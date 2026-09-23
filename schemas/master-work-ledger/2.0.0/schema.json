@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:master-work-ledger:2.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "ledgerKind", "ledgerRevision", "updatedAt", "intentAuthority", "runtimeAssignmentAuthority", "masterLink", "goals", "requests", "constraints", "decisions", "gates", "phases", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "2.0.0"},
+    "ledgerKind": {"const": "master-work-ledger"},
+    "ledgerRevision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "updatedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "intentAuthority": {"const": "json-ledger"},
+    "runtimeAssignmentAuthority": {"const": "toolsenabled"},
+    "masterLink": {"$ref": "#/$defs/masterLink"},
+    "goals": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/goal"}},
+    "requests": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/request"}},
+    "constraints": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/constraint"}},
+    "decisions": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/decision"}},
+    "gates": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/gate"}},
+    "phases": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/phase"}},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  },
+  "$defs": {
+    "idList": {
+      "type": "array", "maxItems": 10000,
+      "items": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+      "uniqueItems": true
+    },
+    "safePlanDisplay": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"}
+      }
+    },
+    "masterLink": {
+      "type": "object", "additionalProperties": false,
+      "required": ["missionId", "observedLedgerRevision", "requestId", "phaseId", "gateIds"],
+      "properties": {
+        "missionId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "observedLedgerRevision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "requestId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "phaseId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "gateIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "goal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["goalId", "requestIds", "constraintIds", "decisionIds", "gateIds", "phaseIds"],
+      "properties": {
+        "goalId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "requestIds": {"$ref": "#/$defs/idList"},
+        "constraintIds": {"$ref": "#/$defs/idList"},
+        "decisionIds": {"$ref": "#/$defs/idList"},
+        "gateIds": {"$ref": "#/$defs/idList"},
+        "phaseIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requestId", "goalId", "gateIds", "plannedPhaseIds"],
+      "properties": {
+        "requestId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "goalId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "gateIds": {"$ref": "#/$defs/idList"},
+        "plannedPhaseIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "constraint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["constraintId", "goalIds", "phaseIds"],
+      "properties": {
+        "constraintId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "goalIds": {"$ref": "#/$defs/idList"},
+        "phaseIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["decisionId", "goalIds", "gateIds"],
+      "properties": {
+        "decisionId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "goalIds": {"$ref": "#/$defs/idList"},
+        "gateIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "gate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["gateId", "state", "phaseIds"],
+      "properties": {
+        "gateId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "state": {"type": "string", "enum": ["planned", "waiting", "satisfied", "rejected"]},
+        "phaseIds": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "phase": {
+      "type": "object", "additionalProperties": false,
+      "required": ["phaseId", "goalId", "requestIds", "dependsOnPhaseIds", "gateIds", "plannedState"],
+      "properties": {
+        "phaseId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "goalId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+        "displayLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "displaySummary": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeSummary"},
+        "requestIds": {"$ref": "#/$defs/idList"},
+        "dependsOnPhaseIds": {"$ref": "#/$defs/idList"},
+        "gateIds": {"$ref": "#/$defs/idList"},
+        "plannedState": {"type": "string", "enum": ["planned", "blocked", "ready"]}
+      }
+    }
+  }
+}

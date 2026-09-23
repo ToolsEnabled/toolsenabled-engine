@@ -1,0 +1,268 @@
+# Secrets & state — never commit
+vault/
+profiles/
+logs/
+state/
+# Browser profiles outside profiles/ — cookies/session tokens live here
+scratch/browser-debug-profile/
+scratch/report-6h-verify-profile/
+scratch/report-6h-html-verify-profile/
+gptaddon/playwright-user-data/
+# Scratch and tmp working trees — snapshots and PoCs, never source of truth
+scratch/
+tmp/
+*.local.json
+.env
+.env.*
+KILLSWITCH
+config/jobs.json
+config/jobs.json.legacy-*
+# Machine topology is a per-installation USER SETTING (owner directive
+# 2026-08-10): this file holds one person's machine names, addresses, and
+# checkout paths. config/machines.example.json is the shipped, address-free
+# template; this is the live file and must never be committed.
+config/machines.profile.json
+
+# config/machines.json (retired): an older, untracked, zero-caller
+# machine-to-root registry that duplicated the above and disagreed with
+# config/service-registry.json about machine-a's root. Deleted along with its
+# sole reader, src/lib/machine-registry.js; ignored here too so a future
+# recreation can never land in a commit by accident.
+config/machines.json
+
+# Google account aliases are per-installation USER DATA, same convention as
+# machines.profile.json above: this file holds one person's Google account
+# aliases and emails. config/google-accounts.example.json is the shipped,
+# placeholder-only template; this is the live file and must never be
+# committed (see src/lib/google-accounts.js).
+config/google-accounts.profile.json
+
+# Paired computers are per-installation USER DATA, same convention as
+# machines.profile.json above: this file names one person's other computers and
+# holds the public keys and per-peer salts their link secrets are derived from.
+# It contains no private key -- that stays in the DPAPI vault -- but it is still
+# one person's topology and must never be committed (see
+# src/lib/peer-enrollment.js). Absence of this file is a NORMAL, fully working
+# single-computer install, so there is no shipped template to go with it.
+config/peers.profile.json
+
+# One customer's licence key, same convention as the two files above. It is a
+# bearer credential for the relay we operate, so committing it would hand a
+# paid entitlement to everyone with the repository. Absence of this file is a
+# NORMAL, fully working, permanently supported install -- the Community tier --
+# so there is no shipped template to go with it (see src/lib/entitlement.js,
+# which is the single place that says so). The operator-side fulfilment ledger
+# lives under state/, already ignored above.
+config/entitlement.profile.json
+
+# WHICH PADDLE ACCOUNT THIS INSTALLATION BILLS AGAINST -- sandbox or live. Same
+# convention as the files above: it is one operator's decision about their own
+# merchant account, not a product fact, and a committed copy would hand every
+# checkout of this repository the environment of whoever committed it. Absence
+# of this file is a NORMAL, fully working install and means SANDBOX; going live
+# is the deliberate act of writing {"environment":"live"} here, which is why
+# there is no shipped template that could be edited by accident (see
+# src/lib/paddle-environment.js, the single place that says so).
+config/paddle-environment.json
+
+# Node
+node_modules/
+
+# Built on demand by the Zed context-terminal ConPTY relay.
+tools/zed-conpty-relay/bin/
+
+# Terraform can contain infrastructure identifiers and provider state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Transient provider debug logs
+firebase-debug.log
+*-debug.log
+
+# Screen captures produced by the desktop capability
+captures/
+
+# Explicit raw MCP responses created by the one-shot helper scripts. They print
+# metadata only unless a caller deliberately requests one of these files.
+scratch/mcp-call-output/
+scratch/playwright-call-output/
+
+# Q53 archive-only quarantine: bytes stay on disk; these paths are not corpus.
+/newplan delet after/
+/reports/desktop-archive-2026-07-29/
+/reports/fleet-worktree-archive/
+
+# Local fleet/runtime evidence may contain full model transcripts or other
+# machine-private material. Keep it on disk, outside Git history.
+/reports/luna-fleet/
+/reports/gemini-fleet/
+/reports/shadow-manager-log.jsonl
+/node_modules.from-machine-a-*/
+/output/
+/.tmp-*
+*.bak-*
+*.pre-*
+*.atomic-pre-*
+
+# Per-agent client state and vendored PLUGIN copies. The canonical copy of a
+# plugin lives under plugins/; those per-client mirrors are regenerated, so
+# tracking them makes every machine's tree differ on sync.
+#
+# SKILLS ARE NOT MIRRORS AND ARE NOT IGNORED. This block used to also ignore
+# /.agents/skills/ and /.claude/skills/ on the same "each machine regenerates
+# them" reasoning, which was false: no generator produces them --
+# tools/generate-mirrors.js has no skills extractor -- while
+# src/lib/source-freeze.js:23 lists both directories in
+# SOURCE_PREFIXES, i.e. this repo's own definition of source. Git ignoring what
+# source-freeze calls source is the contradiction, and it had teeth: the 13
+# existing skills survive only because they predate the rule and are
+# grandfathered, so every NEW skill was silently unshippable -- present on the
+# machine that wrote it, absent from every fresh clone, packaged install and
+# other machine. Caught by adversarial review when the /goal skill was added
+# (owner directive 2026-08-13).
+/.tmp/
+/.cursor/
+/.codex/
+/.codex-*.json
+/.agents/plugins/
+
+# Scratch working trees created inside an artifact folder during one run.
+/artifacts/*/scratch-*/
+
+# ---------------------------------------------------------------------------
+# Business-clean repository boundary. Everything below is OUTPUT, not source:
+# per-run evidence, session reports, verification screenshots and stray logs.
+# It is kept on disk and deliberately not versioned, so the tree reads as a
+# product rather than as somebody's working directory.
+# ---------------------------------------------------------------------------
+
+# Per-run evidence bundles, promotion payloads and one-off coordination scripts.
+/artifacts/
+
+# Session and per-task reports. The ledgers below are data the system reads at
+# runtime, so they stay versioned; everything else here is generated output.
+/reports/*
+!/reports/OWNER-REQUEST-LEDGER.json
+!/reports/OWNER-REQUEST-LEDGER.json.bak
+!/reports/MASTER-WORK-LEDGER.json
+!/reports/TOOLSENABLED-SUGGESTIONS.md
+
+# Verification screenshots captured at the repository root.
+/*.png
+
+# Stray logs and shell accidents.
+/debug.log
+/deleted_log.txt
+/write_log.txt
+/the
+
+# Grepsaver OUTPUT is per-machine, its generator is product. The cards record
+# absolute paths, live ports, git-dirty flags and observation dates for whatever
+# projects happen to sit on THIS box -- context/SYSTEMS.md currently resolves
+# ToolsEnabled to C:\Users\owner\Desktop\ToolsEnabled, which is wrong on the
+# machine it is checked out on. Versioning them couples per-machine state to
+# shared source, which is the same mistake as pinning a routinely edited
+# document into a security digest. Regenerate with `npm run grepsaver:refresh`.
+#
+# The exceptions below are AUTHORED shared documents, not generated output, and
+# excluding them was a real cost: ORIENTATION.md is the onboarding spine every
+# client boot-router points at, and this rule silently prevented it from ever
+# reaching this machine. New agents here were consequently never onboarded to
+# the current directives at all, which the owner noticed from the outside as
+# sessions behaving on stale instructions. A pattern rule that swallows the one
+# file agents are supposed to read first is worse than tracking a few stale
+# cards, so anything authored gets an explicit exception.
+/context/*.md
+# ORIENTATION.md is the exception: it is the single source of truth every agent
+# is told to read first, and it is hand-written, not generated. Leaving it
+# ignored meant it never reached other machines or fresh clones -- which is
+# exactly why Machine B agents were never onboarded to the agent-coord channel
+# and four agents collided on FRA on 2026-08-01.
+!/context/ORIENTATION.md
+/context/systems.json
+/context/check-log.jsonl
+!/context/ORIENTATION.md
+!/context/CARD-TEMPLATE.md
+!/context/DOCS.md
+!/context/toolsenabled-tools.md
+
+# Generated codex app-server protocol bindings (regenerate; see src/lib/agent-engine/README.md)
+src/lib/agent-engine/.q87-codex-protocol-*/
+src/lib/agent-engine/.q87-codex-types-*/
+error.log
+
+# The lane-quality meter is EVIDENCE, not state: it decides how much review a
+# lane gets, and an ignored file is one `git clean -x` from gone. reports/ is
+# ignored wholesale, so this negation must follow it.
+!/reports/lane-quality.json
+
+# Python bytecode from the schema generators
+__pycache__/
+*.pyc
+
+# Stale untracked lane copies. NOT registered git worktrees (`git worktree list`
+# does not show them, `git ls-files .worktrees` is 0), so git offers them to
+# `git add -A` like any other untracked directory. They carry real account
+# addresses copied from older revisions. Two independent lanes flagged that one
+# `git add -A` from the repo root would commit all six, which is an accident this
+# repository has already had. Ignoring them is the cheap half of the fix; deleting
+# the stale copies is the other half and is a separate, owned decision.
+.worktrees/
+
+# Cygwin/MSYS crash dumps. When an agent's own `grep.exe` (or any MSYS binary)
+# faults, it drops a `<program>.exe.stackdump` wherever the process happened to
+# be running -- i.e. in the repo root. These are crash artifacts of the tooling,
+# never product bytes, but as untracked files they fail
+# `tools/require-clean-tree.mjs`, which blocks the packaged build and every
+# proof measured against it. A tool crashing must not be able to stop a release.
+*.stackdump
+
+# Generated caches and shell accidents. context/.prior-work-cache.json and
+# .finished-queue-cache.json are machine-written indexes (regenerated on demand);
+# a bare `[eval]` directory or `mutant` file is residue from a `node -e` run.
+# Untracked files here fail require-clean-tree and block the build.
+context/.prior-work-cache.json
+context/.finished-queue-cache.json
+/[eval]/
+/mutant
+
+# transient: local key-backup staging, never committed
+.keybackup-tmp/
+
+# Agent working notes written to the repository root. Scratch, never product.
+REPORT-*.md
+
+# Same decision, second spelling: a wave filed its notes under .swarm/ with
+# lowercase names, dodging the pattern above. The rule is the rule.
+.swarm/
+
+# THIRD SPELLING, found 2026-08-27 as an untracked F47-FIX-REPORT.md sitting in
+# the repository root. "REPORT-*.md" only catches the word at the START of the
+# name, so any agent that writes <something>-REPORT.md walks straight past it.
+#
+# ROOT-ANCHORED, deliberately. A bare *REPORT*.md would also hide
+# docs/GEMINI-FLEET-REPORT-CONTRACT.md, which is a real tracked document -- and a
+# rule that hides product files to catch scratch is worse than the scratch.
+# Agent notes land in the root; product documents live in a directory.
+/*-REPORT.md
+/*-REPORT-*.md
+/*-report.md
+
+# Named-pipe paths that got written into the working tree AS FILES. Something
+# opened \.\pipe\... relative instead of absolute; the artefacts are
+# unreadable (EACCES) and are what makes quiescent-check report an inspection
+# failure. Ignored so they cannot reach a commit; the writer is a separate bug.
+*pipe*ToolsEnabledOwnerProxy*
+
+# Transient artefacts left behind by two self-checks that do not clean up:
+# tests/.drift-selfcheck.<pid>.generated.js and tools/zzz-*-selftest-<pid>.js.
+# Six reached a commit before this line existed. The generators not removing
+# their own scratch is a separate defect, filed rather than papered over.
+tests/.drift-selfcheck.*.generated.js
+tools/zzz-*-selftest-*.js
+tests/.repo-files-registry-test-*/
+
+# Local dependency installs for the reproducible provider runtime builder.
+/tools/provider-runtimes/**/node_modules/

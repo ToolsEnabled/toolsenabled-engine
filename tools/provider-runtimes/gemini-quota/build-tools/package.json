@@ -1,0 +1,8 @@
+{
+  "name": "te-gemini-bundle-prototype-tools",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "esbuild": "0.25.12"
+  }
+}

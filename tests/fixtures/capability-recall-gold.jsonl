@@ -1,0 +1,106 @@
+{"$schema":"capability-recall-gold-v1","$note":"One case per line. q = what a person types. want = the tool(s) that SHOULD surface; the case passes at K if any of them is in the top K. ok = neighbours that are defensible and are not counted as noise. kind = positive | negative | hard. A negative case wants SILENCE: any result at all is a false positive. Roughly a third of the positives are phrased in words the lexicon does NOT contain -- those are marked \"lex\":false and exist so this file measures the system rather than echoing config/capability-aliases.json back at it."}
+{"q":"take a picture of what is on my screen","want":["screen.capture"],"ok":["screen.capture_monitor","screen.capture_region","screen.capture_window"],"kind":"positive","lex":true}
+{"q":"can you see what I have open right now","want":["screen.capture","window.list"],"ok":["screen.capture_window","screen.list_monitors"],"kind":"positive","lex":false}
+{"q":"grab a screenshot of the left monitor","want":["screen.capture_monitor"],"ok":["screen.capture","screen.list_monitors","screen.capture_region"],"kind":"positive","lex":true}
+{"q":"how many displays does this machine have","want":["screen.list_monitors"],"ok":["screen.capture_monitor","system.doctor"],"kind":"positive","lex":true}
+{"q":"pull the words out of this screenshot","want":["ocr.read"],"ok":["screen.read_capture","screen.capture"],"kind":"positive","lex":false}
+{"q":"what applications are open at the moment","want":["window.list"],"ok":["host.list_processes"],"kind":"positive","lex":true}
+{"q":"bring chrome to the front","want":["window.focus"],"ok":["window.list","browser.start"],"kind":"positive","lex":true}
+{"q":"shut that window","want":["window.close"],"ok":["window.list","window.focus"],"kind":"positive","lex":false}
+{"q":"what did I copy a minute ago","want":["clipboard.read"],"ok":[],"kind":"positive","lex":true}
+{"q":"put this text on my clipboard","want":["clipboard.write"],"ok":["clipboard.read"],"kind":"positive","lex":true}
+{"q":"remember that I prefer dark mode","want":["memory.set"],"ok":["memory.get","memory.search"],"kind":"positive","lex":true}
+{"q":"keep a note that the API key expires in March","want":["memory.set"],"ok":["memory.search","personal_calendar.create"],"kind":"positive","lex":true}
+{"q":"what do you already know about my preferences","want":["memory.search","memory.get"],"ok":["memory.set","settings.read"],"kind":"positive","lex":false}
+{"q":"look up who won the election yesterday","want":["web.search"],"ok":["web.lookup","web.fetch"],"kind":"positive","lex":true}
+{"q":"find current pricing for postgres hosting","want":["web.search"],"ok":["web.lookup","web.fetch"],"kind":"positive","lex":false}
+{"q":"read https://example.com/blog/post and summarise it","want":["web.fetch"],"ok":["web.extract","web.expand","web.search"],"kind":"positive","lex":true}
+{"q":"check my email and tell me if anything is urgent","want":["gmail.list"],"ok":["gmail.send"],"kind":"positive","lex":true}
+{"q":"has anyone written to me today","want":["gmail.list"],"ok":["agent_comms.read","telegram.poll"],"kind":"positive","lex":false}
+{"q":"send Sarah a note saying the build is green","want":["gmail.send"],"ok":["telegram.send","agent_comms.send_local","discord.send"],"kind":"positive","lex":true}
+{"q":"what is on my calendar today","want":["calendar.list"],"ok":["personal_calendar.list","personal_calendar.due"],"kind":"positive","lex":true}
+{"q":"do I have anything scheduled this afternoon","want":["calendar.list"],"ok":["personal_calendar.list","personal_calendar.due"],"kind":"positive","lex":false}
+{"q":"book thirty minutes with the team on Thursday","want":["calendar.create"],"ok":["calendar.list"],"kind":"positive","lex":true}
+{"q":"remind me to renew the domain next week","want":["personal_calendar.create"],"ok":["memory.set","scheduler.create","personal_calendar.capture"],"kind":"positive","lex":true}
+{"q":"what is overdue","want":["personal_calendar.due"],"ok":["personal_calendar.list","task.list"],"kind":"positive","lex":true}
+{"q":"read the config file in my documents folder","want":["host.read_file"],"ok":["host.list_dir","repo.read_file","search.query"],"kind":"positive","lex":true}
+{"q":"what is inside that directory","want":["host.list_dir"],"ok":["host.read_file","repo.list_dir"],"kind":"positive","lex":true}
+{"q":"save the report to disk as a markdown file","want":["host.write_file"],"ok":["repo.write_file","drive.upload"],"kind":"positive","lex":true}
+{"q":"run npm test and show me the output","want":["host.exec"],"ok":["sandbox.exec","host.list_processes"],"kind":"positive","lex":true}
+{"q":"something is eating all my CPU, what is it","want":["host.list_processes"],"ok":["system.doctor","host.exec","system.status"],"kind":"positive","lex":true}
+{"q":"search my own files for the invoice template","want":["search.query"],"ok":["search.index","drive.find","host.list_dir"],"kind":"positive","lex":true}
+{"q":"where is loadSettings defined","want":["code.goto_definition","code.workspace_symbols"],"ok":["code.find_references","search.query"],"kind":"positive","lex":true}
+{"q":"who calls this function","want":["code.find_references"],"ok":["code.goto_definition","code.workspace_symbols"],"kind":"positive","lex":true}
+{"q":"are there any compile errors in the project","want":["code.diagnostics"],"ok":["code.status","host.exec"],"kind":"positive","lex":true}
+{"q":"list the open issues on the repo","want":["github.issue_list"],"ok":["github.issue_get","github.repo_get"],"kind":"positive","lex":true}
+{"q":"file a bug about the login redirect","want":["github.issue_create"],"ok":["github.issue_comment_create","github.issue_list"],"kind":"positive","lex":true}
+{"q":"what pull requests are waiting for review","want":["github.pull_request_list"],"ok":["github.pull_request_get"],"kind":"positive","lex":true}
+{"q":"open a pr from this branch","want":["github.pull_request_create"],"ok":["github.pull_request_list"],"kind":"positive","lex":true}
+{"q":"what was in the last release","want":["github.release_list"],"ok":["github.repo_get","github.release_create"],"kind":"positive","lex":true}
+{"q":"log into the admin site and download the report","want":["browser.start"],"ok":["browser.playwright_call","browser.status","web.fetch"],"kind":"positive","lex":true}
+{"q":"click the accept button on that page","want":["browser.playwright_call"],"ok":["browser.start","browser.playwright_tools"],"kind":"positive","lex":true}
+{"q":"tell the other agent I finished the migration","want":["agent_comms.send_local"],"ok":["agent_comms.send","agent_comms.local_roster"],"kind":"positive","lex":true}
+{"q":"who else is working on this tree right now","want":["agent_comms.local_roster"],"ok":["agent_comms.read","task.list"],"kind":"positive","lex":true}
+{"q":"what work is waiting in the queue","want":["task.list"],"ok":["task.get","task.claim"],"kind":"positive","lex":true}
+{"q":"run the backup every morning at six","want":["scheduler.create"],"ok":["scheduler.list","personal_calendar.create"],"kind":"positive","lex":true}
+{"q":"ping me when the deploy finishes","want":["system.notify"],"ok":["sound.play","telegram.send","tts.speak"],"kind":"positive","lex":false}
+{"q":"say it out loud so I can hear it from the kitchen","want":["tts.speak"],"ok":["sound.play","system.notify"],"kind":"positive","lex":true}
+{"q":"ask me before you delete anything","want":["system.ask"],"ok":["system.ask_remote","owner_prompts.start"],"kind":"positive","lex":true}
+{"$note":"2026-08-23: removed the 'ask me on my phone' positive because every accepted answer (system.ask_remote and telegram.send) left the product with Telegram. Keeping it as a scored positive would require the recommender to return a deleted tool; this note preserves why the assertion left instead of deleting it quietly."}
+{"q":"this needs an API key I have not given you","want":["system.credential_request"],"ok":["owner_forms.describe","settings.read"],"kind":"positive","lex":true}
+{"q":"what is actually configured on this installation","want":["system.doctor","system.status"],"ok":["settings.read"],"kind":"positive","lex":true}
+{"q":"stop all agent activity immediately","want":["system.kill_switch_activate"],"ok":["system.kill_switch_status","task.cancel"],"kind":"positive","lex":true}
+{"q":"show me what has been done on this machine recently","want":["audit.tail"],"ok":["audit.status","memory.search","task.list"],"kind":"positive","lex":true}
+{"q":"try this script somewhere it cannot break anything","want":["sandbox.create","sandbox.exec"],"ok":["sandbox.status","host.exec"],"kind":"positive","lex":true}
+{"q":"do a proper deep dive on competitor pricing","want":["research.run_submit"],"ok":["research.run_status","web.search","research.project_list"],"kind":"positive","lex":true}
+{"q":"rewrite this paragraph with a local model","want":["model.quick_edit","model.complete"],"ok":["model.role_complete"],"kind":"positive","lex":true}
+{"q":"post this payload to their webhook endpoint","want":["http.request"],"ok":["web.fetch"],"kind":"positive","lex":true}
+{"q":"upload the slides to google drive","want":["drive.upload"],"ok":["drive.find"],"kind":"positive","lex":true}
+{"$note":"2026-08-23: removed the Telegram-send positive because telegram.send left the product. system.notify was only an allowed near answer, not the requested tool, so the old case made correct post-removal silence count as a recall regression. This note preserves why the assertion left instead of deleting it quietly."}
+{"q":"read the log file on my other computer","want":["workspace.read"],"ok":["workspace.list","host.read_file"],"kind":"positive","lex":true}
+{"q":"can we buy a year of that monitoring service","want":["purchase.request"],"ok":["pay.check","purchase.decision","payment_method.card_status"],"kind":"positive","lex":true}
+{"q":"how much have we spent this month","want":["pay.check"],"ok":["purchase.request","paddle.transaction_get"],"kind":"positive","lex":true}
+{"q":"look up that customer subscription in paddle","want":["paddle.subscription_get"],"ok":["paddle.transaction_get","paddle.catalog_list"],"kind":"positive","lex":true}
+{"q":"deploy the website","want":["deployment.execute"],"ok":["deployment.detect","launch.execute","firebase.deploy","launch.plan"],"kind":"positive","lex":true}
+{"q":"push the new build live","want":["deployment.execute"],"ok":["launch.execute","deployment.detect","firebase.deploy"],"kind":"positive","lex":true}
+{"q":"inspect this project's deployment setup","want":["deployment.detect"],"ok":["launch.detect","launch.plan"],"kind":"positive","lex":true}
+{"q":"deploy this app using its configured provider","want":["deployment.execute"],"ok":["launch.execute","firebase.deploy","launch.plan"],"kind":"positive","lex":true}
+{"q":"terraform plan for the staging workspace","want":["terraform.plan"],"ok":["terraform.init","terraform.validate","terraform.apply"],"kind":"positive","lex":true}
+{"q":"package the chrome extension for upload","want":["extension.package"],"ok":["extension.validate"],"kind":"positive","lex":true}
+{"q":"post the launch image to instagram","want":["instagram.publish_image"],"ok":["instagram.verify"],"kind":"positive","lex":true}
+{"q":"kick off a codex cloud task on that repo","want":["cloud.task_launch"],"ok":["cloud.task_list","cloud.task_status"],"kind":"positive","lex":true}
+{"q":"which google account are we signed in as","want":["google.accounts"],"ok":["gcloud.account_inspect","system.doctor"],"kind":"positive","lex":true}
+{"q":"set up cursor on this workstation","want":["workstation.install_cursor"],"ok":["workstation.status","workstation.launch_cursor","workstation.configure_agent_clients"],"kind":"positive","lex":true}
+{"q":"create a virtual card for the subscription","want":["stripe.virtual_card_create"],"ok":["stripe.cardholder_create","payment_method.card_register","purchase.request"],"kind":"positive","lex":true}
+{"q":"enable the calendar api in google cloud","want":["gcloud.services_enable"],"ok":["gcloud.project_create","gcloud.doctor"],"kind":"positive","lex":true}
+{"q":"deploy the functions to firebase","want":["firebase.deploy"],"ok":["firebase.doctor","deployment.execute"],"kind":"positive","lex":true}
+{"q":"verify the audit chain has not been tampered with","want":["audit.verify"],"ok":["audit.status","audit.tail"],"kind":"positive","lex":false}
+{"q":"index my documents folder for searching","want":["search.index"],"ok":["search.query","search.status"],"kind":"positive","lex":true}
+{"q":"what is the current status of that background task","want":["task.get"],"ok":["task.list","cloud.task_status"],"kind":"positive","lex":false}
+{"q":"cancel the scheduled nightly job","want":["scheduler.remove"],"ok":["scheduler.list","task.cancel"],"kind":"positive","lex":true}
+{"q":"play a sound when you are finished","want":["sound.play"],"ok":["system.notify","tts.speak"],"kind":"positive","lex":true}
+{"q":"list the events on the shared google calendar","want":["calendar.list"],"ok":["personal_calendar.list"],"kind":"positive","lex":false}
+{"q":"mark that reminder as done","want":["personal_calendar.complete"],"ok":["personal_calendar.list","task.complete"],"kind":"positive","lex":true}
+{"q":"what does this repository do","want":["github.repo_get"],"ok":["repo.read_file","repo.list_dir","code.workspace_symbols"],"kind":"positive","lex":false}
+{"q":"comment on issue 42 that it is fixed","want":["github.issue_comment_create"],"ok":["github.issue_get","github.issue_list"],"kind":"positive","lex":true}
+{"q":"take over the next item and start on it","want":["task.claim"],"ok":["task.start","task.list"],"kind":"positive","lex":false}
+{"q":"hi","want":[],"ok":[],"kind":"negative"}
+{"q":"thanks","want":[],"ok":[],"kind":"negative"}
+{"q":"hello there, how are you today","want":[],"ok":[],"kind":"negative"}
+{"q":"ok","want":[],"ok":[],"kind":"negative"}
+{"q":"that looks good to me","want":[],"ok":[],"kind":"negative"}
+{"q":"no, the other one","want":[],"ok":[],"kind":"negative"}
+{"q":"why did you do that","want":[],"ok":[],"kind":"negative"}
+{"q":"can you explain your reasoning","want":[],"ok":[],"kind":"negative"}
+{"q":"what do you think about this approach","want":[],"ok":[],"kind":"negative"}
+{"q":"keep going","want":[],"ok":[],"kind":"negative"}
+{"q":"never mind","want":[],"ok":[],"kind":"negative"}
+{"q":"sounds right, carry on","want":[],"ok":[],"kind":"negative"}
+{"q":"actually wait","want":[],"ok":[],"kind":"negative"}
+{"q":"nice work","want":[],"ok":[],"kind":"negative"}
+{"q":"I disagree with that","want":[],"ok":[],"kind":"negative"}
+{"q":"summarise what you just told me","want":[],"ok":[],"kind":"negative"}
+{"q":"try again please","want":[],"ok":[],"kind":"negative"}
+{"q":"which of those two is better","want":[],"ok":[],"kind":"negative"}
+{"q":"do it","want":[],"ok":[],"kind":"negative"}
+{"q":"stop","want":[],"ok":[],"kind":"negative"}

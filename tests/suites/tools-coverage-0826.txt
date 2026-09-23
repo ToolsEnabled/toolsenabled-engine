@@ -1,0 +1,37 @@
+# tools-coverage-0826 -- 21 test files recovered from harvest/wave4-engine, a
+# branch stranded on a base far behind main. Rebasing it was not the cheap move:
+# 71 files, and the five test-can-fail waves have since asked every one of the
+# 860 TRACKED files whether it can fail -- so anything already in main was
+# covered by them. These 21 were NOT in main at all, so they were never in that
+# 860 and no wave has ever seen them.
+#
+# Recovered as pure additions instead of a merge: main carries none of these
+# paths, so nothing can conflict and nothing of main's can be reverted by
+# accident. Each was run individually against current main before being listed
+# here; 7 of the 29 recovered files FAILED and were discarded rather than wired,
+# and the child-worker filter found none among the survivors.
+#
+# Most of them cover tools/ entry points -- check-chain-runner, check-dco,
+# check-owner-attribution, check-cross-repo-boundaries, the generators -- which
+# is the coverage gap left after the waves finished with src/.
+#
+tests/agent-msg.js
+tests/agent-parity.js
+tests/canvas-session-preflight.test.js
+tests/check-chain-runner.test.js
+tests/check-comms-names.test.js
+tests/check-cross-repo-boundaries.test.js
+tests/check-dco.test.js
+tests/check-owner-attribution.test.js
+tests/coordinator-escalate.test.js
+tests/drive-upload.test.js
+tests/full-remote-access-listener-host.js
+tests/gemini-agentic-run.test.js
+tests/gen-third-party-licenses.test.js
+tests/generate-agent-activity-contracts.test.js
+tests/generate-delegation-contract-schema.test.js
+tests/generate-error-taxonomy-bindings.test.js
+tests/generate-evidence-store.js
+tests/tools-agent-preflight.test.js
+tests/tools-agent-sweep-js.test.js
+tests/tools-build-queue-migrate-js.test.js

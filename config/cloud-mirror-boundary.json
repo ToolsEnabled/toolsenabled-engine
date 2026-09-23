@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "mirror": {
+    "prefixes": [
+      ".agents/",
+      ".claude/",
+      ".githooks/",
+      ".github/",
+      "adapters/",
+      "bin/",
+      "config/",
+      "docker/",
+      "gptaddon/",
+      "packages/",
+      "research/",
+      "schemas/",
+      "scripts/",
+      "sidecars/",
+      "src/",
+      "tests/",
+      "tools/"
+    ],
+    "paths": [
+      ".gitattributes",
+      ".gitignore",
+      "CONTRIBUTING.md",
+      "CONTRIBUTORS.md",
+      "LICENSE",
+      "NOTICE",
+      "PRIVACY-POLICY.md",
+      "README.md",
+      "REFUND-POLICY.md",
+      "SECURITY.md",
+      "TERMS-OF-SERVICE.md",
+      "THIRD-PARTY-LICENSES.md",
+      "install.ps1",
+      "jsconfig.json",
+      "package-lock.json",
+      "package.json",
+      "registry.json",
+      "docs/GEMINI-FLEET-REPORT-CONTRACT.md",
+      "docs/LOCAL-MODELS.md"
+    ]
+  },
+  "withhold": {
+    "paths": [],
+    "prefixes": []
+  },
+  "credentialScanAcknowledged": {
+    "config/cloud-mirror-boundary.json": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "config/payload-boundary.json": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "tests/": "Synthetic credential-shaped test fixtures only; production credentials are prohibited.",
+    "tools/link-bus-smoke-test.js": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "packages/internal-vcs/test/m3-identity-policy.test.js": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "schemas/generated/coordinator_platform_contract.py": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "schemas/generated/platform.validator.js": "Reviewed synthetic redaction or refusal fixture; no production credential is present.",
+    "schemas/platform/fixtures/redaction-vectors.json": "Reviewed synthetic redaction or refusal fixture; no production credential is present."
+  },
+  "$comment": [
+    "Each customer supplies and registers their own dedicated private GitHub repository.",
+    "ToolsEnabled provides no repository, default repository, default name, or fallback destination.",
+    "The selected repository is verified private before every publication; public destinations refuse."
+  ]
+}

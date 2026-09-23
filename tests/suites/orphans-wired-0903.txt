@@ -1,0 +1,212 @@
+# orphans-wired-0903 -- tracked candidate tests that had no release-chain path.
+#
+# 29 of these were CANDIDATES the census already saw and could not reach from
+# any npm script or package runner: `tools/test-census.js` reported
+# counts.orphaned = 29 against this file's own MAXIMUM_ORPHANS = 0 ceiling
+# (tests/test-census.test.js) before this list existed. Each one is a real
+# assertion suite added by a separate lane during 2026-09-02/03's release
+# repair and merged without also being wired -- an ordinary, expected cost of
+# many lanes landing fast in parallel, not a defect in any one of them. All 29
+# were run together with `tests/run-isolated.js` and PROVEN to exit 0 as a
+# batch before being added, the same discipline orphans-wired-0901 used.
+# The other 4 were not candidates at all: tools/test-census.js's
+# exclusionReason() classified any file under a directory literally named
+# `lib` or `fixtures` as a helper, with no exception for a `.test.js` suffix --
+# the same exception the `worker` basename rule already granted. Fixed in the
+# same change (see tools/test-census.js). Two of the four
+# (tests/lib/multi-account/registry-write.test.js and its
+# registry-write-refusals.test.js sibling) threw or asserted wrong against the
+# CURRENT src/lib/multi-account/registry-write.js -- a stale synthetic-pid
+# fixture and a stale return-shape expectation, neither a defect in the
+# module -- and were repaired in the same change rather than wired red.
+# tests/settings-api-key-never-stored.test.js additionally caught a real
+# defect while orphaned: src/lib/settings.js's read-only-row handling had two
+# copies of the same check, and only the unreachable one redacted the stored
+# value before adding it to `rejected` -- so a hand-written model.api_key
+# round-tripped through settings.read, the local-read tool on the confined
+# agent surface, in plain text. Fixed in the same change (see
+# src/lib/settings.js); this suite is what proved it and now guards it.
+# Three more arrived orphaned while this file was under the merge lock: other
+# lanes landed tests/account-boundary-merge.test.js,
+# tests/desktop-captures-short-names.test.js and
+# tests/tree-directory-durable-write.test.js into release/engine-1.0.41-next
+# during this same window, each without wiring. Run together and PROVEN to
+# exit 0 before being appended here, same discipline as the rest of this file.
+# 2026-09-03, round 2: tools/test-census.js reported counts.orphaned = 3 again
+# (tests/test-census.test.js's ceiling is 0), the same "landed without wiring"
+# gap this file exists to close. Each of the three is the assertion suite a
+# separate lane already wrote for a fix that is ALREADY on this branch --
+# c4bfc01 (broker spool fsync-before-rename, the durable-write sibling
+# tree-directory-durable-write.test.js above names by commit), e2fd0fd
+# (research.finding_save's findingId/supersedes bounds), and 804c30f
+# (schema-validator's uniqueItems enforcement) -- so the product-side fix was
+# never in question, only whether anything still ran the test that proves it.
+# Run together with `tests/run-isolated.js` and PROVEN to exit 0 as a batch
+# (12 assertions, 0 failures) before being appended here.
+# Found and wired independently, at the same time, by two separate round-2
+# lanes (feature/1041-engine-suite-red-r2, landed first as f146278, and
+# feature/1041-t-test-lies-engine-r2) against the same measurement -- the same
+# census ceiling, the same three file names. This paragraph is the version
+# that landed first; the second lane's merge kept it rather than appending a
+# duplicate essay about the identical three files, to avoid exactly the
+# "duplicated rules that can disagree" trap this repository has already paid
+# for once. Both lanes independently proved the batch exits 0 before landing.
+tests/broker-durable-write.test.js
+tests/research-finding-save-id-schema.test.js
+tests/tool-registry-unique-items-enforced.test.js
+tests/account-fence-short-names.test.js
+tests/account-profile-zero-probe.test.js
+tests/agent-api-census-reasons-hold.test.js
+tests/agent-comms/identifiers-are-not-credentials.test.js
+tests/agent-org-root-seat.test.js
+tests/agent-spawn-tree-surface.test.js
+tests/agent-subagent-route.test.js
+tests/agent-tree-spawn.test.js
+tests/audit-advance-cache-after-roll.test.js
+tests/audit-digest-streaming.test.js
+tests/audit-lost-race-keeps-prefix.test.js
+tests/audit-store-identity-cost.test.js
+tests/audit-unanchored-suffix.test.js
+tests/audit-verify-cached-health-read.test.js
+tests/codex-cli-transport-cursor-roundtrip.test.js
+tests/contract-header-repair.test.js
+tests/host-control-relative-path-anchor.test.js
+tests/local-tiers-absence.test.js
+tests/outside-control.test.js
+tests/owner-host-per-line-authority.test.js
+tests/owner-host-root-assertion.test.js
+tests/strict-test-lifecycle.test.js
+tests/providers.web/lookup-direct-refusal-diagnostic.test.js
+tests/refusals-reach-the-agent.test.js
+tests/runtime-command-lookup-cache.test.js
+tests/runtime-command-fallback-scan.test.js
+tests/secret-store/never-configured-is-not-broken.test.js
+tests/settings-api-key-never-stored.test.js
+tests/settings-readonly-reason-is-read.test.js
+tests/tool-registry-deferred-providers.test.js
+tests/vault-presence-cache.test.js
+tests/vault-read-cache.test.js
+tests/lib/cloud-agent/batch-runner.test.js
+tests/lib/multi-account/registry-write.test.js
+tests/lib/multi-account/registry-write-refusals.test.js
+tests/fixtures/fake-provider.test.js
+tests/account-boundary-merge.test.js
+tests/desktop-captures-short-names.test.js
+tests/tree-directory-durable-write.test.js
+tests/audit-projection-parse-memo.test.js
+tests/agent-comms/tree-directory-restart-supersedes-stale-rows.test.js
+# 2026-09-04: page2/tree-store-engine's HUNT pass traced three more paths in
+# src/lib/agent-comms/tree-node-directory.js (heartbeatNode on a row that is
+# not there, supersededByCircle's treeKey requirement driven from the OTHER
+# side than the existing suite covers, and unresolvedManager healed from an
+# unfiltered read) and found each one already correct -- pinned rather than
+# fixed, so a later change to any of the three trips a red test instead of an
+# assumption. Run alone and PROVEN to exit 0 (4/4) before being appended here.
+tests/agent-comms/tree-directory-risk-pins.test.js
+# 2026-09-04, AUDIT pass on page2/tree-store-engine: mutation-tested each of
+# the three risk-pins.test.js pins above (broke the exact behaviour each one
+# names, confirmed the matching pin alone goes red, restored) -- all three
+# hold. Tracing the app-side rewind fix (8d4adab, this rotation's other half
+# of the same lane) into this module found a fourth fact worth naming:
+# shell/agent-host.cjs rewindSession() moves a session's OWN threadId to the
+# fork but never calls bindThread or registerNode, so a rewound circle's row
+# here keeps naming the PRE-fork thread for the rest of that session's life --
+# real, and proven below by a lookup that misses. It is inert for the product
+# today only because Page 2 supplies treeIdentity directly on every start
+# (never depending on findByThreadId to know who a circle is) and because
+# registerNode's own supersededByCircle retires the stale row by name and
+# treeKey regardless of any thread match -- both already true and already
+# covered elsewhere, exercised together here for the first time against a row
+# that carries a present-but-WRONG thread id rather than none at all. Run
+# alone and PROVEN to exit 0 (1/1) before being appended here.
+tests/agent-comms/tree-directory-rewind-resume-seam.test.js
+# Two more of this same AUDIT pass's `buildCensus()` orphan list are not new:
+# tests/agent-comms/tree-directory-scope.test.js (sameTree / treeKey scoping)
+# and tests/agent-comms/tree-edges-manager-roster.test.js (a manager's roster
+# surviving a same-role sibling registering afterward) both exist ONLY to
+# exercise src/lib/agent-comms/tree-node-directory.js -- this lane's own
+# module -- and landed unwired by whichever lane wrote them. Left orphaned
+# they run in nobody's gate, so a regression in either would ship silent.
+# Each run alone and PROVEN to exit 0 (5/5 and 1/1) before being appended here.
+tests/agent-comms/tree-directory-scope.test.js
+tests/agent-comms/tree-edges-manager-roster.test.js
+# 2026-09-04, page2 integration: one more. This lane wrote
+# tests/providers/agent-comms-local-tool-context.test.js for the defect that
+# executeTool's context-aware list did not name agent_comms.send_local or
+# agent_comms.local_roster, so the session the owner host bound never reached
+# either handler and two live circles sharing a name stayed ambiguous. Wired
+# here in the same change that wrote it, rather than added to the ten orphans
+# the census already carries. Run alone and through tests/run-isolated.js and
+# PROVEN to exit 0 (3/3) before being appended here; measured orphan count 11
+# before, 10 after, which is the pre-existing baseline this lane inherited.
+tests/providers/agent-comms-local-tool-context.test.js
+# And one this integration inherited rather than wrote:
+# tests/tree-directory-lock-contention.test.js arrived with
+# release/engine-1.0.41-next's lock-queue commit (d0ec1f3) and was the only
+# other orphan this merge pass added. Wiring it here keeps the pass net-zero
+# against the count it started from. Run through tests/run-isolated.js and
+# PROVEN to exit 0 (1/1) before being appended.
+tests/tree-directory-lock-contention.test.js
+tests/strict-lifecycle-record.test.js
+# 2026-09-07, lane C2: tests/audit-projection-diverged-retry.test.js is wired
+# in the same change that wrote it (tools/test-census.js's MAXIMUM_ORPHANS is
+# 0). Three of its five checks are fail-closed guards -- a divergence that
+# never resolves is still refused, real loss is refused on the FIRST look, and
+# a forged tail is too -- so it must live somewhere a regression is reported.
+# root-suite.txt and agent-comms-orphans.txt both carry status FAIL in
+# tools/check-chain-baseline.json and would absorb it. This file carries no
+# baseline entry. Run through tests/run-isolated.js and PROVEN to exit 0 (5/5)
+# before being appended.
+tests/audit-projection-diverged-retry.test.js
+# 2026-09-07, lane C2: tests/egress-credential-name-gaps.test.js arrived
+# unwired with its cherry-picked RED-evidence commit (648b953c) -- measured,
+# not assumed: tools/test-census.js went from 0 to 1 orphan the moment the
+# cherry-pick landed ("orphan count increased from the R1162 baseline ceiling
+# (0) to 1"). It is wired here, and not in root-suite.txt where its
+# egress-preflight siblings live, because root-suite carries status FAIL in
+# tools/check-chain-baseline.json: a credential-name refusal that regresses
+# there would be absorbed by the baseline and never reported, which for a
+# containment guard is worse than having no test. This file carries no
+# baseline entry and is fail-closed. Run through tests/run-isolated.js and
+# PROVEN to exit 0 (3/3) before being appended.
+tests/egress-credential-name-gaps.test.js
+# 2026-09-07, lane C2: tests/broker-sender-on-receipt.test.js is wired in the
+# same change that wrote it, rather than landing unwired for a later pass to
+# find (tools/test-census.js's MAXIMUM_ORPHANS is 0). It is placed HERE and not
+# in root-suite.txt or agent-comms-orphans.txt on purpose: both of those carry
+# status FAIL in tools/check-chain-baseline.json, so a future regression in
+# them is absorbed by the baseline and never reported. This file carries no
+# baseline entry, so it is fail-closed and the pin is live. Run through
+# tests/run-isolated.js and PROVEN to exit 0 (5/5) before being appended.
+tests/broker-sender-on-receipt.test.js
+# 2026-09-07, lane C2: tests/desktop-worker-image-boundary.test.js is wired in
+# the same change that wrote it (tools/test-census.js's MAXIMUM_ORPHANS is 0).
+# It is placed HERE rather than in root-suite.txt -- where its end-to-end
+# sibling tests/desktop-advanced.js lives -- because root-suite carries status
+# FAIL in tools/check-chain-baseline.json, so a regression in it is absorbed by
+# the baseline and never reported. This file carries no baseline entry, so it
+# is fail-closed. It deliberately needs NO desktop session: it drives the real
+# worker_threads boundary with the shipped handlers and a stubbed capture, so
+# wiring it fail-closed cannot turn this suite red on a machine without a
+# screen. Run through tests/run-isolated.js and PROVEN to exit 0 (4/4).
+tests/desktop-worker-image-boundary.test.js
+
+# owner-host named refusal (2026-09-07, Lane C2R item 1). Wired HERE and not
+# into root-suite.txt: this list is absent from tools/check-chain-baseline.json,
+# so a regression in it is a visible FAIL rather than one absorbed by a
+# baselined FAIL chain. Checked before wiring.
+tests/owner-host-named-refusal.test.js
+# host-control credential name gate (2026-09-07, Lane C2R item 2 / D3b). Wired
+# HERE and not into root-suite.txt: this list is absent from
+# tools/check-chain-baseline.json, so a containment regression is a visible FAIL
+# rather than one absorbed by a baselined FAIL chain. Checked before wiring.
+tests/host-control-credential-name-gate.test.js
+# audit refusal persistence (2026-09-07, Lane C2R item 3 / E2-R33). Wired HERE
+# and not into root-suite.txt: this list is absent from
+# tools/check-chain-baseline.json, so a regression is a visible FAIL rather than
+# one absorbed by a baselined FAIL chain. Checked before wiring.
+tests/audit-refusal-persistence.test.js
+# courier read-lock bound (2026-09-07, Lane C2R item 14). Wired HERE and not
+# so a regression is a visible FAIL rather than one absorbed by a baselined FAIL
+# chain. Checked before wiring.
+tests/agent-comms/courier-read-lock-bound.test.js

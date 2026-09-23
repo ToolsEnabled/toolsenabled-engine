@@ -1,0 +1,62 @@
+# surface-policy-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/repo-files.js
+tests/settings-elevation-shared-writes.test.js
+tests/status-visibility-hook.js
+# 2026-08-24: five passing files moved to the green orphan batch. The remaining
+# two keep named skips for absent per-installation policy/editor files.
+#
+# ---------------------------------------------------------------------------
+# 2026-08-25: tests/confined-tool-surface.test.js wired here.
+#
+# It is the test two shipped modules name as their own enforcement mechanism.
+# src/lib/confined-tool-surface.js:45 -- "a tool added tomorrow is refused at
+# Standard until somebody decides otherwise, and
+# tests/confined-tool-surface.test.js fails until they record which class it
+# is. That is the whole point: the decision cannot be made by forgetting." --
+# and src/lib/agent-api-policy.js:189 leans on the same sentence. Nothing in
+# `npm test`, `pretest` or `posttest` ran it. Its only runner was
+# tests/surface.registry/run.js, reached only by the npm script
+# test:surface.registry, which tests/suites/orphans-wired-0824.txt already
+# names as one of eleven scripts nothing invokes: "Being named is not being
+# run." Its own sibling in that runner, tests/elevation-surface.test.js, was
+# wired on 2026-08-24 and this one was missed. The RUNTIME refusal was never
+# affected -- an unclassified tool is still refused at every confined level --
+# so what was lost was only the NOTICE, which is the half that tells an author
+# which decision they have not made.
+#
+# It also could not have been wired as it stood. One row read
+# config/fra-capability-manifest.machine-a.json with no guard; that file is
+# written per installation by tools/fra-selfhost.js and is in no commit
+# (`git ls-files config` lists 34 files, not one of them a manifest), so the
+# row threw ENOENT and took the whole file red in every checkout. Its
+# behavioural half needs no file and now runs unconditionally; the document
+# half keeps a named skip, exactly like the two entries above it here.
+#
+# MEASURED at 42ccc28 plus this change, through this step's own runner
+# (`node tests/run-isolated.js --from tests/suites/surface-policy-orphans.txt`):
+# 22 checks passed, 1 failed. This step already exited 1 before the file was
+# added -- repo-files and status-visibility-hook are named skips for absent
+# per-installation files, and settings-elevation-shared-writes fails its
+# concurrent-writer row -- so the exit status is unchanged by this line.
+#
+# THE ONE FAILURE IS A TRUE FINDING, NOT A FLAKE: "the table names no tool that
+# is not registered" reports `agent.spawn`. Commit 04c7bbb classified
+# agent.spawn as unconfinable on the strength of it being registered in a
+# WORKING TREE; `git log --all -S"define('agent.spawn'" -- src/lib/tool-registry.js`
+# returns nothing, so no commit in this repository registers it. The reviewed
+# table names a tool the product does not have, and this row says so by name.
+# It clears the moment that registration is committed, and it is deliberately
+# not withdrawn for it: the three entries orphans-wired-0824.txt withdrew were
+# withdrawn for runner TIMEOUTs and a missing Node interpreter -- unreliability
+# in the test files themselves. Pulling a test because it correctly reports an
+# unlanded commit is how this notice went missing in the first place.
+# ---------------------------------------------------------------------------
+tests/confined-tool-surface.test.js
+
+# Saved user profiles must remain enforced in discovery and dispatch.
+tests/action-permission-profiles.test.js

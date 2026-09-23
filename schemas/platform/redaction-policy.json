@@ -1,0 +1,121 @@
+{
+  "policyVersion": "1.0.0",
+  "policyAuthority": "toolsenabled",
+  "serviceId": "coordinator-platform-redaction-v1",
+  "replacement": "[REDACTED]",
+  "maxDepth": 32,
+  "egressKinds": [
+    "provider",
+    "log",
+    "sse",
+    "evidence-export",
+    "notification",
+    "training-candidate"
+  ],
+  "fieldRules": [
+    {
+      "id": "secret-handle-field",
+      "category": "secret-handle",
+      "names": ["secrethandle", "vaultkey", "vaultref", "credentialref"]
+    },
+    {
+      "id": "account-identifier-field",
+      "category": "account-identifier",
+      "names": ["accountid", "accountidentifier", "accountnumber", "brokerageaccountid", "brokerageaccountnumber"]
+    },
+    {
+      "id": "cookie-field",
+      "category": "cookie",
+      "names": ["cookie", "setcookie"]
+    },
+    {
+      "id": "token-field",
+      "category": "token",
+      "names": ["accesstoken", "refreshtoken", "providertoken", "authorization", "authentication"]
+    },
+    {
+      "id": "auth-code-field",
+      "category": "auth-code",
+      "names": ["authcode", "oauthcode", "authorizationcode"]
+    },
+    {
+      "id": "private-key-field",
+      "category": "private-key",
+      "names": ["privatekey"]
+    },
+    {
+      "id": "payment-field",
+      "category": "payment",
+      "names": ["cardnumber", "paymentcredential", "cvc", "cvv", "pin"]
+    },
+    {
+      "id": "credential-field",
+      "category": "credential",
+      "names": ["apikey", "clientsecret", "password", "passphrase", "credential", "credentials", "session", "sessionid"]
+    }
+  ],
+  "suffixRules": [
+    {
+      "id": "sensitive-field-suffix",
+      "category": "credential",
+      "suffixes": ["token", "secret", "credential", "credentials", "session", "privatekey"]
+    }
+  ],
+  "textRules": [
+    {
+      "id": "private-key-text",
+      "category": "private-key",
+      "pattern": "-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY-----[\\s\\S]{0,4096}-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----",
+      "caseInsensitive": false
+    },
+    {
+      "id": "canary-text",
+      "category": "canary",
+      "pattern": "TOOLSENABLED_CANARY_[A-Za-z0-9_-]{12,}",
+      "caseInsensitive": false
+    },
+    {
+      "id": "secret-handle-text",
+      "category": "secret-handle",
+      "pattern": "(vault|secret):\\/\\/[A-Za-z0-9._\\/-]{4,}",
+      "caseInsensitive": true
+    },
+    {
+      "id": "authorization-text",
+      "category": "token",
+      "pattern": "(Bearer|Basic)[ \\t]+[A-Za-z0-9._~+\\/=:-]{12,}",
+      "caseInsensitive": true
+    },
+    {
+      "id": "provider-token-text",
+      "category": "token",
+      "pattern": "(sk_(live|test|prod)_[A-Za-z0-9_-]{12,}|AIza[0-9A-Za-z_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|ya29\\.[A-Za-z0-9._-]{12,}|1\\/\\/[A-Za-z0-9._-]{12,})",
+      "caseInsensitive": false
+    },
+    {
+      "id": "jwt-text",
+      "category": "token",
+      "pattern": "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}",
+      "caseInsensitive": false
+    },
+    {
+      "id": "labeled-sensitive-text",
+      "category": "credential",
+      "pattern": "(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|authorization|cookie|auth[_ -]?code|oauth[_ -]?code|account[_ -]?(id|number)|brokerage[_ -]?account[_ -]?(id|number)|card[_ -]?number)[ \\t]*(=|:)[ \\t]*(\"[^\"\\r\\n]{4,512}\"|'[^'\\r\\n]{4,512}'|[A-Za-z0-9._~+\\/=:-]{8,512})",
+      "caseInsensitive": true
+    }
+  ],
+  "customization": {
+    "mode": "exact-literal-values-and-exact-field-names",
+    "maximumValues": 32,
+    "minimumValueLength": 4,
+    "maximumValueLength": 1024,
+    "maximumFieldNames": 32,
+    "fieldNamePattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+  },
+  "preparedEgress": {
+    "fields": ["payload", "redactionReport"],
+    "gateRescansPayload": true,
+    "reportMarkerAloneIsSufficient": false
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "ToolsEnabled Fixture",
+  "version": "1.0.0",
+  "description": "Fixture extension used to validate local packaging.",
+  "action": { "default_title": "Fixture" },
+  "icons": { "16": "icon.png" }
+}

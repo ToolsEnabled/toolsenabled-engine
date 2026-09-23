@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:capability:1.0.0",
+  "title": "Coordinator platform capability v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "capabilityId": {"type": "string", "pattern": "^cap_[A-Za-z0-9_.-]{3,128}$"},
+    "effect": {"enum": ["read", "local-write", "external-write", "destructive"]},
+    "owner": {"enum": ["toolsenabled", "portfolio-dashboard"]},
+    "approvalRequired": {"type": "boolean"}
+  },
+  "required": ["schemaVersion", "capabilityId", "effect", "owner", "approvalRequired"]
+}

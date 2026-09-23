@@ -1,0 +1,34 @@
+# The run-isolated config-integrity guard's own regression suite.
+#
+# WHY IT NEEDS A LIST OF ITS OWN, FOR ONE FILE.
+# tools/test-census.js classifies tests/run-isolated-config-integrity.js as a
+# RUNNER, on the strength of its `run-` prefix, and excluded files never enter
+# `reachable` or `orphaned`. tools/test-run.js --all runs exactly those two
+# lists, so the whole-tree measurement cannot reach this file and the orphan
+# ceiling in tests/test-census.test.js cannot notice it missing. Naming it here,
+# on a command line npm runs, is what actually makes it run. tests/test-census.test.js
+# pins this list by path so the wiring cannot quietly fall out again.
+#
+# MEASURED 2026-08-25 with the chain's own instrument before being wired:
+#   node tests/run-isolated.js --continue --timeout-ms 180000 --summary <tmp> \
+#     tests/run-isolated-config-integrity.js
+#   -> exit 0, {"status":"pass","exitCode":0,"ms":6254}, and
+#      config/toolsenabled.policy.json byte-identical before and after (sha256
+#      7240D88F...98B0C both times).
+#
+# WHAT THIS SUITE COSTS, STATED PLAINLY RATHER THAN DISCOVERED.
+# Its third phase deliberately runs an unguarded mutation to prove the guard is
+# what makes the difference: a dummy test overwrites config/toolsenabled.policy.json
+# with the single byte `x`, and the suite restores it with
+# `git checkout -- config/toolsenabled.policy.json`. So running it DESTROYS any
+# UNSTAGED edit to that one file, in whatever tree it runs in -- the mutation
+# destroys it, and restoring from the index is the recovery, not the harm.
+# Staged and committed content is unaffected, and the restore also runs from a
+# `finally` block. If you are editing config/toolsenabled.policy.json, commit or
+# stash it before `npm test`.
+#
+# It is wired despite that cost because it is the ONLY test of run-isolated's
+# config-integrity guard -- the mechanism that stops any of ~800 other suites
+# mutating tracked config unnoticed. An untested guard reads as protection while
+# asserting nothing.
+tests/run-isolated-config-integrity.js

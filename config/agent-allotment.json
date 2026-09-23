@@ -1,0 +1,64 @@
+{
+  "$comment": [
+    "CONFIGURABLE. This file is the ceiling of what the agent roster may select from, never a target.",
+    "An allotment is keyed to the allotted agents rather than to the machine, may change when usage",
+    "is being conserved, and grants eligibility rather than requiring dispatch.",
+    "Idle allotment is a VALID state, not waste: nothing here creates work, and unused entries are fine.",
+    "",
+    "HOW TO SHRINK USAGE (each edit takes effect at the next dispatch; it never kills a running lane):",
+    "  1. Set \"enabled\": false            -> roster fully dormant; dispatch behaves as before it existed.",
+    "  2. Delete an allowed[] entry, or a  -> that config is immediately ineligible for future advice.",
+    "     model id from an entry's models[]",
+    "  3. Set maxDispatchesPerDay on an    -> bounded trickle; the roster refuses to advise beyond the cap.",
+    "     entry, or budgets.maxTotalDispatchesPerDay",
+    "  4. Delete this file                 -> treated as an EMPTY allotment (nothing allowed), loudly.",
+    "Growing is the same edits in reverse.",
+    "",
+    "MODEL AUTHORITY: config/model-floor.json via src/lib/model-floor.js. Model ids",
+    "listed here are still refused unless they pass the model-floor check for their backend -- selection",
+    "is always allotment INTERSECT floor INTERSECT availability. An id listed here that is off the floor",
+    "is DROPPED at load with a logged warning, never honored. This block never restates the floor's lists."
+  ],
+  "$authority": "config/model-floor.json",
+  "schemaVersion": "agent-allotment-v1",
+  "updatedAt": "2026-07-29",
+  "updatedBy": "initial policy baseline",
+  "enabled": true,
+  "allowed": [
+    {
+      "$note": "Fleet builder lanes may use the configured Vertex backend model allowed by config/model-floor.json.",
+      "role": "builder",
+      "provider": "gemini",
+      "backend": "vertex",
+      "models": ["gemini-2.5-pro"],
+      "maxDispatchesPerDay": null
+    },
+    {
+      "$note": "Reviewer configurations are an eligibility ceiling only. models:null means this allotment does not pin a reviewer model; applicable model-floor rules still apply at use time.",
+      "role": "reviewer",
+      "provider": "codex",
+      "backend": null,
+      "models": null,
+      "maxDispatchesPerDay": null
+    },
+    {
+      "$note": "Gemini review may use the configured subscription backend model allowed by config/model-floor.json.",
+      "role": "reviewer",
+      "provider": "gemini",
+      "backend": "subscription",
+      "models": ["gemini-3.1-pro-preview"],
+      "maxDispatchesPerDay": null
+    }
+  ],
+  "budgets": {
+    "$comment": "Global conserve-usage lever. A number is a hard daily ceiling counted from roster events dated today; null = no cap.",
+    "maxTotalDispatchesPerDay": null
+  },
+  "parameters": {
+    "$comment": "Roster statistics knobs: minSamples = minimum agent-attributable outcomes before any promote/suspend decision (below it the config is honestly UNKNOWN); explorationEveryK = at most 1 of every K roster-advised dispatches may go to an under-sampled config; suspendDays = suspension expiry window.",
+    "minSamples": 5,
+    "explorationEveryK": 5,
+    "suspendDays": 14
+  },
+  "$forbidden": "No entry may identify an internal Codex tier alias. The loader refuses the whole file if one does."
+}

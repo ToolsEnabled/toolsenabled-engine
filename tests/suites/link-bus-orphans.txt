@@ -1,0 +1,10 @@
+# link-bus-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/link-bus-token-rotation-operator.js
+tests/link-bus-token-rotation-protocol.js
+# 2026-08-24: the three passing files moved to the green orphan batch. These
+# two still fail on undeclared machine-a/machine-b service-registry identities.

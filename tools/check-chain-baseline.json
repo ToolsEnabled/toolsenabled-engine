@@ -1,0 +1,89 @@
+{
+  "$comment": [
+    "Known non-passing steps for the check-chain ratchet, keyed by exact step id.",
+    "This file is not release evidence: strict release checks tolerate no entry.",
+    "An unlisted failure blocks, a listed step that passes requires baseline removal,",
+    "and absent or malformed baseline data grants no tolerance.",
+    "Notes describe only the current-install dependency class; private incident,",
+    "account, machine, vault, and historical measurement detail is intentionally omitted."
+  ],
+  "chains": {
+    "pretest": {
+      "steps": [
+        {
+          "id": "tests/run-isolated.js",
+          "status": "FAIL",
+          "note": "Required current-install inputs are absent; the step remains fail-closed and must be remeasured before release."
+        },
+        {
+          "id": "unwired-campaign-suites",
+          "status": "FAIL",
+          "note": "Required current-install fixtures are absent; the step remains fail-closed and must be remeasured before release."
+        },
+        {
+          "id": "red-gates-orphans",
+          "status": "FAIL",
+          "note": "Required per-installation policy inputs are absent; the step remains fail-closed and must be remeasured before release."
+        }
+      ]
+    },
+    "test": {
+      "steps": [
+        {
+          "id": "root-suite",
+          "status": "FAIL",
+          "note": "Known mixed implementation and configuration debt; strict release checks tolerate none of it."
+        },
+        {
+          "id": "link-bus-orphans",
+          "status": "FAIL",
+          "note": "Current-install link topology is incomplete; the suite remains fail-closed."
+        },
+        {
+          "id": "special-session-orphans",
+          "status": "FAIL",
+          "note": "Current-install session topology is incomplete; the suite remains fail-closed."
+        },
+        {
+          "id": "package-tree-orphans",
+          "status": "FAIL",
+          "note": "Package ownership metadata requires reconciliation against the current source tree."
+        },
+        {
+          "id": "surface-policy-orphans",
+          "status": "FAIL",
+          "note": "Required current-install surface policy inputs are absent; the suite remains fail-closed."
+        },
+        {
+          "id": "workstation-and-launch-orphans",
+          "status": "FAIL",
+          "note": "Current-install workstation configuration is incomplete; the suite remains fail-closed."
+        },
+        {
+          "id": "test:fra",
+          "status": "FAIL",
+          "note": "Known remote-access configuration and implementation debt remains; strict release checks tolerate none of it."
+        },
+        {
+          "id": "test:coverage-audit",
+          "status": "FAIL",
+          "note": "Generated coverage artifacts require reconciliation against the current install."
+        },
+        {
+          "id": "test:invocation-orphans",
+          "status": "FAIL",
+          "note": "Known mixed invocation and current-install input debt remains; strict release checks tolerate none of it."
+        }
+      ]
+    },
+    "posttest": {
+      "steps": [
+        {
+          "id": "test-ratchet",
+          "status": "FAIL",
+          "note": "Required current-install test measurement is absent; the ratchet refuses to rule."
+        }
+      ]
+    }
+  }
+}

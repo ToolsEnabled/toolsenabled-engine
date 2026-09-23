@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:snapshot:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "projectionKind", "observedAt", "sequence", "freshness", "contentTrust", "grantsAuthority", "safeDisplay", "agents", "goals", "requests", "phases", "tasks", "evidence", "reports", "edges", "events"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "projectionKind": {"const": "browser-safe-snapshot"},
+    "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"},
+    "agents": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/browserAgent"}},
+    "goals": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/browserGoal"}},
+    "requests": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/browserRequest"}},
+    "phases": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/browserPhase"}},
+    "tasks": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/browserTask"}},
+    "evidence": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/browserEvidence"}},
+    "reports": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/browserReport"}},
+    "edges": {"type": "array", "maxItems": 8192, "items": {"$ref": "#/$defs/browserEdge"}},
+    "events": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/browserEvent"}}
+  },
+  "$defs": {
+    "browserAgent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["alias", "agentKind", "state", "observedAt"],
+      "properties": {
+        "alias": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeAlias"},
+        "agentKind": {"type": "string", "enum": ["coordinator", "worker", "reviewer", "observer"]},
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserGoal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["safeLabel", "state", "progressPercent", "observedAt"],
+      "properties": {
+        "safeLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "progressPercent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["safeLabel", "state", "gateState", "observedAt"],
+      "properties": {
+        "safeLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "gateState": {"type": "string", "enum": ["not-started", "waiting", "satisfied", "rejected"]},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserPhase": {
+      "type": "object", "additionalProperties": false,
+      "required": ["safeLabel", "state", "progressPercent", "observedAt"],
+      "properties": {
+        "safeLabel": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeLabel"},
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "progressPercent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserTask": {
+      "type": "object", "additionalProperties": false,
+      "required": ["taskKind", "state", "progressPercent", "observedAt"],
+      "properties": {
+        "taskKind": {"type": "string", "enum": ["planning", "implementation", "validation", "review", "report"]},
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "progressPercent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserEvidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evidenceKind", "evidenceCount", "freshness", "observedAt"],
+      "properties": {
+        "evidenceKind": {"type": "string", "enum": ["file", "test", "tool", "report", "approval"]},
+        "evidenceCount": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserReport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "freshness", "observedAt"],
+      "properties": {
+        "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+        "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserEdge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edgeType", "fromKind", "toKind", "observedAt"],
+      "properties": {
+        "edgeType": {"type": "string", "enum": ["delegated_to", "communicated_with", "assigned_to", "works_on", "depends_on", "blocked_by", "supports_gate", "reviewed_by"]},
+        "fromKind": {"type": "string", "enum": ["agent", "goal", "request", "phase", "task", "evidence", "report", "gate"]},
+        "toKind": {"type": "string", "enum": ["agent", "goal", "request", "phase", "task", "evidence", "report", "gate"]},
+        "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"}
+      }
+    },
+    "browserEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "sequence", "occurredAt", "context"],
+      "properties": {
+        "eventType": {"type": "string", "enum": ["agent_state", "delegation_state", "phase_state", "checkpoint_observed", "help_state", "acceptance_state", "report_state", "source_state"]},
+        "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "occurredAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+        "context": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/contextTemplate"}
+      }
+    }
+  }
+}

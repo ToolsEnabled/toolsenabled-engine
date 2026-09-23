@@ -1,0 +1,26 @@
+# agent-comms-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/agent-comms/provider.js
+tests/agent-comms/control-plane.js
+tests/agent-comms/broker-state-recovery.test.js
+tests/agent-comms/broker-delivered-dead-letter.test.js
+tests/agent-comms/broker-deferred-handoff.test.js
+tests/agent-comms/local-delivery-failure-receipts.test.js
+tests/agent-comms/local-deferred-handoff.test.js
+tests/agent-comms/orphan-manager.test.js
+tests/agent-comms/tree-node-directory.test.js
+tests/agent-comms/tree-directory-node-identity.test.js
+tests/agent-comms/tree-directory-scale.test.js
+tests/agent-comms/local-message-runtime-reuse.test.js
+# 2026-08-23: local-tree-delivery.js and relay-edge.js remain wired through the
+# deliberately named `orphans-wired-0823` chain step. They are omitted here so
+# adopting this list does not execute them twice or undo that measured wiring.
+# 2026-08-24: the other twelve files ran green in the 153-file unwired orphan
+# batch and moved to tests/suites/orphans-wired-0824.txt. provider.js remains
+# here because its three machine-routing assertions are red.
+tests/agent-comms/tree-address-historical-sender.test.js
+tests/tree-directory-identity-and-naming.test.js

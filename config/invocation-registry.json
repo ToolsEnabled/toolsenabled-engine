@@ -1,0 +1,656 @@
+{
+  "$comment": [
+    "INVOCATION REGISTRY -- the declared answer to \"how does this run?\".",
+    "",
+    "Read tools/invocation-guard.js for why this exists. The short version:",
+    "this repository's measured dominant defect is mechanisms that exist, work",
+    "correctly, and that nothing ever runs -- a 40KB correct detector cited in",
+    "ten documents and invoked by zero automation, a supervisor that computed a",
+    "verdict and exited 0 anyway, a test glob no target called while a manager",
+    "hand-listed 11 files and reported \"all green\".",
+    "",
+    "roots: the ONLY surfaces treated as executing by themselves. Everything",
+    "else must be reachable from one of these, transitively, or be listed in",
+    "entries. \"npm:<name>\" is a package.json script; npm lifecycle pre/post",
+    "hooks are expanded automatically. A root belongs here only if something",
+    "outside this repository actually starts it -- npm, git, the scheduler, or",
+    "the MCP client. Adding an npm script and pointing a root at it proves",
+    "nothing; that is precisely the non-wiring this guard was built to catch.",
+    "The external LIVE promoter tooling/live/promote-live.mjs engineSuiteInvocation",
+    "starts npm:test:strict for the full engine gate. This is release verification,",
+    "not a claim that the strict harness is customer-runtime code.",
+    "The installed desktop is also external to this repository: its packaged",
+    "capability PAYLOAD.json names tools/mission-bridge.js as bridgeEntrypoint,",
+    "and shell/capability-layer.cjs starts that exact payload-relative program.",
+    "The same desktop directly loads the declared src/lib roots below and",
+    "its relay/device supervisors start the three declared tools roots. Three of",
+    "those entries were added 2026-09-11 for modules the desktop already loaded:",
+    "shell/agent-host.cjs loadAcpEngine() requires acp-process.js and",
+    "loadAntigravityEngine() requires antigravity-cli-process.js, by the same",
+    "require(path.join(engineRoot, ...)) shape as the codex and claude-cli roots",
+    "beside them; shell/device-claim.cjs ADMIN_ENTRY spawns online-fra-admin-cli.js",
+    "one line away from the CLAIM_ENTRY that was already a root. Each reaches its",
+    "own adapter/enrollment module by ordinary require, so none is listed here.",
+    "The desktop shell/agent-host.cjs loads agent-ledger-continuation.js; shell/audit-identity-worker.cjs loads audit-identity-maintenance.js; shell/agent-command-surface.cjs loads ledger-category-reset.js for the person-only reset controls. Their internal dependency closures are ordinary require edges, not additional external roots.",
+    "The public",
+    "Website vendors online-fra-web-client.mjs from an exact published engine",
+    "commit and imports it for the signed-in browser relay path.",
+    "The external Linux source LIVE build runs tests/linux-native.js before",
+    "activation; this native-only entry is not invoked by Windows qualification.",
+    "productionEdges are reviewed dynamic module or subprocess edges whose source is",
+    "already production-reachable. Each remains red if either file disappears",
+    "or the source no longer names the target program; package membership alone",
+    "is never accepted as an invocation edge.",
+    "",
+    "entries: mechanisms with no invocation path, each with a status.",
+    "  \"manual\"   -- a human genuinely must invoke this by hand. Requires a",
+    "                reason that says why. This is the honest case and it is",
+    "                meant to be one line to write.",
+    "  \"baseline\" -- pre-existing debt, recorded once on the date shown so it",
+    "                is counted rather than invisible. NOT an acceptance.",
+    "",
+    "The registry may only SHRINK. If a listed mechanism becomes reachable, or",
+    "is deleted, the guard fails until its entry is removed. That is what stops",
+    "this file from becoming the place things go to stop being counted."
+  ],
+  "schemaVersion": 1,
+  "roots": [
+    "npm:test",
+    "npm:test:strict",
+    "tests/linux-native.js",
+    "install.ps1",
+    "packages/servercontrol/Launch Control Panel.vbs",
+    "tools/mission-bridge.js",
+    "src/mcp-server.js",
+    "src/lib/agent-engine/claude-cli-process.js",
+    "src/lib/agent-engine/codex-process.js",
+    "src/lib/agent-engine/acp-process.js",
+    "src/lib/agent-engine/antigravity-cli-process.js",
+    "src/lib/agent-ledger-continuation.js",
+    "src/lib/audit-identity-maintenance.js",
+    "src/lib/ledger-category-reset.js",
+    "src/lib/capability-recall/index.js",
+    "src/lib/proc/hidden-spawn.js",
+    "src/lib/online-fra-web-client.mjs",
+    "tools/relay-shell.js",
+    "tools/online-fra-claim-cli.js",
+    "tools/online-fra-admin-cli.js",
+    "config/managed-processes.json",
+    ".githooks",
+    "bin/localcode.js",
+    ".github/workflows"
+  ],
+  "productionEdges": [
+    {
+      "from": "src/lib/vault-linux.js",
+      "to": "src/linux-vault.py",
+      "reason": "Both synchronous runtime custody and asynchronous desktop readers pass the exact linux-vault.py helper after the fixed isolated system-Python argv, with the request in private stdin."
+    },
+    {
+      "from": "src/lib/coordinator/duty-registry.js",
+      "to": "src/lib/coordinator/escalation-sink.js",
+      "reason": "The managed coordinator host runs escalation-budget-report, whose optionalModule() resolves and requires this sink before reading sinkStatus(); escalateVia() uses the same real module load."
+    },
+    {
+      "from": "src/lib/coordinator/duty-registry.js",
+      "to": "src/lib/argv-drift.js",
+      "reason": "runArgvDriftDetect() resolves this module through the same optionalModule() helper as the escalation sink and calls its detectAllDrift() on every managed coordinator host duty run."
+    },
+    {
+      "from": "src/lib/agent-onboarding.js",
+      "to": "tools/grepsaver-orient.js",
+      "reason": "buildOrientation() resolves this exact runtime-root path and requires its exported orient function for every onboarding packet."
+    },
+    {
+      "from": "src/lib/agent-onboarding.js",
+      "to": "src/lib/capability-features.js",
+      "reason": "capabilityFeatureProjection() resolves this exact source-runtime module and requires it when the embedder has not deliberately excluded the commercial feature table."
+    },
+    {
+      "from": "src/lib/desktop.js",
+      "to": "tools/desktop.ps1",
+      "reason": "invoke() places the HELPER constant after PowerShell -File and passes that argv to its process runner."
+    },
+    {
+      "from": "src/lib/providers/duo-desktop-approval.js",
+      "to": "tools/duo-desktop-approve.ps1",
+      "reason": "runApproval() passes the exact APPROVAL_SCRIPT constant after PowerShell -File during the reachable UCR Duo handoff."
+    },
+    {
+      "from": "src/lib/providers/firebase.js",
+      "to": "tools/firebase-login.ps1",
+      "reason": "runInteractiveFirebaseLogin() builds this path and passes it after PowerShell -File to run()."
+    },
+    {
+      "from": "src/lib/providers/gcloud-account-login.js",
+      "to": "tools/gcloud-login.ps1",
+      "reason": "runInteractiveGcloudLogin() builds this path and passes it after PowerShell -File to run()."
+    },
+    {
+      "from": "src/lib/providers/owner-prompt-queue.js",
+      "to": "tools/owner-prompt-queue.ps1",
+      "reason": "launchWaitingDialog() resolves RUNNER and passes it after PowerShell -File to spawnProcess()."
+    },
+    {
+      "from": "tools/claude-session-register.js",
+      "to": "tools/claude-session-heartbeat.js",
+      "reason": "startHeartbeat() resolves the BEATER filename beside the registrar and passes that script as process.execPath argv zero."
+    },
+    {
+      "from": "src/lib/research/worker-supervisor.js",
+      "to": "tools/research-runs-worker.js",
+      "reason": "The retained research supervisor passes this workerFile and --supervised-stdio to the original native Job launch; the runtime and shell share that exact supervisor."
+    },
+    {
+      "from": "src/lib/providers/scheduler.js",
+      "to": "src/job-runner.js",
+      "reason": "schedulerRuntime() declares this runnerPath and scheduled task specs carry it as the Node program."
+    },
+    {
+      "from": "src/lib/agent-wake.js",
+      "to": "tools/lane-run.js",
+      "reason": "spawnLaneWrapper() validates DEFAULT_LANE_RUN_FILE and passes laneRunFile as process.execPath argv zero."
+    },
+    {
+      "from": "src/lib/providers/duo-desktop.js",
+      "to": "tools/ucr-login.js",
+      "reason": "runLoginProcess() passes the LOGIN_SCRIPT constant as process.execPath argv zero for the interactive login child."
+    },
+    {
+      "from": "src/lib/secret-store/powershell.js",
+      "to": "tools/secrets-manager.ps1",
+      "reason": "run() resolves MANAGER from the installed program root and passes it after PowerShell -File for every vault operation."
+    },
+    {
+      "from": "src/lib/providers/workstation.js",
+      "to": "tools/full-remote-access-mcp-proxy.js",
+      "reason": "buildMcpServers() writes this exact installed path as argv zero for the customer's toolsenabled-full-remote MCP process."
+    },
+    {
+      "from": "src/lib/providers/workstation.js",
+      "to": "tools/full-remote-playwright-mcp-proxy.js",
+      "reason": "buildMcpServers() writes this exact installed path as argv zero for the customer's playwright-full-remote MCP process."
+    },
+    {
+      "from": "src/lib/vault-host/worker.js",
+      "to": "tools/vault-host.ps1",
+      "reason": "startHost() passes HOST_SCRIPT from programOrStatePath() after PowerShell -File to its persistent child spawn."
+    },
+    {
+      "from": "tools/health-observer.js",
+      "to": "tools/audit-durability-check.js",
+      "reason": "invokeAuditCheckpoint() passes the AUDIT_CHECKPOINT_TOOL constant as execFile argv zero on each managed observer sweep that emits an audit checkpoint."
+    },
+    {
+      "from": "tools/health-observer.js",
+      "to": "tools/process-visibility-refresh.js",
+      "reason": "invokeProcessVisibilityRefresh() passes the PROCESS_VISIBILITY_REFRESH_TOOL constant as execFile argv zero when the observer finds the process snapshot unusable."
+    }
+  ],
+  "entries": {
+    "src/lib/agent-attribution-projection.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/agent-engine/claude-adapter.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/agent-engine/claude-process.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/cloud-agent/index.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/cloud-agent/session.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/cloud-agent/state-machine.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/controller-savings-ledger.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-adapter-contracts.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-enforcement.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-fake-adapters.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-task-attempt-projection.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-task-observation.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/delegation-task-projection.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/fleet-summary.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/owner-ledger-open-gates.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/owner-request-lifecycle-projection.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/owner-request-scope-proposal.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/owner-request-status-projection.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/peer-link-rotation.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/providers/doc-intel.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/request-version/legacy-dotted-disposition.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/research/model-enrichment.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/research/token-analyzer.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/service-registry-probe.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/supervision/process-visibility-producer.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "src/lib/supervision/process-visibility-writer.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-11"
+    },
+    "tests/entry/mcp-owner-proxy-lifecycle.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tests/intent-fidelity-live.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tests/secret-store.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tools/agent-parity.js": {
+      "status": "manual",
+      "reason": "A person runs this by hand after adding or changing an agent provider, per owner request R118, to confirm the new capability works across every provider; there is no fixed event a chain could hook to trigger it automatically.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/agent-preflight.js": {
+      "status": "manual",
+      "reason": "This is an on-demand, read-only live-state diagnostic. Its optional --topic value comes from the current task, and its session, process, and registry observations are meaningful only when requested; deterministic suites cover its parsing and refusal contracts separately.",
+      "seededAt": "2026-08-09",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/agent-roster.js": {
+      "status": "manual",
+      "reason": "This is an on-demand, read-only presence observation. It reports who is live at the moment it is invoked, so a stored chain result would immediately become stale; deterministic suites cover its data and output contracts separately.",
+      "seededAt": "2026-08-09",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/agent-wake.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tools/audit-verify-cost.js": {
+      "status": "manual",
+      "reason": "A measurement harness, not a verdict. It builds throwaway ledgers under the OS temp directory at whatever scale the reader wants to argue about and prints a cost curve; there is no pass or fail for a chain to act on. It exists because two lanes escalated this cost from an inherited number instead of reading one off a run.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/audit.ps1": {
+      "status": "manual",
+      "reason": "Requires an explicit -Action from {tail,verify,status,flush} that only a person deciding what to inspect can supply; there is no default action, so nothing could invoke it without a human choosing one.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/build-queue-migrate.js": {
+      "status": "manual",
+      "reason": "A maintainer runs this explicit, reversible repository migration only when splitting or merging the build queue. It requires a human-supplied ownership plan and remains preview-only unless that maintainer also passes --apply.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/check-capability-mirror.js": {
+      "status": "manual",
+      "reason": "A release operator runs this against a separately checked-out app repository to verify its staged capability/ payload matches this engine checkout (R70). The app checkout's path is a human-supplied, per-invocation argument that no engine-only CI run can infer, and its logic is covered directly by tests/check-capability-mirror.test.js.",
+      "declaredAt": "2026-09-07"
+    },
+    "tools/bridge-status.js": {
+      "status": "manual",
+      "reason": "Its own header calls this a read-only ONBOARDING probe for the two registered-machine layers, run by a person setting up or diagnosing a pairing, reporting tunnel/bridge health separately by design; it is not part of any standing chain.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/canvas-session-preflight.js": {
+      "status": "manual",
+      "reason": "An operator runs this before a Canvas/Duo submission to catch a lapsed SSO session ahead of time, deliberately reading only presence/domain/expiry and never a cookie value; there is no scheduled moment to check a session that has not been chosen for use yet.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/codex-lane-dispatch.ps1": {
+      "status": "manual",
+      "reason": "Dispatches one bounded Codex build lane into an isolated worktree for the exact -Lane/-Model/-Brief a dispatcher supplies for that specific piece of work; each invocation names a lane nobody else has, so nothing standing could call it.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/cloud-batch-plan.js": {
+      "status": "manual",
+      "reason": "A release operator runs this planner against the corpus and project selected for a particular cloud batch. The operator must supply the project, bounded rate, account plan, and new declaration destination; no customer runtime can infer those release decisions.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/cloud-lane.js": {
+      "status": "manual",
+      "reason": "A release operator runs or resumes a specifically admitted cloud batch after reviewing its declaration and journal. Dispatch spends external provider quota and unresolved outcomes require human reconciliation, so it is deliberately not an automatic customer process.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/council-tally.js": {
+      "status": "manual",
+      "reason": "Tallies one specific on-disk council record directory named by whoever convened that council; there is no persistent record to tally until a council has actually been run.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/drive-upload.js": {
+      "status": "manual",
+      "reason": "A thin CLI a person runs to upload or find one named Drive file after the one-time google-oauth-login.js; the file path and intent are supplied per call by whoever is doing the upload.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/fra-selfhost.js": {
+      "status": "manual",
+      "reason": "Walks a person from a fresh install to a working direct-FRA pair. Its whole reason for existing is the one input nobody can guess -- the sha256 preimage of the current runtime-integrity anchor -- after which it adds the operator's own two machines to config/service-registry.json. Both are per-install acts a human performs once, on hardware only he can see.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/gemini-agentic-run.js": {
+      "status": "manual",
+      "reason": "A maintainer invokes this provider runner with a reviewed input file naming the task, workspace, allowed paths, time bound, model, and account-backed backend. It creates reviewable external agent work and therefore must not run from an unattended customer lifecycle.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/google-oauth-login.js": {
+      "status": "manual",
+      "reason": "A customer runs this once for an explicitly chosen account and completes Google's interactive browser consent. No repository process can choose the account, consent on the person's behalf, or safely automate that external authorization.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/git-destructive-reflog-check.js": {
+      "status": "manual",
+      "reason": "Post-incident diagnostic, deliberately not a gate. An agent runs this BY HAND immediately after a destructive git operation to see what the reflog still holds. The only useful moment to run it is after damage, so wiring it into a hook would execute a recovery tool on every ordinary commit and teach everyone to ignore its output. Its behaviour is not unverified: tests/git-destructive-reflog-check.test.js covers it and IS wired into npm test."
+    },
+    "tools/grepsaver-migrate-zones.js": {
+      "status": "manual",
+      "reason": "Its own header states it is a one-time mechanical rewrite of the existing card set, never edits judgment prose, and is explicitly not a recurring operation.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/harden-elevation-target-acls.ps1": {
+      "status": "manual",
+      "reason": "Changes NTFS permissions on the programs this machine runs with administrator rights, and does nothing at all without -Apply. The principals it would remove include the agent sandbox group, which holds Modify on the source tree BY DESIGN, so removing it is a policy change the owner decides rather than a typo fix. It needs elevation and prints what it would remove before removing it.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/ingest-cli-session-usage.js": {
+      "status": "manual",
+      "reason": "Its own header states it can be run manually, from a schedule, or by the local-coder sidecar on its own throttle -- three valid operator-chosen paths, deliberately not narrowed to one fixed root.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/lane-quality.js": {
+      "status": "manual",
+      "reason": "A coordinator runs \"record\" after reviewing one lane outcome and \"status\" when deciding review depth for a named lane/tier; the lane and verdict are the coordinator's own judgment call, not data any chain holds.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/link-bus-bootstrap.js": {
+      "status": "manual",
+      "reason": "Owner-enabled bootstrap that mints and delivers a fresh relay token to one specific peer machine's enrollment window; the owner triggers this per peer, and no automatic process can decide that a new peer bootstrap is warranted.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/link-bus-firewall.ps1": {
+      "status": "manual",
+      "reason": "Needs interactive elevation to add a one-time Windows Firewall rule (BUILTIN\\Administrators is deny-only in the owner's session) and its own header explains it is deliberately kept out of the standing UAC delegation allowlist so no agent can silently widen its own elevated surface.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/local-node-status.js": {
+      "status": "manual",
+      "reason": "Read-only answer to 'can THIS computer run a model as a node, and if not what is the one command that fixes it'. The subject is whichever runtimes and weights are on the operator's own machine, about which no repository chain can assert anything. It starts no inference, downloads nothing and needs no credential.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/mechanical-bridge-smoke.js": {
+      "status": "manual",
+      "reason": "A bounded, read-only smoke test of the live direct-Ethernet bridge that an operator runs by hand to check bridge health against the real network path; nothing schedules it because it exercises a live token-bearing connection.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/native-agent-submit.js": {
+      "status": "manual",
+      "reason": "Its own header names this the LOCAL convenience path used for testing and by a local operator submitting one native.agent.run task; a configured peer instead uses the authenticated task.submit bridge, so this is deliberately the by-hand alternative.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/owner-descope.js": {
+      "status": "manual",
+      "reason": "Records that something the owner asked for is being dropped, carrying the requirement in his words and the reason in the lane's. Both are inputs only the human deciding to descope holds; nothing can derive them. Automating this write would manufacture exactly the invisible descope the tool exists to make impossible.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/owner-spool-review.js": {
+      "status": "manual",
+      "reason": "Its header states the contract outright: classification stays a judgement call. A custodian decides whether spooled owner text is a directive to promote into the ledger, or is moved to reconciled/ with a stated reason. That decision is the whole tool, and wiring it would mean a machine deciding what the owner meant.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/peer-dispatch.js": {
+      "status": "manual",
+      "reason": "Sends one named unit of work to the paired machine over the authenticated 8788 bridge at the moment an operator or agent decides to dispatch it; the work item and target are chosen per call, not standing state.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/prior-work.js": {
+      "status": "manual",
+      "reason": "The 'has this already been done?' query an agent runs BEFORE starting work, when the topic exists only in the prompt it was handed a moment earlier. There is no fixed topic for a chain to pass it. Its four-value exit contract exists because callers that could not tell MISS from UNKNOWN re-derived four nights of research the fleet already owned.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/prune-phrases.js": {
+      "status": "manual",
+      "reason": "It MEASURES how much of the curated phrase table the action-by-object derivation has absorbed, and --write deletes whatever became redundant. Deleting vocabulary is a judgement about what people say, taken while looking at the list; a chain that ran --write would quietly shrink the words a person can be understood by, and a chain that ran it read-only would print a percentage nobody reads. Run it after changing config/actions.json or config/objects.json and read the number.",
+      "declaredAt": "2026-08-22"
+    },
+    "tools/purchase-cart.js": {
+      "status": "manual",
+      "reason": "A person invokes this read-only recovery and support view when the desktop, browser, or bridge is unavailable and they need to inspect the local purchase-question queue. It cannot be scheduled meaningfully because the question is asked only during diagnosis.",
+      "declaredAt": "2026-09-01"
+    },
+    "tools/process-visibility-snapshot-writer.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tools/promote-desktop-root.ps1": {
+      "status": "manual",
+      "reason": "Defaults to read-only and only performs its real filesystem junction/promotion action when a person passes -Execute after reading the preflight report; that is an irreversible-shaped filesystem change the owner approves per run.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/provision-research.ps1": {
+      "status": "manual",
+      "reason": "Provisions local-only research dependencies (Searxng/Python/models) that a person selects via named switches for a one-time environment setup on this machine; there is no standing target environment to provision automatically.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/reap-loopback-listener.ps1": {
+      "status": "manual",
+      "reason": "Needs interactive elevation to kill a specific orphaned listener process that a non-elevated session cannot even query, per its own header explaining the measured S4U administrator-token defect; an operator runs it once they have identified the actual orphan on this host.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/reap-playwright-temp.js": {
+      "status": "manual",
+      "reason": "Its own header states this never runs automatically as a background sweeper and that an owner or agent must invoke it directly to clean up orphaned Playwright temp directories after a crash.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/register-managed-tasks.js": {
+      "status": "manual",
+      "reason": "Reads this machine's actual live Windows Scheduled Task state via Get-ScheduledTask and prints the exact elevated command for whichever declared subsystem is missing one; the live task list it reads only exists on the host it runs on.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/rehome-local-fallback.ps1": {
+      "status": "manual",
+      "reason": "Takes a specific -ConsoleProcessId and -ConsoleStartKey identifying one real live console session to rehome; those identifiers only exist once a person or the owning process observes that exact session.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/remote-agent-bridge-reconcile.js": {
+      "status": "manual",
+      "reason": "Reconciles the live port-8788 bridge process against config/managed-processes.json on THIS host after a reboot or unnoticed crash; the fault it detects is specific to the machine it runs on and is not something a chain here can observe.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/remote-agent-mcp-proxy-smoke.js": {
+      "status": "manual",
+      "reason": "A bounded live smoke test that launches the real stdio MCP proxy and reads the live bridge token from the local vault; an operator runs it to prove the actual native-MCP handoff still works, not on any fixed schedule.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/remote-bridge-bootstrap.js": {
+      "status": "manual",
+      "reason": "Owner-enabled bootstrap/refresh that mints a fresh bridge token in memory and sends it once over the pinned direct-Ethernet enrollment port; the owner decides when Machine-A needs re-enrollment, which no automatic process can infer.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/remote-bridge-firewall.ps1": {
+      "status": "manual",
+      "reason": "Needs the same interactive elevation as tools/link-bus-firewall.ps1 for the same reason (admin-only inbound rule, deny-only session) and is deliberately kept as a separate one-time script and allowlist entry per its own header.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/render-master-report.ps1": {
+      "status": "manual",
+      "reason": "Renders one named HTML/PDF report pair whose paths a person supplies or accepts as defaults; it operates on a specific report a human is producing, not a standing artifact.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/research-once.js": {
+      "status": "manual",
+      "reason": "Runs exactly one research query the caller supplies inline against the real web provider and local research database; the query text is the whole input, and there is no standing query to run without one.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/run-luna-lane.ps1": {
+      "status": "manual",
+      "reason": "Runs one prompt/output/stdout/stderr file set whose absolute paths are supplied by whichever process launches a specific Luna lane; each invocation is scoped to files that exist only because that lane was started.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/scope-node-firewall-rules.ps1": {
+      "status": "manual",
+      "reason": "Rewrites Windows inbound firewall rules on this host, and needs administrator rights to do it. Which remote addresses are legitimate depends on the network the machine is actually on, and the owner has said this machine moves to another computer and network before red-team testing. A repository chain cannot know that answer and must not change a host firewall on its own.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/secret-doctor.js": {
+      "status": "manual",
+      "reason": "A read-only diagnostic that inspects the real local secret store instance on the machine it runs on to explain why a secret operation would or would not work; an operator runs it while troubleshooting, not as part of any deterministic chain.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/service-restart.js": {
+      "status": "manual",
+      "reason": "Restarts one named live OS-managed service on this host by name (per its own usage lines), verifying the socket actually closes before restart; the service name and the decision to restart are an operator's, not derivable state.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/start-agent-activity-visualizer.ps1": {
+      "status": "manual",
+      "reason": "Starts the desktop AgentActivityVisualizer process a person opens to watch live agent activity; it is a UI a human chooses to open, not a background service.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/start-uac-tray.ps1": {
+      "status": "manual",
+      "reason": "Its own header states this is deliberately not elevated and deliberately not a scheduled task: an operator (or whatever process the owner chooses) runs it manually whenever the UAC tray icon should appear.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/status-snapshot.js": {
+      "status": "manual",
+      "reason": "A dispatcher-facing entry point: it is invoked by whatever process is assembling a prompt, from outside this repository, and prints either the whole status block or zero bytes when the owner has not opted in. The caller is that dispatcher, so no surface inside this tree runs it and none should.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/suite-map.js": {
+      "status": "manual",
+      "reason": "Answers 'I changed this file -- which suites actually cover it, and how?' for a person who has just made the change. That change is the input, and no chain holds it. The tool exists because a lane ran an unrelated suite, got a real green, and nearly committed a file that two other suites prove is broken.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/tunnel-bridge-control.ps1": {
+      "status": "manual",
+      "reason": "Its own header states ServerControl (packages/servercontrol, a separate GUI outside this Node-parsed graph) invokes it directly and that lifecycle authority intentionally lives in bridge-session-supervisor.ps1; no JS root in this repository calls it, and the one place its name appears in bridge-session-supervisor.ps1 is a shared-vocabulary comment, not a real invocation, so declaring a productionEdge from that comment would manufacture a relationship that does not exist.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/uac-run.js": {
+      "status": "manual",
+      "reason": "Invokes one specific elevated operation id from config/uac-delegation-allowlist.json chosen by the caller; the id is the entire input and it names a real elevation action a person or agent decides to trigger, not a standing job.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/usage-attribution-query.js": {
+      "status": "manual",
+      "reason": "A bounded, read-only query CLI a person runs against the live signed audit ledger to inspect provider usage without opening audit.sqlite3 directly; the query bounds and moment are the operator's choice.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/usage-attribution-selftest.js": {
+      "status": "baseline",
+      "seededAt": "2026-08-09"
+    },
+    "tools/vault-access-probe.ps1": {
+      "status": "manual",
+      "reason": "Deliberately reads the REAL credential store in the checkout with no redirect. Every vault suite points TOOLSENABLED_VAULT_PATH at an mkdtemp directory, which is precisely why none of them can see the live DACL -- so running this from a suite would either assert nothing or turn the live vault into a test fixture. An operator runs it against the real host after any ACL change.",
+      "declaredAt": "2026-08-13"
+    },
+    "tools/verify-evidence-store.js": {
+      "status": "manual",
+      "reason": "Verifies the real on-disk evidence-store database this host is actually using (DEFAULT_ROOT/DEFAULT_DB_FILE); an operator runs it to check the integrity of that specific live file after a suspected fault, not on a fixed schedule.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tests/linux-sandbox-sterile-live-smoke.js": {
+      "status": "manual",
+      "reason": "Its own header states this is explicit live-Docker acceptance, not a hermetic test or an installer proof, and requires the fixed product image already built without ever downloading or rebuilding it; an operator runs it by hand against a real prebuilt image, which a deterministic gate cannot assume exists.",
+      "seededAt": "2026-09-08"
+    },
+    "src/lib/session-workspace-ceiling.js": {
+      "status": "baseline",
+      "seededAt": "2026-09-08"
+    }
+  }
+}

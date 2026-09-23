@@ -1,0 +1,23 @@
+{
+  "$comment": [
+    "TEMPLATE -- this file ships with the product and must never contain a",
+    "real address, file path, or username. To configure a second computer:",
+    "copy this file to config/machines.profile.json (already gitignored, so",
+    "your copy is never committed), fill it in with YOUR values, and set",
+    "\"mode\" to \"multi\". If you never create that copy at all, this program",
+    "works as a normal single-machine install with zero setup -- absence of a",
+    "profile is the common case, not an error."
+  ],
+  "schemaVersion": 1,
+  "mode": "single",
+  "$comment_mode": "\"single\" (default) if you only ever use this on one computer. \"multi\" once you have listed at least one real entry under \"peers\" below.",
+  "transport": "direct",
+  "$comment_transport": "One of: \"direct\" (free, works only when your computers already share a network), \"self-hosted-relay\" (free, works from anywhere, you run and secure the relay server yourself), \"hosted-relay\" (paid, works from anywhere, nothing for you to run).",
+  "thisMachine": {
+    "id": "desktop",
+    "label": "My desktop"
+  },
+  "$comment_this_machine": "\"id\" is a short lowercase slug YOU choose to name this computer -- letters, digits, dot, dash, underscore only, e.g. \"desktop\" or \"work-laptop\". It is deliberately not an IP address and not a file path, so it keeps working if your network address changes or you move this folder to a new location. \"label\" is only what you see on screen.",
+  "peers": [],
+  "$comment_peers": "Each entry describes one OTHER computer you own, for example: { \"id\": \"laptop\", \"label\": \"My laptop\", \"address\": \"how-to-reach-it\", \"root\": \"where the checkout lives on that machine\" }. Add an entry here and set \"mode\" above to \"multi\" to turn on cross-machine features. An entry cannot name itself as its own peer, and its \"id\" must be a valid slug like the one you chose for thisMachine.id above -- anything else is ignored and reported rather than guessed at."
+}

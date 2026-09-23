@@ -1,0 +1,222 @@
+{
+  "knownFailures": [
+    {
+      "file": "tests/agent-attribution.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/agent-engine/claude-live-turn.js",
+      "status": "fail",
+      "note": "A 'live' suite that drives a real provider turn. Fails without live credentials/session; not a code defect in this tree and not something a gate run should be asked to satisfy."
+    },
+    {
+      "file": "tests/agent-preflight.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/allowlist.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/approval-gate-classification.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/entry/task-stdio.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/fra-endpoint-manifests.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/fra-manifest-repin.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/full-remote-access-bridge.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/grepsaver/allowlist.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/intent-fidelity-live.js",
+      "status": "timeout",
+      "note": "Timed out at the 180 s per-file cap in both measurements. A 'live' suite: it reaches something outside this process, so it moves with machine load and network, and status drift here is expected rather than alarming."
+    },
+    {
+      "file": "tests/kernel.audit/vault-hardening.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/ledger-query.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/line-endings.test.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/link-bus-smoke-test.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/mission-bridge.test.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/owner.ledger/ledger-query.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/package-charters.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/package-check.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/pkg.tree/package-check.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/provider-charters.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/provider-launch-scrub-selfcheck.test.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/provider-launch-scrub.test.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/fra-surface-security.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/scheduler-windows-legacy-mutation.js",
+      "status": "skip",
+      "note": "Status 'skip', not 'fail' -- the runner declined to run it (Windows scheduler mutation). A skip is NOT a pass: it is recorded here by name so a file that silently starts skipping cannot pass for green."
+    },
+    {
+      "file": "tests/scheduler-windows-mutation.js",
+      "status": "skip",
+      "note": "Status 'skip', not 'fail' -- the runner declined to run it (Windows scheduler mutation). A skip is NOT a pass: it is recorded here by name so a file that silently starts skipping cannot pass for green."
+    },
+    {
+      "file": "tests/smoke.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/spawn-env-scrub-gate.test.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/standing-orders-hook.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/surface.policy/standing-orders-hook.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/task-stdio.js",
+      "status": "fail",
+      "note": "NEW since the 2026-08-11T02:57:53.443Z full run: it passed there and does not pass in the 2026-08-11T16:27:26.210Z run. Untouched by this lane -- it appeared from other work in that window. This is the entry class the ratchet exists to make visible; it should be diagnosed and removed, not carried."
+    },
+    {
+      "file": "tests/terminal-suppression.test.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    },
+    {
+      "file": "tests/unified-agent-p02-inventory.js",
+      "status": "fail",
+      "note": "inherited: also not passing in the 2026-08-11T02:57:53.443Z full run (688 files). Cause not diagnosed by this lane."
+    }
+  ],
+  "$comment": [
+    "Known-failing test files, by path. Maintained by tools/test-ratchet.mjs.",
+    "A failure NOT listed here is a regression and blocks. A file listed here that now",
+    "passes ALSO blocks, with 'lower the baseline' -- a ratchet that silently absorbs",
+    "improvement stops ratcheting.",
+    "",
+    "SEEDED from a COMPLETE full-tree run: 2026-08-11T16:27:26.210Z, 76/76 batches, 737 files",
+    "requested and 737 recorded, 699 pass / 35 fail / 1 timeout / 2 skip, 36.1 minutes",
+    "wall clock, 0 not-run and 0 no-record. Command:",
+    "  node tools/test-run.js --all --output <scratch dir>",
+    "The scratch --output is deliberate: state/test-runs/latest.json is polled by other",
+    "lanes as authoritative and a gate run must not overwrite it.",
+    "",
+    "Of these 38 entries, 15 were also not passing in the previous complete run",
+    "(2026-08-11T02:57:53.443Z, 688 files) and 23 are NEW since it. That second number is the",
+    "whole argument for this file: 22 test files broke between two runs of the same tree",
+    "and nothing could tell you which, because both runs simply exited non-zero.",
+    "",
+    "ARITHMETIC, RECONCILED 2026-08-12 -- read this before comparing the numbers above",
+    "with the array below, because they DO NOT match and the mismatch is not an error.",
+    "Everything above describes the SEED and is history: 38 entries = 35 fail + 1 timeout",
+    "+ 2 skip, and 699 + 35 + 1 + 2 = 737, which balances. The array is the CURRENT state",
+    "and holds 35 entries = 32 fail + 1 timeout + 2 skip. The difference is exactly the",
+    "three removals recorded in the wave-2 note below, each proven green before removal.",
+    "The seed paragraph is deliberately NOT rewritten to 35: it is the measurement that",
+    "created this file, and a baseline whose history is edited to agree with its present",
+    "cannot show anyone what changed. Only this note is added when the array moves.",
+    "",
+    "The 2 skip entries are the two opt-in-gated Windows Task Scheduler mutation suites.",
+    "They are NOT failures and tools/test-ratchet.mjs no longer treats them as such (they",
+    "were making SHIP OK unreachable); they stay listed so that a skip appearing anywhere",
+    "ELSE is still read as a regression. Failing-file arithmetic for the ship gate is",
+    "therefore 32, not 35.",
+    "",
+    "NEVER add an entry to make a red run go green without saying why in the note. The",
+    "note is the only thing standing between this file and a quarantine list.",
+    "",
+    "LANE engine-red-tests (wave 2) lowered this baseline by 3, each PROVEN green on the",
+    "current tree immediately before removal (PowerShell, Node v22.19.0):",
+    "  - tests/settings-surface-readonly.test.js -> now passes (exit 0, 4/4). Root cause: the",
+    "    R1231 state-store repair made getStateStore() eagerly open+validate on first call, and",
+    "    tool-registry.js + providers/web.js instantiated state-backed providers at MODULE LOAD,",
+    "    so importing the registry opened the DB and crashed on the test's bare node:sqlite mock.",
+    "    Fixed by deferring those instantiations to first use (registry lazy proxy; web lazy",
+    "    default provider) -- import is now side-effect-free, eager-open preserved on first use.",
+    "  - tests/measurement-honesty.js -> now passes (exit 0, 7 checks). Root cause: tools/",
+    "    check-memory-board-unity.js:541 matched Win32_Process CommandLine without guarding the",
+    "    empty read an unelevated cross-session query returns, silently dropping task-owned",
+    "    servers. Fixed to surface empty CommandLine as undeterminable (never counted stale).",
+    "  - tests/test-census.test.js -> now passes (exit 0). Self-fixed by the concurrent census",
+    "    lane's re-pin to 197 (see the removed entry's own note); no engine-red-tests code change."
+  ],
+  "updated": "2026-08-11T16:30:08.955Z"
+}

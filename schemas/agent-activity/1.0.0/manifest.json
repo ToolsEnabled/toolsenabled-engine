@@ -1,0 +1,40 @@
+{
+  "package": "agent-activity",
+  "schemaAuthority": "toolsenabled",
+  "schemaVersion": "1.0.0",
+  "contractVersion": "agent-activity-v1",
+  "ownershipDomain": "context",
+  "ownershipMap": "../../ownership-map.json",
+  "generator": "tools/generate-agent-activity-contracts.js",
+  "consumerOutput": "../../../../AgentActivityVisualizer/src/generated",
+  "sourcePolicies": {
+    "identifiers": "../../platform/identifier-policy.json",
+    "provenance": "../../platform/provenance-policy.json",
+    "redaction": "../../platform/redaction-policy.json"
+  },
+  "contracts": [
+    {"name": "common", "file": "common.schema.json", "browserSafe": false},
+    {"name": "agent", "file": "agent.schema.json", "browserSafe": false},
+    {"name": "goal", "file": "goal.schema.json", "browserSafe": false},
+    {"name": "request", "file": "request.schema.json", "browserSafe": false},
+    {"name": "phase", "file": "phase.schema.json", "browserSafe": false},
+    {"name": "task", "file": "task.schema.json", "browserSafe": false},
+    {"name": "evidence", "file": "evidence.schema.json", "browserSafe": false},
+    {"name": "report", "file": "report.schema.json", "browserSafe": false},
+    {"name": "edge", "file": "edge.schema.json", "browserSafe": false},
+    {"name": "event", "file": "event.schema.json", "browserSafe": false},
+    {"name": "browser-event", "file": "browser-event.schema.json", "browserSafe": true},
+    {"name": "snapshot", "file": "snapshot.schema.json", "browserSafe": true},
+    {"name": "history", "file": "history.schema.json", "browserSafe": true},
+    {"name": "report-render-manifest", "file": "report-render-manifest.schema.json", "browserSafe": false}
+  ],
+  "browserSafeInvariants": {
+    "contentTrust": "untrusted",
+    "grantsAuthority": false,
+    "safeDisplayFields": ["labels", "sourceCount", "containsSecret"],
+    "freeText": false,
+    "opaqueIds": false,
+    "hashes": false,
+    "paths": false
+  }
+}

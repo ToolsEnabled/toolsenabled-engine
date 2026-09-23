@@ -1,0 +1,1 @@
+{"compilerOptions":{"checkJs":false,"module":"commonjs","target":"es2022","moduleResolution":"node","baseUrl":"."},"include":["src/**/*.js","tools/**/*.js","tests/**/*.js","sidecars/**/*.js"],"exclude":["node_modules","scratch","captures"]}

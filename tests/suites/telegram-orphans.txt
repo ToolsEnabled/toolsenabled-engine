@@ -1,0 +1,21 @@
+# telegram-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+#
+# 2026-09-07, 1.0.42 staleness pass: this list is INTENTIONALLY EMPTY.
+# It named two files that no longer exist in this repository --
+#   tests/telegram-reliability-observation.js
+#   tests/telegram-video-relay.js
+# -- both removed by commit 755dc912 ("Telegram is out: the connector, its
+# tools, its tables and its owner steps"). Measured at engine 5a39c4d8: neither
+# path is in `git ls-tree -r` (2680 tracked files), and `git log --all` for each
+# ends at that removal commit. A suite entry with no file is a dead path, not
+# coverage. The file itself is kept because config/payload-boundary.json names
+# it; retiring the suite entirely also has to retire that boundary entry, and a
+# stale reference in tests/run-isolated.js ABSENT_FIXTURE_GATES still lists
+# tests/telegram-video-relay.js under config/managed-processes.json. Both are
+# flagged to the test-system lane in REPORT-D3-staleness-20260907.md; neither is
+# a mechanical docs edit.

@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "model-floor-v1",
+  "$purpose": [
+    "The single authoritative source of truth for which Gemini models may be used for delegated work.",
+    "src/lib/model-floor.js reads this policy, src/lib/tool-registry.js enforces it at dispatch, and",
+    "the declaration-site drift check prevents independent model lists from contradicting it."
+  ],
+  "policy": {
+    "purposesCannotLowerTheFloor": true,
+    "$purposesCannotLowerTheFloor": [
+      "The configured model floor applies to every delegated purpose, including planning, review,",
+      "advisory, chat, and release review. A purpose never creates a lower-tier exception."
+    ],
+    "purposes": ["lane", "planning", "review", "advisory", "chat", "release-review"],
+    "unknownIsRefusal": true,
+    "$unknownIsRefusal": "A model id absent from a backend's allowed list is refused, whether it is weaker, unknown, or unverified."
+  },
+  "backends": {
+    "subscription": {
+      "$identity": "Configured subscription backend. Only the explicitly allowed high-capability model may be selected.",
+      "allowed": ["gemini-3.1-pro-preview"],
+      "default": "gemini-3.1-pro-preview",
+      "notServable": {}
+    },
+    "vertex": {
+      "$identity": "Configured Vertex backend. Only the explicitly allowed high-capability model may be selected.",
+      "$evidence": "The allowed model is the verified high-capability tier for this backend. Requested and served model identities must match; substitution and fallback are refused.",
+      "allowed": ["gemini-2.5-pro"],
+      "default": "gemini-2.5-pro",
+      "notServable": {
+        "gemini-2.5-flash": "This model is not servable through the configured Vertex route without substitution. Substitution is refused."
+      }
+    },
+    "vertex-seat": {
+      "$identity": "Configured Vertex seat backend. Only the explicitly allowed high-capability model may be selected.",
+      "$evidence": "The allowed model is runtime-verified for this route. Requested and served model identities must match; substitution and fallback are refused.",
+      "allowed": ["gemini-3.1-pro-preview"],
+      "default": "gemini-3.1-pro-preview",
+      "notServable": {}
+    }
+  },
+  "refusedIds": {
+    "gemini-3.6-flash": "Unknown and below the configured model floor. It is not an allowed model id on any configured backend.",
+    "gemini-3.5-flash": "Below the configured model floor.",
+    "gemini-2.5-flash": "Below the configured model floor on every backend and not servable through the configured Vertex route without substitution.",
+    "gemini-3.1-flash-lite": "Below the configured model floor. Silent model substitution is refused.",
+    "gemini-3-flash": "Below the configured model floor.",
+    "gemini-3-flash-preview": "Below the configured model floor. Silent model substitution is refused."
+  },
+  "declarationSites": [
+    {
+      "id": "fleet-lane-models",
+      "file": "src/lib/fleet-supervisor/lane-models.js",
+      "kind": "js-const",
+      "symbols": ["ALLOWED_LANE_MODELS", "ALLOWED_VERTEX_LANE_MODELS"],
+      "status": "derived",
+      "note": "Allowed and default lane models are derived from this policy for each backend."
+    },
+    {
+      "id": "fleet-planning-models",
+      "file": "src/lib/fleet-supervisor/planning.js",
+      "kind": "js-const",
+      "symbols": ["PLANNING_MODEL_BY_BACKEND"],
+      "status": "derived",
+      "note": "Planning models are derived from each backend default, so purpose cannot lower the floor."
+    },
+    {
+      "id": "cli-provider-gateway-models",
+      "file": "src/lib/providers/cli-provider-gateway.js",
+      "kind": "js-const",
+      "symbols": ["GEMINI_MODELS", "RELEASE_REVIEW_GEMINI_MODEL"],
+      "status": "derived",
+      "note": "The provider model set and release-review default are derived from this policy."
+    },
+    {
+      "id": "gemini-agentic-models",
+      "file": "src/lib/providers/gemini-agentic.js",
+      "kind": "js-const",
+      "symbols": ["AGENTIC_MODELS", "PRIMARY_MODEL"],
+      "status": "derived",
+      "note": "The agentic model set and primary model are derived from this policy."
+    },
+    {
+      "id": "vertex-gemini-strong-models",
+      "file": "src/lib/providers/vertex-gemini-strong.js",
+      "kind": "js-const",
+      "symbols": ["MODELS", "PRIMARY_MODEL"],
+      "status": "derived",
+      "note": "The high-capacity Vertex route derives its allowed and selected models from this policy and has no fallback."
+    },
+    {
+      "id": "vertex-gemini-base-model",
+      "file": "src/lib/providers/vertex-gemini.js",
+      "kind": "js-const",
+      "symbols": ["MODEL"],
+      "status": "derived",
+      "note": "The bounded Vertex route derives its selected model from this policy."
+    },
+    {
+      "id": "vertex-gemini-seat-model",
+      "file": "src/lib/providers/vertex-gemini-seat.js",
+      "kind": "js-const",
+      "symbols": ["MODEL", "MODELS"],
+      "status": "derived",
+      "note": "The Vertex seat route derives its selected and allowed model set from this policy and has no fallback."
+    },
+    {
+      "id": "gemini-fleet-tool-model",
+      "file": "tools/gemini-fleet.js",
+      "kind": "js-const",
+      "symbols": ["MODEL"],
+      "status": "compliant",
+      "note": "This independent declaration remains tracked so drift is refused."
+    }
+  ]
+}

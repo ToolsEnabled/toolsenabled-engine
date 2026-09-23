@@ -1,0 +1,29 @@
+# online-surface-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/online-fra-device-claim.js
+tests/online-fra-admin-enrollment.test.js
+tests/online-fra-claim-cli-consent.test.js
+tests/online-fra-claim-cli.test.js
+tests/online-fra-device-identity.js
+tests/online-fra-direct-signalling.js
+tests/online-fra-direct-transport.js
+tests/online-fra-e2e-session.js
+tests/online-fra-local-bridge.test.js
+tests/online-fra-composite-bridge.test.js
+tests/online-fra-browser-authority.test.js
+tests/online-fra-browser-authorization.test.js
+tests/online-fra-browser-authority-clock.test.js
+tests/online-fra-reference-authority.test.js
+tests/online-fra-bridge-native-http.test.js
+tests/online-fra-peer-introduction.js
+tests/online-fra-relay-client.js
+tests/online-maintenance-broker.js
+tests/online-maintenance-contract.js
+tests/online-tools-profile.js
+tests/online-tunnel-adapter.js
+tests/online-tunnel-contract.js
+tests/online-fra-desktop-controller.test.js

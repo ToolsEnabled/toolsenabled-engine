@@ -1,0 +1,31 @@
+# b5322812 added this chain step without its list. Retain the step and bind it
+# to the regression updated by that commit. The same test is already in
+# orphans-wired-0826b.txt; this restores a runnable declared recipe without
+# claiming new coverage or dropping any existing file.
+# Existing independent repair 04450d07 selected the same test for this reason.
+tests/standing-orders-hook-git-destructive.test.js
+
+# The shared API-mode change must remain in the declared product lifecycle.
+tests/agent-api-modes.test.js
+
+# Persistent browser session additions must remain in the declared test lifecycle.
+tests/browser-agent-usability.test.js
+tests/playwright-session-live.test.js
+tests/playwright-session.test.js
+
+# Final combined cancellation and direct-link contracts belong to the normal lifecycle.
+tests/agent-comms/tree-direct-links.test.js
+tests/host-exec-cancellation-native.test.js
+tests/host-exec-cancellation.test.js
+tests/owner-host-cancellation-cleanup.test.js
+# Stopping a session's own native command without retiring the session belongs
+# in the same step as the revoke-time drain it sits beside.
+tests/owner-host-session-cancel.test.js
+
+# Revocation and approval retirement must survive asynchronous boundaries.
+tests/host-exec-kill-switch-admission.test.js
+tests/agent-engine/codex-approval-lifecycle.test.js
+tests/policy-task-retirement.test.js
+tests/mission-bridge-session-lifecycle.test.js
+tests/mission-bridge-action-admission.test.js
+tests/tool-dispatch-policy-refresh.test.js

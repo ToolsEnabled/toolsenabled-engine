@@ -1,0 +1,97 @@
+{
+  "note": "Shape of the owner ToolsEnabled-Live audit ledger at the 2026-09-04T04:11:36Z AUDIT_PROJECTION_DIVERGED breach. Sanitized: only action names survive from the real rows; every target, detail, path, command line, key and signature is dropped. No owner ledger bytes are reproduced here -- the test rebuilds its own ledger with its own throwaway ed25519 key from these shapes.",
+  "measuredAtMs": 1788498412132,
+  "source": "copy of %APPDATA%/ToolsEnabled-Live/capability (read-only), engine 3d920d8",
+  "liveShape": {
+    "archiveBoundarySequence": 8356,
+    "liveWindowEvents": 10053,
+    "firstLiveSequence": 8357,
+    "headSequence": 18409,
+    "sinkCursors": {
+      "jsonl": 18409,
+      "text": 18409
+    },
+    "projectionLines": {
+      "jsonl": 10053,
+      "text": 10053
+    },
+    "projectionBytes": {
+      "jsonl": 12049788,
+      "text": 6956767
+    }
+  },
+  "observedDivergence": {
+    "code": "AUDIT_PROJECTION_DIVERGED",
+    "sink": "jsonl",
+    "projectionLines": 10053,
+    "sinkCursor": 18408,
+    "boundarySequence": 8356,
+    "why": "rows.length (10053) > events.length (10052): the projection line projectSinks() durably appended for the head event is on disk while that event is not yet committed. 96fc6ec loosened only the cursor comparison (rows.length < cursor - boundarySequence), which this state passes; projectionMatches() re-tested the same condition absolutely and threw."
+  },
+  "events": [
+    {
+      "windowOffset": 10046,
+      "action": "controller.meter.tool_batch",
+      "target": "redacted-target-1",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10047,
+      "action": "jarvis.audit.policy.decision",
+      "target": "redacted-target-2",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10048,
+      "action": "controller.agent.launch",
+      "target": "redacted-target-3",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10049,
+      "action": "jarvis.audit.policy.decision",
+      "target": "redacted-target-4",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10050,
+      "action": "host.exec.intent",
+      "target": "redacted-target-5",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10051,
+      "action": "jarvis.audit.policy.decision",
+      "target": "redacted-target-6",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10052,
+      "action": "host.exec.intent",
+      "target": "redacted-target-7",
+      "details": {
+        "redacted": true
+      }
+    },
+    {
+      "windowOffset": 10053,
+      "action": "jarvis.audit.policy.decision",
+      "target": "redacted-target-8",
+      "details": {
+        "redacted": true
+      }
+    }
+  ]
+}

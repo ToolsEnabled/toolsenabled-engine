@@ -1,0 +1,38 @@
+#!/bin/sh
+# Require explicit human/agent provenance for non-generated commits. Git's
+# configured author identifies the account, not necessarily the writing seat.
+
+msg_file="$1"
+[ -z "$msg_file" ] && exit 0
+[ -f "$msg_file" ] || exit 0
+
+case "$(head -n1 "$msg_file")" in
+  "Merge "*|"Revert "*|"squash! "*|"fixup! "*|"amend! "*) exit 0 ;;
+esac
+
+has_author=$(grep -ci '^Co-Authored-By:[[:space:]]*[^[:space:]]' "$msg_file")
+has_lane=$(grep -ci '^Lane:[[:space:]]*[^[:space:]]' "$msg_file")
+has_seat=$(grep -ci '^Lane:.*(\(.*[[:space:],;]\)\?session[[:space:]]\+[A-Za-z0-9_-]\{4,\}' "$msg_file")
+
+if [ "$has_author" -gt 0 ] && [ "$has_lane" -gt 0 ] && [ "$has_seat" -gt 0 ]; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+
+  ============================================================
+  [provenance] REFUSED: this commit does not identify its seat.
+  ============================================================
+  Add both trailers to the end of the commit message:
+
+    Co-Authored-By: <writer or agent> <noreply@example.invalid>
+    Lane: <specific lane> (session <stable session id>)
+
+  Co-Authored-By identifies the writer or model. Lane identifies
+  the distinct working seat. The literal word "session" and an id
+  of at least four letters, digits, underscores, or hyphens are
+  required so concurrent seats do not become indistinguishable.
+  ============================================================
+
+EOF
+exit 1

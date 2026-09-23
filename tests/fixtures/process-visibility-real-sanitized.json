@@ -1,0 +1,1060 @@
+{
+  "schemaVersion": 1,
+  "capturedAtMs": 1785741722783,
+  "reader": {
+    "kind": "toolsenabled-uac-process-reader",
+    "privilege": "elevated-read-only"
+  },
+  "tasks": [
+    {
+      "taskName": "ToolsEnabled Dashboard",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>",
+        "-RunComponent",
+        "dashboard",
+        "-NodePath",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Local Sidecar",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>",
+        "-RunComponent",
+        "local-sidecar",
+        "-NodePath",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Fleet Supervisor",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "--serve",
+        "--quiet",
+        "--concurrency",
+        "4",
+        "--project",
+        "example-vertex-project",
+        "--backend",
+        "vertex"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Telegram Bridge",
+      "state": "Running",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "--serve",
+        "--quiet"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Agent Digest",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "--serve"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled UAC Delegation Helper",
+      "state": "Ready",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Health Observer",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "--serve"
+      ]
+    },
+    {
+      "taskName": "ToolsEnabled Coordinator Duty Host",
+      "state": "Disabled",
+      "executable": "<ABSOLUTE_PATH>",
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "--serve"
+      ]
+    }
+  ],
+  "processes": [
+    {
+      "pid": 3360,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 3688,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-WindowStyle",
+        "Hidden",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 11072,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 18644,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-WindowStyle",
+        "Hidden",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "<ABSOLUTE_PATH>",
+        "-IntervalSeconds",
+        "30"
+      ]
+    },
+    {
+      "pid": 12676,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 23148,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 16744,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "scratch\\r171-handoff-worker.js"
+      ]
+    },
+    {
+      "pid": 14708,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--stdio"
+      ]
+    },
+    {
+      "pid": 40892,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-noexit",
+        "-command",
+        "try { . \\\"<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 31728,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-noexit",
+        "-command",
+        "try { . \\\"<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 29608,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Import-Module '<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 22708,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 27188,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 32800,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 15840,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--stdio"
+      ]
+    },
+    {
+      "pid": 8628,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--serverMode",
+        "partialSemantic",
+        "--useInferredProjectPerProjectRoot",
+        "--disableAutomaticTypingAcquisition",
+        "--cancellationPipeName",
+        "<ABSOLUTE_PATH>",
+        "--locale",
+        "en",
+        "--validateDefaultNpmLocation",
+        "--useNodeIpc"
+      ]
+    },
+    {
+      "pid": 33908,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--useInferredProjectPerProjectRoot",
+        "--cancellationPipeName",
+        "<ABSOLUTE_PATH>",
+        "--locale",
+        "en",
+        "--validateDefaultNpmLocation",
+        "--useNodeIpc"
+      ]
+    },
+    {
+      "pid": 14416,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Roaming/npm/node_modules/typescript/lib/typingsInstaller.js",
+        "--globalTypingsCacheLocation",
+        "C:/Users/<MACHINE>/AppData/Local/Microsoft/TypeScript/5.9",
+        "--typesMapLocation",
+        "C:/Users/<MACHINE>/AppData/Roaming/npm/node_modules/typescript/lib/typesMap.json",
+        "--validateDefaultNpmLocation"
+      ]
+    },
+    {
+      "pid": 14836,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 35752,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 23732,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 14932,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "tools/remote-agent-mcp-proxy.js"
+      ]
+    },
+    {
+      "pid": 19332,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 23952,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 17668,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "tools/remote-agent-mcp-proxy.js"
+      ]
+    },
+    {
+      "pid": 15404,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 11224,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 29148,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 22940,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 11376,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 14828,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 5880,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 38392,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "tools/mcp-owner-proxy.js"
+      ]
+    },
+    {
+      "pid": 31192,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 34740,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 36648,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "try { $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8' } catch {}; if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage') { try { $OutputEncoding = [System.Text.UTF8Encoding]::new() } catch {}; if ($null -ne $PSStyle) { try { $PSStyle.OutputRendering = 'PlainText' } catch {} } }; cd <ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 39976,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 33976,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 2392,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 34284,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "node",
+        "tools/full-remote-access-mcp-proxy.js"
+      ]
+    },
+    {
+      "pid": 2316,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 33940,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "try { $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8' } catch {}; if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage') { try { $OutputEncoding = [System.Text.UTF8Encoding]::new() } catch {}; if ($null -ne $PSStyle) { try { $PSStyle.OutputRendering = 'PlainText' } catch {} } }; cd <ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 31996,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "<ABSOLUTE_PATH>",
+        "-IntervalSeconds",
+        "15"
+      ]
+    },
+    {
+      "pid": 18704,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 40708,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "3889",
+        "--upstream",
+        "http://127.0.0.1:3888"
+      ]
+    },
+    {
+      "pid": 38620,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--serve",
+        "--quiet"
+      ]
+    },
+    {
+      "pid": 19372,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 32628,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/run-codex-lane.js",
+        "--lane",
+        "Q64W",
+        "--launch-id",
+        "launch_R9e5rbkVoJPD8y-HIhhMEg5QKtRYYIVK",
+        "--model",
+        "gpt-5.6-terra",
+        "--effort",
+        "xhigh",
+        "--sandbox",
+        "workspace-write",
+        "--workdir",
+        "C:/Users/<MACHINE>/Desktop/engine-checkout",
+        "--prompt-file",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/p-q64.md",
+        "--out",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/o-q64.json",
+        "--cap-ms",
+        "2400000"
+      ]
+    },
+    {
+      "pid": 16256,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    },
+    {
+      "pid": 40460,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 35004,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 1132,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/run-codex-lane.js",
+        "--lane",
+        "Q67T",
+        "--launch-id",
+        "launch_A2jW8L2_Mqpk7ddOowaSbw76mdFNpHZd",
+        "--model",
+        "gpt-5.6-terra",
+        "--effort",
+        "xhigh",
+        "--sandbox",
+        "workspace-write",
+        "--workdir",
+        "C:/Users/<MACHINE>/Desktop/engine-checkout",
+        "--prompt-file",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/p-q67.md",
+        "--out",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/o-q67.json",
+        "--cap-ms",
+        "2400000"
+      ]
+    },
+    {
+      "pid": 17656,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    },
+    {
+      "pid": 21688,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 18712,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 24476,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/run-codex-lane.js",
+        "--lane",
+        "SWEEP",
+        "--launch-id",
+        "launch_VSA97gMefRj65tAwitrA54LqYtMwX3cq",
+        "--model",
+        "gpt-5.6-luna",
+        "--effort",
+        "high",
+        "--sandbox",
+        "read-only",
+        "--workdir",
+        "C:/Users/<MACHINE>/Desktop/engine-checkout",
+        "--prompt-file",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/p-sweep.md",
+        "--out",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/o-sweep.json",
+        "--cap-ms",
+        "1800000"
+      ]
+    },
+    {
+      "pid": 40332,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    },
+    {
+      "pid": 23116,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 36300,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 31520,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 31108,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 41388,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/run-codex-lane.js",
+        "--lane",
+        "Q37",
+        "--launch-id",
+        "launch_TMH0ZN6bBxMYkMdYpcrpmabjlaQZ_xGb",
+        "--model",
+        "gpt-5.6-terra",
+        "--effort",
+        "xhigh",
+        "--sandbox",
+        "workspace-write",
+        "--workdir",
+        "C:/Users/<MACHINE>/Desktop/engine-checkout",
+        "--prompt-file",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/p-q37.md",
+        "--out",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/o-q37.json",
+        "--cap-ms",
+        "2400000"
+      ]
+    },
+    {
+      "pid": 41656,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    },
+    {
+      "pid": 42708,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 43000,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 23580,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/run-codex-lane.js",
+        "--lane",
+        "Q51",
+        "--launch-id",
+        "launch_bUyB_r9Ml0tMDCI5pcXhvumDMciZcV8T",
+        "--model",
+        "gpt-5.6-luna",
+        "--effort",
+        "high",
+        "--sandbox",
+        "read-only",
+        "--workdir",
+        "C:/Users/<MACHINE>/Desktop/engine-checkout",
+        "--prompt-file",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/p-q51.md",
+        "--out",
+        "C:/Users/<MACHINE>/AppData/Local/Temp/claude/c--Users-<MACHINE>-Desktop-ToolsEnabled/7f927500-b87f-4302-a53f-c9206a956824/scratchpad/o-q51.json",
+        "--cap-ms",
+        "1800000"
+      ]
+    },
+    {
+      "pid": 31132,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    },
+    {
+      "pid": 38516,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 42904,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "src/mcp-server.js"
+      ]
+    },
+    {
+      "pid": 42476,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 26616,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 13900,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        "JABFAHIAcgBvAHIAQQBjAHQAaQBvAG4AUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAdABvAHAAJwANAAoAJABQAHIAbwBnAHIAZQBzAHMAUAByAGUAZgBlAHIAZQBuAGMAZQAgAD0AIAAnAFMAaQBsAGUAbgB0AGwAeQBDAG8AbgB0AGkAbgB1AGUAJwANAAoADQAKACMAIABMAG8AbgBnAC0AbABpAHYAZQBkACAAUABvAHcAZQByAFMAaABlAGwAbAAgAEEAUwBUACAAcABhAHIAcwBlAHIAIAB1AHMAZQBkACAAYgB5ACAAdABoAGUAIABSAHUAcwB0ACAAYwBvAG0AbQBhAG4AZAAtAHMAYQBmAGUAdAB5ACAAbABhAHkAZQByACAAbwBuACAAVwBpAG4AZABvAHcAcwAuAA0ACgAjACAAVABoAGUAIABjAGEAbABsAGUAcgAgAHMAdABhAHIAdABzACAAbwBuAGUAIABjAGgAaQBsAGQAIABwAHIAbwBjAGUAcwBzACAAcABlAHIAIABQAG8AdwBlAHIAUwBoAGUAbABsACAAZQB4AGUAYwB1AHQAYQBiAGwAZQAgAHYAYQByAGkAYQBuAHQAIABhAG4AZAAgAHQAaABlAG4AIABzAGUAbgBkAHMADQAKACMAIABuAGUAdwBsAGkAbgBlAC0AZABlAGwAaQBtAGkAdABlAGQAIABKAFMATwBOACAAcgBlAHEAdQBlAHMAdABzACAAbwB2AGUAcgAgAHMAdABkAGkAbgA6AA0ACgAjACAAIAAgAHsAIAAiAGkAZAAiADoAIAA8AHUANgA0AD4ALAAgACIAcABhAHkAbABvAGEAZAAiADoAIAAiADwAYgBhAHMAZQA2ADQALQBlAG4AYwBvAGQAZQBkACAAVQBUAEYALQAxADYATABFACAAcwBjAHIAaQBwAHQAPgAiACAAfQANAAoAIwAgAFcAZQAgAGEAbgBzAHcAZQByACAAdwBpAHQAaAAgAG8AbgBlACAAYwBvAG0AcABhAGMAdAAgAEoAUwBPAE4AIABsAGkAbgBlACAAcABlAHIAIAByAGUAcQB1AGUAcwB0ADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAbwBrACIALAAgACIAYwBvAG0AbQBhAG4AZABzACIAOgAgAFsAWwAiAEcAZQB0AC0AQwBvAG4AdABlAG4AdAAiACwAIAAiAGYAbwBvAC4AdAB4AHQAIgBdAF0AIAB9AA0ACgAjACAAbwByADoADQAKACMAIAAgACAAewAgACIAaQBkACIAOgAgADwAcwBhAG0AZQA+ACwAIAAiAHMAdABhAHQAdQBzACIAOgAgACIAcABhAHIAcwBlAF8AZgBhAGkAbABlAGQAIgAgAHwAIAAiAHAAYQByAHMAZQBfAGUAcgByAG8AcgBzACIAIAB8ACAAIgB1AG4AcwB1AHAAcABvAHIAdABlAGQAIgAgAH0ADQAKACMADQAKACMAIAAiAHUAbgBzAHUAcABwAG8AcgB0AGUAZAAiACAAaQBzACAAaQBuAHQAZQBuAHQAaQBvAG4AYQBsADoAIABpAHQAIABtAGUAYQBuAHMAIAB0AGgAZQAgAHMAYwByAGkAcAB0ACAAcABhAHIAcwBlAGQAIABzAHUAYwBjAGUAcwBzAGYAdQBsAGwAeQAsACAAYgB1AHQAIAB0AGgAZQAgAEEAUwBUAA0ACgAjACAAaQBuAGMAbAB1AGQAZQBkACAAYwBvAG4AcwB0AHIAdQBjAHQAcwAgAHQAaABhAHQAIAB3AGUAIABjAG8AbgBzAGUAcgB2AGEAdABpAHYAZQBsAHkAIAByAGUAZgB1AHMAZQAgAHQAbwAgAGwAbwB3AGUAcgAgAGkAbgB0AG8AIABhAHIAZwB2AC0AbABpAGsAZQAgAGMAbwBtAG0AYQBuAGQAIAB3AG8AcgBkAHMALgANAAoAIwAgAFQAaABlACAAUgB1AHMAdAAgAHMAaQBkAGUAIAB0AHIAZQBhAHQAcwAgAHQAaABhAHQAIAB0AGgAZQAgAHMAYQBtAGUAIAB3AGEAeQAgAGEAcwAgAGEAbgAgAHUAbgBzAGEAZgBlACAAYwBvAG0AbQBhAG4AZAAuAA0ACgANAAoAIwAgAFUAcwBlACAAQgBPAE0ALQBmAHIAZQBlACAAVQBUAEYALQA4ACAAbwBuACAAdABoAGUAIABwAHIAbwB0AG8AYwBvAGwAIABzAHQAcgBlAGEAbQAgAHMAbwAgAFIAdQBzAHQAIABzAGUAZQBzACAAYwBsAGUAYQBuACAASgBTAE8ATgAgAGwAaQBuAGUAcwAgAHcAaQB0AGgAIABuAG8ADQAKACMAIABsAGUAYQBkAGkAbgBnACAAQgBPAE0AIABiAHkAdABlAHMAIABvAG4AIAB0AGgAZQAgAGYAaQByAHMAdAAgAHIAZQBzAHAAbwBuAHMAZQAuAA0ACgAkAHUAdABmADgAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAFQAZQB4AHQALgBVAFQARgA4AEUAbgBjAG8AZABpAG4AZwBdADoAOgBuAGUAdwAoACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAaQBuACAAPQAgAFsAUwB5AHMAdABlAG0ALgBJAE8ALgBTAHQAcgBlAGEAbQBSAGUAYQBkAGUAcgBdADoAOgBuAGUAdwAoAFsAQwBvAG4AcwBvAGwAZQBdADoAOgBPAHAAZQBuAFMAdABhAG4AZABhAHIAZABJAG4AcAB1AHQAKAApACwAIAAkAHUAdABmADgALAAgACQAZgBhAGwAcwBlACkADQAKACQAcwB0AGQAbwB1AHQAIAA9ACAAWwBTAHkAcwB0AGUAbQAuAEkATwAuAFMAdAByAGUAYQBtAFcAcgBpAHQAZQByAF0AOgA6AG4AZQB3ACgAWwBDAG8AbgBzAG8AbABlAF0AOgA6AE8AcABlAG4AUwB0AGEAbgBkAGEAcgBkAE8AdQB0AHAAdQB0ACgAKQAsACAAJAB1AHQAZgA4ACkADQAKACQAcwB0AGQAbwB1AHQALgBBAHUAdABvAEYAbAB1AHMAaAAgAD0AIAAkAHQAcgB1AGUADQAKAA0ACgBmAHUAbgBjAHQAaQBvAG4AIABJAG4AdgBvAGsAZQAtAFAAYQByAHMAZQBSAGUAcQB1AGUAcwB0ACAAewANAAoAIAAgACAAIABwAGEAcgBhAG0AKAAkAFIAZQBxAHUAZQBzAHQASQBkACwAIAAkAFMAbwB1AHIAYwBlACkADQAKAA0ACgAgACAAIAAgACQAdABvAGsAZQBuAHMAIAA9ACAAJABuAHUAbABsAA0ACgAgACAAIAAgACQAZQByAHIAbwByAHMAIAA9ACAAJABuAHUAbABsAA0ACgANAAoAIAAgACAAIAAkAGEAcwB0ACAAPQAgACQAbgB1AGwAbAANAAoAIAAgACAAIAB0AHIAeQAgAHsADQAKACAAIAAgACAAIAAgACAAIAAkAGEAcwB0ACAAPQAgAFsAUwB5AHMAdABlAG0ALgBNAGEAbgBhAGcAZQBtAGUAbgB0AC4AQQB1AHQAbwBtAGEAdABpAG8AbgAuAEwAYQBuAGcAdQBhAGcAZQAuAFAAYQByAHMAZQByAF0AOgA6AFAAYQByAHMAZQBJAG4AcAB1AHQAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAJABTAG8AdQByAGMAZQAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJAB0AG8AawBlAG4AcwAsAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIABbAHIAZQBmAF0AJABlAHIAcgBvAHIAcwANAAoAIAAgACAAIAAgACAAIAAgACkADQAKACAAIAAgACAAfQAgAGMAYQB0AGMAaAAgAHsADQAKACAAIAAgACAAIAAgACAAIAByAGUAdAB1A..."
+      ]
+    },
+    {
+      "pid": 34764,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--stdio"
+      ]
+    },
+    {
+      "pid": 26908,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--serverMode",
+        "partialSemantic",
+        "--useInferredProjectPerProjectRoot",
+        "--disableAutomaticTypingAcquisition",
+        "--cancellationPipeName",
+        "<ABSOLUTE_PATH>",
+        "--locale",
+        "en",
+        "--validateDefaultNpmLocation",
+        "--useNodeIpc"
+      ]
+    },
+    {
+      "pid": 33344,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "<ABSOLUTE_PATH>",
+        "--useInferredProjectPerProjectRoot",
+        "--cancellationPipeName",
+        "<ABSOLUTE_PATH>",
+        "--locale",
+        "en",
+        "--validateDefaultNpmLocation",
+        "--useNodeIpc"
+      ]
+    },
+    {
+      "pid": 13628,
+      "imageName": "node.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "C:/Users/<MACHINE>/AppData/Roaming/npm/node_modules/typescript/lib/typingsInstaller.js",
+        "--globalTypingsCacheLocation",
+        "C:/Users/<MACHINE>/AppData/Local/Microsoft/TypeScript/5.9",
+        "--typesMapLocation",
+        "C:/Users/<MACHINE>/AppData/Roaming/npm/node_modules/typescript/lib/typesMap.json",
+        "--validateDefaultNpmLocation"
+      ]
+    },
+    {
+      "pid": 38732,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "try { $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8' } catch {}; if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage') { try { $OutputEncoding = [System.Text.UTF8Encoding]::new() } catch {}; if ($null -ne $PSStyle) { try { $PSStyle.OutputRendering = 'PlainText' } catch {} } }; $root = \\\"<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 32160,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "<ABSOLUTE_PATH>",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        "<ABSOLUTE_PATH>"
+      ]
+    },
+    {
+      "pid": 15080,
+      "imageName": "powershell.exe",
+      "startedAtMs": null,
+      "argv": [
+        "[redacted]"
+      ]
+    }
+  ]
+}

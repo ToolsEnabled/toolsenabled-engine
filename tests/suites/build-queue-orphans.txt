@@ -1,0 +1,16 @@
+# build-queue-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/build-queue-authority.js
+tests/build-queue-package-contract.js
+tests/build-queue-projection.js
+tests/build-queue-slice.js
+tests/build-queue-writer.js
+# 2026-08-23: build-queue-telegram-consumer.js was deleted with Telegram. The
+# inline root-chain step had already stopped naming it; this stale list entry
+# is removed explicitly so --from preserves the current executable population.
+# 2026-08-24: the three runnable files passed and moved to the green orphan
+# batch. The five live BUILD-QUEUE.md checks remain explicit non-passing skips.

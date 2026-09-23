@@ -1,0 +1,668 @@
+{
+ "note": "The tools/list answer of @playwright/mcp 0.0.82, recorded 2026-09-22 by starting its cli.js with the gateway flags (--cdp-endpoint to a closed loopback port, no browser) and sending initialize + tools/list. Descriptions are left out; names, argument names, types and required lists are as the server sent them.",
+ "package": "@playwright/mcp",
+ "version": "0.0.82",
+ "tools": [
+  {
+   "name": "browser_click",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "doubleClick": {
+      "type": "boolean"
+     },
+     "button": {
+      "type": "string",
+      "enum": [
+       "left",
+       "right",
+       "middle"
+      ]
+     },
+     "modifiers": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "Alt",
+        "Control",
+        "ControlOrMeta",
+        "Meta",
+        "Shift"
+       ]
+      }
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_close",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_console_messages",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "level": {
+      "default": "info",
+      "type": "string",
+      "enum": [
+       "error",
+       "warning",
+       "info",
+       "debug"
+      ]
+     },
+     "all": {
+      "type": "boolean"
+     },
+     "filename": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "level"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_drag",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "startElement": {
+      "type": "string"
+     },
+     "startTarget": {
+      "type": "string"
+     },
+     "endElement": {
+      "type": "string"
+     },
+     "endTarget": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "startTarget",
+     "endTarget"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_drop",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "data": {
+      "type": "object",
+      "propertyNames": {
+       "type": "string"
+      },
+      "additionalProperties": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_emulate_media",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "colorScheme": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "light",
+         "dark"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "reducedMotion": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "reduce",
+         "no-preference"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "forcedColors": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "active",
+         "none"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "contrast": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "more",
+         "no-preference"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "media": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "screen",
+         "print"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_evaluate",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "function": {
+      "type": "string"
+     },
+     "filename": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "function"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_file_upload",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_fill_form",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "fields": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "element": {
+         "type": "string"
+        },
+        "target": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string",
+         "enum": [
+          "textbox",
+          "checkbox",
+          "radio",
+          "combobox",
+          "slider"
+         ]
+        },
+        "value": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "target",
+        "name",
+        "type",
+        "value"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    "required": [
+     "fields"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_find",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string"
+     },
+     "regex": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_handle_dialog",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "accept": {
+      "type": "boolean"
+     },
+     "promptText": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "accept"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_hover",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "target"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_navigate",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "url"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_navigate_back",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_network_request",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "index": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+     },
+     "part": {
+      "type": "string",
+      "enum": [
+       "request-headers",
+       "request-body",
+       "response-headers",
+       "response-body"
+      ]
+     },
+     "filename": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "index"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_network_requests",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "static": {
+      "default": false,
+      "type": "boolean"
+     },
+     "filter": {
+      "type": "string"
+     },
+     "filename": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "static"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_press_key",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "key": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "key"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_resize",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "width": {
+      "type": "number"
+     },
+     "height": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "width",
+     "height"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_run_code_unsafe",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "filename": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_select_option",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "values": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    },
+    "required": [
+     "target",
+     "values"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_snapshot",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "target": {
+      "type": "string"
+     },
+     "filename": {
+      "type": "string"
+     },
+     "depth": {
+      "type": "number"
+     },
+     "boxes": {
+      "type": "boolean"
+     }
+    },
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_tabs",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "list",
+       "new",
+       "close",
+       "select"
+      ]
+     },
+     "index": {
+      "type": "number"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_take_screenshot",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "png",
+       "jpeg",
+       "webp"
+      ]
+     },
+     "filename": {
+      "type": "string"
+     },
+     "fullPage": {
+      "type": "boolean"
+     },
+     "scale": {
+      "default": "css",
+      "type": "string",
+      "enum": [
+       "css",
+       "device"
+      ]
+     }
+    },
+    "required": [
+     "scale"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_type",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "element": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     },
+     "text": {
+      "type": "string"
+     },
+     "submit": {
+      "type": "boolean"
+     },
+     "slowly": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "target",
+     "text"
+    ],
+    "additionalProperties": false
+   }
+  },
+  {
+   "name": "browser_wait_for",
+   "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+     "time": {
+      "type": "number"
+     },
+     "text": {
+      "type": "string"
+     },
+     "textGone": {
+      "type": "string"
+     }
+    },
+    "additionalProperties": false
+   }
+  }
+ ]
+}

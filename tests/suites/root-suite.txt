@@ -1,0 +1,280 @@
+# root-suite -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/fra-paired-machine-probe.test.js
+tests/device-credential-clear-outcome.test.js
+tests/online-fra-account-native-http.test.js
+tests/schema-validator.js
+tests/owner-prompt-platform-results.test.js
+tests/kill-switch-runtime-state.test.js
+tests/build-queue-tool-context.test.js
+tests/google-accounts-installation.test.js
+tests/google-provider-prerequisites.test.js
+tests/paddle-installed-environment.test.js
+tests/providers/local-execution-refusals.test.js
+tests/settings-reset.test.js
+tests/runtime-security.js
+tests/credential-capture.js
+tests/docker-precondition-refusals.test.js
+tests/vault-hardening.js
+tests/vault-live-acl.test.js
+tests/vault-shipped-acl.test.js
+tests/vault-spawn-cost.test.js
+tests/vault-atomic-sharing.test.js
+tests/audit-store.js
+tests/audit-reliability.js
+tests/audit-concurrency.js
+tests/audit-legacy-scale.js
+tests/audit-anchor-cross-process.js
+tests/audit-intent.js
+tests/audit-logs-retention.js
+tests/isolation-contract.js
+tests/agent-sandbox.js
+tests/browser-owner.js
+tests/playwright-gateway.js
+tests/playwright-call.js
+tests/screen-control-workflow.test.js
+tests/state-store.js
+tests/task-state.js
+tests/state-concurrency.js
+tests/task-concurrency.js
+tests/scheduler-state.js
+tests/scheduler-legacy.js
+tests/scheduler-adapter.js
+tests/scheduler-provider.js
+tests/scheduler-runner.js
+tests/scheduler-windows-xml.js
+# Real Scheduler mutation smokes remain at npm run test:scheduler:mutation.
+tests/provider-state.js
+tests/instagram-saga.js
+tests/google-inputs.js
+tests/gmail-send-failure.js
+tests/gcloud-account-inspector.js
+tests/gemini-agentic.js
+tests/google-oauth-login.test.js
+tests/browser-account-selection.test.js
+tests/google-account-readiness.test.js
+# 2026-08-23: messaging-inputs.js, telegram-worker.js and remote-ask.js were
+# removed with Telegram. The earlier inline package.json root step had already
+# stopped naming them, but this file list retained the dead paths. Recording
+# the removal here keeps switching the chain to --from from silently changing
+# which existing files run; restore paths here if those suites ever return.
+tests/http-request.js
+tests/http-core-redirect.js
+tests/http-core-lifecycle.test.js
+tests/video-provider.test.js
+tests/video-artifacts.test.js
+tests/uac-token-custody.test.js
+tests/web.js
+tests/providers.web/searxng-partial-failure.test.js
+tests/model-picker.js
+tests/model-provider.js
+tests/customer-model-provider.test.js
+tests/customer-payload-privacy.test.js
+tests/cloud-mirror-boundary-truth.test.js
+tests/research-strong.js
+tests/research-hardening.test.js
+tests/injection-test-suite.js
+tests/provider-inputs.js
+tests/firebase-account-login.js
+tests/coordinator-backup-duty.test.js
+tests/controller-cost-attribution.js
+tests/process-visibility-snapshot.test.js
+tests/process-visibility-writer.test.js
+tests/process-visibility-consumer.test.js
+tests/delegation-contracts.js
+tests/delegation-adapter-contracts.js
+tests/delegation-fake-adapters.js
+tests/delegation-task-projection.js
+tests/delegation-task-observation.js
+tests/delegation-task-attempt-projection.js
+tests/billing-provider.js
+tests/github-provider.js
+tests/desktop-advanced.js
+tests/desktop-window-close-guard.js
+tests/desktop-app-capture.js
+tests/search.js
+tests/code-intel.js
+tests/memory-provider.js
+tests/personal-calendar.js
+tests/mcp-tool-surface.js
+tests/t545-permission-provider-separation.test.js
+tests/task-stdio.js
+tests/task-waiting-ledger-lockout.test.js
+tests/task-difficulty-store.test.js
+tests/mcp-call.js
+tests/overnight-advisory.test.js
+tests/grepsaver.js
+tests/grepsaver/orient.js
+tests/grepsaver/tooldigest.js
+tests/agent-preflight.js
+tests/unit/config/config.test.js
+tests/fixtures/fake-provider.test.js
+tests/controller-focus.js
+tests/controller-projection.js
+tests/cli-session-usage.js
+tests/controller-metering.js
+tests/controller-meter-ledger.js
+tests/controller-savings-ledger.js
+tests/controller-meter-isolation.js
+tests/controller-launch-record.js
+tests/agent-org.js
+tests/generic-role-authority-hostile.test.js
+tests/agent-spawn-contract.test.js
+tests/mission-bridge-spawn-coordinator.test.js
+tests/error-taxonomy-bridge-actor-refused.test.js
+tests/mcp-public-message-boundary.test.js
+tests/vault-setter-error-boundary.test.js
+tests/failover-setting-error-boundary.test.js
+tests/audit-admission-error-boundary.test.js
+tests/mission-bridge-seat-pool.test.js
+tests/mission-bridge.test.js
+tests/mission-bridge-api-contract.test.js
+tests/mission-bridge-queue-open.test.js
+tests/mission-bridge-agent-lane.test.js
+tests/mission-role-binding-hostile.test.js
+tests/mission-bridge-claude-mcp-config.test.js
+tests/capability-features.test.js
+tests/entitlement-activation-audit.test.js
+tests/entitlement-enforcement-points.test.js
+tests/publish-gate.test.js
+tests/provider-name-presentation.test.js
+tests/git-push-destination.test.js
+tests/no-owner-data.test.js
+tests/owner-data-account-fixtures-redacted.test.js
+tests/agent-attribution.js
+tests/controller-tool-meter.js
+tests/controller-tool-meter-e2e.js
+tests/token-savings-benchmark.test.js
+tests/agent-digest-schedule.js
+tests/agent-digest-lock.js
+tests/agent-digest.js
+tests/owner-delivery.js
+tests/owner-ledger-contract.js
+tests/egress-preflight.js
+tests/clarify-gate.test.js
+tests/agent-territory-claim.test.js
+tests/standing-orders.js
+tests/enforcement-gaps.js
+tests/owner-capture.js
+tests/owner-capture-spool.js
+tests/owner-attribution-guard.js
+tests/line-endings.test.js
+tests/source-license-drift.test.js
+tests/open-gates-freshness-check.js
+tests/tree-identity.js
+tests/doc-intel.js
+tests/fleet-summary.js
+tests/ledger-query.js
+tests/duo-desktop.js
+tests/uac-delegation.js
+tests/uac-delegation-client.js
+tests/elevation-writability.js
+tests/service-control.js
+tests/port-listener-probe.js
+tests/coordinator-heartbeat.test.js
+tests/coordinator-duty-registry.test.js
+tests/coordinator-duty-host.test.js
+tests/coordinator-escalation-policy.test.js
+tests/coordinator-escalation-sink.test.js
+tests/argv-drift.test.js
+tests/fleet-supervisor-startup-refusal.test.js
+tests/managed-processes.test.js
+tests/managed-native-tunnel-hostile.test.js
+tests/scheduled-task-registrars.test.js
+tests/health-observer.test.js
+tests/system-status-approvals-effective.test.js
+tests/audit-checkpoint-wiring.test.js
+tests/measurement-honesty.js
+tests/pkg.tree/packages-manifest-writer.js
+tests/board-split-readonly-pin.js
+tests/docker-drive-catalogue.test.js
+
+# Wired in the same commit that created it, into a list the release chain
+# ACTUALLY NAMES. Measured 2026-08-25: three suite lists exist on disk that
+# package.json's test chain never mentions, stranding 153 checks somebody had
+# already done the work of wiring -- including 144 in a file whose own comment
+# says they were wired 'rather than left to be found later'. Being wired and
+# being run turned out to be different things.
+tests/cloud-batch-harvest-findings.test.js
+tests/cloud-account-registration.test.js
+tests/multi-account-registry-write.test.js
+tests/multi-account-registry-remove.test.js
+tests/host-exec-timeout-tree.test.js
+tests/windows-job-control.test.js
+tests/windows-job-root-signal-native.test.js
+tests/windows-job-root-signal.test.js
+tests/agent-wake-windows-job.test.js
+tests/run-isolated-suite-timeouts.js
+tests/audit-batch-admission.test.js
+tests/audit-admission-queue.test.js
+tests/audit-activity.test.js
+tests/settings-selection.test.js
+tests/linux-keyring-fixture-root.test.js
+tests/key-custody-dispatch.test.js
+tests/vault-host-retirement.test.js
+tests/tool-dispatch-scheduler.test.js
+tests/mcp-line-dispatcher.test.js
+tests/audit-boundary-race.test.js
+tests/audit-rebuild-seeds-parse-memo.test.js
+tests/coordinator-audit-write-async.test.js
+tests/agent-engine/local-node-adapter.test.js
+tests/agent-engine/local-node-tools.test.js
+tests/agent-resource-admission.test.js
+tests/agent-resource-host.test.js
+tests/agent-resource-registry.test.js
+tests/agent-resource-lanes.test.js
+tests/mission-bridge-owner-tier-refresh.test.js
+
+# Settings integration regressions run through the normal root suite.
+tests/agent-api-mode-compatibility.test.js
+tests/agent-engine/editor-fork.test.js
+tests/agent-resource-settings.test.js
+tests/audit-identity-maintenance.test.js
+tests/owner-host-tool-mode.test.js
+tests/state-store-close.test.js
+
+# The person Stop that was announced as a storage fault. A held saved row
+# (stopped, blocked or uncertain) must keep holding when an agent-origin
+# session resumes the node, and the sentence must name the hold rather than a
+# write failure. Runs the real continuation-state store on real SQLite.
+tests/agent-continuation-person-stop.test.js
+tests/continuation-pending-recoveries-cost.test.js
+tests/continuation-prune.test.js
+tests/online-fra-relay-close.test.js
+tests/online-fra-relay-close-process.test.js
+tests/run-isolated-socket-path-budget.test.js
+tests/isolated-runner-retained-state.test.js
+tests/owner-host-start-admission.test.js
+
+# Which assistant programs the owner host will accept as a calling principal,
+# and the direction of the three actor lists that name them. Every Grok start
+# refused with OWNER_HOST_SESSION_BINDING_INVALID until 2026-09-11 because one
+# of those lists was missing a name the other two had.
+tests/owner-host-agent-actors.test.js
+tests/mission-bridge-owner-prompt-http.test.js
+tests/builtin-assertion-evidence.test.js
+tests/builtin-assertion-scope.test.js
+tests/claude-dispatch-seat-home.test.js
+tests/local-user-profile.test.js
+tests/agent-engine/codex-steer.test.js
+
+# Explicit default-lifecycle ownership for the retained role, host, vault and process tests.
+tests/agent-slot-functions.test.js
+tests/host-control-product-source-writes.test.js
+tests/local-fleet-identity.test.js
+tests/process-cpu-sample.test.js
+tests/vault-access-policy-dispatch.test.js
+tests/vault-access-policy-enforced.test.js
+tests/windows-job-host-settlement-review-W16.test.js
+tests/windows-job-owner-handshake.test.js
+tests/windows-job-pre-ready-settlement.test.js
+
+# Task difficulty policy and existing-recipient assignment contracts.
+tests/task-difficulty.test.js
+tests/task-difficulty-assignment.test.js
+tests/task-difficulty-adapters.test.js
+tests/provider-toolchain.test.js

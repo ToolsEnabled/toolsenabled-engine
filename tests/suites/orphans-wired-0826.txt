@@ -1,0 +1,73 @@
+# orphans-wired-0826 -- 52 tracked engine test files that no suite or npm
+# chain step named, so they had never run in a release. Measured PASS at
+# HEAD one at a time through tests/run-isolated.js before wiring; wiring a
+# test that passes is coverage, wiring one that BITES is the point, so a
+# local tree checked each for discrimination (see the wave that produced
+# this list). One repository-relative path per line, in run order.
+#
+tests/agent-lane-verdict-normalization.test.js
+tests/agent-org-store.test.js
+# Installed role-file compatibility and conflict regressions, added 2026-09-05.
+tests/installed-role-memory.test.js
+tests/agent-presence.test.js
+tests/audit-durability-current-vs-historical.test.js
+tests/audit-fresh-install.js
+tests/auth.google/google-account-readiness.test.js
+tests/auth.google/google-oauth-login.test.js
+tests/canonical-path.js
+tests/cloud-batch-plan.test.js
+tests/cloud-batch-runner.test.js
+tests/cloud-lane-batch-cli.test.js
+tests/codex-dispatcher.test.js
+tests/controller-launch-scope-adversarial.js
+tests/coordinator-backup-age-status-adversarial.test.js
+tests/coordinator-backup-observer-adversarial.test.js
+tests/coordinator-backup-test-writer-adversarial.test.js
+tests/desktop.browser/browser-account-selection.test.js
+# Real provider/owner-ledger demonstration: explicit test:intent-fidelity:live
+# alias, recorded UNEXECUTED outside the unattended strict proof.
+tests/coordinator.workflow/token-savings-benchmark.test.js
+tests/manifest-namespace-gate.test.js
+tests/owner-identity-purpose-gate-adversarial-g9.js
+tests/owner-identity-reader-audit-adversarial-g9.js
+tests/owner-ledger-gate-batch-adversarial-g8.js
+tests/owner-request-scope-adversarial.js
+tests/owner-request-scope-store-adversarial.js
+tests/package-check-adversarial-g8.js
+tests/package-manifest-contract-adversarial.js
+tests/providers.web/research-hardening.test.js
+tests/repo-sync-status.test.js
+tests/repo-sync.test.js
+tests/run-isolated-config-integrity.js
+tests/run-vertex-report-wave.js
+tests/secret-store.js
+tests/service-registry.js
+tests/spawn-hygiene.test.js
+tests/spawn-record.js
+tests/supervision-policy.test.js
+tests/surface.policy/argv-drift.test.js
+tests/surface.policy/pipe-redirection.test.js
+tests/surface.policy/quarantine-preflight.test.js
+tests/surface.registry/lane-scope-tool-registry.test.js
+tests/swarm-presets.test.js
+tests/test-ratchet.test.js
+tests/tool-surface-product-outcome.test.js
+tests/vault-batched-read.test.js
+tests/vault-location-authority.test.js
+tests/vault-location-is-the-only-decider.test.js
+tests/vault-location-parity.test.js
+tests/vault-platform-unsupported.test.js
+tests/vault-unreadable-is-not-absent.test.js
+#
+# WITHDRAWN 2026-08-26 -- tests/p13-policy-approval-worker.js and
+# tests/p14-scoped-approval-worker.js. They are not tests. They are CHILD
+# WORKER SCRIPTS a real test spawns with its input as JSON in process.argv[2];
+# p13 says so in its own header ("This child is intentionally state-only").
+# Run standalone with no argv they throw, catch, print {"ok":false,"code":null}
+# -- AND EXIT 0. They report their own failure and return success, so the
+# selection rule that built this list ("tracked, named by no suite, passes at
+# HEAD") could not tell a helper from a guard. A local tree caught it by
+# mutation: disabling the P13 approval-attachment replay fence left the file
+# GREEN, because the fence is never reached. The workers are not defective;
+# the selection rule was. A wired test that cannot fail spends the release
+# gate's authority on nothing, which is the whole reason this file exists.

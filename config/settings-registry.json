@@ -1,0 +1,2257 @@
+{
+  "schemaVersion": 1,
+  "titles": {
+    "outward.presend_card": "Before something is sent as you",
+    "outward.gates": "Conditions you've set before a send goes out",
+    "outward.unattended_sends": "Sending things while you're away from the computer",
+    "outward.verify_destination": "Checking the destination before sending",
+    "outward.adoption_scope": "Confirming a draft is yours before it goes out",
+    "outward.naming_conventions": "Matching file-naming style at each destination",
+    "outward.gate_strictness": "What happens when a send can't be tied to a request",
+    "outward.identity_authorization": "Whether your assistants may act as you",
+    "outward.reserved_from_agents": "The things only you may do, never your assistants",
+    "ask.primary_channel": "Where your agents come to ask you things",
+    "ask.check_before_pausing": "Checking for your messages before pausing",
+    "ask.stop_cadence": "When to tell you something has stopped",
+    "autonomy.wait_for_me": "How often your agents stop and wait for you",
+    "autonomy.intake_questions": "Checking what you meant before starting work",
+    "autonomy.scope_widening": "Flagging a rule that came out broader than you said",
+    "autonomy.assumption_narration": "Explaining which meaning it assumed",
+    "autonomy.rule_check_narration": "Showing the rule check before each action",
+    "rules.active_instructions": "The rules your assistants are currently following",
+    "rules.require_read_each_turn": "Include all rules in every turn",
+    "rules.filing_from": "Who adds standing rules",
+    "rules.capture_spoken": "Turning something you said into a standing rule",
+    "rules.ask_when_unsure": "Asking you first when your agent is not sure",
+    "rules.agent_filed_needs_approval": "Approving a rule an agent filed before it counts",
+    "rules.agent_proposals": "Letting agents suggest rule changes",
+    "rules.auto_management": "Learning new rules from failures",
+    "rules.captured_list": "A review list for rules that got written down automatically",
+    "fleet.supervision_spend": "How closely the lead checks on other assistants' work",
+    "fleet.lead_does_work": "Whether the lead does the work itself or hands it off",
+    "fleet.checkpoint_cadence": "How often a save point is taken",
+    "fleet.reviewer_may_fix": "Letting the reviewer change files, not just report on them",
+    "fleet.review_cadence": "How often work gets reviewed",
+    "fleet.browser_driver": "Who opens and clicks through web pages",
+    "fleet.coordination_board": "Where your assistants leave notes for each other",
+    "fleet.tree_width": "Direct child slots per agent",
+    "fleet.tree_depth": "Delegation depth below the root",
+    "fleet.max_declared_agents": "How many agents your organisation may list",
+    "fleet.concurrency_limits": "What determines how many agents can work at once",
+    "fleet.concurrent_shared_writes": "Letting several assistants write to the same file at once",
+    "fleet.worker_reset_after_task": "Whether a worker starts its next task with a clean slate",
+    "machines.mode": "Whether you use this on one computer or more than one",
+    "machines.transport": "How your computers reach each other",
+    "machines.peers": "The other computers you've added",
+    "capability.tier": "How much of this computer your assistant may touch",
+    "capability.workspace_roots": "The specific folders your assistants may work in",
+    "capability.elevation_duration": "How long temporary extra access lasts",
+    "capability.elevation_survives_restart": "Whether temporary extra access survives closing the program",
+    "startup.services_at_logon": "Whether ToolsEnabled starts itself when you turn the computer on",
+    "ide.imported_surfaces": "Which IDE and editor sessions you've chosen to bring in",
+    "ide.available_surfaces": "IDE and editor surfaces this machine has seen, added or not",
+    "ide.attach_mode": "What happens to your editor session when you bring it in",
+    "agent.tool_approvals": "Asking you to confirm before a consequential tool runs",
+    "agent.blocking_prompt_gate": "Whether agents may stop and pop up a question box",
+    "agent.blocked_question": "What an agent does when it needs to ask you something",
+    "agent.blocked_question_per_node": "Letting individual agents answer that question differently",
+    "agent.status_injection": "Putting current computer status into agent prompts",
+    "agent.task_only_delegation": "Assign work only through tasks",
+    "agent.comms_enabled": "Agent comms",
+    "agent.message_delivery": "When agents receive messages from other agents",
+    "agent.message_queue_seconds": "How long to collect agent messages before timed delivery",
+    "agent.tool_summary": "Telling each new agent which tools exist here",
+    "agent.agent_api": "Available tool sets",
+    "agent.capability_recall": "Naming the few tools that might fit what you just asked",
+    "agent.status_injection_overrides": "Computer-status prompts for individual agents, lanes, or computers",
+    "model.provider": "Which AI service answers your requests",
+    "model.endpoint": "Where your AI service is running",
+    "model.name": "Which model your AI service uses",
+    "model.local_agent_name": "Default model for local agents",
+    "model.tool_name": "Default model for model requests made by tools",
+    "model.local_gpu_policy": "How local models use the GPU",
+    "model.local_context_tokens": "Local model context size in tokens",
+    "model.local_thinking": "Local model response mode",
+    "model.local_keep_alive_minutes": "Minutes to keep a local model loaded",
+    "model.api_key": "Your AI service credential",
+    "retrieval.unified_search": "Letting assistants look things up before they start",
+    "retrieval.search_documents": "Searching your project documents and reports",
+    "retrieval.search_request_ledger": "Searching your own recorded requests",
+    "retrieval.search_coordination_board": "Searching the notes assistants leave each other",
+    "retrieval.meaning_search": "Matching on meaning as well as wording",
+    "research.pipeline": "Running research jobs on this computer",
+    "research.runner_agent": "Research jobs may launch assistants",
+    "research.runner_process": "Research jobs may run programs",
+    "research.runner_http": "Research jobs may call web services",
+    "accounts.failover": "If an account runs out",
+    "audit.retention": "How much activity history stays instantly searchable",
+    "diagnostics.retention": "Diagnostic storage",
+    "audit.enabled": "Enable activity audit",
+    "ledger.verify_history": "Verify complete ledger history",
+    "audit.activity": "Tool activity audit",
+    "machines.direct_link_setup": "Setting up the cable between two of your computers",
+    "app.outside_control": "Letting a program outside this app press its buttons",
+    "tools.throughput": "How fast assistants' tool calls are handled",
+    "agent.subagent_route": "Where an assistant\u2019s own assistants appear",
+    "agent.message_screening": "Screening messages between agents for credentials",
+    "agent.tool_mode": "Compatibility name for available tool sets",
+    "agent.product_source_writes": "Letting agents edit ToolsEnabled source in checkouts",
+    "tools.audit_batch_window_ms": "Activity record batching delay",
+    "tools.audit_batch_size": "Maximum activity records per batch",
+    "tools.credential_check_interval_seconds": "Repeat Windows vault presence checks",
+    "tools.policy_enforcement": "Require scoped policy decisions (P13)",
+    "purchases.require_owner_approval": "Require my approval for purchases",
+    "agent.close_asks": "Allow assistants to answer and close asks",
+    "agent.persistent_continuation": "Continue unfinished ledger work",
+    "agent.task_difficulty_enabled": "Grade task difficulty"
+  },
+  "entries": [
+    {
+      "id": "outward.presend_card",
+      "section": "A",
+      "depth": 1,
+      "control": "select",
+      "default": "Ask me first",
+      "consequence": "On \"ask me first\", nothing goes out under your name until you have seen what it is, who gets it, and what happens if it is wrong, and said yes. On \"announce only\", it goes and then tells you. On \"say nothing\", things are sent as you without you seeing them at the time, and you would only find them later in the record.",
+      "capabilities": [
+        "On the looser answers, work can go out under your name without you stopping to read it first, so a batch of sends finishes while you are doing something else."
+      ],
+      "risks": [
+        "On \"say nothing\", the first you know of a wrong recipient, a wrong file or a wrong claim is when you go looking in the record, or when the person who received it replies.",
+        "Anything sent this way still went out as you, and cannot be unsent."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Ask me first",
+        "Announce only",
+        "Say nothing"
+      ]
+    },
+    {
+      "id": "outward.gates",
+      "section": "A",
+      "depth": 2,
+      "control": "readback",
+      "default": null,
+      "consequence": "A gate is a condition you set: do not send this until I have checked that. This is where you see the ones you have set, add new ones, and clear the ones you are done with.",
+      "capabilities": [
+        "Lets you stop one specific kind of send until a condition you name has been checked, without switching anything else off."
+      ],
+      "risks": [
+        "A gate you set and forget keeps holding sends back long after the reason has passed, and the work waits without telling you why unless you come here."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "outward.unattended_sends",
+      "section": "A",
+      "depth": 2,
+      "control": "seg",
+      "default": "Queue for review",
+      "consequence": "Scheduled work runs while you are away. This decides whether it may send things out on its own, hold them for you to look at when you are back, or never send at all.",
+      "capabilities": [
+        "On \"send it\", scheduled work finishes on its own overnight instead of waiting for you to come back and release it."
+      ],
+      "risks": [
+        "Nobody sees the send before it happens, so a mistake made at 3am reaches its destination at 3am.",
+        "You are not there to notice that the run went wrong in a way the checks did not catch."
+      ],
+      "externalStep": {
+        "whatItDoes": "Lets Windows run your scheduled work when ToolsEnabled is not open, by registering it as a scheduled task once.",
+        "capabilitiesGained": [
+          "Scheduled work runs at the time you set it, even if this program is closed or the computer has been restarted since.",
+          "A subsystem that crashes can start itself again instead of staying down until you notice."
+        ],
+        "risks": [
+          "Something you set up runs on this computer at times when nobody is watching it, which is the whole point and also the whole risk.",
+          "A task registered once stays registered until you remove it, including after you have stopped using the feature."
+        ],
+        "required": false,
+        "elevation": true,
+        "frequency": "typically",
+        "frequencyBecause": "Registering work that runs while you are signed out needs a Windows privilege called SeBatchLogonRight, and only an administrator has it. That is true on every Windows machine at its default settings; there is no configuration in which an ordinary account can do it. It is one step per piece of scheduled work, not one per run. Derived from what Windows requires, not from whether a prompt was seen on any particular computer.",
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Open Windows PowerShell as an administrator: right-click the Start button, choose \"Terminal (Admin)\", and approve the Windows prompt.",
+            "why": "Registering a task that runs whether or not you are signed in is an administrator action. This product cannot do it, does not ask Windows to let it, and does not weaken any Windows security setting to avoid the prompt. You approve it yourself, and you can close the window and change nothing. If Windows does not ask you at all, that is because the administrator prompt has been turned off on this computer, which is worth knowing on its own."
+          },
+          {
+            "do": "Run the registrar command the product prints for the work you scheduled. It prints the exact line; it never runs it.",
+            "why": "You can read the command before you run it, which you cannot do for something a program runs on your behalf."
+          },
+          {
+            "do": "Close the administrator window.",
+            "why": "Nothing else needs it, and an administrator prompt left open is its own small risk."
+          }
+        ],
+        "verify": "Run Get-ScheduledTask and see the task listed by name. Your scheduled work then also runs with this program closed.",
+        "withoutIt": "The setting stays on and saves, and scheduled work still runs normally while ToolsEnabled is open. It will not run when the program is closed or after a restart, and the schedule says so rather than reporting a run that never happened."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Queue for review",
+        "Send it",
+        "Never send"
+      ]
+    },
+    {
+      "id": "outward.verify_destination",
+      "section": "A",
+      "depth": 3,
+      "control": "toggle",
+      "default": true,
+      "consequence": "With this on, before the assistant sends, uploads, or submits anything as you, it first goes and looks at where it is sending and reads what is already there. Turn it off and it will act on what your own computer remembers instead, which is how the same paper gets submitted twice, or how a newer version already sitting at the destination gets replaced by an older one.",
+      "capabilities": [
+        "Off, sends complete faster and work when the destination is temporarily unreachable, because nothing has to be read back first."
+      ],
+      "risks": [
+        "Off, the assistant acts on what this computer remembers about the destination, which is how the same paper gets submitted twice, or a newer version already sitting there gets replaced by an older one."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "outward.adoption_scope",
+      "section": "A",
+      "depth": 3,
+      "control": "seg",
+      "default": "Each item",
+      "consequence": "The assistant can draft things for you, but they only go out as your work once you say they are yours. This decides whether you say that for each item, or once for a whole project or destination.",
+      "capabilities": [
+        "Saying yes once for a whole project or destination means you are not asked again for every individual item."
+      ],
+      "risks": [
+        "A single yes then covers items you have not seen, including ones drafted after you gave it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Each item",
+        "Per project",
+        "Per destination"
+      ]
+    },
+    {
+      "id": "outward.naming_conventions",
+      "section": "A",
+      "depth": 3,
+      "control": "list",
+      "default": [],
+      "consequence": "Different places expect different file names. Add a destination here and the assistant will match the naming style already used there instead of inventing one.",
+      "capabilities": [
+        "Files arrive at each destination named the way that destination already names things, so nothing has to be renamed by hand afterwards."
+      ],
+      "risks": [
+        "A pattern that no longer matches what a destination expects produces names that look deliberate and are wrong, which is harder to notice than an obviously odd name."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "outward.gate_strictness",
+      "section": "A",
+      "depth": 4,
+      "control": "seg",
+      "default": "Refuse",
+      "consequence": "Refuse is the shipped setting. The assistant refuses to send anything outward that it cannot tie back to a request of yours, so nothing goes out unaccountably. If you do not keep a list of requests at all, this will make outward work impossible for a reason you cannot see, which is why this setting is here. Warn lets the send proceed and marks it. Off removes the check, and with it the only thing tying what leaves this machine to something you asked for.",
+      "capabilities": [
+        "On \"warn\" or \"off\", sends go through even when they cannot be tied back to a request you recorded, which is what you want if you do not keep a list of requests at all."
+      ],
+      "risks": [
+        "Off, nothing outward is accountable to anything you asked for, so there is no way afterwards to answer \"who wanted this sent?\""
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "",
+      "options": [
+        "Refuse",
+        "Warn",
+        "Off"
+      ],
+      "warningText": "Refuse is the shipped setting. The assistant refuses to send anything outward that it cannot tie back to a request of yours, so nothing goes out unaccountably. If you do not keep a list of requests at all, this will make outward work impossible for a reason you cannot see, which is why this setting is here. Warn lets the send proceed and marks it. Off removes the check, and with it the only thing tying what leaves this machine to something you asked for."
+    },
+    {
+      "id": "outward.identity_authorization",
+      "section": "A",
+      "depth": 1,
+      "control": "seg",
+      "default": "Not authorized",
+      "consequence": "This decides whose name your assistants act under, and nothing else. On \"not authorized\" they will stop at anything that would be done as you \u2014 creating an account in your name, registering a business, publishing under your publisher identity \u2014 and ask you to do it or to authorize it. On \"authorized for my business\" they stop asking that question and proceed, but only for the business you have named, and only for the things you have not reserved on the next setting. This never widens what they are allowed to do: everything they could not do before, they still cannot do. It changes who the action is attributed to, not what actions are possible.",
+      "capabilities": [
+        "Authorized, assistants can finish things that only work when done as you: creating an account in your name, registering a business, publishing under your byline."
+      ],
+      "risks": [
+        "Anything done under this is legally and practically yours, whether or not you saw it first.",
+        "The list of things reserved for you is the only remaining line between an assistant and acting as you; if that list is thin, this setting is doing a lot of work on its own."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Not authorized",
+        "Authorized for my business"
+      ]
+    },
+    {
+      "id": "outward.reserved_from_agents",
+      "section": "A",
+      "depth": 1,
+      "control": "list",
+      "default": [
+        "Approving any purchase or spending any money",
+        "Posting to social media",
+        "Anything needing your passport or government ID"
+      ],
+      "consequence": "These are the things you keep for yourself even when your assistants are authorized to act as you. They will do all the work up to each one and then stop and hand it to you \u2014 the shopping list gets assembled but you approve it, the post gets written but you press post. Anything you remove from this list, they will do themselves without asking. Anything you add, they will prepare and then wait on. If you authorize them to act as you and empty this list entirely, you have given them a blank cheque, so the product refuses to treat an empty list as a grant.",
+      "capabilities": [
+        "Lets assistants stay authorized to act as you while still stopping dead at the specific acts you keep for yourself."
+      ],
+      "risks": [
+        "Anything you take off this list becomes something an authorized assistant may do as you, immediately and without a further prompt."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "config/owner-authorization.json carries the stored reservations; src/lib/owner-authorization.js refuses to render a grant that reserves nothing; purchase.request enqueues for your approval and never spends; and the purchase reservation is enforced on the spend path itself by src/lib/purchase-authority.js, which src/lib/providers/pay.js calls before it records any charge, so a spend that names no line you approved is refused rather than merely discouraged."
+    },
+    {
+      "id": "ask.primary_channel",
+      "section": "B",
+      "depth": 1,
+      "control": "select",
+      "default": "Dialog here, notification if away",
+      "consequence": "This is where your agents come to find you when they need an answer. Point it somewhere you do not actually watch and the work quietly stops, or worse, the agent guesses. Whatever you pick, passwords and keys are never requested this way; those always go through the secure vault prompt.",
+      "capabilities": [
+        "Fixes one place your agents come to find you, so a question does not sit unnoticed somewhere you never look."
+      ],
+      "risks": [
+        "Point this at somewhere you do not actually watch and work quietly stops, or the agent gives up waiting and guesses."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Dialog here, notification if away"
+      ]
+    },
+    {
+      "id": "ask.check_before_pausing",
+      "section": "B",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Before the assistant stops and waits, it checks whether you have said anything. Turn it off and it can go quiet while a message from you is still sitting there unread. You will not get an error; it will just look like nothing is happening until it wakes up on its own.",
+      "capabilities": [
+        "On, an assistant picks up an answer you already sent instead of stopping to ask for it again."
+      ],
+      "risks": [
+        "Off, it can go quiet while a message from you sits unread. You get no error; it just looks like nothing is happening."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": ""
+    },
+    {
+      "id": "ask.stop_cadence",
+      "section": "B",
+      "depth": 2,
+      "control": "select",
+      "default": "Tell me now",
+      "consequence": "When an assistant hits something it cannot do, it stops. This decides whether you hear about it straight away, at your next check-in, or only when you go looking.",
+      "capabilities": [
+        "On \"queue quietly\", you are not interrupted every time something stops, and you read the whole list when you are ready."
+      ],
+      "risks": [
+        "A job that stopped an hour ago has been doing nothing for an hour, and on the quieter settings you do not find out until you look."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "",
+      "options": [
+        "Tell me now",
+        "At my next check-in",
+        "Queue quietly"
+      ]
+    },
+    {
+      "id": "autonomy.wait_for_me",
+      "section": "C",
+      "depth": 1,
+      "control": "seg",
+      "default": "Pause only when it truly needs me",
+      "consequence": "This decides whether your agents stop and wait for you. On the most hands-off setting they approve their own next steps and keep working while you sleep, much faster, but work can travel a long way in the wrong direction before you next look at it. On the most cautious setting nothing meaningful happens without your say-so, but agents sit idle every time you step away.",
+      "capabilities": [
+        "On the hands-off end, agents approve their own next steps and keep working while you sleep, which is much faster."
+      ],
+      "risks": [
+        "Work can travel a long way in the wrong direction before anyone reads it, and undoing a night of confident wrong work is slower than the night was."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Ask me first",
+        "Pause only when it truly needs me",
+        "Never wait for me"
+      ]
+    },
+    {
+      "id": "autonomy.intake_questions",
+      "section": "C",
+      "depth": 1,
+      "control": "seg",
+      "default": "Ask if unclear",
+      "consequence": "When you ask for something new, this decides how much the assistant checks what you meant before it starts building. Set it to just start and you get motion immediately, at the risk that it read your request more broadly or more narrowly than you intended and you find out after the work is done. Set it to always confirm and you answer a couple of questions up front on every request, which is slower but means the first attempt is aimed at the right thing.",
+      "capabilities": [
+        "On \"just start\" you get motion immediately, with no back-and-forth before anything is built."
+      ],
+      "risks": [
+        "The assistant may have read your request more broadly or more narrowly than you meant, and you find that out from the finished thing."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Just start",
+        "Ask if unclear",
+        "Always confirm what I meant"
+      ]
+    },
+    {
+      "id": "autonomy.scope_widening",
+      "section": "C",
+      "depth": 2,
+      "control": "seg",
+      "default": "Flag it",
+      "consequence": "Sometimes you say something about one particular case and the assistant writes it down as a rule about everything. This catches that. On the default you get a visible mark on any rule that came out broader than what you actually said, so you can fix it in a moment. On the strictest setting that rule does not take effect at all until you confirm it, safer, but work that depends on it waits for you. Turned off, the broadened rule quietly takes effect and you will only notice it later, in the work it steers.",
+      "capabilities": [
+        "Catches the moment a remark about one case gets written down as a rule about everything, before that rule starts steering later work."
+      ],
+      "risks": [
+        "Off, a rule broader than anything you said keeps applying, and its effects look like the assistant\u2019s own judgement rather than like a rule you can go and delete."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Off",
+        "Flag it",
+        "Hold until I confirm"
+      ]
+    },
+    {
+      "id": "autonomy.assumption_narration",
+      "section": "C",
+      "depth": 2,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Words like finish, launch, done and wire up can mean very different amounts of work. With this on, the agent tells you which meaning it went with and what it is deliberately leaving out, before it starts. It does not stop and wait, it just says so. With it off you get shorter messages and find out what it decided by looking at what it built.",
+      "capabilities": [
+        "You see which meaning of a word like \"finish\" or \"launch\" the agent went with, and what it is deliberately leaving out, before it starts."
+      ],
+      "risks": [
+        "Almost none. It adds a short paragraph before work starts and does not slow anything down or stop to ask."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "autonomy.rule_check_narration",
+      "section": "C",
+      "depth": 2,
+      "control": "select",
+      "default": "One line",
+      "consequence": "Before doing something consequential the assistant checks which of your rules apply. This decides how much of that check you see: nothing, a single line, or the full list. It changes what is shown to you and never whether the check happens.",
+      "capabilities": [
+        "On \"full\", you can see exactly which of your rules were consulted before a consequential action."
+      ],
+      "risks": [
+        "None to what the assistant may do. This changes only how much of the check you are shown, never whether the check happens."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "",
+      "options": [
+        "Off",
+        "One line",
+        "Full"
+      ]
+    },
+    {
+      "id": "rules.active_instructions",
+      "section": "D",
+      "depth": 1,
+      "control": "readback",
+      "default": null,
+      "consequence": "Everything you have told your assistants, merged into one list, with each line showing which of your instructions it came from and what it replaced.",
+      "capabilities": [
+        "Shows everything your assistants are currently following as one list, with the origin of each line and what it replaced."
+      ],
+      "risks": [
+        "None. This reads and shows; it changes nothing on its own."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": ""
+    },
+    {
+      "id": "rules.require_read_each_turn",
+      "section": "D",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "On, every turn started by ToolsEnabled includes the complete current Ledger rules that apply to that agent: global, session, inherited tree and conversation rules. If the rules cannot be read completely or do not fit, the turn does not start. Off, the existing rule refresh behavior remains. This ensures the rules reach the assistant; it cannot prove that the assistant understands or follows them.",
+      "capabilities": [
+        "Supplies all applicable active rules on every turn, including continued work and agents without an assigned role.",
+        "Prevents a turn from starting with missing, stale or shortened rules."
+      ],
+      "risks": [
+        "Repeating all rules uses more context and can increase allowance use.",
+        "A turn cannot start if the rules cannot be read or exceed the assistant's input limit. Independently started agents are not covered."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/rules-turn-snapshot.js reads this setting and the complete canonical rule snapshot; desktop shell/agent-host.cjs includes and rechecks it before every enabled provider turn.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.task_only_delegation",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require work assignments and reports to use tasks. Direct agent messages are refused even when Agent comms is on. Task filing, assignment and checkpoints remain subject to existing role and permission limits.",
+      "capabilities": [
+        "Keep assignments and progress in persistent task records."
+      ],
+      "risks": [
+        "Direct messages between agents are unavailable while this is on."
+      ],
+      "derivedFrom": "owner request T1139",
+      "enforcedBy": "src/lib/agent-delegation-policy.js; local and cross-machine provider send boundaries; tools/agent-msg.js before message preparation.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.comms_enabled",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Allow agents to send messages. Off refuses new local and cross-computer sends while preserving existing messages and task records. Assign work only through tasks takes precedence when enabled.",
+      "capabilities": [
+        "Control new agent-to-agent messages without disabling task checkpoints."
+      ],
+      "risks": [
+        "Agents must use task records to coordinate when direct messages are unavailable."
+      ],
+      "derivedFrom": "owner request T1139",
+      "enforcedBy": "src/lib/agent-delegation-policy.js; local and cross-machine provider send boundaries; tools/agent-msg.js before message preparation.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.message_delivery",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "End of turn",
+      "consequence": "Choose Instant to deliver agent messages during active turns when the runtime supports additional input, Timer to collect messages for the selected interval, or End of turn to wait for completion. The courier never stops an active turn. Unsupported runtimes keep messages queued for the next boundary.",
+      "capabilities": [
+        "Receive agent reports while work continues.",
+        "Collect incoming agent reports and deliver them together after your chosen interval."
+      ],
+      "risks": [
+        "Instant delivery can change the focus of work in progress.",
+        "A runtime without live input delivers at the next turn boundary."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-message-delivery.js reads this choice for the desktop shell/agent-host.cjs courier; shell/agent-message-delivery.cjs chooses steering, queued delivery, or the next turn.",
+      "options": [
+        "Instant",
+        "Timer",
+        "End of turn"
+      ],
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.message_queue_seconds",
+      "section": "F",
+      "depth": 1,
+      "control": "number",
+      "default": 30,
+      "minimum": 1,
+      "maximum": 3600,
+      "step": 1,
+      "unit": "seconds",
+      "consequence": "When Timer is selected, collect messages for this many seconds starting from the first queued message. New arrivals do not extend the timer.",
+      "capabilities": [
+        "Control how often a batch of agent messages is delivered."
+      ],
+      "risks": [
+        "Longer intervals delay incoming results and questions."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-message-delivery.js supplies the timer to the desktop shell/agent-host.cjs courier.",
+      "applies": "next-call"
+    },
+    {
+      "id": "rules.filing_from",
+      "section": "D",
+      "depth": 2,
+      "control": "seg",
+      "options": [
+        "Ledger page only",
+        "Ledger page and /Request",
+        "Agents too"
+      ],
+      "default": "Ledger page and /Request",
+      "consequence": "Who may add a standing rule to your ledger. Ledger page only: you add rules by hand on the Ledger page, and a /Request typed in a chat is refused with a note pointing you there. Ledger page and /Request: you add rules on the Ledger page or by typing /Request, /RequestSession, /RequestTree or /RequestThread in a chat. Agents too: as well as both of those, your agents may turn something you said into a rule, filed under the agent's name; the two settings nested below decide whether an unsure agent asks first and whether an agent's rule waits for your approval. In the first two choices agents neither file rules nor ask you whether to; they carry on with the work. The reset buttons on the Ledger page are yours in every choice.",
+      "capabilities": [
+        "One choice decides every door into the rules ledger: the page, the chat command, and your agents."
+      ],
+      "risks": [
+        "Agents too: an offhand remark can become a rule that steers later sessions until you find it on the Ledger page and remove it.",
+        "Ledger page only: a rule typed as /Request in a chat is refused, so a habit of typing rules in chat stops working until you change this."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/r-ledger-agent-gate.js reads this row for whether agents may file (through the rules.capture_spoken switch that src/lib/settings.js keeps in step with it) and whether the /Request commands are offered; the desktop shell/agent-host.cjs fileStandingRequest refuses a /Request typed in a chat when the choice is Ledger page only",
+      "applies": "next-call"
+    },
+    {
+      "id": "rules.capture_spoken",
+      "section": "D",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "The older on/off form of \"Who adds standing rules\": it reads on when that choice is Agents too and off otherwise, and choosing there is what changes it. Your agents can notice when you say something meant to last \u2014 \"always ask before spending money\", \"from now on keep it short\" \u2014 and write it down as a standing rule in your own words. Off: only you file rules, by typing /Request. On: the agent decides when something you said is a rule and files it, marked as filed by that agent; the chat shows you a line saying what was filed and where, and every later session reads it until you edit or delete the entry by hand. When an agent is unsure it suggests the rule instead and you accept or decline it. This covers the standing-rule ledgers only \u2014 your agents' durable notes, research findings, tasks and messages have their own tools and are not changed here. At the Guided level agents only read, so nothing is filed either way.",
+      "capabilities": [
+        "You say a thing once, in your own words, and it keeps applying \u2014 no command to remember."
+      ],
+      "risks": [
+        "On, an offhand remark can become a rule that steers every later session until you find it in the rules panel and delete it by hand.",
+        "An agent can only name the scope keys it was shown, but a mistaken key puts a rule on the wrong circle until you see it there."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/r-ledger-agent-gate.js"
+    },
+    {
+      "id": "rules.ask_when_unsure",
+      "section": "D",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "When your agent is not sure you meant a standing rule, or not sure who it covers, it files nothing and ends its reply with one short question; your yes files your original sentence. Off: the agent uses the narrowest reading and says so.",
+      "capabilities": [
+        "A doubtful remark never becomes a rule behind your back: the agent asks once, briefly, and waits for your yes."
+      ],
+      "risks": [
+        "On, you will be asked a short question now and then, and a rule you did mean waits on file until you answer it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/r-ledger-agent-gate.js"
+    },
+    {
+      "id": "rules.agent_filed_needs_approval",
+      "section": "D",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "When an agent files a rule from your words, it waits on the Ledger page until you approve it. Until then, no agent treats it as in force. Off, an agent-filed rule counts as soon as it is filed; you can still edit or delete it.",
+      "capabilities": [
+        "Nothing an agent wrote down from your words counts as a rule until you have looked at it and said yes."
+      ],
+      "risks": [
+        "On, a rule you did mean waits on the Ledger page, and agents work without it until you approve it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/r-ledger-agent-gate.js agentFiledNeedsApprovalOf() is what reads this row, under the same provenance rule as its two siblings; src/lib/owner-request-store.js fileRequest asks it and files an agent\u2019s rule as proposed rather than active when the answer is yes"
+    },
+    {
+      "id": "rules.agent_proposals",
+      "section": "D",
+      "depth": 2,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Assistants can notice that a rule is causing trouble and suggest a change. With this on, suggestions land in a list for you to accept or throw away. They never take effect on their own, and nothing an assistant writes changes a rule you set.",
+      "capabilities": [
+        "Assistants can point out that a rule is causing trouble and offer a replacement, which is how a bad rule gets found."
+      ],
+      "risks": [
+        "Very little: proposals land in a list and never take effect on their own. The cost is a list to review."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": ""
+    },
+    {
+      "id": "rules.auto_management",
+      "section": "D",
+      "depth": 2,
+      "control": "select",
+      "default": "Propose",
+      "consequence": "When something goes wrong, the system can work out what rule would have prevented it. Off means it only reports. Propose means suggested rules wait for you. Auto means it applies them itself within the limits it is allowed, and tells you what it changed. Your own instructions are never rewritten automatically in any position.",
+      "capabilities": [
+        "On \"auto\", a rule that would have prevented a failure is applied without waiting for you, so the same failure does not recur tonight."
+      ],
+      "risks": [
+        "The system is then writing the rules it follows, and a rule inferred from one bad night can be wrong about every night after it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Off",
+        "Propose",
+        "Auto"
+      ]
+    },
+    {
+      "id": "rules.captured_list",
+      "section": "D",
+      "depth": 3,
+      "control": "readback",
+      "default": null,
+      "consequence": "This is the list of every rule that got written down automatically because you said something that sounded like a standing instruction. Come here to see what was captured; to correct anything it misheard or remove something you only meant for that one moment, open the ledger file and edit it by hand \u2014 no tool rewrites your words. Skip this list and a rule from an offhand remark keeps quietly steering your agents' work, and you would only notice from its effects, not from anything telling you it happened.",
+      "capabilities": [
+        "Lets you see, correct and delete every rule that got written down automatically from something you said."
+      ],
+      "risks": [
+        "None from reading it. Deleting a rule here takes effect immediately, which is the point."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": ""
+    },
+    {
+      "id": "fleet.supervision_spend",
+      "section": "E",
+      "depth": 2,
+      "control": "seg",
+      "default": "Balanced",
+      "consequence": "This decides how closely the managing agent watches the workers. On the cheapest setting it reads only each worker's own summary of what it did, rather than the actual work, much less expensive, but a worker that reports success while producing something wrong will not be caught until you look yourself. On the most thorough setting it double-checks the real output and you pay noticeably more. No setting will let it stop checking altogether, because that is not a cheaper product, it is a broken one.",
+      "capabilities": [
+        "On \"minimize cost\", the lead reads each worker\u2019s own summary instead of the work itself, which costs considerably less."
+      ],
+      "risks": [
+        "A worker that reports success it did not achieve is believed, and nothing else is looking."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Best results",
+        "Balanced",
+        "Minimize cost"
+      ]
+    },
+    {
+      "id": "fleet.lead_does_work",
+      "section": "E",
+      "depth": 2,
+      "control": "seg",
+      "default": "Automatic",
+      "consequence": "Decides whether your lead assistant does the work itself or hands it to other assistants and stays back to direct them. Doing it itself is simpler and easier to follow. Handing it off gets more done at once, but the lead is then reporting on work it did not watch happen.",
+      "capabilities": [
+        "Handing work off gets more done at once, because several assistants work in parallel."
+      ],
+      "risks": [
+        "The lead is then judging work it did not do, from reports rather than from the thing itself, and a run is harder to follow after the fact."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Automatic",
+        "Lead does the work",
+        "Lead only directs"
+      ]
+    },
+    {
+      "id": "fleet.checkpoint_cadence",
+      "section": "E",
+      "depth": 2,
+      "control": "seg",
+      "default": "Before every batch, and daily",
+      "consequence": "A checkpoint is a save point taken before assistants start changing your files. Take them less often and there is less clutter in your project history, but if a batch of assistants makes a mess there is no clean moment to rewind to; you keep whatever state they left behind.",
+      "capabilities": [
+        "Taking checkpoints less often leaves less clutter in your project history."
+      ],
+      "risks": [
+        "If a batch of assistants makes a mess, there is no clean moment to go back to, and the mess has to be untangled by hand."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Before every batch, and daily",
+        "Once a day",
+        "Before batches only",
+        "Only when I ask"
+      ]
+    },
+    {
+      "id": "fleet.reviewer_may_fix",
+      "section": "E",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Turn this on and the assistant that reviews your code starts changing it instead of only telling you what it found. Problems get fixed without waiting for you, but the only thing that was checking the other assistants' work is now producing work of its own, and nothing checks that.",
+      "capabilities": [
+        "Problems found in review get fixed immediately instead of waiting in a list for you."
+      ],
+      "risks": [
+        "The only thing that was independently checking the other assistants is now one of them, so a mistake it makes has nothing left watching for it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "fleet.review_cadence",
+      "section": "E",
+      "depth": 3,
+      "control": "seg",
+      "default": "Continuous",
+      "consequence": "Decides when the reviewing assistant looks at new work: as it appears, only when you ask, or only before something is merged.",
+      "capabilities": [
+        "On \"continuous\", a problem is found while the work that caused it is still fresh and small."
+      ],
+      "risks": [
+        "Reviewing only when you ask means problems accumulate quietly until something asks for them."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Continuous",
+        "When I ask",
+        "Before a merge"
+      ]
+    },
+    {
+      "id": "fleet.browser_driver",
+      "section": "E",
+      "depth": 3,
+      "control": "seg",
+      "default": "Hand off to a helper",
+      "consequence": "The assistant can either open and click through web pages itself, or start up a helper to do it. Handing it off keeps the main assistant free to carry on with your work and keeps a separate record of everything that was clicked. Doing it itself is quicker for one small lookup, but it ties the assistant up until the browsing finishes, and the web work gets mixed into its main train of thought instead of being kept apart.",
+      "capabilities": [
+        "Handing web pages to a helper keeps the main assistant working on your task, and keeps a separate record of everything that was clicked."
+      ],
+      "risks": [
+        "A second program is driving a browser on this computer, and whatever is signed in to that browser is reachable from it."
+      ],
+      "externalStep": {
+        "whatItDoes": "Installs the browser the helper drives.",
+        "capabilitiesGained": [
+          "Assistants can open and click through web pages instead of stopping at anything that needs a browser."
+        ],
+        "risks": [
+          "A browser under program control can reach any site your saved sign-ins reach."
+        ],
+        "required": false,
+        "elevation": false,
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Install the browser the helper uses, from its own installer.",
+            "why": "This product does not install software on your computer."
+          }
+        ],
+        "verify": "Ask an assistant to open a page. It reports the page title instead of reporting that no browser is available.",
+        "withoutIt": "The setting stays on and saves. Anything that needs a web page stops and says no browser is available on this computer, rather than failing silently or pretending it read the page."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Hand off to a helper",
+        "The main assistant"
+      ]
+    },
+    {
+      "id": "fleet.coordination_board",
+      "section": "E",
+      "depth": 3,
+      "control": "select",
+      "default": "Internal only",
+      "consequence": "Sets where your assistants leave notes for each other. Internal keeps everything on this computer. Turning on the outside fallback means that when the normal channel breaks, their messages get sent through a chat service instead; messages keep flowing, but they travel off this machine to do it.",
+      "capabilities": [
+        "With the outside fallback on, assistants keep leaving each other notes when the normal channel breaks, so work does not stall."
+      ],
+      "risks": [
+        "Those notes then pass through a chat service, and they routinely contain what the assistants are working on."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Internal only",
+        "Internal, with outside fallback"
+      ]
+    },
+    {
+      "id": "fleet.tree_width",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "capabilities": [
+        "Keep reusable child slots and saved conversations in the same tree positions."
+      ],
+      "risks": [
+        "Wider or deeper trees can use more memory and provider time.",
+        "Lowered limits preserve existing slots and prevent additional growth beyond the saved limits."
+      ],
+      "derivedFrom": "owner instruction: configurable total direct child slots with reuse",
+      "enforcedBy": "application shell/tree-slot-admission.cjs; src/fleet-trees.js admission and moves",
+      "warningText": "Changing these limits affects new slots and moves. Existing agents and conversations stay in place, including trees above a lowered limit. Every active, idle or stopped child occupies one slot. Reuse its context or restart that same slot. Wider or deeper trees can use more memory and provider time.",
+      "step": 1,
+      "applies": "next-call",
+      "default": 4,
+      "minimum": 1,
+      "maximum": 64,
+      "unit": "slots per parent",
+      "consequence": "Each actual parent has this many total direct child slots. Active, idle, stopped and draft children all count. Reuse the child's context or restart the same slot. This does not set the organisation-wide agent count or provider concurrency."
+    },
+    {
+      "id": "fleet.tree_depth",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "capabilities": [
+        "Choose how many generations of assistants can delegate below each root."
+      ],
+      "risks": [
+        "Allowing more generations can increase the number of assistants and the work they start.",
+        "Reducing the depth stops further delegation beyond that level; existing descendants and their conversations remain available."
+      ],
+      "derivedFrom": "owner instruction: configurable total direct child slots with reuse",
+      "enforcedBy": "application shell/tree-slot-admission.cjs; src/fleet-trees.js admission and moves",
+      "warningText": "Changing these limits affects new slots and moves. Existing agents and conversations stay in place, including trees above a lowered limit. Every active, idle or stopped child occupies one slot. Reuse its context or restart that same slot. Allowing more generations can increase the number of assistants and the work they start.",
+      "step": 1,
+      "applies": "next-call",
+      "default": 3,
+      "minimum": 0,
+      "maximum": 16,
+      "unit": "levels below root",
+      "consequence": "Limit delegation depth below each tree root. The root is depth zero; the default three allows four levels including the root. Zero permits roots only. Lowering this retains existing descendants and their conversations."
+    },
+    {
+      "id": "fleet.max_declared_agents",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "default": 64,
+      "consequence": "Choose a non-negative whole number for the maximum number of declared agents. The default is 64; 0 removes the agent-count bound. Saved changes govern the next admission. Lowering it preserves existing agents and permits removals, while new growth waits until the organisation is below the chosen size. This setting does not increase how many agents may run at once.",
+      "capabilities": [
+        "Run a declared organisation larger than the shipped 64 without editing the product and rebuilding it."
+      ],
+      "risks": [
+        "Very large organisations take more memory and time to validate.",
+        "Removing the agent-count bound leaves other document validation and runtime admission checks in force."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-org.js resolveMaxAgents; src/lib/agent-org-store.js write admission",
+      "warningText": "The default is 64. Raising this changes the declared list size only, not provider limits, resource admission, seat availability, or simultaneous starts. Lowering it does not delete existing agents. Removing a circle releases its organisation seat through the existing lifecycle.",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "step": 1,
+      "unit": "agents",
+      "applies": "next-call"
+    },
+    {
+      "id": "fleet.concurrency_limits",
+      "section": "E",
+      "depth": 4,
+      "control": "readback",
+      "default": "Current numeric concurrency limits are not measured by this settings row.",
+      "consequence": "Actual running capacity depends on resource admission, available application seats, current launches, and the provider account. Those checks are separate from the declared organisation size. This row does not measure an immutable provider account limit or promise a fixed number of Claude lanes.",
+      "capabilities": [
+        "See why an agent is waiting when your declared organisation still has room in it."
+      ],
+      "risks": [
+        "Increasing the declared organisation size does not increase runtime capacity."
+      ],
+      "derivedFrom": "runtime admission dependencies; no live provider concurrency measurement",
+      "readOnlyReason": "This explanatory row is read-only. Configure resource admission separately; provider limits must be confirmed by the provider. It is not itself an enforced setting: src/lib/mission-bridge/actions.js (BRIDGE_ALL_SEATS_BUSY), src/lib/agent-resource-admission.js (maxConcurrentStarts and the processor headroom slots), and src/lib/controller-launch-record.js (MAX_FAN_OUT) all bound concurrency, but none of them reads or mentions this row's id -- there is no `fleet.concurrency_limits` value for them to read. This row exists to explain, in one place, why a start may wait even though the declared organisation has room.",
+      "enforcedBy": "",
+      "warningText": "No provider concurrency number is asserted here. Check the resource monitor and the specific admission refusal to see why a start is waiting."
+    },
+    {
+      "id": "fleet.concurrent_shared_writes",
+      "section": "E",
+      "depth": 4,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off is the shipped setting. Turning this on lets more than one assistant save changes to the same shared file at the same time. When that happens, one of them silently loses their work, and your project's record of what was asked for can end up corrupted. There is no error message when this happens. You find out by noticing that something you saw earlier is no longer there.",
+      "capabilities": [
+        "Several assistants can save to the same shared file at once, so none of them waits for the others."
+      ],
+      "risks": [
+        "When two save at once, one of them silently loses its work, and your project\u2019s record of what happened no longer matches what is on disk."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "src/lib/shared-write-guard.js withSharedWrite at src/lib/providers/repo-files.js writeFile and src/lib/providers/host-control.js writeFile",
+      "warningText": "Off is the shipped setting. Turning this on lets more than one assistant save changes to the same shared file at the same time. When that happens, one of them silently loses their work, and your project's record of what was asked for can end up corrupted. There is no error message when this happens. You find out by noticing that something you saw earlier is no longer there."
+    },
+    {
+      "id": "fleet.worker_reset_after_task",
+      "section": "E",
+      "depth": 2,
+      "control": "toggle",
+      "default": true,
+      "consequence": "This decides whether a worker assistant remembers what it was doing once it finishes one task and picks up the next. On, the shipped setting, each new task starts from a clean slate: nothing carries over, so a mistake or a stray assumption from the last task cannot quietly follow it into this one, though the worker also has to be told again anything it would otherwise still know. Off, workers keep their memory between tasks, which saves re-explaining things but means something that went wrong earlier can keep shaping work you have not looked at yet.",
+      "capabilities": [
+        "Off, a worker carries what it learned into its next task, so it does not rediscover the same thing twice."
+      ],
+      "risks": [
+        "Off, a wrong belief formed in one task follows it into every task after that, and the second failure looks unrelated to the first."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "machines.mode",
+      "section": "E",
+      "depth": 2,
+      "control": "select",
+      "default": "Just this computer",
+      "consequence": "On \"Just this computer\", nothing about a second machine is ever asked or shown, and your agents run only here. Switch to \"This computer and others I own\" and a place to name your other computers appears below, but nothing connects to anything until you actually add one there. This never asks you which machine you are on; it only appears at all once you go looking for it.",
+      "capabilities": [
+        "On \"this computer and others I own\", a place to name your other computers appears, and work can be spread across them."
+      ],
+      "risks": [
+        "Nothing happens on choosing this alone: no computer is contacted until you add one. The risks arrive with the computers you add, not with this switch."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Just this computer",
+        "This computer and others I own"
+      ]
+    },
+    {
+      "id": "machines.transport",
+      "section": "E",
+      "depth": 3,
+      "control": "select",
+      "default": "Direct connection",
+      "consequence": "This only matters once you have added another computer above. \"Direct connection\" is free and works only while your computers can already reach each other on the same network; if that connection drops, they simply wait until it is back. \"My own relay server\" keeps working from anywhere, but you have to set up and secure that server yourself. \"Hosted relay\" also works from anywhere with nothing for you to run, but your machines' traffic then passes through a server we operate instead, end-to-end encrypted so it cannot be read there, for a fee.",
+      "capabilities": [
+        "A relay keeps your computers in touch even when they are on different networks, so a run does not stop the moment one of them moves."
+      ],
+      "risks": [
+        "On a hosted relay, the traffic between your computers passes through a machine you do not own.",
+        "On \"direct connection\", nothing leaves your own network, but the computers must already be able to reach each other."
+      ],
+      "externalStep": {
+        "whatItDoes": "Lets your other computer reach this one, by allowing the connection through Windows Defender Firewall.",
+        "capabilitiesGained": [
+          "Your other computer can start a direct connection to this one instead of only the other way round.",
+          "The direct connection works without a relay, so nothing between your computers leaves your own network."
+        ],
+        "risks": [
+          "Any device on the same network can then attempt a connection to that port on this computer. The connection is still refused unless it authenticates, but the door is visible where it was not before.",
+          "A rule scoped to \"any network\" follows this computer onto public networks, which is a wider opening than you probably meant."
+        ],
+        "required": false,
+        "elevation": true,
+        "frequency": "sometimes",
+        "frequencyBecause": "Creating a firewall rule always needs an administrator on a default Windows machine. But you only need one at all if your other computer is the one that starts the connection: Windows already allows connections this computer makes outward, so a setup where this machine does the reaching needs no rule. Some arrangements need the step and some do not, which is what \"sometimes\" means here. Derived from which direction Windows blocks by default, not from whether a prompt appeared on any particular computer.",
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Open Windows PowerShell as an administrator: right-click the Start button, choose \"Terminal (Admin)\", and approve the Windows prompt.",
+            "why": "Creating a firewall rule is an administrator action. This product cannot do it and does not ask Windows to let it: you approve that prompt yourself, and you can close it and change nothing."
+          },
+          {
+            "do": "Run the New-NetFirewallRule line shown beside this setting, which names one program, one port and the Private network profile only.",
+            "why": "Scoping it to Private keeps the opening on your home or office network and off public Wi-Fi."
+          },
+          {
+            "do": "Close the administrator window.",
+            "why": "Nothing else on this computer needs it, and leaving an administrator prompt open is its own small risk."
+          }
+        ],
+        "verify": "On your other computer, the computers page shows this one as reachable instead of \"not answering\". You can also run Get-NetFirewallRule and see the rule you created by name.",
+        "withoutIt": "The setting stays on and saves, and your computers still appear in the list. Connections this computer starts still work. Connections your other computer starts will be refused by Windows, so it may show as unreachable in one direction. Nothing fails silently: the computers page says the connection was refused rather than showing it as connected."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Direct connection",
+        "My own relay server",
+        "Hosted relay"
+      ]
+    },
+    {
+      "id": "machines.peers",
+      "section": "E",
+      "depth": 3,
+      "control": "list",
+      "default": [],
+      "consequence": "This is the list of other computers you have added, each under the name you gave it. Add one here and your agents on this machine can start working with it right away, using whichever connection method you chose above; remove one and that link stops immediately, even if something was left unfinished there. An entry that cannot be understood, such as a badly formed name or a computer that names itself as its own peer, is rejected rather than guessed at, and is shown here so you can fix or delete it.",
+      "capabilities": [
+        "Agents on this machine can start working with a computer you add here right away."
+      ],
+      "risks": [
+        "A computer on this list can be given work and can be reached by your agents; removing it cuts that off immediately, including any work in flight."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "capability.tier",
+      "section": "F",
+      "depth": 1,
+      "control": "readback",
+      "default": "set at install",
+      "consequence": "This is what you chose when you set the program up: whether the assistant works inside one folder, inside the projects you add, or anywhere on this computer. You can narrow it here at any time. Widening it asks you the same question the setup did.",
+      "readOnlyReason": "Read-only here because ordinary settings must never be able to widen the installation boundary. The displayed level comes from machine.json, where first-run setup records it. To change it, run ToolsEnabled setup again yourself; existing sessions keep their current ceiling and new sessions use the newly recorded level.",
+      "capabilities": [
+        "A wider level lets an assistant read and change more of this computer, so it can finish tasks that reach outside one folder."
+      ],
+      "risks": [
+        "Everything outside the level is refused today; widening it removes that refusal for every assistant at once, not only the one you had in mind.",
+        "At the wider levels an assistant can run a project's own setup, build and test scripts. Those are written by whoever wrote the project and its dependencies, not by this product, and they can do anything your account can do."
+      ],
+      "externalStep": {
+        "whatItDoes": "Lets you run a project's own setup yourself, on the rare occasion that the project asks Windows for administrator rights while it installs or builds.",
+        "capabilitiesGained": [
+          "A project whose setup genuinely needs an administrator can finish, so its build and tests can run here like any other project's."
+        ],
+        "risks": [
+          "A project's setup scripts are written by other people. Running one as an administrator gives that code full rights on this computer for as long as it runs, and this product cannot tell you in advance what it will do with them.",
+          "This is the one place where the thing asking for administrator rights is not this product and not Windows, but a project you pointed it at."
+        ],
+        "required": false,
+        "elevation": true,
+        "frequency": "rarely",
+        "frequencyBecause": "Node projects install into their own folder and their build and test scripts run with whatever rights they were started with, so the overwhelming majority never ask for anything. The exceptions are packages that register a Windows service, install a driver, or write somewhere machine-wide from an install script. Derived from where npm and its lifecycle scripts write by default, not from whether a prompt appeared on any particular computer.",
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Read what the project's setup actually runs before you decide. Its package.json lists any preinstall, install and postinstall scripts, and those are the ones that run without being asked for.",
+            "why": "This is the step this product cannot do for you in the useful sense: it can run the scripts, but it cannot judge them. You can."
+          },
+          {
+            "do": "If you accept it, open Windows PowerShell as an administrator, change to the project folder, and run the install command yourself once.",
+            "why": "This product does not ask Windows for administrator rights, does not pass them on to a project's scripts, and does not change any Windows security setting to get around the prompt. Doing this step yourself is what keeps that true."
+          },
+          {
+            "do": "Come back and run it here as normal.",
+            "why": "The part that needed an administrator is already done, so the ordinary run finishes without it."
+          }
+        ],
+        "verify": "The step that stopped now completes, and this product stops reporting that something it ran asked for administrator rights.",
+        "withoutIt": "The setting stays on and saves, and everything else at your level keeps working. A project whose setup asks for administrator rights stops at that step and says so plainly \u2014 including when Windows refuses the request on its own because there was nowhere to show you the approval box, which it misleadingly reports as you having cancelled it. Nothing is retried with more rights, nothing is recorded as done, and no partial result is thrown away."
+      },
+      "derivedFrom": "current-install setup policy",
+      "enforcedBy": "machine.json.tier via src/lib/setup/machine-record.js and src/lib/permission-tier-policy.js at src/lib/tool-registry.js executeTool; src/lib/settings.js capabilityBoundaryReadback is what puts that record\u2019s tier into this row and rejects any value stored against it"
+    },
+    {
+      "id": "capability.workspace_roots",
+      "section": "F",
+      "depth": 2,
+      "control": "readback",
+      "default": [],
+      "consequence": "This is where you add or remove the specific project folders your assistants may work in, if your install lets you choose more than one \u2014 some installs are limited to a single folder chosen for you, or already cover your whole computer. Add a folder here and your assistants can start reading and writing inside it right away; remove one and they lose access immediately, even if something was left unfinished there. If your install only allows one fixed folder, there is nothing to add or remove here, because that folder was already decided when you set the program up.",
+      "readOnlyReason": "Read-only here because adding a folder through ordinary settings would widen the installation boundary. The displayed folders come from machine.json.workspaceRoots, where setup records them. To change them, run ToolsEnabled setup again yourself; confined dispatches read the recorded roots on every call.",
+      "capabilities": [
+        "Adding a folder lets assistants read and change what is in it, immediately."
+      ],
+      "risks": [
+        "Everything in an added folder is in reach, including anything personal that happens to be filed there.",
+        "Removing a folder cuts access instantly, including for work left unfinished inside it."
+      ],
+      "derivedFrom": "current-install setup policy",
+      "enforcedBy": "machine.json.workspaceRoots via src/lib/tool-registry.js confinedWorkspaceRoots, src/lib/permission-tier-policy.js, src/lib/confined-tool-surface.js, and src/lib/workspace-boundary.js; src/lib/settings.js capabilityBoundaryReadback is what puts that record\u2019s roots into this row and rejects any value stored against it"
+    },
+    {
+      "id": "capability.elevation_duration",
+      "section": "F",
+      "depth": 3,
+      "control": "duration",
+      "default": 60,
+      "consequence": "Sometimes you give an assistant extra reach beyond what it normally has, just for now. This is how many minutes that extra reach lasts before it automatically expires and the assistant is back to its normal limits, whether or not you remembered to take it away yourself. If you want the wider reach to stick around permanently instead of on a timer, change the setting above instead, where it is visible and easy to find again.",
+      "capabilities": [
+        "A longer window means a task that needs extra reach can finish without you granting it again halfway through."
+      ],
+      "risks": [
+        "The extra reach stays live for the whole window, including after the task that needed it has finished."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "src/lib/capability-elevation-policy.js boundedCompileInput at src/lib/providers/capability-manifests.js compile, enforced by src/lib/capability-manifests.js authorize",
+      "unit": "minutes",
+      "applies": "next-call"
+    },
+    {
+      "id": "capability.elevation_survives_restart",
+      "section": "F",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Sometimes you give an assistant extra reach beyond what it normally has, just for now. This decides whether that temporary grant is still active the next time you open the program, or whether closing the program cancels it automatically along with everything else. Off, the shipped setting, is the safer choice: the extra access goes away when you close the program, even if you forgot to take it back yourself. On, a grant you gave for one moment can still be active days later, long after you meant it to end.",
+      "capabilities": [
+        "On, a grant survives closing the program, so a long job does not lose it when you restart."
+      ],
+      "risks": [
+        "A grant you meant for one moment can still be active days later, and closing the program no longer takes it back for you."
+      ],
+      "derivedFrom": "",
+      "enforcedBy": "src/lib/capability-elevation-policy.js prepareState and src/lib/state-store.js revokeActiveCapabilityProfiles at src/lib/providers/capability-manifests.js durableCapabilityState"
+    },
+    {
+      "id": "startup.services_at_logon",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "With this off, ToolsEnabled's background services stay off when you turn the computer on, and run only once you start them yourself. Turn it on and Windows starts them at boot and at sign-in and keeps them restarting on a timer, so the fleet is already running before you open anything.",
+      "capabilities": [
+        "On, work that has to survive a reboot -- the sweeps, the keepers, the owner host -- is running before you sign in, so a restart does not silently drop the cadence.",
+        "Off, the machine you sign in to is the machine you asked for: nothing of ours is competing for CPU, memory or disk until you start it."
+      ],
+      "risks": [
+        "On, these services start whether or not you meant to work today, and they hold CPU, memory and disk from the moment you sign in.",
+        "Off, nothing self-restarts after a crash or a reboot, so a service that dies stays dead until you start it again."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/lib/StartupPolicy.ps1 builds the trigger list for every registrar and adds the boot and sign-in triggers only when this is on; the registrars under tools/*-task.ps1 carry no AtStartup/AtLogOn literal of their own, so the switch is the only thing that decides."
+    },
+    {
+      "id": "ide.imported_surfaces",
+      "section": "F",
+      "depth": 2,
+      "control": "list",
+      "default": [],
+      "consequence": "Claude Agent and Codex sessions running natively in this product are never affected by this list. But if you also use VS Code or another IDE, sessions started there are found and kept off your dashboard until you add that editor's surface here by name. Add one and its sessions start appearing from then on; remove one and its sessions go back to being merely offered, not shown, though the editor itself keeps working either way. The default is nothing added, so nothing from an editor shows up until you choose it.",
+      "capabilities": [
+        "Sessions you started in an editor appear on your dashboard alongside everything else, instead of being invisible here."
+      ],
+      "risks": [
+        "What those sessions are doing becomes visible in this program, and depending on the setting below, controllable from it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "ide.available_surfaces",
+      "section": "F",
+      "depth": 3,
+      "control": "readback",
+      "default": null,
+      "consequence": "This is the list you choose from: every VS Code, Codex, or other editor surface this machine has actually seen, and how many sessions came from each, whether or not you have added it above. A surface that shows up here but is not on your imported list is still hidden from the dashboard; it appears here only so you have something to say yes to, never as a sign that it was already let in.",
+      "capabilities": [
+        "Shows every editor surface this machine has actually seen, so you can tell the difference between \"not found\" and \"found and not added\"."
+      ],
+      "risks": [
+        "None. Appearing in this list gives a surface nothing; it is the list you choose from."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "ide.attach_mode",
+      "section": "F",
+      "depth": 2,
+      "control": "seg",
+      "default": "Watch it here",
+      "consequence": "When you bring an editor session into the tree, this decides what happens to the session you already have open. Watch it here follows along read-only: the editor stays in charge, nothing you are looking at changes, and the copy here updates as the agent works but you cannot type into it. Take it over moves control to this app, which is the only way to continue the conversation here, but the editor's own view of it stops updating and typing there will not work properly any more. Branch a copy leaves the editor completely alone and starts a separate line of work from wherever that session had got to, so you end up with two conversations that drift apart. The two cannot be driven at once from both places, whichever you pick. Your permission level matters differently for each: while you are only watching, the other program is still the one running that assistant, under whatever it was started with, and the level you chose here does not reach into it. Once you take it over or branch a copy, this app is running it and your level applies from that moment on, though anything it already did happened under the other program's settings and cannot be undone by choosing a level now.",
+      "capabilities": [
+        "On \"take it over\", you can drive a session from here that you started in your editor."
+      ],
+      "risks": [
+        "Taking it over means your editor stops being the one driving that session, which is visible and surprising if someone else is sitting at it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "",
+      "options": [
+        "Watch it here",
+        "Take it over",
+        "Branch a copy"
+      ]
+    },
+    {
+      "id": "agent.tool_approvals",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Some tools ask you to confirm before they run: running a shell command, removing a stored credential, deploying, cancelling a payment. On, each one puts a box on your screen and waits, and nothing consequential happens that you did not personally agree to. Off, those same tools run when an agent calls them, with no box and no waiting. Off does not widen what you are allowed to do: your permission level, the kill switch and the reserved-from-agents list all still decide what is possible, and this only decides whether you are asked first. Basic installs leave optional tool confirmations off. You can enable them explicitly without changing your access level.",
+      "capabilities": [
+        "Work finishes while you are away, because no tool stops to ask you to confirm it."
+      ],
+      "risks": [
+        "Consequential tools run without asking, including ones that change files on this computer. Detailed audit history is available only if you explicitly enable it."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/policy.js requiresApproval() honors the readable Basic default or explicit user/installer choice. Rejected or unreadable settings retain the policy confirmation requirement; permission tiers and reserved actions remain enforced."
+    },
+    {
+      "id": "agent.blocking_prompt_gate",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Some tools stop an agent dead and put a box on your screen, then wait -- up to fifteen minutes on this computer -- until you click something. On, those tools are refused before they run, and the agent is told to write the question and the assumption it is proceeding on into its reply and keep working, so you read the question when you get back instead of finding the work stopped at it. Off, an agent may open those boxes again; if you walk away, the job sits still until you return, and one agent waiting can hold up everything downstream of it. Turning this on does not stop agents reaching you: the tools that leave you a note or a queued prompt and carry on are untouched either way.",
+      "capabilities": [
+        "Work keeps moving while you are away from the computer, because no agent can park itself on a dialog waiting for you."
+      ],
+      "risks": [
+        "An agent that genuinely needed your answer proceeds on its own stated assumption instead, so you may read about a choice after it was made rather than before. While this is on, tools that require a one-time approval cannot be approved by an agent at all, and those calls will fail rather than prompt."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/no-blocking-prompt-hook.js"
+    },
+    {
+      "id": "agent.persistent_continuation",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Keep assistants working through applicable open and in-progress ledger tasks. Saved conversations recover after this app restarts, through the same account, role and permission gates. Transient failures retry with bounded backoff; interrupted turns are checked against their saved conversation before another turn. Stop, permission and account failures remain paused. Unchanged tasks pause after three follow-ups until their checkpoint changes; other eligible tasks can continue. Recurring schedules and separate Research opt-ins stay separate.",
+      "capabilities": [
+        "Continue authorized task and workflow progress without another message after each successful turn."
+      ],
+      "risks": [
+        "Automatic follow-up turns can consume account quota while unfinished work remains."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/ledger-continuation-controller.js schedules application-host turns through existing send, cancellation and account gates",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.task_difficulty_enabled",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require easy, medium or hard on each newly filed task. One failed review raises easy to medium; two cumulative failed reviews raise the task to hard. A grade is never lowered. Turning this off keeps grades and still records explicit review outcomes and failed-review counts. Tasks filed earlier keep no grade.",
+      "capabilities": [
+        "Record easy, medium or hard on each new task and show it on the Ledger page.",
+        "Raise task difficulty after distinct failed reviews without lowering a grade."
+      ],
+      "risks": [
+        "Filing a new task without a difficulty is refused while this is on.",
+        "If the saved setting cannot be read, filing and reviewing tasks are refused until it can."
+      ],
+      "derivedFrom": "Owner task T1138: task difficulty at filing and cumulative review-based regrading.",
+      "enforcedBy": "src/lib/task-difficulty.js defines the policy; owner-request-store.js reads this setting under the Ledger lock when a task is filed or reviewed.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.blocked_question",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Decide for itself",
+      "consequence": "When an assistant uses system.ask, wait for your answer, file the question in your Ledger and continue other work, or use the assistant\u2019s supplied decision within your permission level. Reserved purchases still wait for you. Provider-native questions follow the provider\u2019s own approval controls.",
+      "capabilities": [
+        "On \"decide for itself\", an agent that needs permission keeps going instead of pausing until you answer."
+      ],
+      "risks": [
+        "It then does things you would have been asked about, including running commands that change files."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/ask-preference.js; src/lib/agent-approval-policy.js; src/lib/tool-registry.js systemAsk applies the choice to live tool asks, queues deferred questions in the ledger, and permits a supplied agent decision only within the permission ceiling",
+      "options": [
+        "Stop and wait for me",
+        "Switch to other work",
+        "Decide for itself"
+      ],
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.blocked_question_per_node",
+      "section": "F",
+      "depth": 3,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Lets an individual agent in the tree have its own answer to the question above, instead of every agent sharing one. On, you can set a node that only reads and researches to decide for itself while a node that edits files still stops and asks you, which is usually what you want once more than one thing is running. Off, every agent follows the single setting above, which is simpler to reason about but means the most cautious node and the most harmless one are treated identically. A node you have not given its own answer follows the shared setting either way.",
+      "capabilities": [
+        "Lets a read-only research agent decide for itself while an agent that edits files still stops and waits, instead of one answer for all of them."
+      ],
+      "risks": [
+        "More places to look when an agent behaves differently from what the shared setting says."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-approval-policy.js"
+    },
+    {
+      "id": "agent.status_injection",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, no machine status is collected for agent prompts. On, a compact current block with CPU, memory, state and audit health, owner-request capture backlog, and any available usage or quota measurements is added to automatic onboarding prompts. Unknown measurements stay visibly unknown, and account identities or credentials are never included.",
+      "capabilities": [
+        "Agents can see this computer\u2019s current state and adjust, instead of planning as if nothing else were running."
+      ],
+      "risks": [
+        "That state block is added to prompts, so whatever the model provider receives now includes measurements about this machine."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/status-injection.js; tools/agent-onboarding.js; tools/status-snapshot.js",
+      "applies": "next-session"
+    },
+    {
+      "id": "agent.tool_summary",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "On, every agent this program starts is handed a few short lines at the start of its session saying which tools this computer actually offers at your permission level, which ones it reaches for constantly, and which ones this level withholds -- so you never have to teach an agent what exists or explain why a withheld tool is not a breakage. The note is generated from the real permitted list at the moment the session starts, so it cannot claim a tool your level refuses. Off, agents are told nothing about the toolkit and only discover tools you name yourself.",
+      "capabilities": [
+        "A new agent knows what it can reach and what it cannot, without you naming tools for it -- including that saved credentials are requested through the guarded owner form, never read."
+      ],
+      "risks": [
+        "The note rides at the start of each session, so the model provider receives a short description of which tool families this computer offers, and it costs a few hundred tokens per session."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-tool-summary.js",
+      "applies": "next-session"
+    },
+    {
+      "id": "agent.agent_api",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Only",
+      "consequence": "Choose which tools new agent sessions receive. Only uses ToolsEnabled API tools and restricts native tools. Optimized works with Claude only: it adds Claude’s file search, skills, planning and tool search to the API tools. Sessions on other providers do not start while Optimized is selected. Enabled offers both the API and the provider’s native tools. Disabled withholds the ToolsEnabled API and keeps native tools within the existing role and permission limits. Existing sessions keep their captured choice. API outcome summaries follow Tool activity audit; native tool activity is not added to that API audit.",
+      "capabilities": [
+        "Choose API tools only, API tools with a few Claude native tools, both full tool sets, or native tools for new sessions.",
+        "API calls keep their permissions, approvals and required signed security records. Tool activity audit controls outcome summaries."
+      ],
+      "risks": [
+        "Only can prevent a task when the API has no working equivalent for a native tool.",
+        "Optimized works with Claude only. Codex, Gemini, Grok and local sessions do not start while it is selected. Claude’s selected native actions follow its permissions and are not in the ToolsEnabled API audit.",
+        "Enabled lets an agent choose native tools whose actions are not in the ToolsEnabled API audit.",
+        "Disabled removes API-based coordination and integrations. Providers with no native tools may have no tools available."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-api-mode.js defines the setting identity and accepted modes. src/lib/settings.js reconciles stored choices; src/lib/agent-api-policy.js agentApiMode() reads the canonical mode. src/lib/agent-session-confinement.js and src/lib/agent-engine/claude-cli-adapter.js apply it to new Codex and Claude sessions and resumes. src/owner-host.js binds authenticated dispatch to the same captured mode, enforced by src/lib/tool-mode.js.",
+      "applies": "next-session",
+      "options": [
+        "Only",
+        "Optimized",
+        "Enabled",
+        "Disabled"
+      ]
+    },
+    {
+      "id": "agent.product_source_writes",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Let agents change ToolsEnabled's own source inside a checkout through the ToolsEnabled file tools. Off keeps the integrity fence: host.write_file and host.patch_file refuse the product code folders (src, shell, bin, tools, scripts, sidecars, packages, captures, scratch, tmp) inside every ToolsEnabled checkout, which with Available tool sets on Only stops an agent from developing the product at all. On lifts that one rule for checkouts that are not the running installation. The running installation, state, config, KILLSWITCH, .git, node_modules, the package manifests and the policy documents stay refused. Read on every call.",
+      "capabilities": [
+        "Agents can develop ToolsEnabled itself inside a checkout you made for them, without leaving the audited ToolsEnabled tools."
+      ],
+      "risks": [
+        "While it is on, a confused or hijacked agent can rewrite product code in any ToolsEnabled checkout under your profile; only the running installation and its integrity anchors stay protected."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/product-source-writes.js productSourceWritesPolicy() reads the row under the same provenance rule as outside control (only a true the person or the installer chose counts); src/lib/providers/host-control.js isProductCodeWriteAllowed asks it before refusing a product code folder and never lifts the rule for the running product.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.subagent_route",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Let the assistant decide",
+      "consequence": "When one of your assistants starts another one, this decides where the new one appears. Left as it is, a new assistant joins your tree when the one that started it is already on your tree, and runs on its own otherwise. Set to always on your tree, every assistant an assistant starts is drawn as a circle under it, with its own name, its own conversation and the same stop button as one you started by hand; a start is refused, and says so, when the assistant asking is not itself on a tree. Set to never on your tree, they run on their own the way they always have: bounded, recorded and reachable through the request ledger, but nothing is drawn for you to see. This is a separate question from whether your assistants use this program\u2019s tools at all, which the row above decides.",
+      "capabilities": [
+        "An assistant that another assistant started shows up as a circle you can read, talk to and stop, instead of working somewhere you cannot see.",
+        "You settle it once for every assistant on this computer, rather than hoping each one makes the same choice about where to hand work down."
+      ],
+      "risks": [
+        "Drawing them on your tree makes each one a live conversation on this computer, and this computer holds only so many of those at once; past that a start is refused by name.",
+        "Always on your tree refuses a start whenever the assistant asking is not itself on a tree, so an assistant working on its own will be told no rather than quietly starting a helper."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-subagent-route.js subagentRoute() returns the one route a spawn may take and src/lib/tool-registry.js spawnSubagent obeys it, refusing by name rather than falling back to the other route. It never reads the Agent API row: that one decides whether an assistant also keeps its own built-in tool for this, which is a different question. A value nobody chose cannot force a route, so only user or installer provenance is read as a choice and anything unreadable leaves the shipped answer standing.",
+      "options": [
+        "Always on your tree",
+        "Never on your tree",
+        "Let the assistant decide"
+      ]
+    },
+    {
+      "id": "agent.capability_recall",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "On, every time you type something to an agent, it is handed up to three ToolsEnabled tools that might fit what you just said -- by exact id, with one line each -- so you do not have to know the name of the tool to get it used. Most of the time it is handed nothing at all: \"hi\", \"thanks\" and \"keep going\" get silence, and so does anything the match is not confident about. It only ever names tools your permission level actually offers. Off, agents are told nothing per message and find tools only from the session-start note above or from what you name yourself. The cost when it does speak is about a hundred and twenty tokens on that one message; your words are used to pick the tools and are not written down anywhere by this.",
+      "capabilities": [
+        "You can ask for what you want in your own words -- \"what is on my calendar today\", \"put this on my clipboard\" -- and the agent is shown the tool that does it, instead of you having to know its id."
+      ],
+      "risks": [
+        "When it does have something to say, the short list rides on that message, so the model provider receives up to three tool ids and their one-line descriptions along with what you typed.",
+        "A suggestion is only a suggestion: the agent may take the named tool when a different one, or none, was the better answer."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/capability-recall/index.js"
+    },
+    {
+      "id": "app.outside_control",
+      "section": "F",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, nothing outside this app can press its buttons or read its screen. On, a program running on this computer under your account, such as an agent you run from a terminal or a test script, can drive this app: open its menus, press its buttons, read what is on screen, and run code inside it, through a control connection that only this computer can reach (address 127.0.0.1, port 9223). It takes effect the next time the app starts, because the connection can only be opened while the app is starting. It is off when the product is installed: a copy someone else uses should not be drivable by other programs unless that person chose it.",
+      "capabilities": [
+        "An agent outside the app can operate it for you and report the errors it finds, which is how this product's own development and testing drive it."
+      ],
+      "risks": [
+        "While it is on, any program running on this computer under your account can do the same, including running code inside the app. Nothing outside this computer can reach the connection."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/outside-control.js outsideControlPolicy(): only an explicit true classified in the person's own settings file with user or installer provenance counts, so a flipped registry default or a value nobody chose keeps the port shut; the desktop shell (shell/outside-control.cjs) asks it before Electron is ready and opens the port only on that answer."
+    },
+    {
+      "id": "audit.enabled",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Enable signed, anchored activity audit for operations. Off keeps ordinary work independent of optional audit infrastructure. Existing saved audit data and activity preferences are preserved. Opening Advanced does not enable this feature.",
+      "capabilities": [
+        "Enable activity auditing only after explicit setup."
+      ],
+      "risks": [
+        "When auditing is enabled, unavailable signing or storage can prevent an operation from starting."
+      ],
+      "derivedFrom": "Explicit advanced feature setup; Basic defaults leave this optional feature off.",
+      "enforcedBy": "src/lib/runtime-policy.js resolves an explicit user or installer true; configured writers enforce durable admission before effects.",
+      "applies": "next-call"
+    },
+    {
+      "id": "ledger.verify_history",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require complete ledger-history verification before autonomous task continuation. Off reads current validated tasks without claiming their historical integrity. Existing history is preserved.",
+      "capabilities": [
+        "Verify complete task history only after explicit setup."
+      ],
+      "risks": [
+        "Missing or inconsistent historical task records pause automatic continuation while this verification is enabled."
+      ],
+      "derivedFrom": "Explicit advanced feature setup; Basic defaults leave this optional feature off.",
+      "enforcedBy": "src/lib/agent-ledger-continuation.js and minor-ledger-agent-gate.js consult runtime-policy.js independently of ordinary continuation.",
+      "applies": "next-call"
+    },
+    {
+      "id": "audit.activity",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "options": [
+        "Full",
+        "Essential",
+        "Off"
+      ],
+      "default": "Off",
+      "consequence": "Full selects signed success and failure summaries for completed API tool calls. Essential keeps failure summaries and omits successful-call summaries. Off omits both kinds of tool summary. This preference is dormant unless activity auditing is explicitly enabled. Operational custody and permission checks remain active. Permissions, sandboxing, vault protection and approval enforcement do not change. Applies to the next completed call; existing history is kept. Native tools outside the API are outside this activity audit.",
+      "capabilities": [
+        "Full provides the most complete API activity history for investigation and accountability.",
+        "Essential saves successful-call recording work while keeping failure summaries.",
+        "Off removes tool-summary recording work and retains less activity history."
+      ],
+      "risks": [
+        "Essential leaves no general summary of successful calls; Off also loses failure summaries and the usage measurements derived from those records.",
+        "Omitted summaries cannot be recovered later. Summary recording uses the existing best-effort recorder: write failures are reported and can leave gaps, even in Full. Explicitly enabled operation audit still takes time. Neither lighter choice guarantees a particular call speed."
+      ],
+      "derivedFrom": "Explicit owner choice; no activity summaries by default",
+      "enforcedBy": "src/lib/runtime-policy.js reads the current user or installer choice, defaulting to Off unless audit.enabled is explicitly enabled; src/lib/operation-audit.js capturePolicy() mints the trusted snapshot and src/lib/tool-registry.js auditInvocation() applies it only to optional MCP outcome summaries. Required audit, permission and approval paths are unchanged."
+    },
+    {
+      "id": "tools.throughput",
+      "section": "F",
+      "depth": 2,
+      "control": "seg",
+      "options": [
+        "fast",
+        "strict"
+      ],
+      "default": "fast",
+      "consequence": "Fast, the default: when several assistants call tools at once, their calls run side by side. Calls that only read run together; calls that change something keep their order for each assistant, so an assistant's second change never overtakes its first. Records selected by Tool activity audit, and all required security records, are saved before the call answers. Records from calls that arrive together are saved in one batch instead of one at a time, and that saving happens on a helper thread instead of the thread that draws this window. Strict: the older behaviour, one call at a time per assistant and one record saved per call, which is slower and can make this window hesitate while many assistants are working. It applies to the next call; no restart is needed.",
+      "capabilities": [
+        "Many assistants can work at once without waiting on each other or slowing the window down."
+      ],
+      "risks": [
+        "Two assistants changing the same thing at the same time are ordered by the store they change, not by arrival at this computer, which is what already happens across two computers."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/throughput-mode.js throughputMode() reads the row; src/lib/tool-registry.js admissionGrouped() routes each call's activity records through src/lib/audit-admission.js (one batch per writer-lock acquisition, on a helper thread) or the per-call path; src/mcp-server.js createLineDispatcher() picks the side-by-side scheduler (src/lib/tool-dispatch-scheduler.js) or the one-at-a-time chain for every incoming call, and src/owner-host.js dispatches every bound session through it."
+    },
+    {
+      "id": "agent.status_injection_overrides",
+      "section": "F",
+      "depth": 3,
+      "control": "list",
+      "default": [],
+      "consequence": "Optionally override the shared choice for one exact agent, lane, or computer. Each item is {kind: agent|lane|host, id: the exact node id, enabled: true|false}. Agent overrides win over lane overrides, which win over computer overrides. A missing or malformed shared setting or override list turns injection off rather than treating absence as consent.",
+      "capabilities": [
+        "Lets one agent, lane or computer differ from the shared choice above."
+      ],
+      "risks": [
+        "An override you set once and forget quietly outranks the shared setting, which is the first place anyone will look."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/status-injection.js"
+    },
+    {
+      "id": "model.provider",
+      "section": "F",
+      "depth": 1,
+      "control": "select",
+      "default": "Not configured",
+      "consequence": "Choose OpenAI compatible to send model requests to an API you control, or Ollama to send them to an Ollama-style service such as one running on this computer. Until you choose one, model requests stop with \"No model provider configured\" instead of guessing or using somebody else's account.",
+      "capabilities": [
+        "Choosing a provider is what makes model requests possible at all; until then they stop with an explanation."
+      ],
+      "risks": [
+        "Your prompts go to whatever service you name here, including anything of yours those prompts quote."
+      ],
+      "externalStep": {
+        "whatItDoes": "Runs the model service your requests will be sent to.",
+        "capabilitiesGained": [
+          "Requests are answered instead of stopping with \"no model provider is configured\"."
+        ],
+        "risks": [
+          "A service running on this computer uses this computer\u2019s memory and processor while it answers.",
+          "A service somewhere else receives the text of your prompts."
+        ],
+        "required": false,
+        "elevation": false,
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Install and start the model service you chose, from its own installer or your own server.",
+            "why": "This product does not install or start it, and does not manage it once it is running."
+          },
+          {
+            "do": "Put its address into the setting below it."
+          }
+        ],
+        "verify": "The endpoint setting stops reporting that the address cannot be reached, and a request returns an answer.",
+        "withoutIt": "The setting stays on and saves. Model requests stop and tell you the service could not be reached; nothing is silently retried elsewhere and no other provider is substituted."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/providers/customer-model.js",
+      "options": [
+        "Not configured",
+        "OpenAI compatible",
+        "Ollama"
+      ]
+    },
+    {
+      "id": "model.endpoint",
+      "section": "F",
+      "depth": 2,
+      "control": "text",
+      "default": "",
+      "consequence": "This is the HTTP address that receives your prompts. For OpenAI-compatible services, the assistant calls the chat completions route beneath this address; for Ollama it calls the local chat route. If the address cannot be reached, the request stops and tells you that the provider is unreachable.",
+      "capabilities": [
+        "Points requests at a service you control, including one running on this computer, rather than a service chosen for you."
+      ],
+      "risks": [
+        "Everything in a prompt goes to this address. An address typed wrongly can send your prompts somewhere you did not intend."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/providers/customer-model.js",
+      "applies": "next-call"
+    },
+    {
+      "id": "model.name",
+      "section": "F",
+      "depth": 2,
+      "control": "pick",
+      "default": "",
+      "consequence": "This exact model name is sent to your chosen provider. If the provider does not recognize it or rejects the request, the assistant tells you that the request failed; it does not silently switch to another model.",
+      "capabilities": [
+        "Sends your chosen model name to the provider, so you get the model you meant."
+      ],
+      "risks": [
+        "Very little. If the provider does not recognise the name it says the request failed; it is never quietly answered by a different model."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/providers/customer-model.js"
+    },
+    {
+      "id": "model.local_agent_name",
+      "section": "F",
+      "depth": 2,
+      "control": "pick",
+      "default": "",
+      "consequence": "New interactive local agents and local workers use this exact installed model. A model selected for an individual agent wins. Until this default is set, the existing model name is retained for Ollama. An unavailable choice stops with its name; it is never replaced silently.",
+      "capabilities": [
+        "Choose a fast local coordinator independently of the model used by tool requests."
+      ],
+      "risks": [
+        "Larger models need more GPU memory and may take longer to load."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/agent-engine/local-node-process.js; src/lib/providers/local-node-runtime.js"
+    },
+    {
+      "id": "model.tool_name",
+      "section": "F",
+      "depth": 2,
+      "control": "pick",
+      "default": "",
+      "consequence": "The model request tool uses this exact model on your configured provider. Until this default is set, it uses the existing model name above. Changing it does not change an interactive local agent's model.",
+      "capabilities": [
+        "Choose the model used by tool requests separately from local agents."
+      ],
+      "risks": [
+        "The selected model may use more memory or incur charges on a remote provider."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/providers/customer-model.js"
+    },
+    {
+      "id": "model.local_gpu_policy",
+      "section": "F",
+      "depth": 2,
+      "control": "select",
+      "default": "Require GPU",
+      "options": [
+        "Require GPU",
+        "Allow CPU fallback",
+        "CPU only"
+      ],
+      "consequence": "Require GPU requests all model layers on the GPU and verifies Ollama's memory report before sending your prompt and after generation. If the model does not fit, the request stops. Allow CPU fallback explicitly permits Ollama to split work with the CPU. CPU only requests zero GPU layers.",
+      "capabilities": [
+        "Keep local agents and tool requests on the GPU, or explicitly choose CPU use."
+      ],
+      "risks": [
+        "Requiring the GPU can refuse a model that would fit partly in system memory. CPU fallback can substantially slow replies."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/ollama-gpu.js; src/lib/agent-engine/local-node-process.js; src/lib/providers/customer-model.js; src/lib/providers/local-node-runtime.js"
+    },
+    {
+      "id": "model.local_context_tokens",
+      "section": "F",
+      "depth": 3,
+      "control": "number",
+      "default": 8192,
+      "consequence": "Ollama receives this context size for every local request. Choose a whole number from 512 through 131072. Increasing it lets the model consider more history and tool descriptions, and also reserves more memory.",
+      "capabilities": [
+        "Balance local conversation context against GPU memory use."
+      ],
+      "risks": [
+        "A context that is too large can prevent full GPU residency. A small context may omit older conversation details inside Ollama."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/settings.js; src/lib/agent-engine/local-node-adapter.js; src/lib/providers/customer-model.js; src/lib/providers/local-node-runtime.js",
+      "minimum": 512,
+      "maximum": 131072,
+      "step": 1,
+      "unit": "tokens",
+      "applies": "next-call"
+    },
+    {
+      "id": "model.local_thinking",
+      "section": "F",
+      "depth": 2,
+      "control": "select",
+      "default": "Fast",
+      "options": [
+        "Fast",
+        "Reasoning",
+        "Model default"
+      ],
+      "consequence": "Fast asks Ollama to disable thinking so a short reply can begin promptly. Reasoning explicitly enables thinking; it shares the output budget with the answer. Model default omits the thinking option. A model that rejects the chosen mode reports that rejection.",
+      "capabilities": [
+        "Choose quick coordination replies or additional reasoning on supported local models."
+      ],
+      "risks": [
+        "Fast mode can reduce answer quality on difficult tasks. Reasoning can spend the output budget before producing an answer."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/agent-engine/local-node-adapter.js; src/lib/providers/customer-model.js; src/lib/providers/local-node-runtime.js"
+    },
+    {
+      "id": "model.local_keep_alive_minutes",
+      "section": "F",
+      "depth": 3,
+      "control": "number",
+      "default": 10,
+      "consequence": "Ask Ollama to keep the chosen model loaded for this many minutes after each local request, from 1 through 60. A following request can reuse the loaded weights; Ollama may still unload them to serve another model.",
+      "capabilities": [
+        "Reduce repeated model loading between local coordination turns."
+      ],
+      "risks": [
+        "The loaded model continues to occupy GPU or system memory while idle."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/local-model-options.js; src/lib/settings.js; src/lib/agent-engine/local-node-adapter.js; src/lib/providers/customer-model.js; src/lib/providers/local-node-runtime.js",
+      "minimum": 1,
+      "maximum": 60,
+      "step": 1,
+      "unit": "minutes",
+      "applies": "next-call"
+    },
+    {
+      "id": "model.api_key",
+      "section": "F",
+      "depth": 3,
+      "control": "readback",
+      "default": "Not configured",
+      "readOnlyReason": "Read-only here because a credential must never be written into settings.json, which is a plain file this row would put it in. The key is captured by the secure credential form and kept in the Windows-protected vault under user_model_api_key; src/lib/providers/customer-model.js reads it from there, never from this row. To set or replace it, use the credential form; to remove it, clear that vault entry.",
+      "consequence": "OpenAI-compatible requests use the API key you enter through the secure credential form. The key is kept in the Windows-protected vault and is never written into settings, logs, audit records, or model results. Ollama does not require this key.",
+      "capabilities": [
+        "Lets requests to an OpenAI-compatible service be authorised, which is what makes that provider usable."
+      ],
+      "risks": [
+        "Anyone who can use this key can spend on your account. The key is kept in the Windows-protected vault and is never written into settings, logs, audit records or model results."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "retrieval.unified_search",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, assistants cannot look anything up through the unified search and are told so plainly rather than being handed an empty result. On, an assistant can ask one question across the sources you allow below and gets back either citations or an explicit statement that a source was never read. Turning this off does not make the answer \"nothing exists\"; it makes the answer \"you have this switched off\".",
+      "capabilities": [
+        "An assistant can look things up across the sources you allow before it starts, instead of starting from nothing."
+      ],
+      "risks": [
+        "It reads what you allow below. This switch on its own opens nothing; each source is its own setting."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/retrieval/settings-gate.js; tools/retrieval/index.js; tools/recall.js; tools/recall-index.js"
+    },
+    {
+      "id": "retrieval.search_documents",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, your written documents, designs and lane reports are not searched and are reported as not consulted, so an empty answer can never be mistaken for a gap. On, an assistant can find the document that already answers a question instead of redoing the work. Nothing is copied anywhere: the existing document index is asked and its own answer is passed through.",
+      "capabilities": [
+        "An assistant can find the document that already answers a question instead of writing a second answer to it."
+      ],
+      "risks": [
+        "Your written documents, designs and reports become readable to assistants, including anything personal filed among them."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/retrieval/sources.js; tools/prior-work-index.js"
+    },
+    {
+      "id": "retrieval.search_request_ledger",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, the record of what you have asked for is not searched. On, an assistant can find your exact wording on a subject by request number instead of paraphrasing it from memory. Your requests are your own words, so this is a separate choice from searching project documents, and lines that look like a password or key are never copied into the search index.",
+      "capabilities": [
+        "An assistant can quote your exact wording on a subject instead of paraphrasing it from memory."
+      ],
+      "risks": [
+        "Little: these are your own recorded requests, and they stay on this computer."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/retrieval/sources.js; tools/retrieval/fts-index.js"
+    },
+    {
+      "id": "retrieval.search_coordination_board",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, the notes assistants leave for each other are not searched and are reported as not consulted. On, an assistant can see that another one already claimed a piece of work or already answered a question, instead of starting it again. If the note store cannot be read at all, the answer says so rather than reporting that nobody has written anything.",
+      "capabilities": [
+        "An assistant can see that another one already claimed a piece of work or already answered a question, instead of starting it again."
+      ],
+      "risks": [
+        "Notes assistants left each other become readable across lanes, so a half-finished thought written in one place is read as fact in another."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/retrieval/sources.js; tools/retrieval/fts-index.js"
+    },
+    {
+      "id": "retrieval.meaning_search",
+      "section": "F",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, results are ordered by the words you actually typed, which costs nothing extra and never leaves this computer. On, results may additionally be reordered by a meaning-matching component when one is installed. If you turn this on and no such component is installed, you still get real keyword results and the answer says plainly that the reordering you asked for did not happen.",
+      "capabilities": [
+        "Results can be reordered by meaning as well as by the words you typed, so a document that says the same thing differently still comes up."
+      ],
+      "risks": [
+        "Off, ranking uses only the words you typed, costs nothing extra, and never leaves this computer. On, that stops being true if the meaning-matching component you install is not a local one."
+      ],
+      "externalStep": {
+        "whatItDoes": "Installs the meaning-matching component that does the reordering.",
+        "capabilitiesGained": [
+          "Search finds documents that mean the same thing in different words."
+        ],
+        "risks": [
+          "A component that is not local sees the text it is asked to compare."
+        ],
+        "required": false,
+        "elevation": false,
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Install the meaning-matching component yourself.",
+            "why": "This product does not download or install it, and will not enable it behind your back if it appears."
+          }
+        ],
+        "verify": "A search for a phrase that appears nowhere in a document still returns that document.",
+        "withoutIt": "The setting stays on and saves. Results are ordered by the words you typed, and the search says it is doing that rather than claiming a meaning match it did not perform."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "tools/retrieval/backends.js; tools/retrieval/settings-gate.js"
+    },
+    {
+      "id": "research.pipeline",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, nothing runs on behalf of a research project: submitting a job is refused with a plain sentence saying this switch is off, and jobs already waiting stay waiting instead of failing. On, projects you have enabled can queue work on this computer, and the three controls below decide what kinds of work that may actually be.",
+      "capabilities": [
+        "A research project can queue jobs on this computer and gather their results in one place, instead of you running each step by hand and collecting the output yourself."
+      ],
+      "risks": [
+        "Work you queued earlier can start while you are doing something else, using this computer's time and disk; each kind of work still needs its own permission below."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/research/settings-gate.js; src/lib/providers/research.js; src/lib/research/runners.js"
+    },
+    {
+      "id": "research.runner_agent",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, a research job may not launch an assistant, and a job that asks for one is held with a sentence saying so rather than failed. On, a job may start an assistant through the same launch path you use yourself, and that assistant shows up on the computers page like any other session.",
+      "capabilities": [
+        "A queued research step can be carried out by an assistant that appears in your fleet view, so long investigative work proceeds without you starting each session yourself."
+      ],
+      "risks": [
+        "An assistant started this way works unattended under the project's instructions, so a wrong experiment description becomes wrong work done at machine speed."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/research/settings-gate.js; src/lib/providers/research.js; src/lib/research/runners.js"
+    },
+    {
+      "id": "research.runner_process",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, a research job may not start a program on this computer, and a job that asks to is held with a sentence saying so rather than failed. On, a job may run the exact command its experiment declares, with a scrubbed environment and a time limit, writing what it produces into the project's own folder.",
+      "capabilities": [
+        "A research step can run a command directly and have its printed output or produced files collected as results automatically, with nothing leaving this computer."
+      ],
+      "risks": [
+        "A command declared in an experiment runs with your normal account's access to files, so an experiment written carelessly can read or change anything you can."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/research/settings-gate.js; src/lib/providers/research.js; src/lib/research/runners.js"
+    },
+    {
+      "id": "research.runner_http",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, a research job may not call an outside web service, and a job that asks to is held with a sentence saying so rather than failed. On, a job may make the web requests its experiment declares, over encrypted connections only, and a request that tries to carry a credential in its headers is refused outright.",
+      "capabilities": [
+        "A research step can fetch from or submit to an outside service and record the reply as a result, so collection from a remote source runs unattended."
+      ],
+      "risks": [
+        "Whatever a declared request contains leaves this computer for the service it names, and anything sent to an outside service cannot be called back."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/research/settings-gate.js; src/lib/providers/research.js; src/lib/research/runners.js"
+    },
+    {
+      "id": "accounts.failover",
+      "section": "F",
+      "depth": 2,
+      "control": "seg",
+      "options": [
+        "manual",
+        "auto"
+      ],
+      "default": "auto",
+      "consequence": "When the allowance on the account an assistant is using runs out, this decides what happens next. Left alone, it moves to the next account you have listed and carries on, and says which one it moved to. Set to stop, the assistant stops instead and tells you which account is spent and which of your others is ready, so you choose.",
+      "capabilities": [
+        "Lets work carry on across the accounts you have listed here, instead of stopping the moment one of them runs out."
+      ],
+      "risks": [
+        "Switching by itself spends the allowance on a different account of yours without asking first. Each account is still held to its own limit, and nothing here works around one."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/multi-account/failover-setting.js failoverChoice() reads the row and answers with the choice only when the stored value is one of these two options AND was classified in the person\u2019s own settings file with user or installer provenance, so a flipped registry default or a value nobody chose leaves the shipped answer standing; src/lib/multi-account/rotation.js resolveAccountForSession asks it at slot 4 of its precedence, below anything the caller or the accounts panel stated and above the shipped default, and turns the answer into the selection mode the walk uses."
+    },
+    {
+      "id": "audit.retention",
+      "section": "F",
+      "depth": 1,
+      "control": "select",
+      "default": "Newest 10,000 events",
+      "options": [
+        "Newest 10,000 events",
+        "Newest 50,000 events",
+        "Last 30 days",
+        "Last 90 days",
+        "Keep everything"
+      ],
+      "consequence": "Choose how much recorded history stays in the active ledger. Older records move to sealed, signed archives on this computer; this setting does not delete them. Tool activity audit separately decides which completion summaries are recorded.",
+      "capabilities": [
+        "A larger active window makes more recent history available without opening an archive.",
+        "Keep everything leaves all recorded events in the active ledger."
+      ],
+      "risks": [
+        "A larger active ledger takes more storage and can cost more time to verify or query. The effect depends on the amount of history and this computer.",
+        "Keep everything has no size limit, so storage use grows with recorded activity.",
+        "A smaller active window requires opening signed archives to inspect older records."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-retention.js resolvePreset()/retentionPlan() decide when the live window is over its limit; src/lib/audit.js rollArchiveOnce() moves exactly one event to sealed storage per append and advances the signed boundary inside the same writer transaction that removes it. An unreadable or unknown value resolves to keeping everything, never to a larger deletion."
+    },
+    {
+      "id": "diagnostics.retention",
+      "section": "F",
+      "depth": 1,
+      "control": "select",
+      "default": "7 days / 64 MiB",
+      "options": [
+        "7 days / 64 MiB",
+        "30 days / 256 MiB",
+        "Keep diagnostics",
+        "Archive diagnostics"
+      ],
+      "consequence": "Keep a finite window of new product diagnostics. Active writers have bounded output; older closed diagnostic files expire within the selected age and storage target. Saved conversations, projects, recovery state and existing files are preserved. Keep and Archive require your explicit choice.",
+      "capabilities": [
+        "Choose a finite diagnostic window without enabling detailed audit.",
+        "Keep or export individual closed diagnostics, or explicitly retain archives."
+      ],
+      "risks": [
+        "Explicit keeps, active writers and unreadable files are protected; the storage target may be exceeded and is reported.",
+        "Keep diagnostics and Archive diagnostics retain data without a total storage limit. Native output can contain private task information."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/diagnostic-retention.js resolveDiagnosticPolicy()/createDiagnosticStore() enforce finite output and bounded maintenance only inside a dedicated managed diagnostic directory; explicit keeps and archives are protected."
+    },
+    {
+      "id": "machines.direct_link_setup",
+      "section": "E",
+      "depth": 3,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Only relevant when the setting above is \"Direct connection\". Turn this on and this computer works out which address it holds on the cable to your other computer, records the two as a pair, and starts listening; the first time, Windows asks your permission once. Turn it off and it stops listening and stops trying, on this computer, until you turn it back on. The two openings in Windows Firewall stay, pinned to the other computer's address and doing nothing while nothing is listening, so that turning the link on again does not ask your permission a second time. Nothing here reaches the internet and no account is involved: the two computers agree a key between themselves over the cable and each keeps its own copy.",
+      "capabilities": [
+        "Your two computers reach each other with no server in between and nothing to sign up for, and the traffic never leaves the cable joining them.",
+        "Because each computer is identified by the address it actually holds on a physical port rather than by a name in a file, nothing else on your network can present itself as the other computer.",
+        "Once on, it stays on by itself: if the connection drops, a program crashes, or you unplug and replug the cable, this computer keeps trying and reconnects without you doing anything."
+      ],
+      "risks": [
+        "The openings are pinned to the other computer's address, so anything that later took that address on that cable would inherit them. This is why the setup refuses addresses held on adapters that software can create or reconfigure, such as VPN, Hyper-V, VMware and virtual switches.",
+        "Turning it off here stops this computer listening and trying; it does not reach into the other computer, which you turn off separately. The openings in Windows Firewall also stay until you remove them yourself.",
+        "After you restart the computer this does not come back on by itself, unless you have also turned on \"start ToolsEnabled when Windows starts\". Turn it on again the same way, or turn that setting on if you would rather it returned by itself.",
+        "If the cable is unplugged or loose this stops working, and the failure looks like a software problem. The setting reports the cable and address state in those terms so you are not left guessing."
+      ],
+      "externalStep": {
+        "whatItDoes": "Joins the two computers with a cable and gives each one a fixed address on it. This is the part that is physical, and the part no software can do on your behalf.",
+        "capabilitiesGained": [
+          "The two computers can see each other at all, which everything else about this connection depends on.",
+          "The address each computer holds becomes what identifies it, so neither can be impersonated by something else on your network."
+        ],
+        "risks": [
+          "A cable that is loose or half-seated appears to work and then drops, and the failure will look like a fault in this product rather than a physical one.",
+          "Putting the address on a Wi-Fi, VPN or virtual adapter instead of the physical port will be refused, because an adapter that software can create is one that something you did not intend could also create.",
+          "Assigning a fixed address replaces whatever that adapter was using before. On an adapter also carrying your normal network that would take this computer off it, which is why this belongs on the wired port used for the cable and nothing else."
+        ],
+        "required": false,
+        "elevation": true,
+        "frequency": "rarely",
+        "frequencyBecause": "Once for a given pair of computers. You do it again only if you move the cable to a different port, replace one of the machines, or decide to change the addresses. Derived from the fact that a fixed address persists across restarts, not from how often anyone happens to run the setup.",
+        "neverPerformedForYou": true,
+        "steps": [
+          {
+            "do": "Run a network cable directly between the two computers, from the wired port on one to the wired port on the other.",
+            "why": "This connection is the cable itself. There is no router or switch in between and nothing on your network to configure."
+          },
+          {
+            "do": "On each computer, open Settings, then Network and internet, then Ethernet, and set that adapter to a fixed IP address, giving the two computers different addresses on the same small network. 192.168.50.1 and 192.168.50.2 with subnet mask 255.255.255.0 work; so does any other pair you prefer.",
+            "why": "The two computers identify each other by these addresses, so each needs one that does not change. The numbers are yours to choose and nothing in this product is fixed to any particular ones."
+          },
+          {
+            "do": "Approve the Windows prompt that appears when you save the address.",
+            "why": "Changing a network adapter is an administrator action. This product cannot do it and does not ask Windows to let it: you approve it yourself, and you can cancel and change nothing."
+          },
+          {
+            "do": "Turn this setting on, on both computers, in either order.",
+            "why": "Each side then finds its own address, records the pair and starts listening. The first time, Windows asks your permission once more so this product can open the two ports and install the two background helpers that keep the connection up; after that, turning it on and off asks nothing. Neither side can finish alone, but neither has to wait for the other: whichever you turn on second, they connect by themselves."
+          }
+        ],
+        "verify": "This setting shows the cable as connected, names the address this computer is using and the address it has recorded for the other one, and reports whether the pair has connected and how long ago that was last proven end to end. If the cable is out, or the address is on an adapter that is not accepted, or a port was never opened, it says which of those it is rather than reporting a general failure.",
+        "withoutIt": "Everything else on this computer works exactly as it does now, and this setting still saves. Only the direct connection to your other computer is unavailable, so the computers page shows it as not reachable, and anything needing that machine says so instead of waiting."
+      },
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": ""
+    },
+    {
+      "id": "agent.message_screening",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Allow code names",
+      "consequence": "Every message your agents send each other is checked for anything that looks like a password or key, and a message that trips the check is refused rather than stored. This decides how strict that check is. The middle setting lets a message quote this product's own error codes and tool names -- SECRET_NOT_CONFIGURED, system.credential_request -- which read like credentials to a strict check but are printed in this product's own screens.",
+      "capabilities": [
+        "On \"Allow code names\", agents fixing the vault can quote the error code they are looking at to each other instead of having the message refused.",
+        "On \"Off\", no message between agents is inspected or refused, which is the fastest setting and the only one that never refuses a message you meant to send."
+      ],
+      "risks": [
+        "On \"Off\", a password or key an agent happens to include is written into durable message history exactly as typed, and nothing warns you.",
+        "On \"Refuse look-alikes\", ordinary messages about this product's own error codes are refused, and the agent has to reword them to say anything."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-comms/history.js",
+      "options": [
+        "Refuse look-alikes",
+        "Allow code names",
+        "Off"
+      ]
+    },
+    {
+      "id": "agent.tool_mode",
+      "section": "D",
+      "depth": 1,
+      "control": "select",
+      "default": "ToolsEnabled only",
+      "consequence": "Compatibility name for agent.agent_api. Only means ToolsEnabled only, Optimized means ToolsEnabled with a few Claude native tools (Claude only), Enabled means both full tool sets, and Disabled means Native tools only. Settings shows the canonical Available tool sets row. Existing role and permission limits still apply, and existing sessions keep their captured choice until restarted.",
+      "capabilities": [
+        "Choose whether new assistants use ToolsEnabled services, provider tools, or both."
+      ],
+      "risks": [
+        "Sessions using Native tools only cannot call ToolsEnabled services or use roles that require its functions."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-api-mode.js; src/lib/tool-mode.js; src/lib/agent-api-policy.js; src/lib/agent-session-confinement.js; src/lib/setup/machine-record.js; src/owner-host.js credential binding; src/mcp-server.js; src/lib/tool-registry.js executeTool",
+      "options": [
+        "ToolsEnabled only",
+        "ToolsEnabled and selected native tools",
+        "ToolsEnabled and native tools",
+        "Native tools only"
+      ],
+      "applies": "next-session"
+    },
+    {
+      "id": "tools.audit_batch_window_ms",
+      "section": "D",
+      "depth": 3,
+      "control": "number",
+      "default": 1,
+      "consequence": "Wait this many milliseconds to collect activity records into a batch. A tool still waits for its required record to be durable before it answers.",
+      "capabilities": [
+        "Collect simultaneous activity into fewer writes when many assistants are working."
+      ],
+      "risks": [
+        "Longer waits add delay before a queued tool call can receive its audit receipt."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-admission.js createAdmissionQueue reads before scheduling each batch",
+      "minimum": 0,
+      "maximum": 25,
+      "step": 1,
+      "unit": "ms",
+      "applies": "next-call"
+    },
+    {
+      "id": "tools.audit_batch_size",
+      "section": "D",
+      "depth": 3,
+      "control": "number",
+      "default": 512,
+      "consequence": "Limit how many activity records share one writer transaction. Larger batches reduce writer overhead when many assistants are active.",
+      "capabilities": [
+        "Control how much activity can be recorded together during a burst of tool calls."
+      ],
+      "risks": [
+        "Very large batches hold the ledger writer longer and can delay other queued calls."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-admission.js createAdmissionQueue reads before draining each batch",
+      "minimum": 1,
+      "maximum": 4096,
+      "step": 1,
+      "unit": "records",
+      "applies": "next-call"
+    },
+    {
+      "id": "tools.credential_check_interval_seconds",
+      "section": "D",
+      "depth": 3,
+      "control": "number",
+      "default": 0,
+      "consequence": "Zero reuses a presence result only while the encrypted vault is unchanged. A positive value also repeats the secure helper check after this many seconds. Every call checks the vault content digest; this does not cache permission, sign-in validity or revocation. Linux always consults its secure backend.",
+      "capabilities": [
+        "Choose how often Windows repeats a presence check when the encrypted vault has not changed."
+      ],
+      "risks": [
+        "Short intervals repeatedly start the Windows helper even when no vault record changed."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/vault-presence.js rememberedPresence; src/lib/tool-performance-settings.js",
+      "minimum": 0,
+      "maximum": 300,
+      "step": 1,
+      "unit": "seconds",
+      "applies": "next-call",
+      "platforms": [
+        "win32"
+      ]
+    },
+    {
+      "id": "tools.policy_enforcement",
+      "section": "D",
+      "depth": 4,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require a durable scoped policy decision for consequential tool calls. Calls without one are refused. This experimental policy is off by default.",
+      "capabilities": [
+        "Require explicit scoped authorization before an assistant performs consequential tool calls."
+      ],
+      "risks": [
+        "An assistant without a scoped policy authorization will be unable to perform consequential tool calls."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/p13-setting.js; src/lib/tool-registry.js requireP13Decision; shell/product-settings.cjs applies the launcher environment",
+      "applies": "restart",
+      "warningText": "Consequential calls need scoped policy authorization when this is on. Calls without it are refused."
+    },
+    {
+      "id": "purchases.require_owner_approval",
+      "section": "D",
+      "depth": 2,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Require your approval for each purchase amount recorded in the spending ledger. Turning this off also removes the purchase reservation; your other reservations and daily spending limit remain in effect. This control does not execute payments.",
+      "capabilities": [
+        "Keep each proposed purchase amount waiting for your own approval before it enters the spending ledger."
+      ],
+      "risks": [
+        "When approval is off, assistants can record spending without a new local confirmation for each amount."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/purchase-reservation-policy.js purchaseApprovalReserved; src/lib/purchase-authority.js authorizeSpend; src/lib/providers/pay.js recordSpend; shell/product-settings.cjs atomically updates the purchase reservation",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.close_asks",
+      "section": "D",
+      "depth": 2,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Allow assistants to answer or decline existing asks in your ledger. Turning this off keeps those decisions for you. This does not approve purchases.",
+      "capabilities": [
+        "Let assistants resolve or decline pending questions in the shared Ask ledger."
+      ],
+      "risks": [
+        "An assistant may answer a pending question before you have personally reviewed its wording."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/minor-ledger-agent-gate.js answer and decline",
+      "applies": "next-call"
+    }
+  ]
+}

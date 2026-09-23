@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "p12-readonly",
+      "tools": [
+        "audit.status",
+        "memory.get",
+        "memory.search",
+        "search.query",
+        "search.status",
+        "task.get",
+        "task.list"
+      ],
+      "roots": ["toolsenabled"],
+      "domains": [],
+      "httpMethods": [],
+      "commandIds": [],
+      "secretHandles": [],
+      "externalActions": [],
+      "approvalRequiredActions": [],
+      "deniedTools": [],
+      "completionCriteria": ["evidence-reviewed"],
+      "maxTtlMs": 86400000
+    },
+    {
+      "id": "p12-task-observer",
+      "tools": [
+        "audit.status",
+        "task.get",
+        "task.list"
+      ],
+      "roots": [],
+      "domains": [],
+      "httpMethods": [],
+      "commandIds": [],
+      "secretHandles": [],
+      "externalActions": [],
+      "approvalRequiredActions": [],
+      "deniedTools": [],
+      "completionCriteria": ["state-observed"],
+      "maxTtlMs": 86400000
+    }
+  ]
+}

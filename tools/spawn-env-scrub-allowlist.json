@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "note": "Call sites a human READ and judged unable to leak a provider credential. This is NOT the baseline: tools/spawn-env-scrub-baseline.json records sites nobody has reviewed yet and asserts nothing about them. Every entry here is a claim, so every entry carries a reason and a reviewer -- tools/check-spawn-env-scrub.js refuses an entry whose reason is missing or under 20 characters, and refuses an entry whose call site no longer exists, because an allowlist that outlives its call sites is a bypass with a comment on top.",
+  "criterion": "Exempt means: the executable is a fixed, named, non-AI local binary, its argv is fixed at the call site, and it cannot execute caller-supplied code. A general interpreter (node, powershell, cmd, sh, npx) is NEVER exempt, because whatever it runs inherits the same environment and can reach a provider CLI.",
+  "whyNotInConfig": "These two files live beside the checker in tools/ rather than in config/ because an active process on this machine deletes untracked files from config/ within seconds -- measured 2026-08-10, three probe files placed there were gone in under 8s. Data the gate needs to read cannot live somewhere it can silently vanish from.",
+  "entries": [
+    {
+      "file": "src/lib/fleet-supervisor/kill-tree.js",
+      "symbol": "spawn",
+      "command": "taskkill",
+      "reason": "Windows taskkill with fixed argv (/PID /T /F) to terminate an already-killed child's descendants. It reads no provider variable, executes no caller-supplied code, and spends nothing; there is no environment it could carry to a billable endpoint.",
+      "reviewedBy": "env-passthrough-gate lane",
+      "reviewedOn": "2026-08-10"
+    },
+    {
+      "file": "src/lib/fleet-supervisor/roster/scoreboard.js",
+      "symbol": "execFileSync",
+      "command": "git",
+      "reason": "git rev-parse HEAD with fixed argv, reading the local checkout's commit id. git consults no AI provider variable and this invocation touches no remote, so no credential in the environment is reachable by it.",
+      "reviewedBy": "env-passthrough-gate lane",
+      "reviewedOn": "2026-08-10"
+    }
+  ]
+}

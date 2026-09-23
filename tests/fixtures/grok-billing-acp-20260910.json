@@ -1,0 +1,39 @@
+{
+  "_source": "Grok CLI 1.0.25 ACP replies captured 2026-09-10 (initialize -> authenticate cached_token headless -> _x.ai/billing); address and team id replaced",
+  "authenticateMeta": {
+    "email": "owner@example.test",
+    "auth_mode": "Oidc",
+    "team_id": "00000000-0000-4000-8000-000000000000",
+    "team_name": null,
+    "is_zdr": false,
+    "team_role": null,
+    "coding_data_retention_opt_out": true,
+    "show_resolved_model": false,
+    "gate": null,
+    "subscription_tier": "X Premium+",
+    "feedback_trace_offer": false,
+    "backend_billed": false
+  },
+  "billing": {
+    "config": {
+      "currentPeriod": {
+        "type": "USAGE_PERIOD_TYPE_WEEKLY",
+        "start": "2026-09-10T08:47:13.160026+00:00",
+        "end": "2026-09-17T08:47:13.160026+00:00"
+      },
+      "onDemandCap": {
+        "val": 0
+      },
+      "onDemandUsed": {
+        "val": 0
+      },
+      "prepaidBalance": {
+        "val": 0
+      },
+      "isUnifiedBillingUser": true,
+      "billingPeriodStart": "2026-09-10T08:47:13.160026+00:00",
+      "billingPeriodEnd": "2026-09-17T08:47:13.160026+00:00"
+    },
+    "subscription_tier": "X Premium+"
+  }
+}

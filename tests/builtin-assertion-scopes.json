@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "unit": "outermost-builtin-assert-call",
+  "programs": [
+    {
+      "file": "tests/cloud-agent-state-machine.test.js",
+      "modules": ["tests/cloud-agent-state-machine.test.js"],
+      "excludedAssertions": [],
+      "expectedAssertions": 38,
+      "sourceClosure": [
+        {"file": "tests/cloud-agent-state-machine.test.js", "sha256": "8062d28379dbd31e7aa8a8cb62c7a35c7d44703ef85bddf007de37377581334a"},
+        {"file": "src/lib/cloud-agent/state-machine.js", "sha256": "c20d0e76cbaacc1c649ad69d76daabc334238129a8b34e2df77a38c5aada3bb0"},
+        {"file": "src/lib/cloud-agent/contract.js", "sha256": "f2cfe8cad422bb17b4bad164796c2df37d623ca37e1fd6f995fb55d85c6e25ea"},
+        {"file": "src/lib/cloud-agent/errors.js", "sha256": "548fc0108fa310e0ead87f2266c9220de21bb6da219d194bd44ba040656e8144"}
+      ],
+      "review": "Reviewed the complete actual CommonJS import graph at engine 99d3e302. The entry uses only node:assert/strict, the pure state-machine module and CloudAgentError; state-machine additionally requires contract, whose only other import is builtin node:crypto. No provider, filesystem, child process, environment branch, dynamic import or skip path runs in this program. check(label,fn) invokes fn and increments its own twenty logical groups; expectCode contains one outer throws assertion with nested predicates. Independently enumerated executed outer calls: three bind/submit successes, twenty observation transitions, eleven throws contracts and four canAdvance values, totaling thirty-eight. No custom assertion authority or additional fixture helper is omitted."
+    },
+    {
+      "file": "tests/cloud-agent-session.test.js",
+      "modules": ["tests/cloud-agent-session.test.js"],
+      "excludedAssertions": [],
+      "expectedAssertions": 9,
+      "sourceClosure": [
+        {"file": "tests/cloud-agent-session.test.js", "sha256": "546bc294b0d64d79bc483bcd8e5fd9004f50d38b6216a48e15719640c09fda52"},
+        {"file": "src/lib/cloud-agent/session.js", "sha256": "c430497e86328fca193d6d606c2981fa8f765b9c5843bf7b3011b1a51ad417b7"},
+        {"file": "src/lib/cloud-agent/state-machine.js", "sha256": "c20d0e76cbaacc1c649ad69d76daabc334238129a8b34e2df77a38c5aada3bb0"},
+        {"file": "src/lib/cloud-agent/contract.js", "sha256": "f2cfe8cad422bb17b4bad164796c2df37d623ca37e1fd6f995fb55d85c6e25ea"},
+        {"file": "src/lib/cloud-agent/errors.js", "sha256": "548fc0108fa310e0ead87f2266c9220de21bb6da219d194bd44ba040656e8144"}
+      ],
+      "review": "Reviewed the complete actual CommonJS import graph at engine 99d3e302. The entry imports node:assert/strict and session; session imports only contract, state-machine and errors; contract additionally imports builtin node:crypto. The dependency-injected adapter is defined entirely in this test and returns in-memory values. No provider, filesystem, child process, environment branch, dynamic import, custom assertion authority or skip path runs. The async main awaits all session calls and records failure through process.exitCode. Independently enumerated outer assertions: one adapter doesNotThrow, two reconciliation fields, four post-inspection state/evidence/gate fields and two fresh reconciliation fields, totaling nine. Real session timers settle and clear on each completed operation."
+    },
+    {
+      "file": "tests/cloud-agent-session-refusals.test.js",
+      "modules": ["tests/cloud-agent-session-refusals.test.js"],
+      "excludedAssertions": [],
+      "expectedAssertions": 23,
+      "sourceClosure": [
+        {"file": "tests/cloud-agent-session-refusals.test.js", "sha256": "73e6b15d3e169571da3f26479dfc5a4c1880fab6c0a5fbc330ca0c63fd7aa171"},
+        {"file": "src/lib/cloud-agent/session.js", "sha256": "c430497e86328fca193d6d606c2981fa8f765b9c5843bf7b3011b1a51ad417b7"},
+        {"file": "src/lib/cloud-agent/state-machine.js", "sha256": "c20d0e76cbaacc1c649ad69d76daabc334238129a8b34e2df77a38c5aada3bb0"},
+        {"file": "src/lib/cloud-agent/contract.js", "sha256": "f2cfe8cad422bb17b4bad164796c2df37d623ca37e1fd6f995fb55d85c6e25ea"},
+        {"file": "src/lib/cloud-agent/errors.js", "sha256": "548fc0108fa310e0ead87f2266c9220de21bb6da219d194bd44ba040656e8144"}
+      ],
+      "review": "Reviewed the complete actual CommonJS import graph at engine 99d3e302: entry to session, contract, state-machine and errors, plus only builtin node:assert/strict and node:crypto. All adapter operations are test-local in-memory functions. No provider, filesystem, child process, environment branch, dynamic import, custom assertion authority or skip path runs. Missing evidence has four outer assertions; FAILED and CANCELLED each have four; SUBMITTED and RUNNING each have four; the real one-second terminal observation timeout adds one awaited rejects assertion and two unchanged-state/call-count assertions, totaling twenty-three. The rejects predicate's error-code assertion is nested authority within that single outer call. The unsettled adapter promise cannot end the program early because the actual session budget timer remains referenced and its rejection is awaited. Main failure sets process.exitCode."
+    },
+    {
+      "file": "tests/agent-roles.test.js",
+      "modules": ["tests/agent-roles.test.js"],
+      "excludedAssertions": [],
+      "expectedAssertions": 65,
+      "sourceClosure": [
+        {"file": "tests/agent-roles.test.js", "sha256": "794689b9283af6de123c174e0f596a859b3a8bf7d42cd25042e6e3f561bc1eee"},
+        {"file": "src/lib/agent-roles.js", "sha256": "186a46e2aa9dd9f3a1953a228880406a3000669c9119150849c0901bd279814c"},
+        {"file": "src/lib/roles/controller.json", "sha256": "06b770e84c06537068081b4ff5d293a68372edf980a73ecbe0749b35ff22cb60"},
+        {"file": "src/lib/roles/shadow-manager.json", "sha256": "3e97a14399029850c949b5b8753819faf674f80cf000b421aa8a82de04fcf456"},
+        {"file": "src/lib/roles/planner.json", "sha256": "43e1ca189ecd4b1f8341b8bff6f97ffea004d23016e1a97ba31bbd939da34a6f"},
+        {"file": "src/lib/roles/manager.json", "sha256": "56c582e098e3b947401dce652f513171241e182ac34f3e1d5c90bfdc74976395"},
+        {"file": "src/lib/roles/coordinator-assistant.json", "sha256": "f8a9c8cb6e934124f148cca5071ce61e15317b3343e0e370b2d8de3b27695ab6"},
+        {"file": "src/lib/roles/builder.json", "sha256": "cfdba9fdb134605f8e5e5d1e86d714d430ec6e388841d42ca99d7c3bf8273424"},
+        {"file": "src/lib/roles/reviewer.json", "sha256": "53babbc9767d1280506a90e1a46fa8a0cc0f8a9ee0258c61dabef24e23e61da2"},
+        {"file": "src/lib/roles/worker.json", "sha256": "f4bde0ddfd28ddaae5d69d8a4500d18bcfce18999c22a7869a03b8984ac49f9b"},
+        {"file": "src/lib/roles/observer.json", "sha256": "8d854bd7b4492f252324431747a5bcdc19cca44fd4cbb99cbefea5243953b740"},
+        {"file": "src/lib/agent-org.js", "sha256": "523ece7d7a495ad1e7252222b5db0d3060e5de80e40069fb3fe9ed762f9af453"},
+        {"file": "src/lib/durable-memory-file.js", "sha256": "d1d56b921ab646f6cb1472caf84f0795da0b61ace82a491c81222d938f6bc275"},
+        {"file": "src/lib/runtime-state-root.js", "sha256": "96b57892ed013426723f6f34fec394ef7a2d5b36d0e3b0cb1be25555d47e1fa7"}
+      ],
+      "review": "Reviewed the owner-requested newer Manager owns/handoff wording: only two JSON string values change; imports, executable code, assertion authority and the required sixty-five outer assertions are unchanged. Re-reviewed profile and role changes from e6a2435b: Controller and Manager JSON carry the requested saved wording, and durable-memory-file adds deferred local-user-profile imports inside resolveServicesRoot. The role program does not call that resolver. No measured module, import executed by this program, or assertion count changes; all sixty-five outer assertions remain required. Re-reviewed the complete exercised CommonJS import graph on combined engine 9b83a1eb after the role-file refactor and kill-switch state repair. The runtime-state-root diff adds frozen file/entry sets (RUNTIME_STATE_FILES, RUNTIME_STATE_FILE_SET, RUNTIME_STATE_ENTRIES), adds the copyRuntimeFileWithoutOverwriting helper, adds RUNTIME_STATE_FILES to module.exports, and otherwise changes only the deferred path resolution function programOrStatePath and the legacy adoption function adoptLegacyPayloadState, which gains an environment parameter read per call rather than at load. The three static requires (node:fs, node:os, node:path) and the three deferred account-profile-boundary requires are byte-identical to the previously reviewed revision; no new import or initialization side effect exists. This role-only program invokes none of those functions, so its import closure and sixty-five outer assertions are unchanged. Complete exercised graph: entry to agent-roles, agent-org, durable-memory-file and runtime-state-root, plus all nine static src/lib/roles/*.json imports and builtin node:assert/strict, crypto, fs, os and path. Each JSON file contains only name, summary, owns, mustNot and handoff strings and a rules string array; all nine are individually byte-bound. No executable JSON content or further data dependency exists. The four product modules initialize only frozen declarations, role maps, constants and the lexical program-root path. This test calls roleDefinition, roleRules and storedRoleDefinition with in-memory values; it never invokes settings, storage, account-boundary, resource admission or runtime-state resolution. Deferred account-profile-boundary imports therefore do not load. Beyond Node loading the byte-bound source and JSON modules, no product filesystem operation, provider, network, child process, environment-dependent path, dynamic import, asynchronous work, custom fixture assertion or skip path runs. Independently enumerated outer calls: six lookup/enforced-field checks, four editable-projection checks, four immutable-library checks, two dispatch roles times three stored/declared variants times seven checks (forty-two), seven non-dispatch role checks and two no-base checks, totaling sixty-five. Role directions are product data; these checks prove their stored projection and capability values, not model obedience or extra authority. Both printed success lines remain ordinary raw output, not assertion evidence. Re-reviewed 2026-09-11 at engine fe3c3b8c after a57cd698 changed src/lib/agent-org.js from 583fc3aa to 523ece7d without refreshing this pin, which left createBuiltinAssertionRun throwing 'changed or duplicate reviewed assertion source' and the measurement over this program refusing to run at all since 2026-09-10. The whole diff on that file is one line: 'grok' is added to the frozen PROVIDERS array. It adds no require, no top-level statement, no exported function and no initialization side effect, and PROVIDERS is read only by the organisation admission path, which this role-only program never calls. The import closure, the excluded set and the sixty-five outer assertions are therefore unchanged, and the refreshed pin was proved by measurement rather than asserted: the run reports 65."
+    }
+  ]
+}

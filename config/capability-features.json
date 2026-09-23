@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "$comment": [
+    "THE FEATURES THIS PRODUCT HAS, AND HOW EACH ONE IS ACTUALLY TURNED OFF.",
+    "",
+    "This built-in product manifest distinguishes three mechanisms that are often",
+    "described as disabled but provide different boundaries:",
+    "'disabled', they stop three different attackers, and a settings screen that",
+    "blurs them is lying:",
+    "",
+    "  absent        The code is not in the payload. Enforced at BUILD time by",
+    "                tools/check-payload-boundary.mjs, which is fail-closed and",
+    "                treats an unclassified file as a failure. This is the ONLY",
+    "                tier that stops a rogue agent, because an agent with a shell",
+    "                can do anything the shipped code could do.",
+    "",
+    "  unregistered  The code is on disk but its tools are never defined, so they",
+    "                are absent from tools/list and dispatch refuses the id. This",
+    "                stops an honest mistake, a confused agent, and a prompt",
+    "                injection reaching for a tool. It does NOT stop an agent that",
+    "                can spawn a process. Instantly reversible.",
+    "",
+    "  gated         The tools exist and the policy kernel refuses without the",
+    "                entitlement. For anything that must not be forgeable this is",
+    "                checked SERVER-SIDE by pairId, the way",
+    "                providers/hosted-relay-entitlement.js already does -- it",
+    "                never reads anything from the customer's machine.",
+    "",
+    "At the unrestricted permission level, `unregistered` is a blast-radius control and not a",
+    "security boundary, and this file says so in the tier field of every entry so",
+    "no settings copy can promise more than the mechanism delivers.",
+    "",
+    "WHAT THIS FILE IS NOT. It is not the source of truth for whether a feature is",
+    "on. src/lib/capability-features.js resolves that from the RESOLVED TOOL",
+    "REGISTRY and the filesystem at the moment it is asked, so the onboarding line",
+    "cannot name a feature whose tools are not really there. A confined permission",
+    "tier shrinks listTools, and the line shrinks with it. This file declares what",
+    "COULD exist and how to look for it; the resolver decides what DOES."
+  ],
+  "features": [
+    {
+      "id": "grepsaver",
+      "title": "Orientation cards, so an agent does not read the whole tree to find one thing",
+      "tier": "unregistered",
+      "entry": "node tools/grepsaver-orient.js \"<topic>\"",
+      "probeFiles": [
+        "tools/grepsaver-orient.js"
+      ],
+      "cardIndex": "context/systems.json",
+      "tools": [],
+      "verifiedBy": "command"
+    },
+    {
+      "id": "filekeeper",
+      "title": "The internal sync plane that moves work between machines",
+      "tier": "unregistered",
+      "entry": "node tools/repo-sync.js",
+      "probeFiles": [
+        "tools/repo-sync.js"
+      ],
+      "tools": [],
+      "verifiedBy": "command"
+    },
+    {
+      "id": "cloud-lane",
+      "title": "Dispatch work to Codex Cloud and retrieve the diff it produced",
+      "tier": "unregistered",
+      "entry": "node tools/cloud-lane.js",
+      "probeFiles": [
+        "tools/cloud-lane.js"
+      ],
+      "tools": [
+        "cloud.task_launch",
+        "cloud.task_diff",
+        "cloud.task_status",
+        "cloud.task_list"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "local-node",
+      "title": "Run a model on this computer's own GPU instead of a paid provider",
+      "tier": "unregistered",
+      "entry": "node tools/local-node-status.js",
+      "probeFiles": [
+        "tools/local-node-status.js",
+        "src/lib/providers/local-node-runtime.js"
+      ],
+      "tools": [],
+      "verifiedBy": "command"
+    },
+    {
+      "id": "audit-ledger",
+      "title": "The tamper-evident record of everything that happened",
+      "tier": "gated",
+      "entry": "node tools/audit-verify.js",
+      "probeFiles": [
+        "src/lib/audit.js"
+      ],
+      "tools": [
+        "audit.status",
+        "audit.tail",
+        "audit.verify"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "vault",
+      "title": "Encrypted credential store; secrets enter here and nowhere else",
+      "tier": "gated",
+      "entry": "node tools/secrets.js",
+      "probeFiles": [],
+      "tools": [],
+      "verifiedBy": "probe"
+    },
+    {
+      "id": "purchase-cart",
+      "title": "The shopping list an agent adds to and only the owner approves",
+      "tier": "gated",
+      "entry": "node tools/purchase-cart.js",
+      "probeFiles": [
+        "src/lib/purchase-authority.js",
+        "tools/purchase-cart.js"
+      ],
+      "tools": [
+        "purchase.request",
+        "purchase.decision",
+        "pay.check",
+        "pay.record"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "search",
+      "title": "Unified retrieval across documents, the request ledger and the board",
+      "tier": "unregistered",
+      "entry": "search.query",
+      "probeFiles": [],
+      "tools": [
+        "search.query",
+        "search.status",
+        "search.index"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "memory",
+      "title": "Durable notes that survive across sessions and clients",
+      "tier": "unregistered",
+      "entry": "memory.search",
+      "probeFiles": [],
+      "tools": [
+        "memory.get",
+        "memory.set",
+        "memory.search"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "scheduler",
+      "title": "Recurring work that keeps running when nobody is watching",
+      "tier": "gated",
+      "entry": "scheduler.list",
+      "probeFiles": [],
+      "tools": [
+        "scheduler.create",
+        "scheduler.list",
+        "scheduler.remove"
+      ],
+      "verifiedBy": "tools"
+    },
+    {
+      "id": "sandbox",
+      "title": "Isolated execution for work that should not touch the real machine",
+      "tier": "gated",
+      "entry": "sandbox.status",
+      "probeFiles": [],
+      "tools": [
+        "sandbox.create",
+        "sandbox.exec",
+        "sandbox.status"
+      ],
+      "verifiedBy": "tools"
+    }
+  ]
+}

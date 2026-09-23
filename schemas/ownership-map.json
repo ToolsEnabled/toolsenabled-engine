@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "coordinator-cross-repo-v1",
+  "contractId": "toolsenabled.cross-repository-ownership",
+  "owners": [
+    {
+      "domain": "task",
+      "owner": "toolsenabled",
+      "authority": "durable task, checkpoint, lease, cancellation, and result state",
+      "entryPoint": "src/lib/providers/tasks.js"
+    },
+    {
+      "domain": "evidence",
+      "owner": "toolsenabled",
+      "authority": "bounded research evidence and future unified evidence contracts",
+      "entryPoint": "src/lib/providers/web.js"
+    },
+    {
+      "domain": "context",
+      "owner": "toolsenabled",
+      "authority": "cross-agent context maps, capsules, and profile contracts",
+      "entryPoint": "context/SYSTEMS.md"
+    },
+    {
+      "domain": "provider",
+      "owner": "toolsenabled",
+      "authority": "provider policy, account fences, routing, and control state",
+      "entryPoint": "src/lib/providers/cli-provider-gateway.js"
+    },
+    {
+      "domain": "finance",
+      "owner": "portfolio-dashboard",
+      "authority": "application finance records, source interpretation, and user-facing finance behavior",
+      "entryPoint": "app/db.py",
+      "integrationContractOwner": "toolsenabled"
+    },
+    {
+      "domain": "ui",
+      "owner": "portfolio-dashboard",
+      "authority": "Portfolio Dashboard/MarkIV UI, persona, SSE presentation, and application lifecycle",
+      "entryPoint": "app/main.py"
+    },
+    {
+      "domain": "model-runtime",
+      "owner": "toolsenabled",
+      "authority": "shared local-model resource gates, accounting, and bounded inference",
+      "entryPoint": "src/lib/providers/model.js"
+    },
+    {
+      "domain": "tool-forge",
+      "owner": "toolsenabled",
+      "authority": "generated-tool policy, sandbox, verification, signing, and promotion",
+      "entryPoint": "src/lib/providers/agent-sandbox.js"
+    }
+  ],
+  "dependencyDirections": {
+    "allowed": [
+      "portfolio-dashboard-to-toolsenabled-typed-client",
+      "localcoder-to-toolsenabled-registered-adapter",
+      "research-sidecar-to-toolsenabled-registered-adapter",
+      "toolsenabled-to-finance-domain-readonly-client"
+    ],
+    "forbidden": [
+      "toolsenabled-global-to-portfolio-ui-persona-or-application",
+      "portfolio-dashboard-to-toolsenabled-internal-state-or-vault",
+      "sidecar-to-authoritative-task-audit-vault-browser-evidence-or-model-state",
+      "generated-tool-to-host-python-execution"
+    ]
+  },
+  "financeDomainInterface": {
+    "version": "finance-domain-readonly-v1",
+    "status": "future-contract-no-transport",
+    "owner": "portfolio-dashboard",
+    "consumer": "toolsenabled",
+    "transport": "typed process or HTTPS client only",
+    "operations": [
+      {
+        "name": "finance.snapshot.read.v1",
+        "request": ["asOf", "accountScope"],
+        "response": ["schemaVersion", "asOf", "source", "snapshot"],
+        "effect": "read-only"
+      },
+      {
+        "name": "finance.positions.read.v1",
+        "request": ["asOf", "accountScope"],
+        "response": ["schemaVersion", "asOf", "source", "positions"],
+        "effect": "read-only"
+      },
+      {
+        "name": "finance.market_context.read.v1",
+        "request": ["asOf", "symbols"],
+        "response": ["schemaVersion", "asOf", "source", "context"],
+        "effect": "read-only"
+      }
+    ],
+    "forbidden": ["shared_database", "application_import", "ui_state", "persona_prompt", "credentials", "order_execution"]
+  },
+  "sidecarRegistration": {
+    "version": "toolsenabled-sidecar-registration-v1",
+    "registrants": ["localcoder", "research-sidecar"],
+    "requiredFields": ["sidecarId", "contractVersion", "operations", "healthEndpoint"],
+    "forbiddenAuthorities": ["task", "audit", "vault", "persistent-browser", "evidence", "model-runtime", "policy"],
+    "executionRule": "Generated code must use the ToolsEnabled sandbox, policy, audit, cancellation, and resource boundaries."
+  },
+  "schemaGeneration": {
+    "source": "schemas/ownership-map.json",
+    "generator": "tools/generate-ownership-types.js",
+    "outputs": ["schemas/generated/ownership-map.types.ts", "schemas/generated/ownership_map_types.py"],
+    "checkCommand": "node tools/generate-ownership-types.js --check",
+    "runtimeImportRule": "Generated contracts must not import Portfolio Dashboard, ToolsEnabled runtime modules, or sidecar runtime modules."
+  },
+  "boundaryCheck": {
+    "tool": "tools/check-cross-repo-boundaries.js",
+    "productionRoots": ["src", "tools", "sidecars/local-coder"],
+    "fixtureRoots": ["tests/fixtures/cross-repo-boundary"],
+    "toolsenabledForbiddenSpecifierPatterns": ["portfolio dashboard", "portfolio-dashboard", "frontend/", "app/markiv", "app/persona"],
+    "portfolioForbiddenSpecifierPatterns": ["toolsenabled/src/lib", "toolsenabled.src.lib", "toolsenabled/state/", "toolsenabled.state.", "toolsenabled/vault/", "toolsenabled.vault.", "sidecars/local-coder"]
+  }
+}

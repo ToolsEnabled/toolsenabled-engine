@@ -1,0 +1,367 @@
+# Orphan files proven green before wiring on 2026-08-24.
+#
+# Direct admission evidence is recorded in REPORT-W6-orphan-wire.md: the full
+# 114-entry manifest passed in one run. Failures and named non-passing skips
+# remain in their original orphan classes.
+tests/agent-comms-cutover-gate.js
+tests/agent-comms-tool-surface.js
+tests/agent-comms/broker.js
+tests/agent-comms/channel-contract.js
+tests/agent-comms/claims.js
+tests/agent-comms/compat-bridge.js
+tests/agent-comms/delivery.js
+tests/agent-comms/fabric.js
+tests/agent-comms/history.js
+tests/agent-comms/home-node.js
+tests/agent-comms/read-position.js
+tests/agent-comms/transport-relay.js
+tests/build-queue-consumers.js
+tests/build-queue-intent-consumer.js
+tests/build-queue-migrate-cli.js
+tests/fleet-supervisor-direct-vertex-receipt.js
+tests/fleet-supervisor-direct-vertex-report.js
+tests/fleet-supervisor-luna-executor/descendant-containment.test.js
+tests/fleet-supervisor-luna-executor/evidence-durability.test.js
+tests/fleet-supervisor-luna-executor/reservation-overlap-replay.test.js
+tests/fleet-supervisor-luna-executor/restart-reconciliation.test.js
+tests/fleet-supervisor-model-receipt.js
+tests/fleet-supervisor-worktree-lease-state.js
+tests/fleet-supervisor-worktree-lease.js
+tests/link-bus-enroll-token.js
+tests/link-bus-smoke-test.js
+tests/link-bus-token-rotation-vault.js
+tests/full-remote-playwright-mcp-proxy.js
+tests/remote-playwright-provider.js
+tests/special-session-sealed-transport.js
+tests/owner-alert.js
+tests/owner-identity-reader-audit.js
+tests/owner-ledger-gate-batch.js
+tests/owner-ledger-gate-sweep.js
+tests/owner-request-scope-event.js
+tests/owner-request-scope-production-store.js
+tests/owner-request-scope-store.js
+tests/owner-request-scope.js
+tests/audit-durability.js
+tests/evidence-store.js
+tests/ledger-cold-storage-boot-lists.js
+tests/ledger-merge.js
+tests/request-version/version-chain.js
+tests/source-freeze.js
+tests/council.js
+tests/intent-check-starvation.js
+tests/controller-escalation.js
+tests/controller-launch-scope.js
+tests/model-role.js
+tests/tool-registry-model-floor.js
+tests/package-manifest-contract.js
+tests/action-guards.js
+tests/host-control.js
+tests/pipe-redirection.test.js
+tests/quarantine-preflight.test.js
+tests/repo-files-tool-registry.js
+tests/code-intel-handshake.js
+tests/launch-terminal-race.js
+tests/zed-conpty-relay.test.js
+tests/zed-conpty-resize.test.js
+tests/zed-context-terminal-commands.test.js
+tests/zed-context-terminal-preview-race.test.js
+tests/zed-context-terminal-resize.test.js
+tests/zed-context-terminal-timing.test.js
+tests/zed-context-terminal.test.js
+tests/agent-recent-work.js
+tests/agent-approval-policy.test.js
+tests/agent-session-confinement.test.js
+tests/r1152-sandbox-progress.test.js
+tests/audit-checkpoint.test.js
+tests/audit-error-classification.test.js
+tests/audit-refusal-sentence-names-action.test.js
+tests/agent-spawn-refusals-name-the-action.test.js
+tests/audit-legacy-archive-idempotency.test.js
+tests/audit-projection-verify-cost.test.js
+tests/bridge-server-error-handling.test.js
+tests/codex-dispatch-profile.test.js
+tests/lane-cap-tree-kill.test.js
+tests/loop-guided-child-confinement.test.js
+tests/doctor.test.js
+tests/fra-bridge-vault-poll-cost.test.js
+tests/git-destructive-reflog-check.test.js
+tests/guarded-permission-tier.test.js
+tests/install-tier-enforcement.test.js
+tests/remote-surface-tier-parity.test.js
+tests/ide-session-consent-writer.js
+tests/ide-session-consent.js
+tests/kill-switch.test.js
+tests/machine-profile.js
+tests/mission-bridge-no-origin-clients.test.js
+tests/peer-enroll-cli.js
+tests/peer-enrollment.js
+tests/short-code.js
+tests/peer-link-rotation.js
+tests/purchase-request-tool.test.js
+tests/purchase-authority.test.js
+tests/service-control-listener-liveness.test.js
+tests/machine-record-integrity.test.js
+tests/setup/first-run-setup.test.js
+tests/standing-orders-hook-dirty-tree.test.js
+tests/agent-coord-channel-map.test.js
+tests/claude-session-autoregister.test.js
+tests/grepsaver-tooldigest.test.js
+tests/redteam/tier-escalation.test.js
+tests/claude-auth-probe.test.js
+tests/health-observer-listener-cost.test.js
+tests/multi-account-rotation.test.js
+# tests/multi-account-registry-write.test.js -- UNWIRED 2026-08-26, ONE HALF FIXED,
+# one half owned elsewhere. It carried TWO failures: (1) a Windows SIGKILL
+# assertion the wave-29 strengthening introduced -- process.kill(pid,SIGKILL)
+# has no SIGKILL on Windows, so the child reports signal:null and the assertion
+# failed on the machine that cuts; FIXED IN THE TEST to assert force-kill by each
+# platform evidence without weakening the registry-integrity checks. (2) a
+# PRE-EXISTING services-root failure wave 29 itself flagged as outside its fence:
+# an account written through one resolver is not seen by the services-root caller
+# (null !== cloud-a) -- a real multi-account cross-resolver integration bug for
+# the account-router owner, not a test defect. Re-wire when (2) is fixed; (1) is
+# already correct in the file.
+# tests/multi-account-registry-write.test.js
+tests/multi-account-launch-scrub.test.js
+tests/provider-launch-scrub-selfcheck.test.js
+tests/provider-launch-scrub.test.js
+tests/settings-enforcement-honesty.test.js
+tests/agent-tool-summary.test.js
+tests/agent-api-policy.test.js
+tests/kernel.state/agent-coord-attest-migrate.js
+tests/claude-confined-home.test.js
+tests/finished-queue/finished-queue.js
+# Written 2026-08-24 for the cloud batch lane, and wired in the same pass that
+# created them rather than left to be found later. Both were proven green
+# before wiring, which is what this file requires: cloud-mirror-bridge 19
+# checks, cloud-batch-target 76 checks. Adding orphan tests while dispatching
+# 150 tasks to fix orphan tests would have been its own joke.
+tests/cloud-mirror-bridge.test.js
+tests/cloud-batch-target.test.js
+
+# ---------------------------------------------------------------------------
+# 2026-08-24, second admission pass (session b6a617e2).
+#
+# Twenty-one more test files that this chain did not run. NOT ONE of them was an
+# orphan by the census: tools/test-census.js calls all of them REACHABLE, because
+# each is named by an npm script -- eleven of them: test:anywhere-transport,
+# test:audit, test:cloud-agent, test:coordinator, test:crossrepo, test:fleet,
+# test:kernel.audit, test:owner.digest, test:owner.ledger and
+# test:surface.registry -- and NOTHING in `npm test` or `pretest` invokes any of
+# those eleven scripts. Being named is not being run.
+#
+# HOW THAT WAS ESTABLISHED, AND HOW IT WAS NOT. The tempting evidence was
+# tools/invocation-guard.js's `launderedTests` set -- "581 test(s) look reachable
+# only because an npm script names them while nothing invokes that script" -- and
+# all of these are in it. That set proves nothing here: `extractReferences()` in
+# that tool reads npm script command TEXT and has no `--from` case, so every path
+# this repository moved out of argv and into tests/suites/*.txt fell out of its
+# graph. Measured 2026-08-24: 117 of the 117 entries this file already had, 147
+# of root-suite.txt's 149, and 7 of 7 in orphans-wired-w2.txt are ALL in
+# `launderedTests` -- tests whose own output is in the chain's log.
+# tests/lib/suite-list.js's header warns about exactly this and taught the census;
+# the guard was never taught. What established these instead was the transitive
+# closure of `pretest`/`test`/`posttest` -- npm run edges followed, inline paths
+# taken, every `--from` list expanded through this repository's own
+# readSuiteList(), and the two package runners the chain actually invokes
+# (tests/adversarial/run.js, tests/repo-protocol/run.js). Before this change that
+# closure reached 556 test paths and none of these.
+#
+# ADMISSION, and it took three runs rather than one. Twenty-nine candidates
+# passed a first `node tests/run-isolated.js --continue` batch 29/29 in 430.2 s.
+# Five were then withdrawn as duplicates (below), and the remaining twenty-four
+# were wired and run through this chain's own step. THREE OF THEM WENT RED
+# THERE, so they were taken back out and are listed below by name. A re-measure
+# of all twenty-four under the runner agreed exactly with the step: 21 pass,
+# 2 timeout, 1 fail. Only what passed both chain-condition runs is listed here.
+#
+# Passing under bare `node` admitted nothing. audit-durability-classification-
+# provenance is RED under bare `node` and GREEN under this runner, so the
+# bare-node measurements were discarded and everything was measured through the
+# runner the chain uses.
+#
+# WITHDRAWN BECAUSE THEY REDDEN THIS STEP, measured twice each:
+#   tests/standing-orders-hook-git-destructive.test.js -- TIMEOUT at the runner's
+#     180 000 ms ceiling (180 012 ms), and again at 180 018 ms running alone.
+#     It passed the first batch in 74 408 ms, so it is not slow by a small
+#     margin; it is over the line whenever this machine is loaded.
+#   tests/audit-durability-current-vs-historical.test.js -- TIMEOUT (180 016 ms).
+#     First batch: 67 894 ms.
+#   tests/owner-ingress-spool.test.js -- FAIL, exit 1. Its resolve-node helper
+#     could not find any Node interpreter because `node --version` itself
+#     returned ETIMEDOUT on every candidate path. First batch: 34 204 ms.
+# A wired file that reds this step is worse than an unwired one. These three
+# stay out until they are fast enough, or until the runner's ceiling is raised
+# for them deliberately.
+#
+# WITHDRAWN AS DUPLICATES, none of them red:
+# tests/auth.google/google-account-readiness.test.js,
+# tests/auth.google/google-oauth-login.test.js,
+# tests/coordinator.workflow/token-savings-benchmark.test.js,
+# tests/surface.policy/pipe-redirection.test.js and
+# tests/surface.policy/quarantine-preflight.test.js all passed and are still not
+# listed. Each has a same-named one-line shim at the flat tests/ path --
+# tests/pipe-redirection.test.js is 68 bytes and its whole body is
+# `require('./surface.policy/pipe-redirection.test.js')` -- and all five shims are
+# ALREADY in this file or in tests/suites/root-suite.txt, so the chain already
+# runs those assertions once per run. Listing the required file too would run the
+# same checks twice for no coverage and add 66 s (google-account-readiness alone
+# is 56.7 s). No static reader consulted here follows a shim's require, so these
+# had to be found by reading the files; that is the "wire the file a second time"
+# trap tests/lib/suite-list.js warns about.
+#
+# MARGIN, because two of the entries below are close to the same ceiling that
+# removed three others. Re-measured under load: lane-territory-check 118 269 ms
+# (34 551 ms in the first batch) and audit-projection-total-render 98 380 ms
+# (31 573 ms). Both passed twice and are listed; both are worth watching.
+#
+# Three files below carry a `"status": "baseline"` entry in
+# config/invocation-registry.json: tests/backup-duty.test.js,
+# tests/lane-scope.test.js, tests/lane-territory-check.test.js. Wiring them makes
+# those entries stale, and that registry may only shrink, so they must be deleted
+# by whoever owns that file. config/invocation-registry.json is outside this lane
+# and was NOT edited. tools/invocation-guard.js will not ask for the deletion
+# either -- measured before and after, it reported the same `stale: 22` and no new
+# entries, because of the `--from` blindness above. The debt is owed regardless.
+#
+# tests/resource-alerts.test.js is in tests/run-isolated.js's
+# `WINDOWS_ONLY_SUITES`, so off Windows it becomes a named skip and this step
+# exits non-zero. That is not new: tests/owner-alert.js, tests/source-freeze.js
+# and tests/r1152-sandbox-progress.test.js above are already in that table.
+#
+# FOUND WHILE RUNNING THIS STEP, AND NOT CAUSED BY THIS CHANGE. This file's
+# header says its entries were proven green. One of them is not green any more:
+# tests/standing-orders-hook-dirty-tree.test.js failed the step BEFORE anything
+# below was added, and failed again run alone -- `git stash must be blocked:
+# stdout= stderr=`, 0 !== 2. Root cause is in the hook's own log
+# (logs/standing-orders-hook.log): `"decision":"fail-open-indeterminate"`,
+# `"reason":"git status --porcelain could not be evaluated: spawnSync git
+# ETIMEDOUT."`. tools/standing-orders-hook.js's `GIT_DIRTY_STATUS_TIMEOUT_MS` is
+# 3000, and under this machine's concurrent load `git status --porcelain` in a
+# fresh temp repo does not finish inside it, so the rule correctly fails open and
+# the test's RED case correctly reports that it was not blocked. The same step
+# also exited 124 on that pre-change run, which means a SECOND entry timed out
+# silently; that command carries no --summary, so which one was not determined
+# here. Left in place: removing a red test is not this lane's call, and it is
+# not weakening a check that got it removed.
+# ---------------------------------------------------------------------------
+tests/agent-digest-config-absence.test.js
+tests/agent-sweep-task.test.js
+tests/anywhere-netbird.test.js
+tests/audit-archive-boundary.test.js
+tests/audit-archive-roll.test.js
+tests/audit-archive-segment.test.js
+tests/audit-durability-classification-provenance.test.js
+tests/audit-projection-total-render.test.js
+tests/audit-retention.test.js
+tests/backup-duty.test.js
+tests/codex-cloud-environments.test.js
+tests/elevation-surface.test.js
+tests/lane-scope.test.js
+tests/lane-territory-check.test.js
+tests/online-fra-renewal.test.js
+tests/owner-capture-audit.test.js
+tests/owner-spool-review.test.js
+tests/process-visibility-refresh.test.js
+tests/resource-alerts.test.js
+tests/status-injection.test.js
+tests/unit/providers/provider-registry.test.js
+# ---------------------------------------------------------------------------
+# 2026-08-24/25, third admission pass (session b6a617e2).
+#
+# Source data: a 119-file orphan classification run (91 PASS, 28 FAIL) handed
+# to this lane. Of the 91 PASS files, the transitive closure of
+# pretest/test/posttest -- npm run edges followed, --then steps of
+# tools/check-chain-runner.js split exactly as that runner splits them (a step
+# that is `npm run <script>` keeps ONLY tokens[2]; anything after it in the
+# same step is discarded by the real runner, confirmed by reading
+# check-chain-runner.js's parseSteps itself, not assumed), every --from list
+# expanded through
+# tests/lib/suite-list.js's own readSuiteList(), and the two package runners
+# the chain actually invokes (tests/adversarial/run.js,
+# tests/repo-protocol/run.js) parsed for their literal test-path arrays --
+# already covered 81 of the 91. That closure measured 576 wired test paths
+# total, which is exactly 556 (this file's own prior-pass note) + 20 (this
+# file's second-pass admissions that are PASS in the classification; the
+# 21st, audit-durability-classification-provenance, is FAIL there), so the
+# method reproduces the prior pass's own count before adding anything.
+#
+# That left 10 candidates. Five are NOT new orphans, they are the SAME "wire
+# it a second time" trap this file's header already warns about, just at a
+# path this pass had to find by reading the file, same as before:
+#   tests/auth.google/google-account-readiness.test.js and
+#   tests/auth.google/google-oauth-login.test.js -- flat one-line shims
+#   tests/google-account-readiness.test.js / tests/google-oauth-login.test.js
+#   already run them and are already in tests/suites/root-suite.txt.
+#   tests/coordinator.workflow/token-savings-benchmark.test.js -- same shape,
+#   shim tests/token-savings-benchmark.test.js, already in root-suite.txt.
+#   tests/surface.policy/pipe-redirection.test.js and
+#   tests/surface.policy/quarantine-preflight.test.js -- shims
+#   tests/pipe-redirection.test.js / tests/quarantine-preflight.test.js,
+#   already in THIS file (lines above). Verified by opening all five shims:
+#   each file's whole body is one `require('./<nested path>')` line.
+#
+# Two more are real orphans that were ALREADY investigated and withdrawn by
+# the pass directly above this one, for cause. Both were re-measured here,
+# independently, through this same runner, because "proven green" cannot be
+# inherited from a note:
+#   tests/owner-ingress-spool.test.js -- passed once in a two-file batch
+#   (30 660 ms), then FAILED alone, reproducing the exact prior finding
+#   verbatim: resolve-node.js could not find a working Node interpreter
+#   because `node --version` returned ETIMEDOUT on every candidate path,
+#   including the two real interpreters on this machine. Not wired.
+#   tests/standing-orders-hook-git-destructive.test.js -- passed twice here
+#   (44 224 ms in a batch, 61 268 ms alone), but the withdrawal above it
+#   already recorded two runs landing AT the runner's 180 000 ms ceiling
+#   (180 012 ms and 180 018 ms) against one clean 74 408 ms run. Five
+#   measurements across both passes: three comfortable, two at the ceiling.
+#   That is a real intermittent breach rate, not a fixed number that only
+#   needed a re-check, and pretest going red stops EVERY test file in the
+#   chain (see tools/check-chain-runner.js's own header on why aggregation
+#   was built). Left out, same disposition as the pass above: too close to
+#   the ceiling to call "proven green" on the strength of two more good
+#   runs when the bad runs are already on record for the same file. Not
+#   wired; not a step-red found by wiring it, because it was not wired to
+#   check.
+#
+# The remaining three are the real find: present as bare tokens on the `test`
+# script's own command line, inside its LAST check-chain-runner step --
+# `npm run test:ratchet:check tests/error-taxonomy-refusal-rescue.test.js
+# tests/owner-prompt-queue-refusals-name-their-condition.test.js
+# tests/uncoded-refusals-carry-codes.test.js
+# tests/system-binaries-resolve-under-system-root.test.js` -- and reading
+# tools/check-chain-runner.js's parseSteps confirms why the closure does not
+# count them: a step whose first two tokens are `npm run` sets
+# `step.npm = tokens[2]` and nothing else; the four trailing test paths are
+# parsed into the step's token list and then simply never read again. They
+# are visible on the command line and invisible to execution -- the fourth
+# path, tests/system-binaries-resolve-under-system-root.test.js, is outside
+# this pass's scope (not in the 91-file PASS set) and is left for whoever
+# owns that file to notice the same way.
+#
+# ADMISSION. All three below ran together through tests/run-isolated.js
+# (this chain's own runner, not bare `node`) and passed 3/3 in 25.5 s:
+# tests/error-taxonomy-refusal-rescue.test.js (393 ms, 41 assertions),
+# tests/owner-prompt-queue-refusals-name-their-condition.test.js (755 ms, 20
+# assertions), tests/uncoded-refusals-carry-codes.test.js (24 314 ms, 10
+# checks plus one honest platform SKIP for live Terraform). Then wired here
+# and run again through `npm run test:orphans-wired-0823` -- the actual chain
+# step that reads this file -- and the real result of THAT run is recorded
+# where this pass's report names it, not assumed from the file-level run
+# above.
+# ---------------------------------------------------------------------------
+tests/error-taxonomy-refusal-rescue.test.js
+tests/owner-prompt-queue-refusals-name-their-condition.test.js
+tests/uncoded-refusals-carry-codes.test.js
+# ---------------------------------------------------------------------------
+# Written 2026-08-25 for the "agents do not use our tools" lane and wired in
+# the same pass, next to tests/agent-tool-summary.test.js above -- the suite
+# that proves the note is CORRECT. This one proves it is DELIVERED: the MCP
+# handshake in src/mcp-server.js returned no `instructions` field at all, so
+# the note reached no agent on any install, and the credential tools described
+# themselves as a procedure rather than as the credential manager. Both halves
+# are pinned here through the real dispatch(), not by reading source.
+# ---------------------------------------------------------------------------
+tests/mcp-initialize-instructions.test.js
+tests/host-control-write-fence-anchor.test.js
+tests/host-control-entry-point-fence.test.js

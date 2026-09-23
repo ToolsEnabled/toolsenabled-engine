@@ -1,0 +1,53 @@
+{
+  "canonical": [
+    {
+      "value": {"z": 0, "a": [true, {"b": 1.0, "a": "x"}]},
+      "canonical": "{\"a\":[true,{\"a\":\"x\",\"b\":1}],\"z\":0}"
+    },
+    {
+      "value": {"event": "evt_fixture01", "sequence": 2, "task": "tsk_fixture01"},
+      "canonical": "{\"event\":\"evt_fixture01\",\"sequence\":2,\"task\":\"tsk_fixture01\"}"
+    }
+  ],
+  "hashes": [
+    {
+      "domain": "coordinator:task:v1",
+      "value": {"z": 0, "a": [true, {"b": 1.0, "a": "x"}]}
+    },
+    {
+      "domain": "coordinator:event:v1",
+      "value": {"event": "evt_fixture01", "sequence": 2, "task": "tsk_fixture01"}
+    }
+  ],
+  "validIds": [
+    {"kind": "task", "value": "tsk_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "delegation", "value": "dlg_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "evidence", "value": "ev_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "resource-lease", "value": "lease_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "provider-session", "value": "ses_0123456789abcdefghijklmnopqrstuv"}
+  ],
+  "invalidIds": [
+    {"kind": "task", "value": "tsk_short"},
+    {"kind": "task", "value": "evt_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "task", "value": "tsk_0123456789abcdefghijklmnopqrstu!"},
+    {"kind": "task", "value": "TSK_0123456789abcdefghijklmnopqrstuv"},
+    {"kind": "not-a-kind", "value": "tsk_0123456789abcdefghijklmnopqrstuv"}
+  ],
+  "validControlTimestamps": [
+    "2026-07-26T12:34:56.789Z",
+    "2000-02-29T00:00:00.000Z"
+  ],
+  "invalidControlTimestamps": [
+    "2026-07-26T12:34:56Z",
+    "2026-07-26T12:34:56.789+00:00",
+    "2026-07-26 12:34:56.789Z",
+    "2026-02-30T12:34:56.789Z",
+    "2026-07-26T12:34:56.789z"
+  ],
+  "invalidDomains": [
+    "",
+    "Coordinator:task:v1",
+    "coordinator task",
+    "coordinator/../task"
+  ]
+}

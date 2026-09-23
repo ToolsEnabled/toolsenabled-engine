@@ -1,0 +1,9 @@
+# Same eight files previously declared in tests/repo-protocol/run.js.
+tests/repo-protocol/build-queue-corpus.js
+tests/repo-protocol/build-queue-migration.js
+tests/test-census.test.js
+tests/test-ratchet.test.js
+tests/naming-ratchet.test.js
+tests/invocation-guard.test.js
+tests/repo-sync.test.js
+tests/repo-sync-status.test.js

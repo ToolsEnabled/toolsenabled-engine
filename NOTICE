@@ -1,0 +1,195 @@
+ToolsEnabled
+Copyright (c) 2026 Joshua Pinckard
+
+ToolsEnabled was founded and created by Joshua Pinckard. The original platform was
+developed by directing autonomous AI-agent fleets through the system's own evolving
+coordination architecture.
+
+Sole founder and creator : Joshua Pinckard
+Official product         : ToolsEnabled
+Official publisher       : ToolsEnabled, Inc. (in formation)
+Copyright holder         : Joshua Pinckard
+
+This repository holds the LOCAL RUNTIME -- the agent engine and the capability
+layer it exposes through MCP. The desktop interface is built in a separate
+repository. Both are the same product and carry the same grant; the interface
+repository holds its own copy of this notice.
+
+-------------------------------------------------------------------------------
+LICENSE
+-------------------------------------------------------------------------------
+
+This software is licensed under the MIT License. The grant is made by the
+LICENSE file in the root of this repository. That file controls; nothing in this
+NOTICE alters, adds to, or narrows it.
+
+MIT was chosen deliberately over a copyleft license. The software you install and
+run on your own machines is free, and it is meant to stay free in the sense that
+costs you nothing and asks you nothing: no network-service source obligation, no
+share-alike condition on what you build with it, and no policy review at
+organisations that refuse copyleft. You may use, modify, redistribute and sell
+this software, including inside closed-source products, provided the copyright
+notice and the permission notice travel with the copies you hand on.
+
+The MIT License grants copyright permissions. It does not contain an express
+patent grant.
+
+-------------------------------------------------------------------------------
+WHAT IS FREE AND WHAT IS PAID
+-------------------------------------------------------------------------------
+
+Everything in this repository is free and open under the MIT License. There is no
+paid tier of this source, no feature withheld behind a license key in it, and no
+obligation to buy anything in order to run it. Connect the software to a server
+you run yourself and you pay nothing, forever.
+
+What ToolsEnabled sells is OPERATING a server, not the right to any code:
+
+  - The managed non-LAN connectivity service and the relay we host and run.
+  - The secure phone path, and mobile access through the website to your own
+    agent systems.
+  - The hosted vault storage service.
+  - The account, billing and entitlement services.
+
+None of that is in this repository. What is absent is not only the deployment and
+the hosting but the server-side implementation itself, which lives outside this
+tree. Running your own server for these capabilities is free; the reason to pay
+is that you would rather we ran one for you than run one yourself.
+
+Also not in this repository: the internal secure-messaging engine referred to as
+SecureAgentChannel, which is excluded from any external release pending a
+separate decision by the owner. Do not represent it as open, licensed, or
+available.
+
+-------------------------------------------------------------------------------
+CRYPTOGRAPHY
+-------------------------------------------------------------------------------
+
+This software implements no cryptographic algorithm of its own and contains no
+homegrown or proprietary cryptographic construction. Its own cryptography is
+performed entirely through standard platform primitives: Node.js `node:crypto`,
+WebCrypto at the browser edge, and the Windows Data Protection API (DPAPI) for
+local credential storage.
+
+One third-party library in this tree performs cryptography, and it is named
+here rather than omitted. `werift` (MIT licensed, version pinned exactly) is a
+pure-JavaScript implementation of WebRTC. It is loaded lazily by
+`src/lib/online-fra-direct-transport.js` alone, to open a peer-to-peer data
+channel between a person's own two computers, and WebRTC secures that channel
+with DTLS -- so the DTLS handshake and record protection on that one path are
+werift's, not this software's. It is optional at runtime: when it is absent the
+transport reports the direct path unavailable and traffic stays on the relay
+path, which uses the platform primitives below. `playwright`, the only other
+declared dependency, performs no cryptography.
+
+The primitives this software itself calls are:
+
+  - X25519 key agreement, for establishing session keys between a person's
+    own computers.
+  - AES-256-GCM authenticated encryption, for the session frames themselves
+    and for data sealed at rest.
+  - Ed25519 signatures, for device identity, signed leases, and offline
+    licence verification.
+  - SHA-256, for content addressing, integrity checks and audit chaining.
+  - HKDF and PBKDF2, for key derivation.
+
+Two non-cryptographic uses of hash functions appear in the source and are
+named here so that an inventory of this tree does not read as though they
+were security mechanisms. Neither protects anything:
+
+  - MD5 in `src/lib/search.js`, as the bucket-selection function of a
+    feature-hashed lexical embedding vector. It maps a token to an index in
+    a fixed-width array. It is not used to authenticate, sign, protect or
+    compare anything.
+  - SHA-1 in `packages/internal-vcs/`, where it identifies which object
+    format a git repository uses. That is git's own on-disk format, read
+    rather than chosen by this software.
+
+-------------------------------------------------------------------------------
+LEGAL STATUS
+-------------------------------------------------------------------------------
+
+ToolsEnabled, Inc. has not been incorporated. It is named here as the intended
+publisher and is marked "(in formation)" for that reason. Copyright is held
+personally by Joshua Pinckard until the entity exists and the rights are
+assigned to it; this NOTICE is updated at that point.
+
+No trademark application has been filed for "ToolsEnabled", and the name is not
+claimed here as a REGISTERED mark. The reservation below is of common-law
+rights in the name, which is a different thing and does not depend on a filing.
+
+The interface was previously called "Mission Control". That name was dropped
+before launch: a USPTO search returned 17 live marks for it in the relevant
+classes, including Apple Inc. (Reg. 4240125, IC 009) and BMC Software.
+"ToolsEnabled" returned no hits, live or dead.
+
+The trademark section below was drafted in-house and has not been reviewed by
+outside counsel. It states a boundary that already exists rather than creating
+one: MIT grants copyright permissions and never granted trademark rights.
+
+-------------------------------------------------------------------------------
+TRADEMARKS
+-------------------------------------------------------------------------------
+
+"ToolsEnabled", "ToolsEnabled Anywhere", and the ToolsEnabled logos are
+trademarks of Joshua Pinckard (assignment to ToolsEnabled, Inc. planned upon
+its formation). The MIT License above grants copyright permissions only; it
+does not grant permission to use these names or logos.
+
+What this means in practice:
+
+  - You may use, modify, redistribute and sell this software under the MIT
+    License, and you may truthfully state that your work is based on or
+    compatible with ToolsEnabled.
+  - You may not name a fork, derivative, product, or service "ToolsEnabled"
+    (or a confusingly similar name), and you may not use the names or logos
+    in a way that suggests your distribution is published, endorsed by, or
+    affiliated with us.
+  - If you distribute a modified version, give it your own name.
+
+Nothing here restricts fair or nominative use of the names to describe
+provenance ("a fork of ToolsEnabled") or compatibility.
+
+-------------------------------------------------------------------------------
+CONTRIBUTIONS
+-------------------------------------------------------------------------------
+
+Outside contributions are accepted under the Developer Certificate of Origin,
+version 1.1. Each commit carries a Signed-off-by line, which is the contributor's
+statement that they wrote the change or otherwise have the right to submit it
+under this project's license. There is no copyright assignment and no separate
+agreement to sign: contributors keep the copyright in what they write, and it is
+contributed under the same MIT terms the rest of the project uses.
+
+CONTRIBUTING.md states the certificate in full and explains how to sign off.
+
+-------------------------------------------------------------------------------
+CONTRIBUTORS
+-------------------------------------------------------------------------------
+
+Outside developers are credited in CONTRIBUTORS.md as contributors and
+maintainers. Contributors are never founders. The founder credit above is not
+shared and is not altered by contribution.
+
+-------------------------------------------------------------------------------
+ACADEMIC AND RESEARCH CITATION
+-------------------------------------------------------------------------------
+
+Joshua Pinckard conceived the project, defined its objectives and requirements,
+directed the autonomous agent workflows, selected and evaluated outputs, and
+assumes responsibility for the research methodology and conclusions. AI agents
+generated substantial portions of the implementation and written drafts.
+
+-------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+-------------------------------------------------------------------------------
+
+This product uses third-party open-source components, each governed by its own
+license. Those licenses are unaffected by this NOTICE, and nothing here adds to
+or removes from them. The dependencies are declared in package.json and their
+license texts are reproduced in full in THIRD-PARTY-LICENSES.md, which is
+generated from the installed dependency tree rather than written by hand.
+
+The runtime also drives browser engines through Playwright. Playwright downloads
+those browser binaries onto the machine that runs it; they are not redistributed
+by this repository and carry their own licenses from their own vendors.

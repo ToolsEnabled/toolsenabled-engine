@@ -1,0 +1,2542 @@
+{
+  "schemaVersion": 2,
+  "comment": "Known package-boundary findings. Any new finding fails, even when totals fall. Removed findings require a reviewed lower baseline; --write-baseline cannot absorb a regression.",
+  "recordedAt": "2026-09-12T18:37:07.068Z",
+  "counts": {
+    "duplicateClaims": 0,
+    "duplicateRepositoryFiles": 0,
+    "unmappedFiles": 0,
+    "orphanedClaims": 0,
+    "unmappedEdges": 0,
+    "layeringViolations": 360
+  },
+  "findings": {
+    "duplicateClaims": [],
+    "duplicateRepositoryFiles": [],
+    "unmappedFiles": [],
+    "orphanedClaims": [],
+    "unmappedEdges": [],
+    "layeringViolations": [
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/full-remote-access-bridge.js",
+        "fromPackage": "fra",
+        "to": "src/mcp-server.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/full-remote-access-bridge.js",
+        "fromPackage": "fra",
+        "to": "src/remote-agent-bridge.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/agent-session-confinement.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/agent-tool-summary.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/capability-recall/allowlist.js",
+        "fromPackage": "search",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/dispatch-permission-session.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/providers/pay.js",
+        "fromPackage": "providers.billing",
+        "to": "src/lib/purchase-authority.js",
+        "toPackage": "entry.approvals"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/providers/remote-playwright.js",
+        "fromPackage": "fra",
+        "to": "src/playwright-gateway.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/settings.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/setup/machine-record.js",
+        "toPackage": "entry.setup"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/bridge-status.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/fra-peer-heartbeat.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/fra-peer-identity-probe.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/fra-token-enrollment-lifecycle.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/full-remote-access-mcp-proxy.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/full-remote-playwright-mcp-proxy.js",
+        "fromPackage": "fra",
+        "to": "src/playwright-gateway.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/full-remote-playwright-mcp-proxy.js",
+        "fromPackage": "fra",
+        "to": "tools/remote-agent-mcp-proxy.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/mcp-owner-proxy.js",
+        "fromPackage": "surface.registry",
+        "to": "src/mcp-server.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "IMPORTS_ENTRYPOINT",
+        "from": "tools/playwright-call.js",
+        "fromPackage": "desktop.browser",
+        "to": "src/playwright-gateway.js",
+        "toPackage": "entry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/audit-admission.js",
+        "fromPackage": "kernel.audit",
+        "to": "src/lib/throughput-mode.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/audit.js",
+        "fromPackage": "kernel.audit",
+        "to": "src/lib/settings.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/health-invariants.js",
+        "fromPackage": "kernel.runtime",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/policy-authorizations.js",
+        "fromPackage": "kernel.policy",
+        "to": "src/lib/providers/capability-manifests.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/policy-authorizations.js",
+        "fromPackage": "kernel.policy",
+        "to": "src/lib/scoped-approvals.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/policy-authorizations.js",
+        "fromPackage": "kernel.policy",
+        "to": "src/lib/tool-registry.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/policy-evaluator.js",
+        "fromPackage": "kernel.policy",
+        "to": "src/lib/tool-registry.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/policy.js",
+        "fromPackage": "kernel.policy",
+        "to": "src/lib/settings.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/providers/host-control.js",
+        "fromPackage": "kernel.runtime",
+        "to": "src/lib/shared-write-guard.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/runtime.js",
+        "fromPackage": "kernel.runtime",
+        "to": "src/lib/credential-metadata.js",
+        "toPackage": "secrets"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/runtime.js",
+        "fromPackage": "kernel.runtime",
+        "to": "src/lib/ide-session-consent-writer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/runtime.js",
+        "fromPackage": "kernel.runtime",
+        "to": "src/lib/providers/owner-prompt-queue.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/capability-manifests.js",
+        "toPackage": "surface.registry"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/coordinator-workflow/broker-verification.js",
+        "toPackage": "coordinator.workflow"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/research/provenance.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/research/study-protocol.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/scheduled-actions.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "KERNEL_IMPORTS_UP",
+        "from": "src/lib/state-store.js",
+        "fromPackage": "kernel.state",
+        "to": "src/lib/scheduler-constants.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/local-coder/src/cli-provider-gateway.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/local-coder/src/overnight-advisory-worker.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/providers/overnight-advisory.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/local-coder/src/overnight-advisory-worker.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/local-coder/src/overnight-advisory-worker.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/providers/research-strong.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/local-coder/src/overnight-advisory-worker.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/providers/tasks.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "sidecars/native-agent/src/native-agent-launcher.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/agent-digest.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/owner-delivery.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-comms/broker.js",
+        "fromPackage": "agent-comms",
+        "to": "src/lib/agent-wake/liveness-receiver.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-comms/channel-contract.js",
+        "fromPackage": "agent-comms",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-comms/compat-bridge.js",
+        "fromPackage": "agent-comms",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-comms/local-runtime.js",
+        "fromPackage": "agent-comms",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/collect.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/build-queue-corpus.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/collect.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/controller-projection.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/index.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/index.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/owner-delivery.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/index.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/index.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/providers/google.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/scheduling-status.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-digest/scheduling-status.js",
+        "fromPackage": "owner.digest",
+        "to": "src/lib/supervision/observer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/claude-cli-process.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/fleet-supervisor/kill-tree.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/codex-process.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/fleet-supervisor/kill-tree.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-adapter.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-adapter.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/providers/local-node-runtime.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-process.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-process.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/ollama-gpu.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-process.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/providers/local-node-runtime.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-tools.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/fleet-supervisor/kill-tree.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-node-tools.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/providers/local-node-runtime.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-engine/local-thread-store.js",
+        "fromPackage": "agent-engine",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-lane.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/tasks.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-lane.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-org-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-org.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-roles.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/owner-authorization.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/owner-request-store.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/r-ledger-agent-gate.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/r-ledger.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-presence.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-org.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-presence.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-wake.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-org-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-wake.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/agent-org.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-wake.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/memory.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-wake.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/tasks.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/agent-wake.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/anywhere-transport.js",
+        "fromPackage": "fra",
+        "to": "src/lib/entitlement.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/browser-owner.js",
+        "fromPackage": "desktop.native",
+        "to": "src/lib/service-control.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/build-queue-provenance.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/cloud-agent/cloud-mirror.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/github.js",
+        "toPackage": "providers.github"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/controller-escalation.js",
+        "fromPackage": "controller",
+        "to": "src/lib/delegation-contracts.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/controller-metering.js",
+        "fromPackage": "controller",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/controller-projection.js",
+        "fromPackage": "controller",
+        "to": "src/lib/cli-session-usage.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/controller-projection.js",
+        "fromPackage": "controller",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/coordinator/duty-registry.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/coordinator/duty-registry.js",
+        "fromPackage": "controller",
+        "to": "src/lib/owner-chat.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/coordinator/escalation-sink.js",
+        "fromPackage": "controller",
+        "to": "src/lib/owner-chat.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/coordinator/escalation-sink.js",
+        "fromPackage": "controller",
+        "to": "src/lib/owner-directive-inbox.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/coordinator/owner-alarm-channel.js",
+        "fromPackage": "controller",
+        "to": "src/lib/agent-comms/local-runtime.js",
+        "toPackage": "agent-comms"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/direct-vertex-report.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/vertex-gemini.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/lane-models.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/lane-runner.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/luna-executor.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/controller-launch-record.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/model-receipt.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/planning.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/review.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/roster/allotment.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/roster/scoreboard.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/fleet-supervisor/worktree.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/fra-workspace-policy.js",
+        "toPackage": "fra"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/launch-outcome.js",
+        "fromPackage": "controller",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-lane.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-org-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-org.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/build-queue-writer.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/cloud-agent/cloud-mirror.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/controller-launch-record.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/launch-outcome.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/owner-request-store.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/providers/local-node-runtime.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "tools/ledger-archive.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/agent-lane-dispatch.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-lane.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/agent-lane-dispatch.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/owner-prompts.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/owner-prompt-theme.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/purchase-recording.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/owner-request-store.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/purchase-recording.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/providers/pay.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/research-actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/providers/research-runs-runtime.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/research-actions.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/providers/research.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/server.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/uac-delegation.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/termination.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/termination.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/agent-wake.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/mission-bridge/termination.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/fleet-supervisor/state.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/multi-account/claude-allowance.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/usage/adapters/claude-cached-utilization.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/multi-account/launch.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/multi-account/rotation.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/claude-auth-probe.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/multi-account/rotation.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/claude-usage-probe.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/open-gates-freshness.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/open-gates-digest-contract.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-delivery.js",
+        "fromPackage": "owner.inbox",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-delivery.js",
+        "fromPackage": "owner.inbox",
+        "to": "src/lib/providers/google.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-directive-notification.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/agent-comms/local-runtime.js",
+        "toPackage": "agent-comms"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-directive-notification.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-lifecycle-projection.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-scope-event.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-scope-proposal.js",
+        "fromPackage": "controller",
+        "to": "src/lib/owner-request-provenance.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-scope-proposal.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-scope-store.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-scope.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-status-projection.js",
+        "fromPackage": "controller",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/owner-request-status-projection.js",
+        "fromPackage": "controller",
+        "to": "src/lib/request-id.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/capability-manifests.js",
+        "fromPackage": "providers.misc",
+        "to": "src/lib/coordinator-audit-events.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/chrome-web-store-oauth.js",
+        "fromPackage": "providers.chrome-web-store",
+        "to": "src/lib/browser-account-url.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/chrome-web-store-oauth.js",
+        "fromPackage": "providers.chrome-web-store",
+        "to": "src/lib/browser-owner.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/chrome-web-store-oauth.js",
+        "fromPackage": "providers.chrome-web-store",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/chrome-web-store.js",
+        "fromPackage": "providers.chrome-web-store",
+        "to": "src/lib/google-oauth.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/cli-provider-gateway.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/coordinator-audit-events.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/cli-provider-gateway.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/cli-provider-gateway.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/code-intel.js",
+        "fromPackage": "providers.misc",
+        "to": "src/lib/lsp-client.js",
+        "toPackage": "code.intel"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/codex-cloud.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/proc/run.js",
+        "toPackage": "repo-gate"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/customer-model.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/customer-model.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/ollama-gpu.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/deployment.js",
+        "fromPackage": "providers.infrastructure",
+        "to": "src/lib/providers/firebase.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/drive.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/drive.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-oauth.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/duo-desktop.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/firebase.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/gcloud-account-login.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/gemini-agentic.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/agent-onboarding.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/gemini-agentic.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/coordinator-audit-events.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/gemini-agentic.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/google.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/google.js",
+        "fromPackage": "providers.google.suite",
+        "to": "src/lib/google-oauth.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/infrastructure.js",
+        "fromPackage": "providers.infrastructure",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/launch.js",
+        "fromPackage": "providers.launch",
+        "to": "src/lib/providers/chrome-web-store.js",
+        "toPackage": "providers.chrome-web-store"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/launch.js",
+        "fromPackage": "providers.launch",
+        "to": "src/lib/providers/deployment.js",
+        "toPackage": "providers.infrastructure"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/launch.js",
+        "fromPackage": "providers.launch",
+        "to": "src/lib/providers/extension.js",
+        "toPackage": "providers.chrome-web-store"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/launch.js",
+        "fromPackage": "providers.launch",
+        "to": "src/lib/providers/firebase.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/license.js",
+        "fromPackage": "providers.billing",
+        "to": "src/lib/license-store.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/local-node-runtime.js",
+        "fromPackage": "models",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/model-role.js",
+        "fromPackage": "models",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/model-role.js",
+        "fromPackage": "models",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/model.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-picker.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/model.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/overnight-advisory.js",
+        "fromPackage": "coordinator.core",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/reminders.js",
+        "fromPackage": "sched",
+        "to": "src/lib/providers/memory.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/remote-playwright.js",
+        "fromPackage": "fra",
+        "to": "src/lib/browser-owner.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/remote-playwright.js",
+        "fromPackage": "fra",
+        "to": "tools/playwright-call.js",
+        "toPackage": "desktop.browser"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/repo-files.js",
+        "fromPackage": "providers.misc",
+        "to": "src/lib/shared-write-guard.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research-hermes.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/model-picker.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research-hermes.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research-hermes.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research-strong.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/model-picker.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research-strong.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/research.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/providers/sensitive-local-input.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/tasks.js",
+        "fromPackage": "sched",
+        "to": "src/lib/coordinator-audit-events.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini-seat.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini-seat.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini-seat.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini-strong.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini-strong.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/providers/vertex-gemini.js",
+        "fromPackage": "providers.gateway",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/request-version/version-chain.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/research/research-runs-worker.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/providers/tasks.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/research/runners.js",
+        "fromPackage": "providers.research",
+        "to": "src/lib/multi-account/launch.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/service-control.js",
+        "fromPackage": "sched",
+        "to": "src/lib/uac-delegation-client.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/status-injection.js",
+        "fromPackage": "models",
+        "to": "src/lib/multi-account/health.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/status-injection.js",
+        "fromPackage": "models",
+        "to": "src/lib/multi-account/launch.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/supervision/observer.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/supervision/policy.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/supervision/process-visibility-consumer.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/supervision/process-visibility-refresh.js",
+        "fromPackage": "controller",
+        "to": "src/lib/uac-delegation-client.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/supervision/process-visibility-targets.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "src/lib/usage/adapters/local-ledger.js",
+        "fromPackage": "models",
+        "to": "src/lib/controller-meter-ledger.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/agent-onboarding.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/status-injection.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/agent-preflight.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/owner-authorization.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/agent-preflight.js",
+        "fromPackage": "fleet",
+        "to": "tools/ledger-authority.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/agent-preflight.js",
+        "fromPackage": "fleet",
+        "to": "tools/prior-work-index.js",
+        "toPackage": "grepsaver"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/coordinator-duty-host.js",
+        "fromPackage": "controller",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/coordinator-duty-host.js",
+        "fromPackage": "controller",
+        "to": "src/lib/service-control.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/drive-upload.js",
+        "fromPackage": "auth.google",
+        "to": "src/lib/providers/drive.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/fleet-supervisor.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/fleet-supervisor.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/owner-chat.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/fra-keeper.js",
+        "fromPackage": "fra",
+        "to": "src/lib/service-control.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/full-remote-access-enroll-token.js",
+        "fromPackage": "fra",
+        "to": "tools/lib/one-shot-token-enroll.js",
+        "toPackage": "link.bus"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/gemini-agentic-run.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/gemini-agentic.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/gemini-fleet.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/generate-delegation-contract-schema.js",
+        "fromPackage": "controller",
+        "to": "src/lib/delegation-contracts.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/health-observer.js",
+        "fromPackage": "sched",
+        "to": "src/lib/owner-directive-inbox.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/health-observer.js",
+        "fromPackage": "sched",
+        "to": "src/lib/supervision/lock.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/health-observer.js",
+        "fromPackage": "sched",
+        "to": "src/lib/supervision/observer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/health-observer.js",
+        "fromPackage": "sched",
+        "to": "src/lib/supervision/process-visibility-consumer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ingest-cli-session-usage.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/cli-session-usage-ingest.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ingest-cli-session-usage.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/cli-session-usage.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/lane-territory-gate.js",
+        "fromPackage": "repo-gate",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-archive.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/mission-bridge/actions.js",
+        "toPackage": "mission-bridge"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-archive.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-archive.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-query.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/agent-presence.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-query.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-lifecycle-projection.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-query.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope-proposal.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-query.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ledger-query.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-status-projection.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/link-bus-smoke-test.js",
+        "fromPackage": "link.bus",
+        "to": "src/lib/agent-comms/read-position.js",
+        "toPackage": "agent-comms"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/lock-agent-sandbox-image.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/providers/agent-sandbox.js",
+        "toPackage": "providers.sandbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/mission-bridge.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/research/lifecycle-channel.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/mission-bridge.js",
+        "fromPackage": "mission-bridge",
+        "to": "src/lib/research/worker-supervisor.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/owner-scope-proposal.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope-proposal.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/owner-scope-proposal.js",
+        "fromPackage": "owner.ledger",
+        "to": "src/lib/owner-request-scope-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/queue-from-ledger.js",
+        "fromPackage": "fleet",
+        "to": "src/lib/owner-request-scope-store.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/queue-from-ledger.js",
+        "fromPackage": "fleet",
+        "to": "tools/ledger-query.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/reap-playwright-temp.js",
+        "fromPackage": "sched",
+        "to": "src/lib/browser-owner.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/register-managed-tasks.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/register-managed-tasks.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/supervision/observer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/research-once.js",
+        "fromPackage": "coordinator.core",
+        "to": "src/lib/credential-metadata.js",
+        "toPackage": "secrets"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/research-once.js",
+        "fromPackage": "coordinator.core",
+        "to": "src/lib/providers/web.js",
+        "toPackage": "providers.web"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/retrieval/sources.js",
+        "fromPackage": "search",
+        "to": "tools/grepsaver-lib.js",
+        "toPackage": "grepsaver"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/retrieval/sources.js",
+        "fromPackage": "search",
+        "to": "tools/prior-work-index.js",
+        "toPackage": "grepsaver"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/direct-vertex-report.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/gemini-report-contract.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/lane-models.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/lane-runner.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/supervisor.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/run-vertex-report-wave.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/fleet-supervisor/worktree.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/uac-run.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/uac-delegation-client.js",
+        "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ucr-login.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/desktop.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/ucr-login.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/duo-owner-relay.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/usage-attribution-selftest.js",
+        "fromPackage": "models",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/verify-evidence-store.js",
+        "fromPackage": "tools.misc",
+        "to": "src/lib/evidence-store.js",
+        "toPackage": "evidence"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/agent-session-confinement.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/agent-engine/claude-cli-adapter.js",
+        "toPackage": "agent-engine"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/argv-drift.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/managed-processes.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/argv-drift.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/supervision/observer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/byte-tool-refusal.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/repo-files.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/intent-fidelity.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/build-queue-corpus.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/intent-fidelity.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/providers/cli-provider-gateway.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/mcp-tool-surface.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/durable-worker-runtime.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/permission-tier-policy.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/fra-capability-manifest.js",
+        "toPackage": "fra"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/scoped-approvals.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/desktop.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/settings.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/credential-metadata.js",
+        "toPackage": "secrets"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/firebase.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/infrastructure.js",
+        "toPackage": "providers.infrastructure"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/repo-sync-status.js",
+        "toPackage": "repo-gate"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/system-status.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/scheduled-actions.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/accessibility.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/agent-tree-spawn.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/app-context.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/browser-account-url.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/browser-owner.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/cloud-agent/codex-cloud-launch.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/controller-tool-meter.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/coordinator-audit-events.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/credential-metadata.js",
+        "toPackage": "secrets"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/dependency-acceptance.js",
+        "toPackage": "repo-gate"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/desktop.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/google-accounts.js",
+        "toPackage": "auth.google"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/ide-session-consent-writer.js",
+        "toPackage": "controller"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/minor-ledger-agent-gate.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/mission-bridge/actions.js",
+        "toPackage": "mission-bridge"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/mission-bridge/owner-prompts.js",
+        "toPackage": "mission-bridge"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/model-floor.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/multi-account/health.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/multi-account/launch.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/multi-account/registry-write.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/multi-account/rotation.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/owner-form-contract.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/owner-identity-purpose-gate.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/owner-request-store.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/agent-comms-local.js",
+        "toPackage": "agent-comms"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/agent-comms.js",
+        "toPackage": "agent-comms"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/agent-sandbox.js",
+        "toPackage": "providers.sandbox"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/billing.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/claude-auth-probe.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/code-intel.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/customer-model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/deployment.js",
+        "toPackage": "providers.infrastructure"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/drive.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/duo-desktop.js",
+        "toPackage": "auth.duo"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/extension.js",
+        "toPackage": "providers.chrome-web-store"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/firebase.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/fra-workspace-handles.js",
+        "toPackage": "fra"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/gcloud-account-login.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/github.js",
+        "toPackage": "providers.github"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/google.js",
+        "toPackage": "providers.google.suite"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/http-request.js",
+        "toPackage": "providers.web"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/infrastructure.js",
+        "toPackage": "providers.infrastructure"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/instagram.js",
+        "toPackage": "providers.messaging"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/iphone-handoff.js",
+        "toPackage": "providers.iphone.handoff"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/launch.js",
+        "toPackage": "providers.launch"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/memory.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/model-role.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/model.js",
+        "toPackage": "providers.gateway"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/overnight-advisory-runtime.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/overnight-advisory.js",
+        "toPackage": "coordinator.core"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/owner-prompt-queue.js",
+        "toPackage": "owner.inbox"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/paddle.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/pay.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/reminders.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/remote-playwright.js",
+        "toPackage": "fra"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/repo-files.js",
+        "toPackage": "providers.misc"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/research-hermes.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/research-runs-runtime.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/research-strong.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/research.js",
+        "toPackage": "providers.research"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/scheduler.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/stripe.js",
+        "toPackage": "providers.billing"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/tasks.js",
+        "toPackage": "sched"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/video.js",
+        "toPackage": "providers.video"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/web.js",
+        "toPackage": "providers.web"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/providers/workstation.js",
+        "toPackage": "providers.launch"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/r-ledger-agent-gate.js",
+        "toPackage": "owner.ledger"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/search.js",
+        "toPackage": "search"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/secret-store/index.js",
+        "toPackage": "secrets"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "src/lib/tool-registry.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/video-models.js",
+        "toPackage": "providers.video"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "tools/settings-set.js",
+        "fromPackage": "surface.registry",
+        "to": "src/lib/local-model-options.js",
+        "toPackage": "models"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "tools/standing-orders-hook.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/build-queue-writer.js",
+        "toPackage": "fleet"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "tools/standing-orders-hook.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/dependency-acceptance.js",
+        "toPackage": "repo-gate"
+      },
+      {
+        "code": "SURFACE_IMPORTS_DOMAIN",
+        "from": "tools/standing-orders-hook.js",
+        "fromPackage": "surface.policy",
+        "to": "src/lib/providers/repo-files.js",
+        "toPackage": "providers.misc"
+      }
+    ]
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "mode": "autonomous",
+  "killswitchFile": "KILLSWITCH",
+  "audit": {
+    "enabled": true,
+    "jsonlFile": "logs/actions.jsonl",
+    "textFile": "logs/actions.log"
+  },
+  "browser": {
+    "profileDirectory": "profiles/chrome",
+    "allowedSchemes": [
+      "https"
+    ],
+    "headless": false
+  },
+  "limits": {
+    "maxScheduledJobs": 50,
+    "defaultDailySpendUsd": 100,
+    "maxInstagramPublishesPerRun": 1
+  },
+  "localInference": {
+    "hermesAdvisoryEnabled": true,
+    "strongAdvisoryEnabled": true
+  },
+  "overnightAdvisory": {
+    "enabled": true
+  },
+  "approvals": {
+    "enabled": true,
+    "externalWrites": true,
+    "actions": [
+      "scheduler.create",
+      "scheduler.remove",
+      "scheduler.reconcile",
+      "host.exec",
+      "browser.stop",
+      "window.close",
+      "sandbox.reap",
+      "sandbox.auth_profile_create",
+      "sandbox.auth_profile_revoke",
+      "system.credential_remove",
+      "paddle.transaction_cancel",
+      "paddle.subscription_cancel"
+    ],
+    "autoApproveBrowserStart": true,
+    "autoApproveCloudLaunch": true,
+    "allowScheduledActions": true,
+    "standingAuthorizations": [],
+    "timeoutSeconds": 60,
+    "$comment_standingAuthorizations": "Ships EMPTY. A standing authorization pre-approves an action so it runs without asking, so it belongs to the operator who granted it, never to the product. The shape is kept; the entries are not. This file previously carried one for a different product of the author's, including that project's live cloud project id -- which is how it was found: the owner-data guard flagged the id after a hand scan for names and LAN addresses had already called the file clean."
+  },
+  "http": {
+    "allowedHosts": [],
+    "vaultKeys": {}
+  },
+  "research": {
+    "search": {
+      "provider": "searxng",
+      "searxngUrl": "http://127.0.0.1:8888/search"
+    },
+    "fetch": {
+      "allowHttp": false,
+      "robotsTtlMs": 86400000,
+      "hostIntervalMs": 5000,
+      "globalConcurrency": 4,
+      "maxResponseBytes": 10485760,
+      "maxRedirects": 5,
+      "timeoutMs": 30000
+    },
+    "tavily": {
+      "routineMonthlyPool": 700,
+      "researchMonthlyPool": 200,
+      "applicationHardStop": 900
+    }
+  },
+  "providers": {
+    "falVideo": {
+      "enabled": true
+    },
+    "instagram": {
+      "enabled": true,
+      "apiVersion": "v25.0"
+    },
+    "firebase": {
+      "enabled": true
+    },
+    "googleCloud": {
+      "enabled": true
+    },
+    "vercel": {
+      "enabled": true
+    },
+    "cloudflare": {
+      "enabled": true
+    },
+    "chromeWebStore": {
+      "enabled": true
+    },
+    "extension": {
+      "enabled": true
+    },
+    "google": {
+      "enabled": true
+    },
+    "github": {
+      "enabled": true
+    },
+    "web": {
+      "enabled": true
+    },
+    "stripe": {
+      "enabled": true
+    },
+    "paddle": {
+      "enabled": true
+    },
+    "codexCloud": {
+      "enabled": true
+    }
+  }
+}

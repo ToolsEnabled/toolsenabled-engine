@@ -1,0 +1,19 @@
+# Byte fidelity is a hard requirement for this repo, not a style preference.
+#
+# The FRA transport binding refuses a session unless several files hash to the
+# same SHA-256 on both machines — among them STANDING-ORDERS.md,
+# config/standing-orders.json, config/toolsenabled.policy.json and
+# config/uac-delegation-allowlist.json. Git's default on Windows
+# (core.autocrlf=true, set system-wide here) rewrites line endings on both
+# checkin and checkout, so the same commit can land on two machines with
+# different bytes and therefore different digests. That is the same class of
+# failure that produced the 2026-08-02 FRA outage, and it is exactly what this
+# repo exists to stop.
+#
+# `-text` disables all end-of-line conversion: what was committed is what is
+# checked out, on every machine, whatever its local core.autocrlf says.
+* -text
+
+# Reviewed public provider artifacts retain exact cross-platform manifest bytes.
+/provider-runtimes/gemini-quota/** binary
+/tools/provider-runtimes/gemini-quota/** -text whitespace=cr-at-eol

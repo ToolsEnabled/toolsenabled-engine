@@ -1,0 +1,4 @@
+{
+  "_comment": "Built-in clarify-before-work policy (tools/clarify-gate-hook.js). Set enabled to false to withhold the gate; every withheld decision is logged to logs/clarify-gate-hook.log. Absence of this file, a missing boolean enabled field, or malformed content all mean the gate is on. Only a literal boolean false disables it.",
+  "enabled": true
+}

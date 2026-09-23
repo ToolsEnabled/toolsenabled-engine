@@ -1,0 +1,164 @@
+# orphans-wired-0826b -- 164 tracked engine test files that NO chain step and NO
+# suite list named, so no release has ever executed them. Found by walking the
+# whole chain (27 reachable steps, 30 of 31 suite lists) and unioning the files
+# each names against git ls-files: 612 of 860 were reachable, 248 were not.
+#
+# Of the 248, these are the ones that PASS. Measured one at a time on a loaded
+# box, where PASS is informative and FAIL is not -- load only pushes times up and
+# starves spawns, so a green here is real and a red is a question. 29 answered
+# with a NAMED SKIP, 39 are candidate failures held for a solo re-run, and 8 were
+# inconclusive under contention. None of those is wired: a red or unmeasured test
+# in the chain either breaks it or launders an unknown as a pass.
+#
+# EIGHT PASSES WERE WITHDRAWN BEFORE WIRING. They are CHILD WORKER SCRIPTS that a
+# real test spawns with its input in process.argv[2], not tests. Run standalone
+# they throw, catch, print an ok:false object and EXIT 0 -- reporting their own
+# failure and returning success. The rule that selects these files (tracked,
+# unnamed, passes) cannot tell a helper from a guard, which is how two of them
+# reached the 0826 suite before being pulled back out. Filtered here by argv[2]
+# use and by a header calling itself a child.
+#
+# Real provider turns remain at npm run test:agent-engine:live.
+tests/anywhere-transport.js
+tests/audit-lock-scope.test.js
+tests/audit-anchor-fork-heals.test.js
+tests/auth.duo/duo-desktop.js
+tests/auth.duo/run.js
+tests/auth.duo/ucr-sso.js
+tests/auth.google/run.js
+tests/bridge-status.js
+tests/cloud-mirror.test.js
+tests/code-intel-live.js
+tests/code.intel/code-intel.js
+tests/codex-cloud-launch.test.js
+tests/controller/controller-cost-attribution.js
+tests/controller/controller-escalation.js
+tests/controller/controller-focus.js
+tests/controller/controller-launch-scope.js
+tests/controller/controller-meter-isolation.js
+tests/controller/controller-meter-ledger.js
+tests/controller/controller-metering.js
+tests/controller/controller-savings-ledger.js
+tests/controller/controller-tool-meter-e2e.js
+tests/controller/controller-tool-meter.js
+tests/controller/custom-roles.js
+tests/dashboard-task-port-guard.js
+tests/delegation-readonly-qualification.js
+tests/delegation/adapter-contracts.js
+tests/delegation/run.js
+tests/delegation/uac-delegation-client.js
+tests/delegation/uac-delegation.js
+tests/desktop.browser/agent-browser-contract.js
+tests/desktop.browser/agent-browser-lifecycle.js
+tests/desktop.browser/agent-browser-operations.js
+tests/desktop.browser/agent-browser-shell.js
+tests/desktop.browser/browser-owner.js
+tests/desktop.browser/playwright-call.js
+tests/entry/mcp-handshake-probe.js
+tests/evidence/evidence-store.js
+tests/evidence/run.js
+tests/fleet/fleet-summary.js
+tests/fleet/fleet-supervisor-direct-vertex-receipt.js
+tests/fleet/fleet-supervisor-model-receipt.js
+tests/grepsaver/grepsaver.js
+tests/grepsaver/reindex.js
+tests/kernel.audit/audit-anchor-cross-process.js
+tests/kernel.audit/audit-anchor-writer.js
+tests/kernel.audit/audit-concurrency.js
+tests/kernel.audit/audit-contention.js
+tests/kernel.audit/audit-durability-multiprocess.js
+tests/kernel.audit/audit-intent.js
+tests/kernel.audit/audit-ledger-vault-binding.js
+tests/kernel.audit/audit-legacy-scale.js
+tests/kernel.audit/audit-projection-batching.js
+tests/kernel.audit/audit-reliability.js
+tests/kernel.audit/audit-store.js
+tests/kernel.policy/run.js
+tests/kernel.policy/runtime-security.js
+tests/kernel.runtime/schema-validator.js
+tests/kernel.state/agent-coord-integrity.js
+tests/kernel.state/instagram-saga.js
+tests/kernel.state/provider-state.js
+tests/kernel.state/scheduler-adapter.js
+tests/kernel.state/scheduler-legacy.js
+tests/kernel.state/scheduler-provider.js
+tests/kernel.state/scheduler-state.js
+tests/kernel.state/state-concurrency.js
+tests/kernel.state/state-store.js
+tests/kernel.state/task-concurrency.js
+tests/kernel.state/task-state.js
+tests/ledger-authority.test.js
+tests/ledger-gate-writer.js
+tests/memory/memory-provider.js
+tests/memory/run.js
+tests/models/cli-session-usage.js
+tests/models/model-picker.js
+tests/models/model-provider.js
+tests/models/model-role.js
+tests/models/f47-vram-probe.js
+tests/online-fra-relay-client.edge.js
+tests/online-fra-relay-shell-solo.js
+tests/online-fra-relay-shell.js
+tests/online-fra-web-client.js
+tests/owner-ingress-spool.test.js
+tests/pkg.tree/package-check-adversarial-g8.js
+tests/pkg.tree/package-manifest-contract-adversarial.js
+tests/pkg.tree/package-manifest-contract.js
+tests/providers.billing/billing-provider.js
+tests/providers.gateway/gemini-agentic.js
+tests/providers.github/github-provider.js
+tests/providers.github/run.js
+tests/providers.google.suite/firebase-account-login.js
+tests/providers.google.suite/gcloud-account-inspector.js
+tests/providers.google.suite/gmail-attachments.js
+tests/providers.google.suite/gmail-send-failure.js
+tests/providers.google.suite/google-oauth-access-token.js
+tests/providers.google.suite/personal-calendar.js
+tests/providers.google.suite/provider-untrusted-content.js
+tests/providers.infrastructure/provider-inputs.js
+tests/providers.infrastructure/run.js
+tests/providers.launch/run.js
+tests/providers.launch/service-control.js
+tests/providers.misc/doc-intel.js
+tests/providers.misc/host-control.js
+tests/providers.misc/run.js
+tests/providers.research/injection-test-suite.js
+tests/providers.research/research-hermes.js
+tests/providers.research/research-strong.js
+tests/providers.research/run.js
+tests/providers.sandbox/agent-sandbox.js
+tests/providers.sandbox/run.js
+tests/repo-protocol/build-queue-corpus.js
+tests/repo-protocol/build-queue-migration.js
+tests/retrieval/run.js
+# Let the maintained runner record each search suite separately. The package
+# runner's concatenated TAP output is not one test-file result.
+tests/search/search.js
+tests/search-containment.test.js
+tests/search-query-revocation.test.js
+tests/search/search.js
+tests/secrets/credential-capture.js
+tests/secrets/credential-removal.js
+tests/secrets/device-credential-clear.js
+tests/secrets/payment-card-security-code-never-stored.js
+tests/secrets/secret-exists-unreadable.js
+tests/secrets/vault-path-agreement.js
+tests/secrets/vault-write-visibility.js
+tests/standing-orders-hook-git-destructive.test.js
+tests/surface.policy/action-guards.js
+tests/surface.registry/mcp-tool-surface.js
+tests/test-census.test.js
+tests/tools.misc/run-vertex-report-wave.js
+tests/unified-agent-p02-inventory.js
+#
+# THE TWO secrets/ FILES BELOW WERE RED AND ARE REPAIRED, not merely found green.
+# Both called a tool by pulling `.handler` off its TOOL_REGISTRY entry, and the
+# approval-boundary work deliberately stopped the registry exporting live
+# handlers -- "a destructive live handler must not be callable through
+# getTool()". So both died on a TypeError before asserting anything. They now
+# call through executeTool(), the path a real caller uses. Assertion counts are
+# unchanged (47 and 59, zero assert lines added or removed) and the repair is
+# mutation-proved: making an unreadable vault report present:false fails
+# "D3 card_status never renders an unreadable vault as no card on file" by name.
+tests/secrets/vault-presence.js
+tests/secrets/payment-card-vault-safety.js

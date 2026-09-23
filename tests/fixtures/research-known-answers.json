@@ -1,0 +1,62 @@
+[
+  {
+    "question": "What is the exact height of the Eiffel Tower in meters as of 2024, excluding antennas?",
+    "expected_answers": ["300", "300m", "300 meters"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Eiffel_Tower"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "Who won the Nobel Prize in Physics in 1921 and what was it awarded for?",
+    "expected_answers": ["Albert Einstein", "photoelectric effect"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Nobel_Prize_in_Physics", "https://www.nobelprize.org/prizes/physics/1921/summary/"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What is the chemical formula for caffeine?",
+    "expected_answers": ["C8H10N4O2"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Caffeine"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What is the primary function of the mitochondria?",
+    "expected_answers": ["powerhouse of the cell", "cellular respiration", "ATP production"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Mitochondrion"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What year did the Apollo 11 moon landing occur?",
+    "expected_answers": ["1969"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Apollo_11"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What is the capital city of Australia?",
+    "expected_answers": ["Canberra"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Canberra"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "Who wrote the play 'Romeo and Juliet'?",
+    "expected_answers": ["William Shakespeare"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Romeo_and_Juliet"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What is the hardest naturally occurring mineral?",
+    "expected_answers": ["Diamond"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Diamond"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "How many continents are there on Earth?",
+    "expected_answers": ["7", "seven"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Continent"],
+    "difficulty": "static HTML"
+  },
+  {
+    "question": "What is the speed of light in a vacuum in m/s?",
+    "expected_answers": ["299,792,458", "299792458"],
+    "reference_urls": ["https://en.wikipedia.org/wiki/Speed_of_light"],
+    "difficulty": "static HTML"
+  }
+]

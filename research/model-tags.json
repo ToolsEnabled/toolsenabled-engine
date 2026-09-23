@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "Pinned Ollama model tags and their expected blob digests for the research fleet. See LOCAL-DEEP-RESEARCH-PLAN.md.",
+  "models": [
+    {
+      "tag": "qwen3.5:4b",
+      "role": "tier-3-workhorse",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+      "tag": "qwen3.5:9b",
+      "role": "tier-2-planner",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    {
+      "tag": "gpt-oss:20b",
+      "role": "tier-1-slow-batch",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000003"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:context:1.0.0",
+  "title": "Coordinator platform context capsule v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "contextId": {"type": "string", "pattern": "^ctx_[A-Za-z0-9_-]{8,128}$"},
+    "taskId": {"type": "string", "pattern": "^tsk_[A-Za-z0-9_-]{8,128}$"},
+    "provenance": {"enum": ["verified", "untrusted", "generated-model", "local-derived"]},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 8192}
+  },
+  "required": ["schemaVersion", "contextId", "taskId", "provenance", "summary"]
+}

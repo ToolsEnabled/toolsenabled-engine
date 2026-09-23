@@ -1,0 +1,1 @@
+{"capabilities":["cap_fixture.read"],"entrypoint":"main.py","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","version":"1.0.0","name":"fixture-tool","packageId":"pkg_fixture01","schemaVersion":"1.0.0"}

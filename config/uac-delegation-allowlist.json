@@ -1,0 +1,10 @@
+{
+  "$comment": [
+    "ToolsEnabled ships with no standing elevated operations.",
+    "The UAC delegation helper accepts only operation identifiers declared in this file;",
+    "an empty operations array is a deliberate fail-closed product default.",
+    "Installation-specific elevated work requires a separately reviewed local authority decision."
+  ],
+  "schemaVersion": 1,
+  "operations": []
+}

@@ -1,0 +1,132 @@
+{
+    "schema":  "servercontrol.parity-manifest.v1",
+    "bundleVersion":  "6.1.1",
+    "fileCount":  23,
+    "totalBytes":  345651,
+    "runtimeStateExcluded":  [
+                                 "servers.json",
+                                 "tunnel-state.json",
+                                 "power-policy.json",
+                                 "*.log",
+                                 "logs/**",
+                                 "panel-heartbeat.json",
+                                 "lifecycle-health.json"
+                             ],
+    "files":  [
+                  {
+                      "path":  "AGENT-CARD.txt",
+                      "bytes":  105,
+                      "sha256":  "6fdc088e7b2625d3ecd5e51516b83238a484f382038b1d363310eba819754543"
+                  },
+                  {
+                      "path":  "Aggregate-Servers.ps1",
+                      "bytes":  1183,
+                      "sha256":  "923129cd40717281ac76275d30c81d983f686864b63b64a11cb84b3f63c35c0f"
+                  },
+                  {
+                      "path":  "Deploy-ServerControl.ps1",
+                      "bytes":  8388,
+                      "sha256":  "783aa88b6a9dec18086748925748d726207aa5397bea0c7f0a6f1010ac5a15b6"
+                  },
+                  {
+                      "path":  "Full-Remote-Access-Firewall.ps1",
+                      "bytes":  3014,
+                      "sha256":  "6c599cf48e59afe398f7cc62ad8aae2bb8281f41f6ce7eddfe1daf0e1cb962bc"
+                  },
+                  {
+                      "path":  "Generate-ServerControlManifest.ps1",
+                      "bytes":  3289,
+                      "sha256":  "cdcbed8b1766e8b8ef3dad2b8d9df1fa879842659d9bf953d04c07d597397699"
+                  },
+                  {
+                      "path":  "Launch Control Panel.cmd",
+                      "bytes":  230,
+                      "sha256":  "8455eba28c6994c9624ad073a52670f7433cb63e6b3887dcc0483361c7b8cc77"
+                  },
+                  {
+                      "path":  "Launch Control Panel.vbs",
+                      "bytes":  594,
+                      "sha256":  "d7c9003c80fce96200eb0eb58d8c26b4a4e8e4ca4d9662b21530ab2f3ba504c6"
+                  },
+                  {
+                      "path":  "Mechanical-Connect.ps1",
+                      "bytes":  70506,
+                      "sha256":  "e01f63b7cbe11040ae5b3d2a0b7f21f96756b18e0800a46721da202d521dd690"
+                  },
+                  {
+                      "path":  "Panel-Watchdog.ps1",
+                      "bytes":  9773,
+                      "sha256":  "d27bc293826bd06b4a6cad3d455ec44f848253f912ba785f080da95966691431"
+                  },
+                  {
+                      "path":  "PowerGuard.ps1",
+                      "bytes":  2929,
+                      "sha256":  "74d02aa1e23c4e2dd28eaac990fe7cedafe8946544d5a3d7d41b3aa9ba8042e0"
+                  },
+                  {
+                      "path":  "README.txt",
+                      "bytes":  5797,
+                      "sha256":  "9c7496baab68c55324dbf8cce397672a3608be3faaea66cdde9f62562c2d24f6"
+                  },
+                  {
+                      "path":  "Reaper.ps1",
+                      "bytes":  4519,
+                      "sha256":  "44bd9c0ebebb2a56187674b38fbc7a5fac242d0210e10ddbfae6f2dd83c390a7"
+                  },
+                  {
+                      "path":  "ServerControl.Common.ps1",
+                      "bytes":  9105,
+                      "sha256":  "5d089c70b1c0574356510670b2c38485a7fb6c97428b1503c6470983294a82dd"
+                  },
+                  {
+                      "path":  "ServerControl.ico",
+                      "bytes":  61046,
+                      "sha256":  "640947d96a92591ac7fd5a8b5b88bceac159e7971bc4fe9a09ff9d4658a04820"
+                  },
+                  {
+                      "path":  "Server-Control-Panel.ps1",
+                      "bytes":  76961,
+                      "sha256":  "cb2648c69093d361b6db969cb4599779c92ee11fe143f12eb63a5578c5016384"
+                  },
+                  {
+                      "path":  "Server-Lifecycle.ps1",
+                      "bytes":  10213,
+                      "sha256":  "3cc11f1ca2dfe9716b57d8331dc3eea05c43606c6783286a530c985f7efec6dd"
+                  },
+                  {
+                      "path":  "ServerRegistry.ps1",
+                      "bytes":  28357,
+                      "sha256":  "b0408c54dcdee9a55b2cb62d8a5846972e86c8b603b4d542e5cfba11fa507a07"
+                  },
+                  {
+                      "path":  "Start-Server-Hidden.ps1",
+                      "bytes":  1439,
+                      "sha256":  "162a9a61bc1258f4f72cee4316bae6d591b3ca9810ffab809f8c029f4e0ad1e1"
+                  },
+                  {
+                      "path":  "Start-Topology-Games.ps1",
+                      "bytes":  1334,
+                      "sha256":  "e41a0132df5a3b3ab1f92c5927e66a8c9ee9bc991c3cf470ec469a9deeec29c5"
+                  },
+                  {
+                      "path":  "Stop-ServerByPort.ps1",
+                      "bytes":  9852,
+                      "sha256":  "844e4435f25e6d4f89d4e02b58564f4d5fbc37b9924e0077aa799a1af916091e"
+                  },
+                  {
+                      "path":  "Test-Registry.ps1",
+                      "bytes":  2556,
+                      "sha256":  "90aee61ee9eab9faed18a14c69c812d38374bd5e19dcd5eadcca2bf1873d5cf5"
+                  },
+                  {
+                      "path":  "Test-ServerControl.ps1",
+                      "bytes":  13903,
+                      "sha256":  "6c9cde182f0216c7aa07b6b0d523154d3a4993fd45b9efd2a10c97351dc0bd2b"
+                  },
+                  {
+                      "path":  "Tunnel-Lifecycle.ps1",
+                      "bytes":  20558,
+                      "sha256":  "afebddf8810c62b21c1a499e563b9dc9c0e05f71075e489855ed15fe709bc8db"
+                  }
+              ]
+}

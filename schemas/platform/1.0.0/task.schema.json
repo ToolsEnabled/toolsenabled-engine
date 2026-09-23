@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:task:1.0.0",
+  "title": "Coordinator platform task v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "taskId": {"type": "string", "pattern": "^tsk_[A-Za-z0-9_-]{8,128}$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "state": {"enum": ["submitted", "running", "succeeded", "failed", "cancelled", "uncertain"]},
+    "objective": {"type": "string", "minLength": 1, "maxLength": 4096}
+  },
+  "required": ["schemaVersion", "taskId", "title", "state", "objective"]
+}

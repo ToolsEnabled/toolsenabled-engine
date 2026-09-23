@@ -1,0 +1,1738 @@
+{
+  "schemaVersion": "capability-aliases-v1",
+  "$comment": [
+    "EVERYDAY WORDS FOR TOOLSENABLED TOOLS. THIS IS CONTENT, NOT CONFIGURATION.",
+    "",
+    "The tool descriptions are written for correctness and are precise about",
+    "mechanism. People are not. Someone says 'take a picture of my screen'; the",
+    "description says 'Capture the full virtual screen to a PNG'. Not one word",
+    "overlaps. No amount of scoring bridges that -- one line here does, and unlike",
+    "an embedding it can be READ, ARGUED WITH, AND FIXED.",
+    "",
+    "FIELDS:",
+    "  tools    the ids this entry speaks for. Checked against the live registry at",
+    "           build time; an unknown id FAILS the build rather than aliasing nothing.",
+    "  words    folded into the tool's `alias` field and scored by ordinary BM25, so",
+    "           a word that turns out to be common across entries loses its own",
+    "           weight automatically through IDF.",
+    "  phrases  multi-word intents matched against the whole normalised prompt. A",
+    "           phrase is a claim single-term scoring cannot make: 'check for",
+    "           updates' is three ordinary words and one intent.",
+    "",
+    "THREE RULES, EACH LEARNED FROM A MEASURED FAILURE:",
+    "",
+    "1. READ INTENTS AND WRITE INTENTS GET SEPARATE ENTRIES. They were together,",
+    "   and 'what is on my calendar today' returned calendar.create above",
+    "   calendar.list -- the tool that ADDS an event, for a question that asks what",
+    "   is already there. Every capability where reading and writing are different",
+    "   tools is split below.",
+    "",
+    "2. A WORD THAT IS GENERIC IN ENGLISH GOES IN `phrases`, NOT `words`. 'website'",
+    "   was a single-word alias for web.fetch. It is rare in the catalogue, so IDF",
+    "   made it the most informative term in any prompt containing it, and 'deploy",
+    "   the website' returned web.expand, web.extract and web.fetch -- ahead of",
+    "   every deployment tool. 'read this website' is the intent; 'website' alone",
+    "   is not.",
+    "",
+    "3. AN ALIAS MUST BE SOMETHING A PERSON WOULD ACTUALLY TYPE FOR THIS",
+    "   CAPABILITY. Aliasing broadly is how a recommender starts answering",
+    "   everything with the same four tools. When the eval reports a miss the fix",
+    "   is a line here; when it reports a false positive the fix is deleting one."
+  ],
+  "entries": [
+    {
+      "$intent": "read the screen",
+      "tools": [
+        "screen.capture",
+        "screen.capture_monitor",
+        "screen.capture_region",
+        "screen.capture_window"
+      ],
+      "words": [
+        "screenshot",
+        "screengrab",
+        "screen shot",
+        "screen grab",
+        "snap",
+        "snapshot",
+        "visible",
+        "onscreen"
+      ],
+      "phrases": [
+        "picture of my screen",
+        "picture of the screen",
+        "what is on my screen",
+        "what is on the screen",
+        "look at my screen",
+        "see my screen",
+        "see the screen",
+        "capture my screen",
+        "capture the screen",
+        "take a screenshot",
+        "grab the screen",
+        "show me the screen",
+        "what am i looking at",
+        "what do you see",
+        "what is up on",
+        "snap the screen",
+        "snap a picture",
+        "show me what"
+      ]
+    },
+    {
+      "$intent": "list monitors / re-read an existing capture",
+      "tools": [
+        "screen.list_monitors",
+        "screen.read_capture"
+      ],
+      "words": [
+        "monitors",
+        "displays",
+        "second screen"
+      ],
+      "phrases": [
+        "how many monitors",
+        "which monitor",
+        "read the capture again"
+      ]
+    },
+    {
+      "$intent": "text out of an image",
+      "tools": [
+        "ocr.read"
+      ],
+      "words": [
+        "ocr",
+        "transcribe"
+      ],
+      "phrases": [
+        "read the text in this image",
+        "text in the image",
+        "what does this image say",
+        "text from a screenshot",
+        "text out of a picture",
+        "extract the text",
+        "words out of",
+        "pull the words",
+        "what does it say in"
+      ]
+    },
+    {
+      "$intent": "which windows exist",
+      "tools": [
+        "window.list"
+      ],
+      "words": [
+        "apps",
+        "applications",
+        "window",
+        "windows",
+        "program",
+        "programs"
+      ],
+      "phrases": [
+        "what apps are open",
+        "what is open",
+        "which windows are open",
+        "list the windows",
+        "what programs are running",
+        "what i have open",
+        "what have i got open",
+        "what applications are open",
+        "what i have open right now",
+        "see what i have open",
+        "what is running on screen",
+        "which apps"
+      ]
+    },
+    {
+      "$intent": "act on a window",
+      "tools": [
+        "window.focus",
+        "window.close"
+      ],
+      "words": [
+        "foreground",
+        "minimise",
+        "minimize",
+        "shut",
+        "front",
+        "frontmost"
+      ],
+      "phrases": [
+        "bring it to the front",
+        "bring to the front",
+        "switch to the window",
+        "close that window",
+        "focus the window",
+        "shut that window",
+        "shut the window",
+        "put it in front",
+        "hide that window"
+      ]
+    },
+    {
+      "$intent": "read the clipboard",
+      "tools": [
+        "clipboard.read"
+      ],
+      "words": [
+        "clipboard",
+        "copied"
+      ],
+      "phrases": [
+        "what did i copy",
+        "what is on my clipboard",
+        "what is in my clipboard",
+        "read my clipboard",
+        "the thing i copied",
+        "what is copied"
+      ]
+    },
+    {
+      "$intent": "write the clipboard",
+      "tools": [
+        "clipboard.write"
+      ],
+      "words": [
+        "clipboard"
+      ],
+      "phrases": [
+        "put it on my clipboard",
+        "copy that for me",
+        "copy this to my clipboard",
+        "set my clipboard",
+        "chuck it on the clipboard",
+        "stick it on the clipboard",
+        "paste this"
+      ]
+    },
+    {
+      "$intent": "save something durable",
+      "tools": [
+        "memory.set"
+      ],
+      "words": [
+        "remember",
+        "memorise",
+        "memorize",
+        "jot",
+        "record",
+        "retain",
+        "memo"
+      ],
+      "phrases": [
+        "remember this",
+        "remember that",
+        "make a note",
+        "take a note",
+        "note this down",
+        "save this for later",
+        "keep track of",
+        "do not forget",
+        "write that down",
+        "store this",
+        "keep a note",
+        "keep a record",
+        "hang on to this",
+        "file that away",
+        "jot down",
+        "jot that down",
+        "note that",
+        "log that",
+        "put that somewhere",
+        "for later",
+        "so you do not forget",
+        "note it"
+      ]
+    },
+    {
+      "$intent": "read something saved",
+      "tools": [
+        "memory.get",
+        "memory.search"
+      ],
+      "words": [
+        "recall",
+        "saved",
+        "noted"
+      ],
+      "phrases": [
+        "what did i tell you",
+        "do you remember",
+        "what do you remember",
+        "what did we save",
+        "look in your notes",
+        "what notes do you have",
+        "have i mentioned",
+        "what do you know about",
+        "what do you already know",
+        "already know about",
+        "what have you saved",
+        "in your notes",
+        "did i say",
+        "have i told you"
+      ]
+    },
+    {
+      "$intent": "search the public web",
+      "tools": [
+        "web.search",
+        "web.lookup"
+      ],
+      "words": [
+        "google",
+        "duckduckgo",
+        "online",
+        "reviews",
+        "news",
+        "price",
+        "prices",
+        "cheapest",
+        "compare"
+      ],
+      "phrases": [
+        "search the web",
+        "search online",
+        "look it up",
+        "look this up",
+        "google it",
+        "find out about",
+        "what is the latest on",
+        "search the internet",
+        "who is",
+        "news about",
+        "look up who",
+        "look up what",
+        "current pricing",
+        "what does it cost",
+        "how much does",
+        "find pricing",
+        "latest on",
+        "dig around online",
+        "have a look online",
+        "search around for",
+        "see what is out there",
+        "reviews of",
+        "how much is"
+      ]
+    },
+    {
+      "$intent": "read a specific page",
+      "tools": [
+        "web.fetch",
+        "web.extract",
+        "web.expand"
+      ],
+      "words": [
+        "url",
+        "scrape",
+        "webpage",
+        "homepage"
+      ],
+      "phrases": [
+        "read this page",
+        "read this url",
+        "read this link",
+        "read this website",
+        "what does this page say",
+        "open this link",
+        "fetch the page",
+        "summarise this article",
+        "summarize this article",
+        "what is on this site",
+        "pull the page",
+        "summarise it",
+        "summarize it",
+        "and summarise",
+        "and summarize",
+        "scrape the page",
+        "off their site",
+        "off their homepage",
+        "pull the page down",
+        "get the page"
+      ]
+    },
+    {
+      "$intent": "read email",
+      "tools": [
+        "gmail.list"
+      ],
+      "words": [
+        "inbox",
+        "unread",
+        "email",
+        "emails",
+        "mail",
+        "sender",
+        "messages"
+      ],
+      "phrases": [
+        "check my email",
+        "check my mail",
+        "read my email",
+        "any new email",
+        "what is in my inbox",
+        "anything urgent in my email",
+        "go through my email",
+        "who emailed me",
+        "recent emails",
+        "my emails",
+        "written to me",
+        "has anyone written",
+        "anyone emailed",
+        "in my inbox",
+        "sitting in my inbox",
+        "from my inbox",
+        "anything from",
+        "new mail",
+        "recent mail",
+        "go through the inbox"
+      ]
+    },
+    {
+      "$intent": "send email",
+      "tools": [
+        "gmail.send"
+      ],
+      "words": [
+        "email",
+        "reply",
+        "compose"
+      ],
+      "phrases": [
+        "send an email",
+        "email them",
+        "email him",
+        "email her",
+        "reply to that email",
+        "draft an email",
+        "write an email",
+        "send them a mail",
+        "send a note",
+        "a note saying",
+        "send them a note",
+        "drop them a line",
+        "let them know",
+        "write to them",
+        "mail them",
+        "get in touch with",
+        "email the team"
+      ]
+    },
+    {
+      "$intent": "read the shared calendar",
+      "tools": [
+        "calendar.list"
+      ],
+      "words": [
+        "agenda",
+        "morning",
+        "afternoon",
+        "evening",
+        "tomorrow",
+        "availability",
+        "appointments",
+        "meetings",
+        "diary"
+      ],
+      "phrases": [
+        "what is on my calendar",
+        "what do i have today",
+        "what do i have tomorrow",
+        "my schedule today",
+        "am i free",
+        "next meeting",
+        "when is my",
+        "any meetings",
+        "what meetings",
+        "anything scheduled",
+        "do i have anything",
+        "what is scheduled",
+        "my day look like",
+        "my afternoon look like",
+        "my week look like",
+        "what is my day",
+        "when am i free",
+        "free slots",
+        "my diary"
+      ]
+    },
+    {
+      "$intent": "add to the shared calendar",
+      "tools": [
+        "calendar.create"
+      ],
+      "words": [
+        "book",
+        "invite"
+      ],
+      "phrases": [
+        "book a meeting",
+        "put it on my calendar",
+        "add to my calendar",
+        "schedule a meeting",
+        "set up a meeting",
+        "create an event",
+        "block out time",
+        "book time",
+        "find time with",
+        "with the team on",
+        "stick a meeting in",
+        "put a meeting in",
+        "get it in the diary",
+        "pencil in",
+        "set up a call"
+      ]
+    },
+    {
+      "$intent": "read reminders and what is due",
+      "tools": [
+        "personal_calendar.list",
+        "personal_calendar.due"
+      ],
+      "words": [
+        "overdue",
+        "reminders",
+        "outstanding",
+        "pending"
+      ],
+      "phrases": [
+        "what is due",
+        "what is overdue",
+        "my reminders",
+        "what do i owe",
+        "anything due today",
+        "what is on my list",
+        "my to do list",
+        "still to do",
+        "what is left",
+        "anything outstanding"
+      ]
+    },
+    {
+      "$intent": "add or close a reminder",
+      "tools": [
+        "personal_calendar.create",
+        "personal_calendar.complete",
+        "personal_calendar.capture"
+      ],
+      "words": [],
+      "phrases": [
+        "remind me to",
+        "remind me about",
+        "add a reminder",
+        "mark it done",
+        "mark that complete",
+        "tick it off",
+        "set a reminder"
+      ]
+    },
+    {
+      "$intent": "read files and folders on this computer",
+      "tools": [
+        "host.read_file",
+        "host.list_dir"
+      ],
+      "words": [
+        "yaml",
+        "yml",
+        "csv",
+        "config",
+        "folder",
+        "directory",
+        "contents",
+        "dump"
+      ],
+      "phrases": [
+        "read a file",
+        "read the file",
+        "what is in this folder",
+        "list the files",
+        "what files are in",
+        "open the file",
+        "contents of the folder",
+        "look in the directory",
+        "on my computer",
+        "on my desktop",
+        "in my documents",
+        "dump the contents",
+        "dump that file",
+        "show me the file",
+        "cat the file",
+        "what does the file say",
+        "inside the folder",
+        "pull up the file"
+      ]
+    },
+    {
+      "$intent": "write a file on this computer",
+      "tools": [
+        "host.write_file"
+      ],
+      "words": [
+        "export"
+      ],
+      "phrases": [
+        "save it to a file",
+        "write a file",
+        "write it to disk",
+        "create a file",
+        "save that file",
+        "put it in a file",
+        "write it out",
+        "dump it to a file",
+        "export it to"
+      ]
+    },
+    {
+      "$intent": "run something on this computer",
+      "tools": [
+        "host.exec"
+      ],
+      "words": [
+        "powershell",
+        "terminal",
+        "cmd",
+        "npm",
+        "git",
+        "node",
+        "python",
+        "script",
+        "stdout",
+        "build",
+        "bash",
+        "shell"
+      ],
+      "phrases": [
+        "run a command",
+        "run this command",
+        "on the command line",
+        "in the shell",
+        "execute this",
+        "run the script",
+        "show me the output",
+        "run the tests",
+        "run it and",
+        "execute the",
+        "kick off the build",
+        "run the build",
+        "fire off",
+        "and capture the output"
+      ]
+    },
+    {
+      "$intent": "what is running on this computer",
+      "tools": [
+        "host.list_processes"
+      ],
+      "words": [
+        "cpu",
+        "ram",
+        "memory",
+        "pid",
+        "hogging",
+        "slow"
+      ],
+      "phrases": [
+        "what is running",
+        "what processes are running",
+        "is it still running",
+        "check the processes",
+        "using all my cpu",
+        "eating memory",
+        "hogging the machine",
+        "eating the cpu",
+        "using all the memory",
+        "why is it slow",
+        "what is chewing"
+      ]
+    },
+    {
+      "$intent": "files inside the project checkout",
+      "tools": [
+        "repo.read_file",
+        "repo.list_dir",
+        "repo.write_file"
+      ],
+      "words": [
+        "repo",
+        "repository",
+        "codebase",
+        "checkout"
+      ],
+      "phrases": [
+        "read a file in the repo",
+        "files in the project",
+        "in the repository",
+        "in the codebase"
+      ]
+    },
+    {
+      "$intent": "search already-indexed local text",
+      "tools": [
+        "search.query"
+      ],
+      "words": [
+        "semantic",
+        "locate",
+        "hunt",
+        "grep",
+        "scan"
+      ],
+      "phrases": [
+        "search my files",
+        "search the code",
+        "find it in my files",
+        "where did i write",
+        "search my documents",
+        "search my notes",
+        "find the document about",
+        "search my own files",
+        "dig through my files",
+        "track down the file",
+        "hunt for",
+        "scan my files"
+      ]
+    },
+    {
+      "$intent": "build or inspect the local search index",
+      "tools": [
+        "search.index",
+        "search.status"
+      ],
+      "words": [],
+      "phrases": [
+        "index my files",
+        "index my documents",
+        "reindex",
+        "build the index",
+        "is the index up to date"
+      ]
+    },
+    {
+      "$intent": "navigate code by symbol",
+      "tools": [
+        "code.workspace_symbols",
+        "code.document_symbols",
+        "code.goto_definition",
+        "code.find_references",
+        "code.hover"
+      ],
+      "words": [
+        "symbol",
+        "callers",
+        "signature",
+        "caller",
+        "usages",
+        "declaration",
+        "trace",
+        "function",
+        "method",
+        "class"
+      ],
+      "phrases": [
+        "where is this defined",
+        "where is it defined",
+        "who calls this",
+        "find references",
+        "find the references",
+        "jump to definition",
+        "go to definition",
+        "what type is this",
+        "what does this function do",
+        "where is loadsettings",
+        "is defined",
+        "defined in the codebase",
+        "trace the callers",
+        "trace every caller",
+        "every caller of",
+        "who uses this",
+        "usages of",
+        "find the function"
+      ]
+    },
+    {
+      "$intent": "compiler and linter problems",
+      "tools": [
+        "code.diagnostics",
+        "code.status"
+      ],
+      "words": [
+        "lint",
+        "diagnostics",
+        "compile error",
+        "type error",
+        "linter",
+        "warnings",
+        "problems",
+        "errors"
+      ],
+      "phrases": [
+        "are there any errors",
+        "show me the errors",
+        "what is broken",
+        "any warnings",
+        "does it compile",
+        "lint problems",
+        "anything broken",
+        "type errors",
+        "problems in the workspace"
+      ]
+    },
+    {
+      "$intent": "read github issues",
+      "tools": [
+        "github.issue_list",
+        "github.issue_get"
+      ],
+      "words": [
+        "issue",
+        "issues",
+        "tickets"
+      ],
+      "phrases": [
+        "open issues",
+        "what issues are open",
+        "look at the issue",
+        "read the issue",
+        "any bug reports",
+        "what is filed",
+        "outstanding issues"
+      ]
+    },
+    {
+      "$intent": "write a github issue or comment",
+      "tools": [
+        "github.issue_create",
+        "github.issue_comment_create"
+      ],
+      "words": [],
+      "phrases": [
+        "file an issue",
+        "create an issue",
+        "open an issue",
+        "comment on the issue",
+        "raise a bug",
+        "file a bug",
+        "log a bug",
+        "report a bug",
+        "raise a ticket"
+      ]
+    },
+    {
+      "$intent": "read pull requests",
+      "tools": [
+        "github.pull_request_list",
+        "github.pull_request_get"
+      ],
+      "words": [
+        "pr",
+        "prs",
+        "reviews"
+      ],
+      "phrases": [
+        "open pull requests",
+        "what prs are open",
+        "review the pr",
+        "look at the pull request",
+        "read the pr",
+        "outstanding pull requests",
+        "pending prs",
+        "waiting for review",
+        "tidy up the pull requests"
+      ]
+    },
+    {
+      "$intent": "open a pull request",
+      "tools": [
+        "github.pull_request_create"
+      ],
+      "words": [],
+      "phrases": [
+        "raise a pr",
+        "open a pull request",
+        "create a pull request",
+        "put up a pr"
+      ]
+    },
+    {
+      "$intent": "read releases and repo metadata",
+      "tools": [
+        "github.release_list",
+        "github.repo_get"
+      ],
+      "words": [
+        "changelog"
+      ],
+      "phrases": [
+        "latest release",
+        "what release are we on",
+        "what was in the last release",
+        "what does this repository do",
+        "about the repo"
+      ]
+    },
+    {
+      "$intent": "cut a release",
+      "tools": [
+        "github.release_create",
+        "github.repository_dispatch"
+      ],
+      "words": [],
+      "phrases": [
+        "cut a release",
+        "publish a release",
+        "tag a release"
+      ]
+    },
+    {
+      "$intent": "open or close a real browser",
+      "tools": [
+        "browser.start",
+        "browser.stop",
+        "browser.status"
+      ],
+      "words": [
+        "chrome",
+        "tab",
+        "navigate"
+      ],
+      "phrases": [
+        "open a browser",
+        "open chrome",
+        "log into the site",
+        "sign in to the site",
+        "close the browser",
+        "go to the site",
+        "load the page in a browser",
+        "log into the admin",
+        "pull up the site",
+        "open the page",
+        "in a real browser",
+        "browse to"
+      ]
+    },
+    {
+      "$intent": "act inside the open browser",
+      "tools": [
+        "browser.playwright_call",
+        "browser.playwright_tools",
+        "browser.playwright_status"
+      ],
+      "words": [
+        "playwright",
+        "tab"
+      ],
+      "phrases": [
+        "click the button",
+        "click the accept",
+        "fill in the form",
+        "type into the page",
+        "press the button",
+        "in the browser",
+        "what is the tab showing",
+        "on the current tab",
+        "what is the page showing",
+        "screenshot the page"
+      ]
+    },
+    {
+      "$intent": "message another agent",
+      "tools": [
+        "agent_comms.send_local",
+        "agent_comms.send"
+      ],
+      "words": [
+        "teammate",
+        "notify",
+        "inform"
+      ],
+      "phrases": [
+        "message another agent",
+        "tell the other agent",
+        "ask my manager",
+        "hand this off",
+        "let the other agent know",
+        "pass it to",
+        "let the other know",
+        "let them know i",
+        "tell the other one",
+        "pass a message"
+      ]
+    },
+    {
+      "$intent": "read agent messages and roster",
+      "tools": [
+        "agent_comms.read",
+        "agent_comms.local_roster",
+        "agent_comms.acknowledge"
+      ],
+      "words": [],
+      "phrases": [
+        "who else is working",
+        "who can i message",
+        "check my messages",
+        "any messages for me",
+        "who is on the tree",
+        "what agents are there"
+      ]
+    },
+    {
+      "$intent": "read the work queue",
+      "tools": [
+        "task.list",
+        "task.get"
+      ],
+      "words": [
+        "queue",
+        "backlog",
+        "unfinished",
+        "outstanding",
+        "board",
+        "items"
+      ],
+      "phrases": [
+        "what is on the queue",
+        "what work is waiting",
+        "the work queue",
+        "status of that task",
+        "status of the task",
+        "what is waiting",
+        "current status of",
+        "status of that background",
+        "how is that task going",
+        "on the board",
+        "what is unfinished",
+        "what is in progress",
+        "what is left to do"
+      ]
+    },
+    {
+      "$intent": "act on a work item",
+      "tools": [
+        "task.claim",
+        "task.start",
+        "task.complete",
+        "task.fail",
+        "task.submit",
+        "task.cancel",
+        "task.checkpoint",
+        "task.heartbeat"
+      ],
+      "words": [],
+      "phrases": [
+        "claim a task",
+        "mark it complete",
+        "pick up a task",
+        "take over the next",
+        "start on the next",
+        "take the next item"
+      ]
+    },
+    {
+      "$intent": "make something happen on a schedule",
+      "tools": [
+        "scheduler.create",
+        "scheduler.list",
+        "scheduler.remove",
+        "scheduler.reconcile"
+      ],
+      "words": [
+        "cron",
+        "recurring",
+        "nightly",
+        "daily",
+        "weekly",
+        "regularly",
+        "repeat",
+        "timer"
+      ],
+      "phrases": [
+        "every morning",
+        "every day at",
+        "run it on a schedule",
+        "schedule this to run",
+        "set up a recurring",
+        "stop the scheduled",
+        "once a week",
+        "on a timer",
+        "from now on",
+        "every tuesday",
+        "every monday",
+        "every week",
+        "each morning",
+        "keep doing it"
+      ]
+    },
+    {
+      "$intent": "get the person's attention",
+      "tools": [
+        "system.notify",
+        "sound.play",
+        "tts.speak"
+      ],
+      "words": [
+        "notification",
+        "beep",
+        "ping",
+        "nudge",
+        "alert",
+        "notify",
+        "buzz"
+      ],
+      "phrases": [
+        "let me know when",
+        "notify me",
+        "pop up a notification",
+        "make a sound",
+        "say it out loud",
+        "read it to me",
+        "alert me",
+        "tell me when it is done",
+        "ping me",
+        "when it finishes",
+        "when the deploy finishes",
+        "once it is done",
+        "nudge me",
+        "buzz me",
+        "give me a shout",
+        "let me know once",
+        "when the tests pass",
+        "when it is finished"
+      ]
+    },
+    {
+      "$intent": "ask the owner here and wait",
+      "tools": [
+        "system.ask"
+      ],
+      "words": [],
+      "phrases": [
+        "ask me first",
+        "check with me",
+        "ask the owner",
+        "get my approval",
+        "wait for my answer",
+        "do not do it without asking",
+        "ask me before",
+        "before you delete",
+        "before doing anything"
+      ]
+    },
+    {
+      "$intent": "ask the owner for a credential",
+      "tools": [
+        "system.credential_request"
+      ],
+      "words": [
+        "credential",
+        "credentials",
+        "vault",
+        "api key",
+        "secret",
+        "token",
+        "key",
+        "password",
+        "login"
+      ],
+      "phrases": [
+        "i need an api key",
+        "add a credential",
+        "store a password",
+        "set up the api key",
+        "i do not have the token",
+        "it needs a login",
+        "i have not given you",
+        "needs an api key",
+        "you do not have the key",
+        "need the token",
+        "need credentials",
+        "do not have the key"
+      ]
+    },
+    {
+      "$intent": "what the owner input forms can collect",
+      "tools": [
+        "owner_forms.describe"
+      ],
+      "words": [],
+      "phrases": [
+        "where do the secrets go",
+        "what can the form collect"
+      ]
+    },
+    {
+      "$intent": "what is configured on this installation",
+      "tools": [
+        "system.status",
+        "system.doctor",
+        "settings.read"
+      ],
+      "words": [
+        "rundown",
+        "overview",
+        "health"
+      ],
+      "phrases": [
+        "what is configured here",
+        "is everything working",
+        "what is enabled",
+        "check the setup",
+        "read the settings",
+        "what are my settings",
+        "what can you do here",
+        "what tools do you have",
+        "how is this set up",
+        "what is configured",
+        "on this installation",
+        "how is this configured",
+        "give me a rundown",
+        "the lay of the land",
+        "what state is this in",
+        "how this machine is set up"
+      ]
+    },
+    {
+      "$intent": "stop everything",
+      "tools": [
+        "system.kill_switch_status",
+        "system.kill_switch_activate"
+      ],
+      "words": [],
+      "phrases": [
+        "stop everything",
+        "turn it all off",
+        "emergency stop",
+        "kill switch",
+        "shut it all down",
+        "stop all",
+        "all agent activity",
+        "halt everything",
+        "stop every agent"
+      ]
+    },
+    {
+      "$intent": "what has happened on this machine",
+      "tools": [
+        "audit.tail",
+        "audit.status",
+        "audit.verify",
+        "audit.flush"
+      ],
+      "words": [
+        "audit",
+        "activity"
+      ],
+      "phrases": [
+        "what happened",
+        "what did you do",
+        "show me the log",
+        "audit trail",
+        "check the history",
+        "is the log intact",
+        "what has been done",
+        "what have the agents been doing",
+        "what has been happening",
+        "recent activity",
+        "what went on"
+      ]
+    },
+    {
+      "$intent": "work in a disposable environment",
+      "tools": [
+        "sandbox.create",
+        "sandbox.exec",
+        "sandbox.status",
+        "sandbox.cleanup",
+        "sandbox.artifacts",
+        "sandbox.workspace_read",
+        "sandbox.workspace_write",
+        "sandbox.doctor"
+      ],
+      "words": [
+        "sandbox",
+        "disposable",
+        "throwaway",
+        "scratch",
+        "isolated"
+      ],
+      "phrases": [
+        "try it safely",
+        "in a sandbox",
+        "without touching my machine",
+        "throwaway environment",
+        "isolated workspace",
+        "somewhere safe",
+        "cannot break anything",
+        "somewhere it cannot",
+        "without breaking anything",
+        "spin up somewhere",
+        "spin something up",
+        "somewhere throwaway",
+        "test it in isolation"
+      ]
+    },
+    {
+      "$intent": "start a research run",
+      "tools": [
+        "research.run_submit"
+      ],
+      "words": [
+        "research"
+      ],
+      "phrases": [
+        "do some research",
+        "research this",
+        "look into this deeply",
+        "deep research",
+        "deep dive",
+        "proper deep dive",
+        "dig into this",
+        "investigate this properly",
+        "research on"
+      ]
+    },
+    {
+      "$intent": "read research results",
+      "tools": [
+        "research.run_status",
+        "research.run_list",
+        "research.result_list",
+        "research.finding_save",
+        "research.finding_list",
+        "research.project_list",
+        "research.session_context"
+      ],
+      "words": [],
+      "phrases": [
+        "what have we found",
+        "what did the research find",
+        "research findings",
+        "past findings"
+      ]
+    },
+    {
+      "$intent": "run text through a model",
+      "tools": [
+        "model.complete",
+        "model.quick_edit",
+        "model.role_complete",
+        "model.customer_complete"
+      ],
+      "words": [
+        "ollama"
+      ],
+      "phrases": [
+        "use a local model",
+        "run it through a model",
+        "quick rewrite",
+        "draft some text",
+        "local llm",
+        "rewrite this",
+        "reword this",
+        "with a local model"
+      ]
+    },
+    {
+      "$intent": "call an http api",
+      "tools": [
+        "http.request"
+      ],
+      "words": [
+        "curl",
+        "endpoint",
+        "webhook"
+      ],
+      "phrases": [
+        "call the api",
+        "hit the endpoint",
+        "make an http request",
+        "post to the api",
+        "rest api",
+        "post this payload",
+        "to their endpoint",
+        "send a request to"
+      ]
+    },
+    {
+      "$intent": "google drive",
+      "tools": [
+        "drive.find",
+        "drive.upload",
+        "drive.delete"
+      ],
+      "words": [
+        "cloud",
+        "stash"
+      ],
+      "phrases": [
+        "on google drive",
+        "upload to drive",
+        "find it in drive",
+        "google drive",
+        "stash it in the cloud",
+        "in the cloud folder",
+        "put it on drive"
+      ]
+    },
+    {
+      "$intent": "another connected computer",
+      "tools": [
+        "workspace.list",
+        "workspace.read"
+      ],
+      "words": [],
+      "phrases": [
+        "on my other computer",
+        "on the other machine",
+        "files on the other computer",
+        "what computers are connected",
+        "my other machine",
+        "the other computer"
+      ]
+    },
+    {
+      "$intent": "ask to buy something",
+      "tools": [
+        "purchase.request",
+        "purchase.decision"
+      ],
+      "words": [],
+      "phrases": [
+        "can we buy",
+        "i want to buy",
+        "add it to the shopping list",
+        "approve the purchase",
+        "sign up for a subscription",
+        "can we buy a",
+        "buy a year",
+        "pay for a service",
+        "monitoring service"
+      ]
+    },
+    {
+      "$intent": "what has been spent",
+      "tools": [
+        "pay.check",
+        "pay.record",
+        "payment_method.card_status",
+        "payment_method.card_register"
+      ],
+      "words": [
+        "budget",
+        "spent",
+        "remaining"
+      ],
+      "phrases": [
+        "how much have we spent",
+        "what is the budget",
+        "put it on the card",
+        "what have we paid",
+        "how much is left",
+        "budget left",
+        "what have we spent",
+        "running total"
+      ]
+    },
+    {
+      "$intent": "our customers' billing",
+      "tools": [
+        "paddle.subscription_get",
+        "paddle.transaction_get",
+        "paddle.catalog_list",
+        "paddle.subscription_cancel",
+        "paddle.transaction_cancel",
+        "paddle.transaction_verify",
+        "paddle.doctor",
+        "paddle.webhook_verify"
+      ],
+      "words": [
+        "paddle"
+      ],
+      "phrases": [
+        "check the subscription",
+        "look up the transaction",
+        "cancel the subscription",
+        "what plans do we sell",
+        "refund the customer"
+      ]
+    },
+    {
+      "$intent": "deploy this project",
+      "tools": [
+        "deployment.detect",
+        "deployment.execute"
+      ],
+      "words": [
+        "production",
+        "prod"
+      ],
+      "phrases": [
+        "ship it",
+        "push it live",
+        "take it live",
+        "publish the site",
+        "publish the website",
+        "deploy the site",
+        "deploy the website",
+        "deploy the app",
+        "how do we deploy this",
+        "go live",
+        "push the new build",
+        "push the build live",
+        "new build live",
+        "deploy this",
+        "to production",
+        "ship the build",
+        "get it out",
+        "out to prod"
+      ]
+    },
+    {
+      "$intent": "plan or run a launch sequence",
+      "tools": [
+        "launch.plan",
+        "launch.detect",
+        "launch.execute"
+      ],
+      "words": [
+        "launch"
+      ],
+      "phrases": [
+        "launch plan",
+        "the launch sequence",
+        "what is left before launch"
+      ]
+    },
+    {
+      "$intent": "firebase",
+      "tools": [
+        "firebase.deploy",
+        "firebase.doctor",
+        "firebase.project_create",
+        "firebase.app_create",
+        "firebase.firestore_create",
+        "firebase.account_login",
+        "firebase.project_enable"
+      ],
+      "words": [
+        "firebase",
+        "firestore"
+      ],
+      "phrases": [
+        "deploy to firebase",
+        "firebase project",
+        "deploy the functions",
+        "functions to firebase"
+      ]
+    },
+    {
+      "$intent": "google cloud",
+      "tools": [
+        "gcloud.doctor",
+        "gcloud.project_create",
+        "gcloud.services_enable",
+        "gcloud.account_login",
+        "gcloud.account_inspect",
+        "gcloud.service_account_create",
+        "gcloud.service_account_key_to_vault"
+      ],
+      "words": [
+        "gcloud",
+        "gcp"
+      ],
+      "phrases": [
+        "google cloud project",
+        "enable the api in gcp",
+        "create a service account",
+        "google cloud"
+      ]
+    },
+    {
+      "$intent": "terraform",
+      "tools": [
+        "terraform.plan",
+        "terraform.apply",
+        "terraform.init",
+        "terraform.validate"
+      ],
+      "words": [
+        "terraform"
+      ],
+      "phrases": [
+        "terraform plan",
+        "apply the terraform",
+        "provision the infrastructure"
+      ]
+    },
+    {
+      "$intent": "browser extension packaging",
+      "tools": [
+        "extension.package",
+        "extension.validate"
+      ],
+      "words": [],
+      "phrases": [
+        "package the extension",
+        "validate the extension",
+        "chrome extension",
+        "zip the extension"
+      ]
+    },
+    {
+      "$intent": "instagram",
+      "tools": [
+        "instagram.publish_image",
+        "instagram.verify"
+      ],
+      "words": [
+        "instagram"
+      ],
+      "phrases": [
+        "post it to instagram",
+        "publish to instagram"
+      ]
+    },
+    {
+      "$intent": "codex cloud tasks",
+      "tools": [
+        "cloud.task_launch",
+        "cloud.task_list",
+        "cloud.task_status",
+        "cloud.task_diff",
+        "cloud.account_list"
+      ],
+      "words": [],
+      "phrases": [
+        "launch a cloud task",
+        "run it in the cloud",
+        "check the cloud task",
+        "codex cloud"
+      ]
+    },
+    {
+      "$intent": "guarded owner input forms",
+      "tools": [
+        "owner_prompts.start",
+        "owner_prompts.status",
+        "owner_prompts.events",
+        "owner_prompts.cancel"
+      ],
+      "words": [],
+      "phrases": [
+        "ask the owner to type",
+        "open a form for the owner",
+        "guarded form"
+      ]
+    },
+    {
+      "$intent": "the code editor on this machine",
+      "tools": [
+        "workstation.status",
+        "workstation.install_cursor",
+        "workstation.launch_cursor",
+        "workstation.configure_agent_clients",
+        "workstation.sync_cursor_extensions",
+        "workstation.initialize_cursor_state"
+      ],
+      "words": [
+        "cursor",
+        "vscode"
+      ],
+      "phrases": [
+        "set up cursor",
+        "open the editor",
+        "configure the ide",
+        "vs code"
+      ]
+    },
+    {
+      "$intent": "which google account",
+      "tools": [
+        "google.accounts"
+      ],
+      "words": [],
+      "phrases": [
+        "which google account",
+        "what accounts are signed in",
+        "signed in as"
+      ]
+    },
+    {
+      "$intent": "ide folder consent",
+      "tools": [
+        "ide.consent_read",
+        "ide.consent_import",
+        "ide.consent_remove"
+      ],
+      "words": [],
+      "phrases": [
+        "trust this folder",
+        "ide consent",
+        "trusted folders"
+      ]
+    },
+    {
+      "$intent": "duo two-factor",
+      "tools": [
+        "duo.desktop_status",
+        "duo.ucr_login"
+      ],
+      "words": [
+        "duo"
+      ],
+      "phrases": [
+        "duo push",
+        "two factor prompt",
+        "two factor",
+        "mfa prompt"
+      ]
+    },
+    {
+      "$intent": "iphone handoff",
+      "tools": [
+        "iphone.handoff_status"
+      ],
+      "words": [
+        "iphone"
+      ],
+      "phrases": [
+        "from my iphone",
+        "handoff status"
+      ]
+    },
+    {
+      "$intent": "stripe cards and checkout",
+      "tools": [
+        "stripe.virtual_card_create",
+        "stripe.cardholder_create",
+        "billing.checkout_status",
+        "billing.webhook_verify"
+      ],
+      "words": [
+        "stripe"
+      ],
+      "phrases": [
+        "create a virtual card",
+        "check the stripe checkout",
+        "virtual card"
+      ]
+    },
+    {
+      "$intent": "overnight advisory runs",
+      "tools": [
+        "overnight_advisory.submit",
+        "overnight_advisory.list",
+        "overnight_advisory.status",
+        "overnight_advisory.lifecycle"
+      ],
+      "words": [],
+      "phrases": [
+        "run it overnight",
+        "overnight advisory",
+        "while i sleep"
+      ]
+    }
+  ]
+}

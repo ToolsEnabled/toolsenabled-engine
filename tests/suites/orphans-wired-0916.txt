@@ -1,0 +1,66 @@
+# Four suites named by census 8515 (a recut gate) as unwired: committed but
+# never named on any npm command line, so nothing in `npm test` ran them and
+# the orphan ceiling in tests/test-census.test.js sat broken at 0 vs a real
+# count that included these four.
+#
+# MEASURED 2026-09-16 at da21d105, before wiring, with the chain's own
+# instrument -- `node tests/run-isolated.js <each file>`:
+#   tests/agent-comms/tree-roster-agent-id.test.js        6/6 pass, 3091.7 ms
+#   tests/agent-continuation-persist-silence.test.js      5/5 pass, 1402.1 ms
+#   tests/capability-find-tool.test.js                    pass, 27025 ms (wall)
+#   tests/owner-prompt-launch-environment.test.js         2/2 pass, 1841.5 ms
+# All four are green, so this claims no new red; it wires 15 assertions
+# (13 node:test cases + capability-find-tool's own internal suite + the
+# owner-prompt-launch-environment pair) that were being written, committed and
+# never executed. Required executions per census 8515's manifest header,
+# never exclusions.
+#
+# census 8515 also named tests/providers.gateway/npm-global-prefix-discovery.js
+# as unwired; measured false -- it is already reachable via
+# tests/providers.gateway/run.js, a package runner tools/test-census.js
+# expands. Not repeated here; reported separately.
+#
+# ADDENDUM 2026-09-16, by Manager 8's explicit ruling: three more orphans the
+# census found that census 8515's own list never named, wired in the same
+# pass because the ceiling (0) cannot clear while they sit unexecuted.
+# Wiring is the mechanical act of making a test run; it is NOT adoption --
+# tests/audit-signing-key-cause.test.js is Manager 8's own lane's (landed
+# unwired by fda089e0, T182, at this exact tip); the other two, pre-existing
+# at 57e589c4, belong to agent-engine and were routed there by name if either
+# had failed on first execution.
+#
+# MEASURED 2026-09-16 at da21d105, before wiring:
+#   tests/agent-engine/claude-cli-image-turn.test.js   pass, 4133 ms (wall)
+#   tests/agent-engine/turn-image-bytes.test.js        pass, 2990 ms (wall)
+#   tests/audit-signing-key-cause.test.js              4/4 pass, 232.1 ms
+# All three green on first real execution -- nothing to route, no product
+# finding to report. This claims no new red.
+#
+# ADDENDUM 2026-09-16, cbff0277a: Merge 1 of the confidentiality stack
+# (w65/audit-signing-key-cause-20260916 into cut2/engine-landing-20260916)
+# added two test files without wiring them into any aggregate, taking the
+# orphan ceiling in tests/test-census.test.js from 0 back to 2. Same defect
+# class as this file's own two prior entries above.
+#
+# MEASURED 2026-09-16 at cbff0277a, before wiring, with the chain's own
+# instrument -- `node tests/run-isolated.js <each file>`:
+#   tests/audit-cause-chain-rendering.test.js         5/5 pass, 283.1 ms
+#   tests/audit-signing-key-cause-fixture.test.js     0/2, 2 SKIP -- both
+#     self-skip: "the fixture did not reproduce on this host (threw=false, a
+#     vault reason was captured=false). The vault succeeded despite the
+#     module-only PSModulePath, so there is no destroyed cause to test for."
+#     A correct, named refusal on a host where the fixture's precondition
+#     does not reproduce -- not a failure, and not weakened to make it one.
+# Wiring is the mechanical act of making both run; no new red is claimed.
+
+tests/agent-comms/tree-roster-agent-id.test.js
+tests/agent-continuation-persist-silence.test.js
+tests/capability-find-tool.test.js
+tests/owner-prompt-launch-environment.test.js
+tests/agent-engine/claude-cli-image-turn.test.js
+tests/agent-engine/turn-image-bytes.test.js
+tests/audit-signing-key-cause.test.js
+tests/owner-prompt-platform-psmodulepath.test.js
+tests/providers/psmodulepath-vault-autoload.test.js
+tests/audit-cause-chain-rendering.test.js
+tests/audit-signing-key-cause-fixture.test.js

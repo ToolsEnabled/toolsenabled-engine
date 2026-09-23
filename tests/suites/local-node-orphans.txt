@@ -1,0 +1,12 @@
+# local-node-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/local-node-dispatch.test.js
+tests/local-node-tier.test.js
+tests/local-owner-session-binding.test.js
+tests/local-model-settings-gpu.test.js
+tests/local-thread-recovery.test.js
+tests/local-tool-discovery.test.js

@@ -1,0 +1,28 @@
+{
+  "provenance": "Synthetic protocol examples; no account, provider request or credential data.",
+  "sourceVersion": "0.58.0",
+  "observedAt": "2026-09-14T17:00:00.000Z",
+  "normal": {
+    "buckets": [
+      { "modelId": "gemini-pro", "tokenType": "REQUESTS", "remainingFraction": 0.123456789, "remainingAmount": "123456789012345678901234567890.125", "resetTime": "2026-09-15T01:00:00.123456789+02:00" },
+      { "modelId": "gemini-flash", "tokenType": "REQUESTS", "remainingFraction": 0 },
+      { "modelId": "gemini-flash", "tokenType": "TOKENS", "remainingFraction": 1 },
+      { "modelId": "gemini-lite", "tokenType": "TOKENS", "remainingAmount": "9007199254740993" }
+    ]
+  },
+  "partial": {
+    "buckets": [
+      { "modelId": "gemini-pro", "tokenType": "REQUESTS", "remainingFraction": 0.6 },
+      { "modelId": "gemini-flash", "tokenType": "REQUESTS", "remainingFraction": "0.8", "remainingAmount": "42", "resetTime": "2026-02-30T00:00:00Z" },
+      { "modelId": "gemini-lite", "tokenType": "TOKENS" },
+      null
+    ]
+  },
+  "conflicting": {
+    "buckets": [
+      { "modelId": "gemini-pro", "tokenType": "REQUESTS", "remainingFraction": 0.75 },
+      { "modelId": "gemini-flash", "tokenType": "REQUESTS", "remainingFraction": 0.25 },
+      { "modelId": "gemini-pro", "tokenType": "REQUESTS", "remainingFraction": 0.05 }
+    ]
+  }
+}

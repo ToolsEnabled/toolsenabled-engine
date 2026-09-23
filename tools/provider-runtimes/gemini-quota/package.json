@@ -1,0 +1,9 @@
+{
+  "name": "te-gemini-quota-worker-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@google/gemini-cli-core": "0.58.0"
+  }
+}

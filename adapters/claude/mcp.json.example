@@ -1,0 +1,15 @@
+{
+  "_comment": "GENERATED -- do not edit. Produced by tools/generate-mirrors.js; edit the authority it reads, then re-run this script. The path below is a PLACEHOLDER, not a real machine's root -- copy this file, drop the \".example\" suffix, and replace it with where your own checkout actually lives.",
+  "mcpServers": {
+    "toolsenabled": {
+      "command": "node",
+      "args": [
+        "C:\\path\\to\\your\\toolsenabled-checkout\\tools\\mcp-owner-proxy.js"
+      ],
+      "env": {
+        "TOOLSENABLED_AGENT_ACTOR": "claude",
+        "TOOLSENABLED_TOOL_ALLOWLIST": "system.*,task.*,memory.*,search.*,code.*,research.hermes_complete,research.strong_complete,research.local_tiers_status,overnight_advisory.*,sandbox.*,gcloud.account_inspect,audit.status,audit.tail,duo.*,clipboard.*,screen.*,ocr.read,window.*,model.complete,http.request,web.search"
+      }
+    }
+  }
+}

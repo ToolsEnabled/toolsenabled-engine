@@ -1,0 +1,48 @@
+# Three suites that were committed with their fixes but never named on any npm
+# command line, so nothing in `npm test` ran them and the orphan ceiling in
+# tests/test-census.test.js went from 0 to 3.
+#
+# MEASURED 2026-09-11 at fe3c3b8c, before wiring, with the chain's own
+# instrument -- `node tests/run-isolated.js <the three files>`:
+#   tests/host-byte-mediation.test.js            11/11 pass, 17.9 s
+#   tests/owner-host-socket-path-refusal.test.js  3/3  pass,  6 ms
+#   tests/vault-presence-cache-linux.test.js      3/3  pass
+# All three are green, so this claims no new red; it restores 17 assertions
+# that were being written, committed and then never executed.
+#
+# WHY THEY WERE INVISIBLE. tools/test-run.js --all runs
+# [...reachable, ...orphaned], so `npm run test:all` did execute them and
+# nothing in that reading looked wrong. The declared gate, `npm test`, is a
+# chain of named lists, and a file in no list is in no chain step. The census
+# is the only instrument that can tell those two readings apart, which is why
+# its ceiling is 0 and not a tolerance.
+
+# cabf99c3 mediated host.read_file/host.write_file and added host.patch_file.
+tests/host-byte-mediation.test.js
+
+# 85dd2d59 made the owner-host socket refusal name the byte count and the
+# 107-byte kernel limit. The boundary it pins is exact; an unrun exactness
+# check is the one kind that rots without anybody noticing.
+tests/owner-host-socket-path-refusal.test.js
+
+# eaa377d7 gave Linux the vault-presence cache Windows already had.
+tests/vault-presence-cache-linux.test.js
+
+# .45 native census ownership: real detached descendants may not outlive the
+# isolated test on success, nonzero exit, or timeout. Before 0/3; fixed 3/3.
+tests/isolated-runner-owned-process.test.js
+
+tests/owner-prompt-shared-runner.test.js
+tests/linux-credential-prompt.test.js
+tests/owner-prompt-windows-capture.test.js
+tests/desktop-focus-refusal.test.js
+
+# Who adds standing rules (rules.filing_from, owner 2026-09-15): the three-way
+# choice, its migration to and from the older switch, and the no-asking texts.
+tests/rules-filing-from.test.js
+
+# capability.find is a SHIPPED tool -- src/lib/tool-registry.js defines it and
+# lists it in contextAwareHandler -- but its only regression suite reached no
+# invocation path, so the tool shipped with zero executed coverage. Wiring, not
+# registering: a customer-reachable tool does not get a "manual" disposition.
+tests/capability-find-tool.test.js

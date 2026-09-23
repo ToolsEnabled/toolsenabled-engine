@@ -1,0 +1,14 @@
+# fleet-supervisor-orphans -- the file list for this step of the root `test` chain.
+#
+# Read by tests/run-isolated.js --from (see tests/lib/suite-list.js for why
+# the list lives in a file and why tools/test-census.js reads it too).
+# One repository-relative path per line, in run order. Blank lines and
+# lines starting with # are ignored.
+tests/fleet-supervisor-luna-executor.js
+tests/fleet-supervisor-planning.js
+tests/fleet-supervisor-custody.test.js
+tests/fleet-supervisor-review.js
+tests/fleet-supervisor/evidence-process-lifetime.test.js
+tests/worktree-commit-guard.test.js
+# 2026-08-24: nine runnable files passed and moved to the green orphan batch.
+# These three keep their named missing-installation-fixture skips.

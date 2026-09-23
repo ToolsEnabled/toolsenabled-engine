@@ -1,0 +1,27 @@
+{
+  "package": "coordinator-platform",
+  "schemaVersion": "1.0.0",
+  "schemaAuthority": "toolsenabled",
+  "canonicalization": {
+    "id": "coordinator-platform-c14n-v1",
+    "keyOrder": "ASCII code-unit ascending",
+    "strings": "JSON escaped with ASCII output",
+    "numbers": "finite IEEE-754 safe integers only; negative zero and integral float spellings normalize to an integer",
+    "nonFiniteNumbers": "rejected",
+    "nonIntegerNumbers": "rejected"
+  },
+  "schemas": [
+    {"name": "task", "file": "1.0.0/task.schema.json", "domain": "task", "owner": "toolsenabled"},
+    {"name": "event", "file": "1.0.0/event.schema.json", "domain": "task", "owner": "toolsenabled"},
+    {"name": "evidence", "file": "1.0.0/evidence.schema.json", "domain": "evidence", "owner": "toolsenabled"},
+    {"name": "capability", "file": "1.0.0/capability.schema.json", "domain": "tool-forge", "owner": "toolsenabled"},
+    {"name": "approval", "file": "1.0.0/approval.schema.json", "domain": "provider", "owner": "toolsenabled"},
+    {"name": "context", "file": "1.0.0/context.schema.json", "domain": "context", "owner": "toolsenabled"},
+    {"name": "delegation", "file": "1.0.0/delegation.schema.json", "domain": "task", "owner": "toolsenabled"},
+    {"name": "resource-lease", "file": "1.0.0/resource-lease.schema.json", "domain": "model-runtime", "owner": "toolsenabled"},
+    {"name": "budget", "file": "1.0.0/budget.schema.json", "domain": "provider", "owner": "toolsenabled"},
+    {"name": "memory", "file": "1.0.0/memory.schema.json", "domain": "context", "owner": "toolsenabled"},
+    {"name": "finance-result", "file": "1.0.0/finance-result.schema.json", "domain": "finance", "owner": "portfolio-dashboard"},
+    {"name": "tool-package", "file": "1.0.0/tool-package.schema.json", "domain": "tool-forge", "owner": "toolsenabled"}
+  ]
+}

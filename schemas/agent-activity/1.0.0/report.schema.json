@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:report:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entityType", "reportId", "state", "freshness", "observedAt", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "entityType": {"const": "report"},
+    "reportId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+    "state": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/activityState"},
+    "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+    "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  }
+}

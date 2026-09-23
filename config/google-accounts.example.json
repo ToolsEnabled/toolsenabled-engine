@@ -1,0 +1,23 @@
+{
+  "$comment": [
+    "TEMPLATE -- this file ships with the product and must never contain a",
+    "real account alias or email. To register your own Google accounts, run",
+    "tools/google-oauth-login.js --account <alias> --email <email>, which",
+    "creates config/google-accounts.profile.json for you (already gitignored,",
+    "so your copy is never committed). If you never do that, this program",
+    "simply has zero registered Google accounts -- every Google/Duo/Vertex",
+    "tool that needs one reports that plainly instead of failing or prompting."
+  ],
+  "defaultAccount": null,
+  "$comment_defaultAccount": "The alias used when a tool call does not name one explicitly. Set automatically to your first registered account unless you register more than one and choose a different default.",
+  "cwsLoginAccount": null,
+  "$comment_cwsLoginAccount": "Optional. The alias whose browser session the Chrome Web Store publisher flow is allowed to use. Leave null until you configure Chrome Web Store publishing.",
+  "duoAccount": null,
+  "$comment_duoAccount": "Optional. The alias for a Duo-protected institutional Google Workspace sign-in (for example, a university NetID). Leave null unless you have that specific setup.",
+  "vertexSeatAccount": null,
+  "$comment_vertexSeatAccount": "Optional. The alias whose Google account holds your paid Vertex AI seat. Only affects which account the dashboard reserves the 'vertex' Gemini lane row for; leave null and that row simply does not appear.",
+  "vertexApiAccount": null,
+  "$comment_vertexApiAccount": "Optional. The alias whose Google account holds your Vertex AI API-credit pool. Same as vertexSeatAccount but for the 'api' Gemini lane row. These are deliberately two settings because a seat and a credit pool are separate purchases that need not be on the same account.",
+  "accounts": {},
+  "$comment_accounts": "One entry per registered alias, e.g. \"personal\": { \"email\": \"you@example.com\", \"label\": \"Personal Gmail\" }. Aliases are letters, digits, dot, underscore, and hyphen only."
+}

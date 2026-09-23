@@ -1,0 +1,478 @@
+#!/bin/sh
+# Fires before every push, in every worktree, via core.hooksPath=.githooks
+# (installed by the "hooks:install" npm script, which "prepare" runs).
+#
+# WHY THIS EXISTS. On 2026-08-08/09 this repository's dominant defect was
+# measured and it was not missing mechanisms and not carelessness. It was
+# MECHANISMS THAT EXIST, WORK CORRECTLY, AND THAT NOTHING EVER RUNS. Three of
+# them are invoked here for the first time:
+#
+#   tools/check-single-copy-work.js   40,707 bytes, correct, referenced in
+#                                     CLAUDE.md, AGENTS.md,
+#                                     config/standing-orders.json and seven
+#                                     other documents.
+#   tools/lane-territory-check.js     exits 1 correctly on an R1162 territory
+#                                     violation. Zero invokers -- only its own
+#                                     test ever ran it.
+#   tools/package-check.js            computed 207 unmapped files and 329
+#                                     layering violations, then exited 0.
+#
+# Each had a HUMAN-SHAPED SUBSTITUTE doing the job worse: "remember to run the
+# detector", "remember to check your territory", "read the report". Nobody omits
+# a check deliberately -- they replace it with something they can see, and the
+# replacement silently degrades.
+#
+# WHY PRE-PUSH AND NOT POST-COMMIT. Measured on this machine, not assumed:
+# `node tools/check-single-copy-work.js` takes 20.7 SECONDS offline, because it
+# sweeps every worktree and every local branch. Twenty seconds on every commit
+# is a hook that the first person in a hurry deletes, and a deleted check is
+# worse than no check. Pushes are infrequent and a push is precisely the moment
+# someone is acting on durability, so the cost lands where the question is
+# actually being asked. .githooks/post-commit already owns the complementary
+# millisecond question ("is this commit reachable from any remote") and
+# deliberately defers the full sweep to "on demand or on a schedule" -- this is
+# that schedule. The division is by TIMING, not duplication.
+#
+# WHY SECTIONS 1-4 DO NOT BLOCK. Every one of those checks is RED TODAY, on
+# pre-existing debt that no single push caused: untracked *.log files in other
+# agents' worktrees, and 329 layering violations older than this hook. A pre-push
+# that refuses a push over unrelated files in somebody else's worktree gets
+# switched off within a day. That is the same trap .githooks/post-commit hit when
+# its first version warned on every commit and had to be re-thresholded. So those
+# four checks are LOUD, not blocking, and they always fall through to exit 0.
+#
+# This is not a permanent verdict. Blocking is the correct end state for the
+# territory gate in particular, because a territory violation is specific,
+# current, and caused by the push in front of you. It should be promoted to a
+# hard refusal once its red is cleared -- deliberately, by someone who has read
+# the clean baseline, not by default today.
+#
+# SECTION 0 IS DIFFERENT AND IT DOES BLOCK. It answers "where is this push
+# going", and it is the one question in this file whose wrong answer cannot be
+# taken back. Every argument above -- red today, somebody else's debt, gets
+# switched off in a day -- fails to apply to it: it is green today, it is about
+# the push in front of you and nothing else, and a correct push to the private
+# origin never sees it. The three properties that made the other checks
+# advisory are exactly the properties it does not share.
+#
+# A check that CANNOT RUN must never look like a check that passed. Every branch
+# below says so out loud instead of returning a reassuring silence.
+
+# ===========================================================================
+# 0. PUSH DESTINATION. THE FENCE THAT KEEPS THIS REPOSITORY PRIVATE.
+#
+# WHY IT EXISTS. ToolsEnabled/engine is private source and must remain private.
+# Measured 2026-08-13: this hook ran on every push, looked at four unrelated
+# questions, and exited 0 without ever asking where the push was going. This
+# section is the destination check that makes the private-source rule an
+# enforced property rather than an operator memory.
+#
+# WHAT IS AT STAKE, precisely. A push publishes HISTORY, not the tip.
+# 94a9d22:src/lib/providers/license.js is 12,622 readable bytes containing
+# LICENSE_VAULT_KEY and a self-minting ed25519 keygen path, and that commit is
+# an ancestor of origin/main. Deleting the file in a later commit did not remove
+# it. So one `git push` to a public destination publishes the paid licensing
+# module, and there is no undo: public source is cloned, cached and indexed
+# beyond recall within minutes.
+#
+# WHY IT RUNS FIRST, ABOVE EVEN THE repo_root AND node PROBES. Both of those
+# probes bail out with `exit 0` when they cannot answer -- correct for advisory
+# checks, fatal for this one, because "no node on PATH" would have become
+# "push anywhere you like". This section is therefore pure POSIX shell with no
+# node, no repository, and no network in its path: it needs only the two
+# arguments git already hands every pre-push hook ($1 remote name, $2 remote
+# URL). Nothing that can be absent can make it silent.
+#
+# FAIL CLOSED, IN THOSE WORDS. It refuses unless it can positively recognise the
+# destination as declared-private. An empty argument, an unparseable URL, a
+# missing `tr`, a shape it has never seen -- every one of those is a refusal.
+# The rule is: SILENCE MUST NEVER PUSH.
+#
+# NO BYPASS ENVIRONMENT VARIABLE, DELIBERATELY. An escape hatch on this check is
+# the check, because the moment that matters is someone in a hurry. Widening the
+# destination list is a file edit in a reviewable commit, which is slow on
+# purpose and leaves a diff.
+# ===========================================================================
+
+# >>> DECLARED PRIVATE DESTINATIONS -----------------------------------------
+# THE ALLOWLIST. This list, and nothing inferred, decides where a push may go.
+# It is deliberately data a human reads and a reviewer diffs -- not a regex that
+# happens to match today's URL, and not "whatever origin currently points at"
+# (origin can be repointed in one command by anyone, which would make the fence
+# guard nothing).
+#
+# One entry per line, in NORMALISED form: lowercase, no scheme, no user or
+# token, no ".git" suffix, no trailing slash. host/owner/repo. Transport does
+# not appear because it is not part of a repository's identity -- https and ssh
+# to the same repository are the same destination -- but the repository name is
+# matched WHOLE, so "engine-public" is a different destination from "engine"
+# and is refused.
+#
+# Adding a line here asserts: THIS REPOSITORY IS PRIVATE, IT WILL STAY PRIVATE,
+# AND ITS ENTIRE HISTORY MAY LIVE THERE. There is no public-source export route.
+# The manifest's `open` classification describes customer-distributable,
+# open-licensed source; it does not authorize a public repository or push.
+private_push_destinations='
+github.com/toolsenabled/engine
+'
+# <<< DECLARED PRIVATE DESTINATIONS -----------------------------------------
+
+# Reduce a push destination to the identity used against the list above.
+# Returns 0 and sets push_destination_id on success; returns 1 when the
+# destination cannot be reduced to anything, which the caller treats as a
+# refusal rather than as a pass.
+push_destination_id=''
+resolve_push_destination() {
+  rpd_rest=$1
+  push_destination_id=''
+  [ -n "$rpd_rest" ] || return 1
+
+  case "$rpd_rest" in
+    *://*)
+      # https://host/path, ssh://host/path, git://, file://... Drop the scheme;
+      # a port, if present, stays in the authority and therefore has to be
+      # declared explicitly to match. That is the fail-closed direction.
+      rpd_rest=${rpd_rest#*://}
+      ;;
+    *:*)
+      # scp-like: [user@]host:owner/repo. The first colon is the separator, so
+      # rewrite it as a slash to give the same identity as the https form. A
+      # Windows path (C:/...) also lands here and simply will not match.
+      rpd_rest="${rpd_rest%%:*}/${rpd_rest#*:}"
+      ;;
+  esac
+
+  # Userinfo identifies the CALLER, never the repository -- and it can be a
+  # token. Strip it before comparing, and before anything is printed.
+  rpd_authority=${rpd_rest%%/*}
+  case "$rpd_rest" in
+    */*) rpd_tail=${rpd_rest#*/} ;;
+    *)   rpd_tail='' ;;
+  esac
+  case "$rpd_authority" in
+    *@*) rpd_authority=${rpd_authority##*@} ;;
+  esac
+  if [ -n "$rpd_tail" ]; then
+    rpd_rest="$rpd_authority/$rpd_tail"
+  else
+    rpd_rest=$rpd_authority
+  fi
+
+  # Trailing slashes, then one ".git", then trailing slashes again ("repo.git/").
+  while :; do
+    case "$rpd_rest" in
+      */) rpd_rest=${rpd_rest%/} ;;
+      *)  break ;;
+    esac
+  done
+  case "$rpd_rest" in
+    *.git) rpd_rest=${rpd_rest%.git} ;;
+  esac
+  while :; do
+    case "$rpd_rest" in
+      */) rpd_rest=${rpd_rest%/} ;;
+      *)  break ;;
+    esac
+  done
+  [ -n "$rpd_rest" ] || return 1
+
+  # Explicit letter ranges, not [:upper:], so a locale cannot change the answer.
+  rpd_lower=$(printf '%s' "$rpd_rest" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz' 2>/dev/null)
+  # If `tr` is missing or failed, the result is empty while the input was not.
+  # That is a check that could not run, so it refuses instead of guessing.
+  [ -n "$rpd_lower" ] || return 1
+
+  push_destination_id=$rpd_lower
+  return 0
+}
+
+refuse_push_destination() {
+  # $1 is a short reason; push_destination_id may be empty if it could not be
+  # resolved. The raw URL is never printed -- it can carry a token.
+  printf '\n'
+  printf '  ============================================================\n'
+  printf '  [destination] PUSH REFUSED. THIS REPOSITORY IS PERMANENTLY PRIVATE.\n'
+  printf '  ============================================================\n'
+  printf '  Destination:  %s\n' "${push_destination_id:-<could not be read>}"
+  printf '  Remote name:  %s\n' "${1:-<none given>}"
+  printf '  Reason:       %s\n' "$2"
+  printf '\n'
+  printf '  A push publishes HISTORY, not just the current files. The history of\n'
+  printf '  this repository contains the PAID LICENSING MODULE: commit 94a9d22,\n'
+  printf '  src/lib/providers/license.js, 12,622 readable bytes including\n'
+  printf '  LICENSE_VAULT_KEY and a self-minting key generator. That commit is an\n'
+  printf '  ancestor of origin/main. The file was deleted later, which does not\n'
+  printf '  remove it -- anyone who clones gets it. One push to a public\n'
+  printf '  destination hands out the paid module, and it cannot be taken back:\n'
+  printf '  public source is cloned, cached and indexed within minutes.\n'
+  printf '\n'
+  printf '  THERE IS NO SUPPORTED PUBLIC-SOURCE EXPORT OR PUSH ROUTE. The engine\n'
+  printf '  and app repositories remain private. The boundary manifest marks\n'
+  printf '  customer-distributable, open-licensed source; it does not authorize\n'
+  printf '  making a repository public or generating a public-source tree.\n'
+  printf '\n'
+  printf '  If this really is another PRIVATE destination, add its normalised\n'
+  printf '  host/owner/repo to the DECLARED PRIVATE DESTINATIONS list near the top\n'
+  printf '  of .githooks/pre-push, in a commit someone can review. There is no\n'
+  printf '  environment variable that turns this off, on purpose: a fence you can\n'
+  printf '  switch off in a hurry is off exactly when it was needed.\n'
+  printf '  ============================================================\n'
+  printf '\n'
+}
+
+push_remote_name=$1
+push_remote_url=$2
+
+if [ -z "$push_remote_url" ]; then
+  # git passes <name> <url>. No url means this hook cannot see its subject, and
+  # a destination check that cannot see the destination must not wave it through.
+  refuse_push_destination "$push_remote_name" 'git supplied no destination URL to check'
+  exit 1
+fi
+
+if ! resolve_push_destination "$push_remote_url"; then
+  refuse_push_destination "$push_remote_name" 'the destination URL could not be read as host/owner/repo'
+  exit 1
+fi
+
+push_destination_declared=0
+for rpd_allowed in $private_push_destinations; do
+  [ "$rpd_allowed" = "$push_destination_id" ] && push_destination_declared=1
+done
+
+if [ "$push_destination_declared" -ne 1 ]; then
+  refuse_push_destination "$push_remote_name" 'not in the declared private destination list'
+  exit 1
+fi
+
+printf '  [destination] %s -- declared private. OK.\n' "$push_destination_id"
+
+# INVOKE BY LITERAL RELATIVE PATH, NOT "$repo_root/tools/...". Measured
+# 2026-08-09: tools/invocation-guard.js --json still listed package-check.js and
+# lane-territory-check.js under "unreachableTools" while this hook was demonstrably
+# running them, because its static matcher cannot resolve a shell variable prefix.
+# Executing the check but staying invisible to the guard that counts unrun
+# mechanisms is the same defect one level up -- so cd first and use the literal
+# path, keeping what the guard can prove identical to what actually runs.
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+[ -n "$repo_root" ] && cd "$repo_root" || true
+if [ -z "$repo_root" ]; then
+  printf '\n  [pre-push] COULD NOT DETERMINE the repository root; checks did NOT run.\n'
+  printf '  [pre-push] Treat that as unknown, not as safe.\n\n'
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  printf '\n  [pre-push] node is not on PATH; the single-copy, territory and package\n'
+  printf '  [pre-push] boundary checks did NOT run. Unknown, not safe.\n\n'
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 1. LANE TERRITORY (R1162). Fast, and only meaningful inside a lane.
+#
+# DIFF BASE. git hands a pre-push hook one line per ref on stdin:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# The remote sha is what the remote ALREADY has, which makes it the only base
+# that means "the changes this push is about to publish". Preferring it is not a
+# refinement, it is a correctness fix, and it was measured rather than reasoned:
+#
+#   base=origin/HEAD (which resolves to origin/main here) reported 479 changed
+#   paths outside territory in the canonical tree and 438 in wt-r1197-visibility
+#   -- on correct work. origin/main sits ~425 commits behind these branches, so
+#   the merge-base fork point is far enough back that essentially the entire
+#   program reads as a violation.
+#
+# A gate that reports 479 false violations is muted inside a day, and then the
+# real violations it would have caught go unseen too -- the same trap that forced
+# .githooks/post-commit to be re-thresholded. origin/HEAD and the upstream are
+# kept only as a fallback for a branch the remote has never seen.
+#
+# TERRITORY SOURCE. TOOLSENABLED_LANE_SCOPE is authoritative when it is set, and
+# lane-territory-check.js reads it directly. But it is only set inside a lane
+# PROCESS: measured UNSET in an ordinary shell, which is where most pushes are
+# actually typed. So when it is absent the gate falls back to
+# tools/lane-territory-gate.js, which resolves this worktree's declared
+# territory from state/agent-launch/<agentId>.json -- the record src/lib/
+# agent-lane.js already writes at launch, carrying both `territory` and
+# `worktree` (measured: 62 of 65 records, 47 distinct worktrees).
+#
+# Without that fallback this check ran in neither of the two cases that matter:
+# the env var is unset in a shell, and the recorded territory was never read by
+# anything. The adapter reports INDETERMINATE rather than inventing violations
+# when a record declares a prose label instead of paths.
+# ---------------------------------------------------------------------------
+zero_sha='0000000000000000000000000000000000000000'
+push_base=''
+# Only consume stdin when git actually supplied it; reading from a terminal
+# during a manual test of this hook would block forever.
+if [ ! -t 0 ]; then
+  while read -r _local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$zero_sha" ] && continue   # a deletion publishes no content
+    if [ -n "$remote_sha" ] && [ "$remote_sha" != "$zero_sha" ]; then
+      push_base="$remote_sha"
+      break
+    fi
+  done
+fi
+
+base="$push_base"
+if [ -z "$base" ]; then
+  base=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+  [ -z "$base" ] && base=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)
+  if [ -n "$base" ]; then
+    printf '  [territory] NOTE: the remote has no copy of this branch, so the base is\n'
+    printf '  [territory] %s. If that trunk is stale, expect over-reporting.\n' "$base"
+  fi
+fi
+
+if [ -z "$base" ]; then
+  printf '\n  [territory] COULD NOT DETERMINE a diff base; the R1162 territory gate did NOT run.\n'
+  printf '  [territory] Treat that as unknown, not as safe.\n\n'
+else
+  if [ -n "$TOOLSENABLED_LANE_SCOPE" ]; then
+    territory_out=$(node "tools/lane-territory-check.js" --worktree "$repo_root" --base "$base" 2>&1)
+    territory_code=$?
+  else
+    territory_out=$(node "tools/lane-territory-gate.js" --base "$base" 2>&1)
+    territory_code=$?
+    # 2 means "no declared territory to enforce here", which is the ordinary
+    # answer for a worktree that is not a scoped lane. Not a finding.
+    [ "$territory_code" -eq 2 ] && territory_code=0
+  fi
+
+  if [ "$territory_code" -ne 0 ]; then
+    printf '\n'
+    printf '  ============================================================\n'
+    printf '  [territory] THIS LANE CHANGED FILES OUTSIDE ITS DECLARED TERRITORY.\n'
+    printf '  ============================================================\n'
+    printf '  Owner R1162: out-of-directive work is a violation, not initiative.\n'
+    printf '\n'
+    printf '  %s\n' "$territory_out"
+    printf '\n'
+    printf '  Either drop those paths from this push, or get the territory widened\n'
+    printf '  before pushing. Do not widen it yourself to silence this.\n'
+    printf '  ============================================================\n'
+    printf '\n'
+  else
+    printf '  [territory] %s\n' "$(printf '%s' "$territory_out" | head -1)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 2. PACKAGE BOUNDARIES. ~0.2s measured, so it is free at push time.
+#
+# Exit 1 means checked-and-violated; exit 2 means the check could not form a
+# trustworthy opinion (unreadable manifest, or nothing actually scanned). Those
+# are reported differently on purpose -- collapsing them is how a broken
+# instrument starts reading as a clean bill of health.
+# ---------------------------------------------------------------------------
+package_out=$(node "tools/package-check.js" 2>&1)
+package_code=$?
+package_verdict=$(printf '%s\n' "$package_out" | grep '^verdict:')
+if [ "$package_code" -eq 2 ]; then
+  printf '\n  [packages] CHECK COULD NOT RUN -- %s\n' "${package_verdict:-no verdict line was produced}"
+  printf '  [packages] Unknown, not safe.\n\n'
+elif [ "$package_code" -ne 0 ]; then
+  printf '  [packages] %s\n' "${package_verdict:-violations reported without a verdict line}"
+  printf '  [packages] Full report: node tools/package-check.js\n'
+else
+  printf '  [packages] boundaries clean.\n'
+fi
+
+# ---------------------------------------------------------------------------
+# 3. SINGLE-COPY FULL SWEEP. ~20s measured. This is the slow one, and it is last
+# so the cheap verdicts above are already on screen while it runs.
+#
+# Exit 0 clean, 1 stranded, 2 indeterminate -- the tool's own contract, used as
+# given. Default mode is offline; --network is deliberately NOT passed, because
+# a push should not be gated on a remote being reachable.
+# ---------------------------------------------------------------------------
+printf '  [single-copy] full sweep (~20s, every worktree and local branch)...\n'
+sweep_out=$(node "tools/check-single-copy-work.js" 2>&1)
+sweep_code=$?
+
+if [ "$sweep_code" -eq 2 ]; then
+  printf '\n  [single-copy] INDETERMINATE -- the sweep could not reach a verdict.\n'
+  printf '  %s\n' "$sweep_out"
+  printf '  [single-copy] Treat that as unknown, not as safe.\n\n'
+elif [ "$sweep_code" -ne 0 ]; then
+  printf '\n'
+  printf '  ============================================================\n'
+  printf '  [single-copy] WORK EXISTS IN EXACTLY ONE PLACE.\n'
+  printf '  ============================================================\n'
+  printf '  Nine near-losses on 2026-08-08 all had this shape, including a\n'
+  printf '  19.5KB security review, a licence-compliance fence test, and the\n'
+  printf '  owner request ledger three separate times.\n'
+  printf '\n'
+  printf '  %s\n' "$sweep_out"
+  printf '\n'
+  printf '  The push you are about to make may not cover these. Verify what\n'
+  printf '  actually landed rather than trusting the push output:\n'
+  printf '    git branch -r --contains HEAD\n'
+  printf '  ============================================================\n'
+  printf '\n'
+else
+  printf '  [single-copy] clean -- nothing exists in only one place.\n'
+fi
+
+# ---------------------------------------------------------------------------
+# 4. OPEN-GATES DIGEST FRESHNESS. Two file reads and a regex -- microseconds,
+# so it runs unconditionally like the package check above.
+#
+# WHY THIS EXISTS (2026-08-10). reports/OPEN-GATES.md is a generated snapshot
+# of the owner-request ledger, and every agent's SESSION-BOOT reads it instead
+# of the live ledger. It measured 2 revisions stale in this exact working tree
+# tonight (stamped 730, live ledger at 732) with nothing catching it --
+# tools/agent-preflight.js has always been ABLE to detect this, but only when
+# an agent remembers to run it by hand. This makes the same drift loud at
+# another moment: right before a push, whether or not anyone thought to ask.
+#
+# WHY ADVISORY, NOT BLOCKING, LIKE EVERY OTHER CHECK IN THIS HOOK. Regenerating
+# this file is controller-serial (STANDING-ORDERS.md: shared ledger/report
+# files are off-limits to the fleet) -- an ordinary lane pushing unrelated work
+# cannot fix staleness here even if this hook refused the push over it. Blocking
+# on state only one role may repair is exactly the shape section 1-3's own
+# comments already reject; it would train people to bypass the hook within a
+# day, same as an over-eager territory or single-copy gate would.
+#
+# tools/check-open-gates-freshness.js exits 1 on STALE/MISSING/UNSTAMPED (a
+# real, tested exit-code contract -- see tests/open-gates-freshness-check.js)
+# and 0 on FRESH/INDETERMINATE; this hook captures that code the same way it
+# captures territory_code/package_code/sweep_code above, purely to choose how
+# loud to print, never to decide whether to exit.
+# ---------------------------------------------------------------------------
+gates_out=$(node "tools/check-open-gates-freshness.js" 2>&1)
+gates_code=$?
+if [ "$gates_code" -ne 0 ]; then
+  printf '\n  [open-gates] %s\n' "$gates_out"
+  printf '  [open-gates] Only the controller can regenerate/commit reports/OPEN-GATES.md; flagging for them, not blocking this push.\n\n'
+else
+  printf '  %s\n' "$gates_out"
+fi
+
+# ---------------------------------------------------------------------------
+# The owner's request system keeps exactly one tripwire (owner design
+# 2026-08-15: /Request, /RequestSession, /RequestTree, /RequestThread file his
+# words; the rest is in his hands). tools/r-ledger-check.js names any /Request*
+# turn he typed that reached the ingress spool but NO ledger -- the command's
+# filing step did not land. Exit 5 on a miss, 0 clean; advisory like the
+# blocks above, and for the same reason.
+# ---------------------------------------------------------------------------
+rledger_out=$(node "tools/r-ledger-check.js" --hours 48 2>&1)
+rledger_code=$?
+if [ "$rledger_code" -ne 0 ]; then
+  printf '\n  [r-ledger] %s\n' "$rledger_out"
+  printf '  [r-ledger] Flagging, not blocking: file the named turn(s) with the words as typed.\n\n'
+else
+  printf '  %s\n' "$rledger_out"
+fi
+
+# Sections 1-4 never block. See the header: every one of them is red on
+# pre-existing debt, and a blocking hook over somebody else's untracked scratch
+# file is a hook that gets deleted. Promote them to blocking deliberately, per
+# check, once each is green.
+#
+# Reaching this line means section 0 already recognised the destination as
+# declared-private. A push that got here is going somewhere this file names.
+exit 0

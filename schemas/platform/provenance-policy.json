@@ -1,0 +1,66 @@
+{
+  "policyVersion": "1.0.0",
+  "policyAuthority": "toolsenabled",
+  "labels": [
+    "trusted-user",
+    "trusted-configuration",
+    "verified-local-state",
+    "verified-project",
+    "generated-model",
+    "untrusted-repository",
+    "untrusted-web",
+    "untrusted-browser",
+    "untrusted-download",
+    "untrusted-agent",
+    "secret",
+    "secret-derived"
+  ],
+  "canonicalLabelOrder": "ASCII lexical ascending",
+  "sourceReference": {
+    "evidenceIdPattern": "^ev_[A-Za-z0-9_-]{8,128}$",
+    "contentHashPattern": "^[a-f0-9]{64}$"
+  },
+  "propagation": {
+    "concatenation": "union-input-labels-and-source-evidence",
+    "calculation": "union-input-labels-and-source-evidence",
+    "redaction": "union-input-labels-and-source-evidence; add secret-derived when any input is secret or secret-derived",
+    "agentTransformation": "union-input-labels-and-source-evidence; add untrusted-agent",
+    "modelSummary": "union-input-labels-and-source-evidence; add generated-model"
+  },
+  "sinks": [
+    {
+      "sink": "command",
+      "denyLabels": ["generated-model", "secret", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    },
+    {
+      "sink": "memory",
+      "denyLabels": ["generated-model", "secret", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    },
+    {
+      "sink": "secret",
+      "denyLabels": ["generated-model", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    },
+    {
+      "sink": "approval",
+      "denyLabels": ["generated-model", "secret", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    },
+    {
+      "sink": "network",
+      "denyLabels": ["generated-model", "secret", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    },
+    {
+      "sink": "external-write",
+      "denyLabels": ["generated-model", "secret", "secret-derived", "untrusted-agent", "untrusted-browser", "untrusted-download", "untrusted-repository", "untrusted-web"]
+    }
+  ],
+  "sinkDenySemantics": "Any matching deny label blocks the sink; no other label can override a deny.",
+  "safeDisplay": {
+    "fields": ["labels", "sourceCount", "containsSecret"],
+    "includeSourceIdentifiers": false,
+    "includeContent": false
+  },
+  "authorization": {
+    "provenanceAllowsAction": false,
+    "sinkAllowIsNecessaryButNotSufficient": true
+  }
+}

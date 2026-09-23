@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:policy-decision:1.0.0",
+  "title": "Coordinator deterministic policy decision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "policyVersion": { "const": "1.0.0" },
+    "policyHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "requestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "decisionHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "actionId": { "type": "string", "pattern": "^[a-z0-9_]+(?:\\.[a-z0-9_]+)+$" },
+    "classification": { "enum": ["automatic", "confirmation-required", "user-performed", "blocked"] },
+    "allowed": { "type": "boolean" },
+    "reasonCodes": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,79}$" }
+    },
+    "matchedRuleIds": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,79}$" }
+    },
+    "blockingLabels": {
+      "type": "array", "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" }
+    }
+  },
+  "required": ["schemaVersion", "policyVersion", "policyHash", "requestHash", "decisionHash", "actionId", "classification", "allowed", "reasonCodes", "matchedRuleIds", "blockingLabels"]
+}

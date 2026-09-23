@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:delegation:1.0.0",
+  "title": "Coordinator platform delegation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "delegationId": {"type": "string", "pattern": "^dlg_[A-Za-z0-9_-]{8,128}$"},
+    "taskId": {"type": "string", "pattern": "^tsk_[A-Za-z0-9_-]{8,128}$"},
+    "actor": {"enum": ["codex", "claude", "gemini", "local"]},
+    "state": {"enum": ["requested", "running", "completed", "failed", "cancelled"]}
+  },
+  "required": ["schemaVersion", "delegationId", "taskId", "actor", "state"]
+}

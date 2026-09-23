@@ -1,0 +1,55 @@
+# Regression suites previously absent from the npm test lifecycle.
+tests/accessibility-functions.test.js
+tests/role-functions.test.js
+tests/agent-engine/claude-cli-stderr-durable.test.js
+tests/agent-lifecycle-tools-registered.test.js
+tests/audit-projection-window-overhang.test.js
+tests/audit-retention-roll-fault-recovery.test.js
+tests/build-queue-tools.test.js
+tests/customer-model-local-load.test.js
+tests/host-exec-audit-off-thread.test.js
+tests/host-exec-vault-process-budget.test.js
+tests/local-node-reasoning-answer.test.js
+tests/mcp-server-footprint.test.js
+tests/mcp-server-shutdown-forensics.test.js
+tests/model-error-sentences.test.js
+tests/online-fra-claim-cli-usage.test.js
+tests/owner-host-idle-timeout.test.js
+tests/owner-host-per-line-unknown-vs-denied.test.js
+tests/owner-host-session-retirement-observer.test.js
+tests/providers/agent-comms-local-caller-session.test.js
+tests/rfc3339-schema-maxlength-matches-pattern.test.js
+tests/settings-pick-control.test.js
+tests/settings-text-control.test.js
+tests/vault-host-missing-worker.test.js
+tests/vault-host.test.js
+tests/memory-audit-off-thread.test.js
+# 2026-09-07, 1.0.42 engine integration: five test files arrived with the merged
+# constituents and reached this branch with no invocation path at all --
+# tools/invocation-guard.js reported "5 executable mechanism(s) exist with NO
+# invocation path and NO registry entry" on the union, even though each one is
+# reachable on the branch that introduced it. Each was run here before wiring and
+# passed; they are wired, not registry-excused, because they are ordinary
+# regression tests a human does not have to invoke by hand.
+#
+# They are wired HERE rather than into a suite that matches each subject, because
+# this step id ("orphans-wired-0905") is NOT listed in tools/check-chain-baseline.json,
+# so a future failure is binding. The nearest subject-matching suites --
+# ledger-and-evidence-orphans for the ledger tests and test:fra for the FRA one --
+# are both baselined FAIL, which would have absorbed every regression these files
+# are meant to catch. That is the same reasoning 6fb2e444 applied when it moved
+# memory-audit-off-thread.test.js out of ledger-and-evidence-orphans, one line above.
+tests/agent-comms/broker-state-retention.test.js
+tests/helpers/isolated-state-root.test.js
+tests/minor-ledger-agent-gate.test.js
+# 2026-09-07, second round: e5878cac (Worker 3's 97771721, a_ledger.answer /
+# a_ledger.decline / p_ledger.decide) added this file with no invocation path either.
+# Run on this head before wiring: # tests 9, # pass 9, # fail 0.
+tests/minor-ledger-agent-gate-ap-tools.test.js
+tests/online-fra-web-client-seal-error-translation.test.js
+tests/owner-request-status-writer.test.js
+tests/audit-archive-append-idempotent.test.js
+tests/audit-durability-newest-breach.test.js
+tests/audit-projection-divergence-reason.test.js
+tests/audit-verify-include-archive.test.js
+tests/pay-record-durable-intent.test.js

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "systems": [
+    {
+      "id": "agent-comms",
+      "canonicalLabel": "Agent Comms",
+      "layer": "internal-domain",
+      "apiNamespace": "agent_comms",
+      "implementationStatus": "implemented local-first messaging fabric; owner-special channel and owner-wide journal projection are the owner-notification mapping"
+    },
+    {
+      "id": "secure-agent-channel",
+      "canonicalLabel": "Secure Agent Channel",
+      "layer": "transport",
+      "implementationStatus": "libsignal-backed interim; not integrated in this checkout; not the independent implementation requested"
+    },
+    {
+      "id": "reserved-external-provider-namespaces",
+      "canonicalLabel": "Reserved External Provider Namespaces",
+      "layer": "external-provider-namespace",
+      "source": "config/toolsenabled.policy.json#/providers",
+      "implementationStatus": "derived at check time; external providers are never internal Agent Comms identifiers"
+    }
+  ]
+}
