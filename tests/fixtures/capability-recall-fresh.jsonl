@@ -1,0 +1,39 @@
+{"$note":"THE FRESH SET. Written AFTER the lexicon and the constants were finished, and never used to tune either. The main gold set drove the lexicon -- every miss it reported became an alias line -- so its recall number is partly a measure of that loop and cannot be read as generalisation. This file can be. Nothing here was consulted while writing config/capability-aliases.json, and no case in it may ever be used to justify an alias; when one fails it is recorded as a failure and the fix, if any, is judged on whether the phrasing is general."}
+{"q":"snap the window I am looking at and tell me what it says","want":["screen.capture_window"],"ok":["screen.capture","ocr.read","window.list"],"kind":"positive"}
+{"q":"jot down that the certificate renews in November","want":["memory.set"],"ok":["personal_calendar.create","memory.search"],"kind":"positive"}
+{"q":"is there anything sitting in my inbox from the bank","want":["gmail.list"],"ok":["gmail.send","search.query"],"kind":"positive"}
+{"q":"whats my afternoon look like","want":["calendar.list"],"ok":["personal_calendar.list","personal_calendar.due"],"kind":"positive"}
+{"q":"dump the contents of that yaml file","want":["host.read_file"],"ok":["repo.read_file","host.list_dir"],"kind":"positive"}
+{"q":"which processes are hogging the machine","want":["host.list_processes"],"ok":["system.doctor","host.exec","system.status"],"kind":"positive"}
+{"q":"execute the build script and capture stdout","want":["host.exec"],"ok":["sandbox.exec"],"kind":"positive"}
+{"q":"trace every caller of parseToolAllowlist","want":["code.find_references"],"ok":["code.goto_definition","code.workspace_symbols","search.query"],"kind":"positive"}
+{"q":"any lint problems in the workspace","want":["code.diagnostics"],"ok":["code.status"],"kind":"positive"}
+{"q":"scrape the pricing table off their homepage","want":["web.fetch"],"ok":["web.extract","web.search","browser.start"],"kind":"positive"}
+{"q":"dig around online for reviews of that laptop","want":["web.search"],"ok":["web.lookup","web.fetch"],"kind":"positive"}
+{"q":"drop a line to the team lead about the outage","want":["gmail.send"],"ok":["telegram.send","agent_comms.send_local","discord.send"],"kind":"positive"}
+{"q":"stick a meeting in for Monday morning","want":["calendar.create"],"ok":["calendar.list","personal_calendar.create"],"kind":"positive"}
+{"q":"nudge me when the tests go green","want":["system.notify"],"ok":["sound.play","telegram.send","tts.speak"],"kind":"positive"}
+{"q":"whats sitting unfinished on the board","want":["task.list"],"ok":["task.get"],"kind":"positive"}
+{"q":"spin up somewhere throwaway to test this","want":["sandbox.create"],"ok":["sandbox.exec","sandbox.status"],"kind":"positive"}
+{"q":"ship the latest build to production","want":["deployment.execute"],"ok":["launch.execute","deployment.detect","firebase.deploy"],"kind":"positive"}
+{"q":"inspect this project's deployment setup","want":["deployment.detect"],"ok":["launch.detect","launch.plan"],"kind":"positive"}
+{"q":"whats the tab currently showing","want":["browser.playwright_call"],"ok":["browser.status","screen.capture","browser.playwright_status"],"kind":"positive"}
+{"q":"I need the token for their api and dont have it","want":["system.credential_request"],"ok":["owner_forms.describe","settings.read"],"kind":"positive"}
+{"q":"give me a rundown of this machines configuration","want":["system.doctor","system.status"],"ok":["settings.read","workstation.status"],"kind":"positive"}
+{"q":"what have the agents been up to on here","want":["audit.tail"],"ok":["audit.status","agent_comms.local_roster","task.list"],"kind":"positive"}
+{"q":"let the other one know I am done with the file","want":["agent_comms.send_local"],"ok":["agent_comms.send","agent_comms.local_roster"],"kind":"positive"}
+{"q":"stash these slides in the cloud folder","want":["drive.upload"],"ok":["drive.find","host.write_file"],"kind":"positive"}
+{"q":"tidy up the outstanding pull requests","want":["github.pull_request_list"],"ok":["github.pull_request_get","github.pull_request_create"],"kind":"positive"}
+{"q":"chuck this text on the clipboard","want":["clipboard.write"],"ok":["clipboard.read"],"kind":"positive"}
+{"q":"do that every Tuesday from now on","want":["scheduler.create"],"ok":["scheduler.list","personal_calendar.create"],"kind":"positive"}
+{"q":"how much of the budget is left","want":["pay.check"],"ok":["purchase.request","paddle.transaction_get"],"kind":"positive"}
+{"q":"right, got it","want":[],"ok":[],"kind":"negative"}
+{"q":"makes sense to me","want":[],"ok":[],"kind":"negative"}
+{"q":"go on then","want":[],"ok":[],"kind":"negative"}
+{"q":"hmm not quite","want":[],"ok":[],"kind":"negative"}
+{"q":"can you say that again","want":[],"ok":[],"kind":"negative"}
+{"q":"whats your reasoning there","want":[],"ok":[],"kind":"negative"}
+{"q":"leave it for now","want":[],"ok":[],"kind":"negative"}
+{"q":"perfect, thank you","want":[],"ok":[],"kind":"negative"}
+{"q":"one sec","want":[],"ok":[],"kind":"negative"}
+{"q":"whats next","want":[],"ok":[],"kind":"negative"}

@@ -1,0 +1,46 @@
+# DEVELOPER CERTIFICATE OF ORIGIN -- pull request gate.
+#
+# This is where the sign-off requirement actually has teeth. The local checker
+# (tools/check-dco.js) is the same logic and can be run by hand, but a rule that
+# only runs when someone remembers to run it is not a rule. An outside
+# contribution arrives as a pull request, so that is where this fires.
+#
+# Deliberately NOT enforced through .githooks/commit-msg: that hook is installed
+# via core.hooksPath on the maintainer's machine and blocks every commit from
+# every agent seat. Outside contributors never run it, so putting the check there
+# would inconvenience exactly the people who do not need it and miss exactly the
+# people who do.
+#
+# This file does nothing until the repository is published. That is the point:
+# it is in place before the first outside pull request rather than written in
+# response to one, because the first merge is the irreversible step.
+
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Signed-off-by
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the full history
+        uses: actions/checkout@v4
+        with:
+          # The gate compares a commit range, so a shallow clone would have
+          # nothing to compare against.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Every commit in this pull request carries a sign-off
+        run: >-
+          node tools/check-dco.js
+          "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

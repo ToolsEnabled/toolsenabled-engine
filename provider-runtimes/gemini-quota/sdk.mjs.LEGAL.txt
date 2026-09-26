@@ -1,0 +1,833 @@
+Bundled license information:
+
+@google/gemini-cli-core/dist/src/utils/debugLogger.js:
+@google/gemini-cli-core/dist/src/tools/tool-error.js:
+@google/gemini-cli-core/dist/src/utils/paths.js:
+@google/gemini-cli-core/dist/src/utils/googleErrors.js:
+@google/gemini-cli-core/dist/src/utils/errors.js:
+@google/gemini-cli-core/dist/src/config/projectRegistry.js:
+@google/gemini-cli-core/dist/src/config/storageMigration.js:
+@google/gemini-cli-core/dist/src/config/storage.js:
+@google/gemini-cli-core/dist/src/tools/memoryTool.js:
+@google/gemini-cli-core/dist/src/utils/ignorePatterns.js:
+@google/gemini-cli-core/dist/src/utils/constants.js:
+@google/gemini-cli-core/dist/src/utils/fileUtils.js:
+@google/gemini-cli-core/dist/src/services/environmentSanitization.js:
+@google/genai/dist/node/index.mjs:
+@google/gemini-cli-core/dist/src/utils/userAccountManager.js:
+@google/gemini-cli-core/dist/src/mcp/token-storage/base-token-storage.js:
+@google/gemini-cli-core/dist/src/policy/types.js:
+@google/gemini-cli-core/dist/src/scheduler/types.js:
+@google/gemini-cli-core/dist/src/utils/safeJsonStringify.js:
+@google/gemini-cli-core/dist/src/utils/schemaValidator.js:
+@google/gemini-cli-core/dist/src/confirmation-bus/types.js:
+@google/gemini-cli-core/dist/src/tools/tools.js:
+@google/gemini-cli-core/dist/src/utils/textUtils.js:
+@google/gemini-cli-core/dist/src/tools/mcp-tool.js:
+@google/gemini-cli-core/dist/src/telemetry/tool-call-decision.js:
+@google/gemini-cli-core/dist/src/telemetry/constants.js:
+@google/gemini-cli-core/dist/src/utils/installationManager.js:
+@google/gemini-cli-core/dist/src/telemetry/telemetryAttributes.js:
+@google/gemini-cli-core/dist/src/telemetry/sanitize.js:
+@google/gemini-cli-core/dist/src/telemetry/metrics.js:
+@google/gemini-cli-core/dist/src/telemetry/semantic.js:
+@google/gemini-cli-core/dist/src/telemetry/llmRole.js:
+@google/gemini-cli-core/dist/src/telemetry/types.js:
+@google/gemini-cli-core/dist/src/mcp/token-storage/keychain-token-storage.js:
+@google/gemini-cli-core/dist/src/mcp/token-storage/types.js:
+@google/gemini-cli-core/dist/src/mcp/token-storage/hybrid-token-storage.js:
+@google/gemini-cli-core/dist/src/code_assist/oauth-credential-storage.js:
+@google/gemini-cli-core/dist/src/mcp/token-storage/index.js:
+@google/gemini-cli-core/dist/src/utils/stdio.js:
+@google/gemini-cli-core/dist/src/utils/terminal.js:
+@google/gemini-cli-core/dist/src/utils/headless.js:
+@google/gemini-cli-core/dist/src/utils/authConsent.js:
+@google/gemini-cli-core/dist/src/code_assist/oauth2.js:
+@google/gemini-cli-core/dist/src/code_assist/types.js:
+@google/gemini-cli-core/dist/src/config/models.js:
+@google/gemini-cli-core/dist/src/telemetry/clearcut-logger/event-metadata-key.js:
+@google/gemini-cli-core/dist/src/tools/definitions/types.js:
+@google/gemini-cli-core/dist/src/tools/definitions/base-declarations.js:
+@google/gemini-cli-core/dist/src/tools/definitions/dynamic-declaration-helpers.js:
+@google/gemini-cli-core/dist/src/tools/definitions/model-family-sets/gemini-3.js:
+@google/gemini-cli-core/dist/src/tools/definitions/coreTools.js:
+@google/gemini-cli-core/dist/src/tools/tool-names.js:
+@google/gemini-cli-core/dist/src/ide/detect-ide.js:
+@google/gemini-cli-core/dist/src/telemetry/clearcut-logger/clearcut-logger.js:
+@google/gemini-cli-core/dist/src/telemetry/file-exporters.js:
+@google/gemini-cli-core/dist/src/telemetry/gcp-exporters.js:
+@google/gemini-cli-core/dist/src/telemetry/config.js:
+@google/gemini-cli-core/dist/src/telemetry/conseca-logger.js:
+@google/gemini-cli-core/dist/src/utils/thoughtUtils.js:
+@google/gemini-cli-core/dist/src/utils/partUtils.js:
+@google/gemini-cli-core/dist/src/core/geminiRequest.js:
+@google/gemini-cli-core/dist/src/services/chatRecordingService.js:
+@google/gemini-cli-core/dist/src/telemetry/uiTelemetry.js:
+@google/gemini-cli-core/dist/src/utils/formatters.js:
+@google/gemini-cli-core/dist/src/telemetry/activity-detector.js:
+@google/gemini-cli-core/dist/src/telemetry/high-water-mark-tracker.js:
+@google/gemini-cli-core/dist/src/telemetry/rate-limiter.js:
+@google/gemini-cli-core/dist/src/telemetry/memory-monitor.js:
+@google/gemini-cli-core/dist/src/telemetry/activity-types.js:
+@google/gemini-cli-core/dist/src/telemetry/activity-monitor.js:
+@google/gemini-cli-core/dist/src/telemetry/trace.js:
+@google/gemini-cli-core/dist/src/telemetry/startupProfiler.js:
+@google/gemini-cli-core/dist/src/telemetry/index.js:
+@google/gemini-cli-core/dist/src/telemetry/sdk.js:
+@google/gemini-cli-core/dist/src/telemetry/loggers.js:
+@google/gemini-cli-core/dist/src/code_assist/converter.js:
+@google/gemini-cli-core/dist/src/utils/generateContentResponseUtilities.js:
+@google/gemini-cli-core/dist/src/utils/language-detection.js:
+@google/gemini-cli-core/dist/src/policy/utils.js:
+@google/gemini-cli-core/dist/src/utils/bfsFileSearch.js:
+@google/gemini-cli-core/dist/src/utils/pathCorrector.js:
+@google/gemini-cli-core/dist/src/tools/diffOptions.js:
+@google/gemini-cli-core/dist/src/utils/editor.js:
+@google/gemini-cli-core/dist/src/tools/modifiable-tool.js:
+@google/gemini-cli-core/dist/src/ide/constants.js:
+@google/gemini-cli-core/dist/src/ide/ideContext.js:
+@google/gemini-cli-core/dist/src/ide/types.js:
+@google/gemini-cli-core/dist/src/ide/process-utils.js:
+@google/gemini-cli-core/dist/src/ide/ide-connection-utils.js:
+@google/gemini-cli-core/dist/src/utils/package.js:
+@google/gemini-cli-core/dist/src/utils/version.js:
+@google/gemini-cli-core/dist/src/ide/ide-client.js:
+@google/gemini-cli-core/dist/src/utils/session.js:
+@google/gemini-cli-core/dist/src/utils/secure-browser-launcher.js:
+@google/gemini-cli-core/dist/src/utils/httpErrors.js:
+@google/gemini-cli-core/dist/src/utils/googleQuotaErrors.js:
+@google/gemini-cli-core/dist/src/availability/errorClassification.js:
+@google/gemini-cli-core/dist/src/availability/policyCatalog.js:
+@google/gemini-cli-core/dist/src/utils/modelUtils.js:
+@google/gemini-cli-core/dist/src/availability/policyHelpers.js:
+@google/gemini-cli-core/dist/src/fallback/handler.js:
+@google/gemini-cli-core/dist/src/utils/errorReporting.js:
+@google/gemini-cli-core/dist/src/utils/delay.js:
+@google/gemini-cli-core/dist/src/utils/retry.js:
+@google/gemini-cli-core/dist/src/core/baseLlmClient.js:
+@google/gemini-cli-core/dist/src/utils/promptIdContext.js:
+@google/gemini-cli-core/dist/src/utils/llm-edit-fixer.js:
+@google/gemini-cli-core/dist/src/tools/definitions/resolver.js:
+@google/gemini-cli-core/dist/src/tools/omissionPlaceholderDetector.js:
+@google/gemini-cli-core/dist/src/tools/edit.js:
+@google/gemini-cli-core/dist/src/utils/editCorrector.js:
+@google/gemini-cli-core/dist/src/tools/write-file.js:
+@google/gemini-cli-core/dist/src/code_assist/telemetry.js:
+@google/gemini-cli-core/dist/src/utils/channel.js:
+@google/gemini-cli-core/dist/src/code_assist/experiments/client_metadata.js:
+@google/gemini-cli-core/dist/src/code_assist/server.js:
+@google/gemini-cli-core/dist/src/code_assist/setup.js:
+@google/gemini-cli-core/dist/src/utils/quotaErrorDetection.js:
+@google/gemini-cli-core/dist/src/utils/tokenCalculation.js:
+@google/gemini-cli-core/dist/src/code_assist/codeAssist.js:
+@google/gemini-cli-core/dist/src/core/apiKeyCredentialStorage.js:
+@google/gemini-cli-core/dist/src/core/fakeContentGenerator.js:
+@google/gemini-cli-core/dist/src/utils/customHeaderUtils.js:
+@google/gemini-cli-core/dist/src/core/recordingContentGenerator.js:
+@google/gemini-cli-core/dist/src/core/contentGenerator.js:
+@google/gemini-cli-core/dist/src/prompts/prompt-registry.js:
+@google/gemini-cli-core/dist/src/resources/resource-registry.js:
+@google/gemini-cli-core/dist/src/tools/tool-registry.js:
+@google/gemini-cli-core/dist/src/config/constants.js:
+@google/gemini-cli-core/dist/src/tools/ls.js:
+@google/gemini-cli-core/dist/src/telemetry/telemetry-utils.js:
+@google/gemini-cli-core/dist/src/utils/gitIgnoreParser.js:
+@google/gemini-cli-core/dist/src/utils/ignoreFileParser.js:
+@google/gemini-cli-core/dist/src/utils/gitUtils.js:
+@google/gemini-cli-core/dist/src/services/fileDiscoveryService.js:
+@google/gemini-cli-core/dist/src/tools/read-file.js:
+@google/gemini-cli-core/dist/src/tools/ripGrep.js:
+@google/gemini-cli-core/dist/src/tools/glob.js:
+@google/gemini-cli-core/dist/src/utils/getFolderStructure.js:
+@google/gemini-cli-core/dist/src/tools/activate-skill.js:
+@google/gemini-cli-core/dist/src/utils/summarizer.js:
+@google/gemini-cli-core/dist/src/utils/getPty.js:
+@google/gemini-cli-core/dist/src/utils/terminalSerializer.js:
+@google/gemini-cli-core/dist/src/utils/process-utils.js:
+@google/gemini-cli-core/dist/src/services/executionLifecycleService.js:
+@google/gemini-cli-core/dist/src/tools/shell.js:
+@google/gemini-cli-core/dist/src/utils/fetch.js:
+@google/gemini-cli-core/dist/src/tools/web-fetch.js:
+@google/gemini-cli-core/dist/src/tools/web-search.js:
+@google/gemini-cli-core/dist/src/utils/messageInspectors.js:
+@google/gemini-cli-core/dist/src/core/geminiChat.js:
+@google/gemini-cli-core/dist/src/core/turn.js:
+@google/gemini-cli-core/dist/src/core/tokenLimits.js:
+@google/gemini-cli-core/dist/src/prompts/snippets.legacy.js:
+@google/gemini-cli-core/dist/src/prompts/utils.js:
+@google/gemini-cli-core/dist/src/agents/codebase-investigator.js:
+@google/gemini-cli-core/dist/src/core/prompts.js:
+@google/gemini-cli-core/dist/src/utils/environmentContext.js:
+@google/gemini-cli-core/dist/src/hooks/hookTranslator.js:
+@google/gemini-cli-core/dist/src/hooks/types.js:
+@google/gemini-cli-core/dist/src/context/chatCompressionService.js:
+@google/gemini-cli-core/dist/src/agents/types.js:
+@google/gemini-cli-core/dist/src/agents/utils.js:
+@google/gemini-cli-core/dist/src/skills/skillLoader.js:
+@google/gemini-cli-core/dist/src/tools/get-internal-docs.js:
+@google/gemini-cli-core/dist/src/agents/cli-help-agent.js:
+@google/gemini-cli-core/dist/src/mcp/oauth-utils.js:
+@google/gemini-cli-core/dist/src/mcp/oauth-token-storage.js:
+@google/gemini-cli-core/dist/src/services/modelConfigService.js:
+@google/gemini-cli-core/dist/src/agents/registry.js:
+@google/gemini-cli-core/dist/src/utils/tool-utils.js:
+@google/gemini-cli-core/dist/src/core/coreToolHookTriggers.js:
+@google/gemini-cli-core/dist/src/utils/nextSpeakerChecker.js:
+@google/gemini-cli-core/dist/src/services/loopDetectionService.js:
+@google/gemini-cli-core/dist/src/core/client.js:
+@google/gemini-cli-core/dist/src/scheduler/tool-executor.js:
+@google/gemini-cli-core/dist/src/utils/workspaceContext.js:
+@google/gemini-cli-core/dist/src/confirmation-bus/message-bus.js:
+@google/gemini-cli-core/dist/src/agents/local-executor.js:
+@google/gemini-cli-core/dist/src/agents/a2aUtils.js:
+@google/gemini-cli-core/dist/src/agents/remote-invocation.js:
+@google/gemini-cli-core/dist/src/utils/checks.js:
+@google/gemini-cli-core/dist/src/services/gitService.js:
+@google/gemini-cli-core/dist/src/services/fileSystemService.js:
+@google/gemini-cli-core/dist/src/utils/browser.js:
+@google/gemini-cli-core/dist/src/tools/write-todos.js:
+@google/gemini-cli-core/dist/src/availability/modelAvailabilityService.js:
+@google/gemini-cli-core/dist/src/routing/strategies/defaultStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/classifierStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/numericalClassifierStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/compositeStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/fallbackStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/overrideStrategy.js:
+@google/gemini-cli-core/dist/src/routing/modelRouterService.js:
+@google/gemini-cli-core/dist/src/output/types.js:
+@google/gemini-cli-core/dist/src/config/defaultModelConfigs.js:
+@google/gemini-cli-core/dist/src/utils/memoryImportProcessor.js:
+@google/gemini-cli-core/dist/src/utils/memoryDiscovery.js:
+@google/gemini-cli-core/dist/src/context/memoryContextManager.js:
+@google/gemini-cli-core/dist/src/policy/stable-stringify.js:
+@google/gemini-cli-core/dist/src/safety/protocol.js:
+@google/gemini-cli-core/dist/src/hooks/trustedHooks.js:
+@google/gemini-cli-core/dist/src/hooks/hookRegistry.js:
+@google/gemini-cli-core/dist/src/hooks/hookRunner.js:
+@google/gemini-cli-core/dist/src/hooks/hookAggregator.js:
+@google/gemini-cli-core/dist/src/hooks/hookPlanner.js:
+@google/gemini-cli-core/dist/src/hooks/hookEventHandler.js:
+@google/gemini-cli-core/dist/src/hooks/hookSystem.js:
+@google/gemini-cli-core/dist/src/hooks/index.js:
+@google/gemini-cli-core/dist/src/code_assist/experiments/experiments.js:
+@google/gemini-cli-core/dist/src/code_assist/experiments/flagNames.js:
+@google/gemini-cli-core/dist/src/skills/skillManager.js:
+@google/gemini-cli-core/dist/src/code_assist/admin/admin_controls.js:
+@google/gemini-cli-core/dist/src/policy/toml-loader.js:
+@google/gemini-cli-core/dist/src/utils/security.js:
+@google/gemini-cli-core/dist/src/safety/checker-runner.js:
+@google/gemini-cli-core/dist/src/safety/context-builder.js:
+@google/gemini-cli-core/dist/src/safety/built-in.js:
+@google/gemini-cli-core/dist/src/safety/conseca/policy-generator.js:
+@google/gemini-cli-core/dist/src/safety/conseca/policy-enforcer.js:
+@google/gemini-cli-core/dist/src/safety/conseca/conseca.js:
+@google/gemini-cli-core/dist/src/safety/registry.js:
+@google/gemini-cli-core/dist/src/utils/extensionLoader.js:
+@google/gemini-cli-core/dist/src/mcp/google-auth-provider.js:
+@google/gemini-cli-core/dist/src/mcp/sa-impersonation-provider.js:
+@google/gemini-cli-core/dist/src/tools/mcp-compliance-transport.js:
+@google/gemini-cli-core/dist/src/mcp/oauth-provider.js:
+@google/gemini-cli-core/dist/src/tools/mcp-client.js:
+@google/gemini-cli-core/dist/src/tools/mcp-client-manager.js:
+@google/gemini-cli-core/dist/src/agents/a2a-client-manager.js:
+@google/gemini-cli-core/dist/src/config/memory.js:
+@google/gemini-cli-core/dist/src/output/json-formatter.js:
+@google/gemini-cli-core/dist/src/output/stream-json-formatter.js:
+@google/gemini-cli-core/dist/src/commands/extensions.js:
+@google/gemini-cli-core/dist/src/utils/checkpointUtils.js:
+@google/gemini-cli-core/dist/src/commands/restore.js:
+@google/gemini-cli-core/dist/src/commands/init.js:
+@google/gemini-cli-core/dist/src/commands/memory.js:
+@google/gemini-cli-core/dist/src/commands/types.js:
+@google/gemini-cli-core/dist/src/core/logger.js:
+@google/gemini-cli-core/dist/src/routing/routingStrategy.js:
+@google/gemini-cli-core/dist/src/fallback/types.js:
+@google/gemini-cli-core/dist/src/code_assist/admin/mcpUtils.js:
+@google/gemini-cli-core/dist/src/utils/fsErrorMessages.js:
+@google/gemini-cli-core/dist/src/utils/exitCodes.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/ignore.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/result-cache.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/crawlCache.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/crawler.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/fileWatcher.js:
+@google/gemini-cli-core/dist/src/utils/filesearch/fileSearch.js:
+@google/gemini-cli-core/dist/src/utils/errorParsing.js:
+@google/gemini-cli-core/dist/src/utils/apiConversionUtils.js:
+@google/gemini-cli-core/dist/src/services/FolderTrustDiscoveryService.js:
+@google/gemini-cli-core/dist/src/services/sessionSummaryService.js:
+@google/gemini-cli-core/dist/src/services/sessionSummaryUtils.js:
+@google/gemini-cli-core/dist/src/ide/ide-installer.js:
+@google/gemini-cli-core/dist/src/prompts/mcp-prompts.js:
+@google/gemini-cli-core/dist/src/tools/read-many-files.js:
+@google/gemini-cli-core/dist/src/utils/trust.js:
+@google/gemini-cli-core/dist/src/index.js:
+@google/gemini-cli-core/dist/src/test-utils/config.js:
+@google/gemini-cli-core/dist/src/utils/pathReader.js:
+@google/gemini-cli-core/dist/index.js:
+  /**
+   * @license
+   * Copyright 2025 Google LLC
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+@google/gemini-cli-core/dist/src/utils/shell-utils.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/commandSafety.js:
+@google/gemini-cli-core/dist/src/sandbox/windows/commandSafety.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/fsUtils.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/commandUtils.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/sandboxDenialUtils.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/sandboxReadWriteUtils.js:
+@google/gemini-cli-core/dist/src/sandbox/linux/bwrapArgsBuilder.js:
+@google/gemini-cli-core/dist/src/sandbox/linux/LinuxSandboxManager.js:
+@google/gemini-cli-core/dist/src/sandbox/macos/baseProfile.js:
+@google/gemini-cli-core/dist/src/sandbox/macos/seatbeltArgsBuilder.js:
+@google/gemini-cli-core/dist/src/sandbox/macos/MacOsSandboxManager.js:
+@google/gemini-cli-core/dist/src/sandbox/windows/windowsSandboxDenialUtils.js:
+@google/gemini-cli-core/dist/src/sandbox/windows/WindowsSandboxManager.js:
+@google/gemini-cli-core/dist/src/services/sandboxManagerFactory.js:
+@google/gemini-cli-core/dist/src/services/sandboxManager.js:
+@google/gemini-cli-core/dist/src/policy/sandboxPolicyManager.js:
+@google/gemini-cli-core/dist/src/utils/events.js:
+@google/gemini-cli-core/dist/src/utils/markdownUtils.js:
+@google/gemini-cli-core/dist/src/utils/fileDiffUtils.js:
+@google/gemini-cli-core/dist/src/services/keychainTypes.js:
+@google/gemini-cli-core/dist/src/services/fileKeychain.js:
+@google/gemini-cli-core/dist/src/services/keychainService.js:
+@google/gemini-cli-core/dist/src/billing/billing.js:
+@google/gemini-cli-core/dist/src/tools/definitions/modelFamilyService.js:
+@google/gemini-cli-core/dist/src/tools/definitions/model-family-sets/default-legacy.js:
+@google/gemini-cli-core/dist/src/generated/git-commit.js:
+@google/gemini-cli-core/dist/src/services/chatRecordingTypes.js:
+@google/gemini-cli-core/dist/src/utils/sessionOperations.js:
+@google/gemini-cli-core/dist/src/core/agentChatHistory.js:
+@google/gemini-cli-core/dist/src/utils/cryptoUtils.js:
+@google/gemini-cli-core/dist/src/utils/sessionUtils.js:
+@google/gemini-cli-core/dist/src/telemetry/billingEvents.js:
+@google/gemini-cli-core/dist/src/telemetry/heap-snapshot.js:
+@google/gemini-cli-core/dist/src/telemetry/event-loop-monitor.js:
+@google/gemini-cli-core/dist/src/tools/diff-utils.js:
+@google/gemini-cli-core/dist/src/tools/jit-context.js:
+@google/gemini-cli-core/dist/src/utils/planUtils.js:
+@google/gemini-cli-core/dist/src/utils/cache.js:
+@google/gemini-cli-core/dist/src/core/loggingContentGenerator.js:
+@google/gemini-cli-core/dist/src/core/modelMappingContentGenerator.js:
+@google/gemini-cli-core/dist/src/utils/surface.js:
+@google/gemini-cli-core/dist/src/utils/ignorePathUtils.js:
+@google/gemini-cli-core/dist/src/tools/read-mcp-resource.js:
+@google/gemini-cli-core/dist/src/tools/list-mcp-resources.js:
+@google/gemini-cli-core/dist/src/tools/constants.js:
+@google/gemini-cli-core/dist/src/tools/grep-utils.js:
+@google/gemini-cli-core/dist/src/tools/grep.js:
+@google/gemini-cli-core/dist/src/services/shellExecutionService.js:
+@google/gemini-cli-core/dist/src/sandbox/utils/proactivePermissions.js:
+@google/gemini-cli-core/dist/src/tools/ask-user.js:
+@google/gemini-cli-core/dist/src/tools/topicTool.js:
+@google/gemini-cli-core/dist/src/config/topicState.js:
+@google/gemini-cli-core/dist/src/config/agent-loop-context.js:
+@google/gemini-cli-core/dist/src/utils/historyHardening.js:
+@google/gemini-cli-core/dist/src/utils/ragLogger.js:
+@google/gemini-cli-core/dist/src/agent/tool-display-utils.js:
+@google/gemini-cli-core/dist/src/prompts/snippets.js:
+@google/gemini-cli-core/dist/src/prompts/promptProvider.js:
+@google/gemini-cli-core/dist/src/agents/agentLoader.js:
+@google/gemini-cli-core/dist/src/agents/generalist-agent.js:
+@google/gemini-cli-core/dist/src/agents/browser/snapshotSuperseder.js:
+@google/gemini-cli-core/dist/src/agents/browser/browserAgentDefinition.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/base-provider.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/value-resolver.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/api-key-provider.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/http-provider.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/google-credentials-provider.js:
+@google/gemini-cli-core/dist/src/utils/oauth-flow.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/oauth2-provider.js:
+@google/gemini-cli-core/dist/src/agents/auth-provider/factory.js:
+@google/gemini-cli-core/dist/src/agents/a2a-errors.js:
+@google/gemini-cli-core/dist/src/utils/toolCallContext.js:
+@google/gemini-cli-core/dist/src/scheduler/state-manager.js:
+@google/gemini-cli-core/dist/src/scheduler/confirmation.js:
+@google/gemini-cli-core/dist/src/scheduler/policy.js:
+@google/gemini-cli-core/dist/src/scheduler/hook-utils.js:
+@google/gemini-cli-core/dist/src/context/truncation.js:
+@google/gemini-cli-core/dist/src/context/agentHistoryProvider.js:
+@google/gemini-cli-core/dist/src/context/toolOutputMaskingService.js:
+@google/gemini-cli-core/dist/src/context/config/registry.js:
+@google/gemini-cli-core/dist/src/context/processors/toolMaskingProcessor.js:
+@google/gemini-cli-core/dist/src/context/processors/blobDegradationProcessor.js:
+@google/gemini-cli-core/dist/src/context/processors/nodeTruncationProcessor.js:
+@google/gemini-cli-core/dist/src/context/graph/types.js:
+@google/gemini-cli-core/dist/src/context/processors/nodeDistillationProcessor.js:
+@google/gemini-cli-core/dist/src/context/utils/formatNodesForLlm.js:
+@google/gemini-cli-core/dist/src/context/processors/stateSnapshotProcessor.js:
+@google/gemini-cli-core/dist/src/context/config/profiles.js:
+@google/gemini-cli-core/dist/src/context/config/schema.js:
+@google/gemini-cli-core/dist/src/context/config/configLoader.js:
+@google/gemini-cli-core/dist/src/context/tracer.js:
+@google/gemini-cli-core/dist/src/context/eventBus.js:
+@google/gemini-cli-core/dist/src/context/pipeline/inbox.js:
+@google/gemini-cli-core/dist/src/context/graph/toGraph.js:
+@google/gemini-cli-core/dist/src/context/graph/fromGraph.js:
+@google/gemini-cli-core/dist/src/context/graph/nodeIdService.js:
+@google/gemini-cli-core/dist/src/context/pipeline/environmentImpl.js:
+@google/gemini-cli-core/dist/src/context/pipeline/contextWorkingBuffer.js:
+@google/gemini-cli-core/dist/src/context/pipeline/orchestrator.js:
+@google/gemini-cli-core/dist/src/context/graph/render.js:
+@google/gemini-cli-core/dist/src/context/utils/invariantChecker.js:
+@google/gemini-cli-core/dist/src/context/contextManager.js:
+@google/gemini-cli-core/dist/src/context/processors/historyTruncationProcessor.js:
+@google/gemini-cli-core/dist/src/context/processors/rollingSummaryProcessor.js:
+@google/gemini-cli-core/dist/src/context/utils/contextTokenCalculator.js:
+@google/gemini-cli-core/dist/src/context/utils/adaptiveTokenCalculator.js:
+@google/gemini-cli-core/dist/src/context/initializer.js:
+@google/gemini-cli-core/dist/src/context/toolDistillationService.js:
+@google/gemini-cli-core/dist/src/scheduler/tool-modifier.js:
+@google/gemini-cli-core/dist/src/scheduler/scheduler.js:
+@google/gemini-cli-core/dist/src/agents/agent-scheduler.js:
+@google/gemini-cli-core/dist/src/utils/deadlineTimer.js:
+@google/gemini-cli-core/dist/src/utils/fastAckHelper.js:
+@google/gemini-cli-core/dist/src/config/scoped-config.js:
+@google/gemini-cli-core/dist/src/tools/complete-task.js:
+@google/gemini-cli-core/dist/src/utils/agent-sanitization-utils.js:
+@google/gemini-cli-core/dist/src/agents/local-invocation.js:
+@google/gemini-cli-core/dist/src/agent/agent-session.js:
+@google/gemini-cli-core/dist/src/agents/local-subagent-protocol.js:
+@google/gemini-cli-core/dist/src/agents/local-session-invocation.js:
+@google/gemini-cli-core/dist/src/agents/remote-subagent-protocol.js:
+@google/gemini-cli-core/dist/src/agents/remote-session-invocation.js:
+@google/gemini-cli-core/dist/src/utils/browserConsent.js:
+@google/gemini-cli-core/dist/src/agents/browser/inputBlocker.js:
+@google/gemini-cli-core/dist/src/agents/browser/automationOverlay.js:
+@google/gemini-cli-core/dist/src/agents/browser/browserManager.js:
+@google/gemini-cli-core/dist/src/agents/browser/mcpToolWrapper.js:
+@google/gemini-cli-core/dist/src/agents/browser/modelAvailability.js:
+@google/gemini-cli-core/dist/src/agents/browser/analyzeScreenshot.js:
+@google/gemini-cli-core/dist/src/agents/browser/browserAgentFactory.js:
+@google/gemini-cli-core/dist/src/agents/browser/browserAgentInvocation.js:
+@google/gemini-cli-core/dist/src/agents/agent-tool.js:
+@google/gemini-cli-core/dist/src/utils/approvalModeUtils.js:
+@google/gemini-cli-core/dist/src/tools/exit-plan-mode.js:
+@google/gemini-cli-core/dist/src/tools/enter-plan-mode.js:
+@google/gemini-cli-core/dist/src/tools/shellBackgroundTools.js:
+@google/gemini-cli-core/dist/src/core/localLiteRtLmClient.js:
+@google/gemini-cli-core/dist/src/services/sandboxedFileSystemService.js:
+@google/gemini-cli-core/dist/src/tools/definitions/trackerTools.js:
+@google/gemini-cli-core/dist/src/services/trackerTypes.js:
+@google/gemini-cli-core/dist/src/tools/trackerTools.js:
+@google/gemini-cli-core/dist/src/routing/strategies/gemmaClassifierStrategy.js:
+@google/gemini-cli-core/dist/src/routing/strategies/approvalModeStrategy.js:
+@google/gemini-cli-core/dist/src/services/trackerService.js:
+@google/gemini-cli-core/dist/src/policy/policy-engine.js:
+@google/gemini-cli-core/dist/src/agents/acknowledgedAgents.js:
+@google/gemini-cli-core/dist/src/utils/path-validator.js:
+@google/gemini-cli-core/dist/src/config/injectionService.js:
+@google/gemini-cli-core/dist/src/policy/config.js:
+@google/gemini-cli-core/dist/src/mcp/stored-token-provider.js:
+@google/gemini-cli-core/dist/src/utils/envExpansion.js:
+@google/gemini-cli-core/dist/src/config/config.js:
+@google/gemini-cli-core/dist/src/policy/integrity.js:
+@google/gemini-cli-core/dist/src/config/extensions/integrityTypes.js:
+@google/gemini-cli-core/dist/src/config/extensions/integrity.js:
+@google/gemini-cli-core/dist/src/billing/index.js:
+@google/gemini-cli-core/dist/src/services/memoryPatchUtils.js:
+@google/gemini-cli-core/dist/src/agents/skill-extraction-agent.js:
+@google/gemini-cli-core/dist/src/services/sessionScratchpadUtils.js:
+@google/gemini-cli-core/dist/src/services/memoryService.js:
+@google/gemini-cli-core/dist/src/utils/atCommandUtils.js:
+@google/gemini-cli-core/dist/src/utils/tool-visibility.js:
+@google/gemini-cli-core/dist/src/agent/content-utils.js:
+@google/gemini-cli-core/dist/src/agent/event-translator.js:
+@google/gemini-cli-core/dist/src/agent/legacy-agent-session.js:
+@google/gemini-cli-core/dist/src/utils/compatibility.js:
+@google/gemini-cli-core/dist/src/services/worktreeService.js:
+@google/gemini-cli-core/dist/src/voice/responseFormatter.js:
+@google/gemini-cli-core/dist/src/context/types.js:
+@google/gemini-cli-core/dist/src/voice/audioRecorder.js:
+@google/gemini-cli-core/dist/src/voice/transcriptionProvider.js:
+@google/gemini-cli-core/dist/src/voice/geminiLiveTranscriptionProvider.js:
+@google/gemini-cli-core/dist/src/voice/whisperTranscriptionProvider.js:
+@google/gemini-cli-core/dist/src/voice/transcriptionFactory.js:
+@google/gemini-cli-core/dist/src/voice/whisperModelManager.js:
+@google/gemini-cli-core/dist/src/utils/binaryCheck.js:
+  /**
+   * @license
+   * Copyright 2026 Google LLC
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+long/umd/index.js:
+  /**
+   * @license
+   * Copyright 2009 The Closure Library Authors
+   * Copyright 2020 Daniel Wirtz / The long.js Authors.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *     http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   *
+   * SPDX-License-Identifier: Apache-2.0
+   */
+
+@grpc/proto-loader/build/src/util.js:
+@grpc/proto-loader/build/src/index.js:
+@grpc/proto-loader/build/src/util.js:
+@grpc/proto-loader/build/src/index.js:
+  /**
+   * @license
+   * Copyright 2018 gRPC authors.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *     http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   *
+   */
+
+web-streams-polyfill/dist/ponyfill.es2018.js:
+  /**
+   * @license
+   * web-streams-polyfill v3.3.3
+   * Copyright 2024 Mattias Buelens, Diwank Singh Tomer and other contributors.
+   * This code is released under the MIT license.
+   * SPDX-License-Identifier: MIT
+   */
+
+fetch-blob/index.js:
+  /*! fetch-blob. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
+
+formdata-polyfill/esm.min.js:
+undici/lib/web/fetch/body.js:
+  /*! formdata-polyfill. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
+
+node-domexception/index.js:
+  /*! node-domexception. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
+
+googleapis/build/src/apis/monitoring/index.js:
+  /*! THIS FILE IS AUTO-GENERATED */
+
+@google-cloud/precise-date/build/src/index.js:
+@google-cloud/paginator/build/src/resource-stream.js:
+  /*!
+   * Copyright 2019 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+teeny-request/build/src/agents.js:
+  /**
+   * @license
+   * Copyright 2019 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+teeny-request/build/src/TeenyStatistics.js:
+  /**
+   * @license
+   * Copyright 2020 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+teeny-request/build/src/index.js:
+  /**
+   * @license
+   * Copyright 2018 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/common/build/src/service.js:
+  /*!
+   * @module common/service
+   */
+
+safe-buffer/index.js:
+  /*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
+
+@google-cloud/common/build/src/util.js:
+  /*!
+   * @module common/util
+   */
+
+@google-cloud/common/build/src/service-object.js:
+  /*!
+   * @module common/service-object
+   */
+
+@google-cloud/common/build/src/operation.js:
+  /*!
+   * @module common/operation
+   */
+
+@google-cloud/paginator/build/src/index.js:
+  /*!
+   * Copyright 2015 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+  /*!
+   * @module common/paginator
+   */
+  /*! Developer Documentation
+   *
+   * paginator is used to auto-paginate `nextQuery` methods as well as
+   * streamifying them.
+   *
+   * Before:
+   *
+   *   search.query('done=true', function(err, results, nextQuery) {
+   *     search.query(nextQuery, function(err, results, nextQuery) {});
+   *   });
+   *
+   * After:
+   *
+   *   search.query('done=true', function(err, results) {});
+   *
+   * Methods to extend should be written to accept callbacks and return a
+   * `nextQuery`.
+   */
+
+ee-first/index.js:
+  /*!
+   * ee-first
+   * Copyright(c) 2014 Jonathan Ong
+   * MIT Licensed
+   */
+
+on-finished/index.js:
+  /*!
+   * on-finished
+   * Copyright(c) 2013 Jonathan Ong
+   * Copyright(c) 2014 Douglas Christopher Wilson
+   * MIT Licensed
+   */
+
+@google-cloud/logging/build/src/utils/context.js:
+@google-cloud/logging/build/src/utils/http-request.js:
+@google-cloud/logging/build/src/utils/log-common.js:
+@google-cloud/logging/build/src/log-sync.js:
+  /*!
+   * Copyright 2021 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/logging/build/src/middleware/express/make-middleware.js:
+@google-cloud/logging/build/src/middleware/express/index.js:
+@google-cloud/logging/build/src/middleware/index.js:
+  /*!
+   * Copyright 2018 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/logging/build/src/utils/metadata.js:
+  /*!
+   * Copyright 2016 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/logging/build/src/utils/common.js:
+@google-cloud/logging/build/src/entry.js:
+  /*!
+   * Copyright 2015 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/logging/build/src/utils/instrumentation.js:
+  /*!
+   * Copyright 2022 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+@google-cloud/logging/build/src/log.js:
+  /*!
+   * Copyright 2015 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+  /*! Developer Documentation
+   *
+   * All async methods (except for streams) will call a callback in the event
+   * that a callback is provided .
+   */
+
+@google-cloud/logging/build/src/sink.js:
+  /*!
+   * Copyright 2015 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+  /*! Developer Documentation
+   *
+   * All async methods (except for streams) will call a callbakc in the event
+   * that a callback is provided.
+   */
+
+@google-cloud/logging/build/src/index.js:
+  /*!
+   * Copyright 2015 Google Inc. All Rights Reserved.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+  /*! Developer Documentation
+   * All async methods (except for streams) will execute a callback in the event
+   * that a callback is provided.
+   */
+  /*! Developer Documentation
+   *
+   * These methods can be auto-paginated.
+   */
+
+undici/lib/web/websocket/frame.js:
+  /*! ws. MIT License. Einar Otto Stangvik <einaros@gmail.com> */
+
+js-yaml/dist/js-yaml.mjs:
+  /*! js-yaml 4.1.1 https://github.com/nodeca/js-yaml @license MIT */

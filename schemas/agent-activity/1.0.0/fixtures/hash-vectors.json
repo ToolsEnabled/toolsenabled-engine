@@ -1,0 +1,11 @@
+{
+  "canonical": {
+    "z": [3, true, null],
+    "a": {"m": "safe", "b": 2}
+  },
+  "domains": [
+    "agent-activity:event:1.0.0",
+    "master-work-ledger:2.0.0",
+    "agent-activity:report-html:1.0.0"
+  ]
+}

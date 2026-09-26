@@ -1,0 +1,20 @@
+{
+  "$id": "urn:coordinator:platform:error:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "code", "classification", "retryable", "safeSummary"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0", "type": "string"},
+    "code": {"type": "string", "enum": ["INVALID_REQUEST", "POLICY_DENIED", "APPROVAL_REQUIRED", "INPUT_REQUIRED", "AUTH_EXPIRED", "QUOTA_EXHAUSTED", "UNAVAILABLE", "TIMEOUT", "MALFORMED_OUTPUT", "VERIFICATION_FAILED", "STALE_DATA", "RESOURCE_PRESSURE", "INJECTION_DETECTED", "SANDBOX_VIOLATION", "EXTERNAL_CHANGE", "INTERNAL_ERROR", "MODEL_PROVIDER_TIMED_OUT", "MODEL_OUTPUT_BUDGET_SPENT", "LOCAL_NODE_OUTPUT_BUDGET_SPENT", "LOCAL_NODE_GPU_REQUIRED", "LOCAL_NODE_GPU_UNVERIFIED", "MODEL_PROVIDER_INTERRUPTED", "OPERATION_CANCELLED"]},
+    "classification": {"type": "string", "enum": ["terminal", "retry-after-input", "retry-after-time"]},
+    "retryable": {"type": "boolean"},
+    "safeSummary": {"type": "string", "minLength": 1, "maxLength": 240},
+    "retryAfterMs": {"type": "integer", "minimum": 0, "maximum": 3600000}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"retryable": {"const": false}}, "required": ["retryable"]},
+      "then": {"not": {"required": ["retryAfterMs"]}}
+    }
+  ]
+}

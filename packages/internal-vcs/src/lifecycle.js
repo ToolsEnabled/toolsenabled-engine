@@ -1,0 +1,97 @@
+'use strict';
+
+const TRUTH_STATES = Object.freeze(['SAFE', 'UNSAFE', 'UNKNOWN']);
+const PROPOSAL_STATES = Object.freeze([
+  'DRAFT',
+  'OFFLINE_PROPOSAL',
+  'QUARANTINED',
+  'SUBMITTED',
+  'SUPERSEDED',
+]);
+const REVISION_STATES = Object.freeze([
+  'DRAFT',
+  'PROPOSED',
+  'VALIDATED',
+  'ACCEPTED',
+  'PROVEN',
+  'APPLYING',
+  'APPLIED',
+  'OBSERVED_RUNNING',
+  'SUPERSEDED',
+]);
+const RETENTION_STATES = Object.freeze([
+  'UNCLASSIFIED',
+  'PRESERVED',
+  'RELEASED',
+  'TOMBSTONED',
+]);
+const CLAIM_STATES = Object.freeze([
+  'REQUESTED',
+  'GRANTED',
+  'ACTIVE',
+  'RENEWING',
+  'RELEASED',
+  'REVOKED',
+  'EXPIRED',
+  'ABANDONED',
+]);
+const OPERATION_STATES = Object.freeze([
+  'PLANNED',
+  'PREPARED',
+  'PROVEN',
+  'APPLYING',
+  'COMMITTED',
+  'PARTIALLY_APPLIED',
+  'COMPENSATING',
+  'FAILED',
+  'UNKNOWN',
+]);
+const CONFLICT_KINDS = Object.freeze([
+  'TEXTUAL',
+  'STRUCTURAL',
+  'SEMANTIC',
+  'AUTHORITY',
+  'TASK',
+  'SIDE_EFFECT',
+]);
+const CONFLICT_STATES = Object.freeze([
+  'ANALYZED',
+  'TEXTUALLY_CLEAN',
+  'TEXT_CONFLICT',
+  'STRUCTURAL_CONFLICT',
+  'SEMANTIC_CONFLICT',
+  'AUTHORITY_CONFLICT',
+  'TASK_CONFLICT',
+  'SIDE_EFFECT_CONFLICT',
+  'VALIDATED',
+  'REJECTED',
+]);
+const BACKUP_STATES = Object.freeze([
+  'DECLARED',
+  'SNAPSHOTTING',
+  'VERIFIED',
+  'RESTORABLE',
+  'RESTORED',
+  'FAILED',
+  'UNKNOWN',
+]);
+const EVIDENCE_FRESHNESS = Object.freeze([
+  'FRESH',
+  'STALE',
+  'EXPIRED',
+  'INVALIDATED',
+  'UNKNOWN',
+]);
+
+module.exports = Object.freeze({
+  TRUTH_STATES,
+  PROPOSAL_STATES,
+  REVISION_STATES,
+  RETENTION_STATES,
+  CLAIM_STATES,
+  OPERATION_STATES,
+  CONFLICT_KINDS,
+  CONFLICT_STATES,
+  BACKUP_STATES,
+  EVIDENCE_FRESHNESS,
+});

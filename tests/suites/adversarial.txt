@@ -1,0 +1,12 @@
+# Same eleven files previously declared in tests/adversarial/run.js.
+tests/controller-launch-scope-adversarial.js
+tests/coordinator-backup-age-status-adversarial.test.js
+tests/coordinator-backup-observer-adversarial.test.js
+tests/coordinator-backup-test-writer-adversarial.test.js
+tests/owner-identity-purpose-gate-adversarial-g9.js
+tests/owner-identity-reader-audit-adversarial-g9.js
+tests/owner-ledger-gate-batch-adversarial-g8.js
+tests/owner-request-scope-adversarial.js
+tests/owner-request-scope-store-adversarial.js
+tests/package-check-adversarial-g8.js
+tests/package-manifest-contract-adversarial.js

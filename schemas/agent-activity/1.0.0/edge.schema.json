@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:edge:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "edgeId", "edgeType", "from", "to", "observedAt", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "edgeId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+    "edgeType": {"type": "string", "enum": ["delegated_to", "communicated_with", "assigned_to", "works_on", "depends_on", "blocked_by", "supports_gate", "reviewed_by"]},
+    "from": {"$ref": "#/$defs/entityReference"},
+    "to": {"$ref": "#/$defs/entityReference"},
+    "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  },
+  "$defs": {
+    "entityReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityType", "entityId"],
+      "properties": {
+        "entityType": {"type": "string", "enum": ["agent", "goal", "request", "phase", "task", "evidence", "report", "gate"]},
+        "entityId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"}
+      }
+    }
+  }
+}

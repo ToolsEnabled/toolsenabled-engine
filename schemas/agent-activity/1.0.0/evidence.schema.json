@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:evidence:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "entityType", "evidenceId", "evidenceKind", "evidenceCount", "freshness", "observedAt", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "entityType": {"const": "evidence"},
+    "evidenceId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+    "evidenceKind": {"type": "string", "enum": ["file", "test", "tool", "report", "approval"]},
+    "evidenceCount": {"type": "integer", "minimum": 0, "maximum": 1000000},
+    "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+    "observedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  }
+}

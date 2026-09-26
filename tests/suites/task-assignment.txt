@@ -1,0 +1,6 @@
+# Engine task-assignment category. The four leaves are the exact retained
+# T1138/T1139 source files; keep this list as the single --from invocation.
+tests/task-assignment-authority.test.js
+tests/task-assignment-transaction.test.js
+tests/task-assignment-composition.test.js
+tests/owner-host-task-assignment-transport.test.js

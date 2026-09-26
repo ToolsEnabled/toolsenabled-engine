@@ -1,0 +1,114 @@
+#!/bin/sh
+# Fires after every commit, in every worktree. Answers ONE question instantly:
+# is what you just committed reachable from any remote?
+#
+# WHY THIS EXISTS. tools/check-single-copy-work.js has existed since 2026-08-04.
+# It is 40,707 bytes, it is correct, and it is referenced in CLAUDE.md,
+# AGENTS.md, config/standing-orders.json and seven other documents. It was
+# invoked by ZERO npm scripts and no automation of any kind. Every reference was
+# prose telling an agent to remember to run it.
+#
+# On 2026-08-08/09 work was found existing in exactly one place NINE times --
+# including a 19.5KB security review, a licence-compliance fence test, the
+# owner's own request ledger three separate times, and four stranded branches.
+# All nine happened while that working detector sat unused one directory away.
+# It caught them only because a coordinator happened to type it by hand.
+#
+# So the gap was never detection. It was invocation. That made the detector the
+# most ironic member of the night's fail-open family: a mechanism built so
+# nobody would have to remember, reachable only by remembering.
+#
+# WHY THIS HOOK IS NOT JUST `node tools/check-single-copy-work.js`.
+# Measured: that tool takes ~19.8 SECONDS even in its offline default mode,
+# because it sweeps every worktree and every local branch. Twenty seconds added
+# to every commit is a hook that gets deleted by the first person in a hurry,
+# and a check that gets disabled is worse than no check at all.
+#
+# So the division is by TIMING, not by duplication:
+#   - here, at commit time: the one question that is only answerable now, using
+#     one git command that costs milliseconds.
+#   - the full sweep (other worktrees, untracked files, every local branch):
+#     `node tools/check-single-copy-work.js`, run on demand or on a schedule.
+#
+# This hook NEVER blocks. post-commit cannot fail a commit that already
+# happened, and blocking a push over unrelated scratch files is exactly how
+# checks get switched off. It is loud instead.
+
+# A REPO WITH NO REMOTE NEEDS DIFFERENT ADVICE, not louder advice.
+#
+# Measured 2026-08-09: the mission-control repository has NO remote at all, so
+# `git rev-list --count HEAD --not --remotes` returns 196 -- EVERY commit on the
+# branch. This hook would then print its loud box on every single commit,
+# forever, and tell the reader to `git push origin`, which cannot work. That is
+# the noise-gets-muted failure this hook's own threshold exists to prevent,
+# committed by the hook itself.
+#
+# The deeper point, and it is the half of the rule that was missing all night:
+# COMMITTING PROTECTS AGAINST A LOST WORKTREE. IT DOES NOTHING AGAINST A LOST
+# DISK. Six commits were found existing on exactly one disk tonight -- written
+# by lanes that had been told to commit precisely so nothing would be stranded,
+# one of whose messages literally said "IN FLIGHT AT STAND-DOWN". They did as
+# instructed and it bought them less than they believed, because nobody had told
+# them the second half.
+#
+# So where there is no remote, replication means MIRRORING, and the hook must
+# say that instead of naming a push that is impossible.
+if [ -z "$(git remote 2>/dev/null)" ]; then
+  count=$(git rev-list --count HEAD 2>/dev/null)
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  printf '\n  [single-copy] This repo has NO REMOTE. "%s" (%s commits) lives on this disk alone.\n' "$branch" "$count"
+  printf '  [single-copy] Committing did not replicate it. Mirror it before you rely on it.\n\n'
+  exit 0
+fi
+
+stranded=$(git rev-list --count HEAD --not --remotes 2>/dev/null)
+
+# Empty means the rev-list failed (no remotes configured, a fresh repo, a
+# detached odd state). Say so rather than reporting a reassuring silence -- a
+# check that cannot run must not look like a check that passed. That exact
+# failure shape cost this project a keeper that returned exit 0 for hours while
+# the service it guarded was down.
+if [ -z "$stranded" ]; then
+  printf '\n  [single-copy] COULD NOT DETERMINE whether this commit exists anywhere else.\n'
+  printf '  [single-copy] Treat that as unknown, not as safe. Check `git remote -v`.\n\n'
+  exit 0
+fi
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# THRESHOLD, and it is the difference between a mechanism that survives and one
+# that gets deleted. The first version of this hook warned whenever stranded > 0
+# -- which is EVERY commit, because the commit you just made is unpushed by
+# definition. Caught by testing it rather than reasoning about it: an empty
+# verification commit triggered the full warning box.
+#
+# A check that fires on every single commit is noise, noise gets muted, and a
+# muted check is worse than none. That is the same trap as widening a flaky
+# test's tolerance to silence it.
+#
+# So: one commit unpushed is normal and gets one quiet line. Accumulation is the
+# actual risk signal -- work piling up locally is what preceded every near-loss
+# on 2026-08-08 -- and that gets the loud treatment.
+if [ "$stranded" -ge 3 ]; then
+  printf '\n'
+  printf '  ============================================================\n'
+  printf '  [single-copy] %s commits on "%s" exist ONLY on this machine.\n' "$stranded" "$branch"
+  printf '  ============================================================\n'
+  printf '  Work is accumulating with no second copy. Nine times on\n'
+  printf '  2026-08-08 that state ended in near-loss -- including during a\n'
+  printf '  quiet period, from lanes that had done nothing wrong.\n'
+  printf '\n'
+  printf '    git push origin %s\n' "$branch"
+  printf '\n'
+  printf '  Then VERIFY it landed rather than trusting the push output:\n'
+  printf '    git branch -r --contains HEAD\n'
+  printf '\n'
+  printf '  Full sweep (other worktrees, untracked, all branches):\n'
+  printf '    node tools/check-single-copy-work.js\n'
+  printf '  ============================================================\n'
+  printf '\n'
+elif [ "$stranded" -gt 0 ]; then
+  printf '  [single-copy] %s unpushed on "%s" -- push when this line of work settles.\n' "$stranded" "$branch"
+fi
+
+exit 0

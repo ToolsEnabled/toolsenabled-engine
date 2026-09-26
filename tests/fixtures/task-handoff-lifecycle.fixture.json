@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "computerId": "this-computer",
+  "source": {
+    "nodeId": "node-removed",
+    "treeId": "tree-source",
+    "parentId": null,
+    "status": "finished",
+    "sessionId": null,
+    "preimage": {
+      "id": "node-removed",
+      "treeId": "tree-source",
+      "parentId": null,
+      "status": "finished",
+      "sessionId": null
+    }
+  },
+  "tasks": [
+    {
+      "id": "T1",
+      "scope": "tree",
+      "scopeKey": "node-removed",
+      "status": "in-progress",
+      "words": "Retain this active task during removal"
+    },
+    {
+      "id": "T2",
+      "scope": "tree",
+      "scopeKey": "node-removed",
+      "status": "blocked-external",
+      "words": "Retain this blocked task during removal"
+    },
+    {
+      "id": "T3",
+      "scope": "tree",
+      "scopeKey": "other-node",
+      "status": "open",
+      "words": "Do not include another node's task"
+    },
+    {
+      "id": "T4",
+      "scope": "tree",
+      "scopeKey": "node-removed",
+      "status": "done",
+      "words": "Do not rehome a terminal task"
+    }
+  ],
+  "cases": [
+    {
+      "name": "verified-parent",
+      "authority": "verified",
+      "parentNodeId": "node-parent",
+      "reason": "Node removed by the authenticated owner; task owner moved to its verified parent.",
+      "sourceAfterCommit": "retained-until-topology-receipt",
+      "sourceAfterFinalize": "removed-after-trusted-topology-receipt"
+    },
+    {
+      "name": "verified-no-parent",
+      "authority": "verified",
+      "parentNodeId": null,
+      "reason": "Node removed by the authenticated owner; no verified parent exists, so the task is owner-gone.",
+      "sourceAfterCommit": "retained-until-topology-receipt",
+      "sourceAfterFinalize": "removed-after-trusted-topology-receipt"
+    },
+    {
+      "name": "unknown-parent",
+      "authority": "unknown",
+      "parentNodeId": null,
+      "reason": "The saved topology or parent authority is unreadable or ambiguous.",
+      "sourceAfterCommit": "retained-and-barrier-active",
+      "sourceAfterFinalize": "not-applicable"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "toolsenabled-agent-playwright-sandbox",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "1.61.0"
+  }
+}

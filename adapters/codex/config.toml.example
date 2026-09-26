@@ -1,0 +1,17 @@
+# Merge into your Codex MCP configuration.  Replace <TOOLSENABLED_ROOT> in
+# every value below with the absolute path of your ToolsEnabled checkout,
+# using forward slashes on every platform (for example C:/ToolsEnabled or
+# /home/you/toolsenabled).  The server uses stdio and has no dependency
+# installation step.
+[mcp_servers.toolsenabled]
+command = "node"
+args = ["<TOOLSENABLED_ROOT>/tools/mcp-owner-proxy.js"]
+
+[mcp_servers.toolsenabled.env]
+TOOLSENABLED_ROOT = "<TOOLSENABLED_ROOT>"
+TOOLSENABLED_AGENT_ACTOR = "codex"
+TOOLSENABLED_TOOL_ALLOWLIST = "system.*,task.*,memory.*,search.*,code.*,research.hermes_complete,research.strong_complete,research.local_tiers_status,overnight_advisory.*,sandbox.*,gcloud.account_inspect,audit.status,audit.tail,duo.*,clipboard.*,screen.*,ocr.read,window.*,model.complete,http.request,web.search"
+
+[mcp_servers.playwright]
+command = "node"
+args = ["<TOOLSENABLED_ROOT>/src/playwright-gateway.js", "@playwright/mcp@0.0.82"]

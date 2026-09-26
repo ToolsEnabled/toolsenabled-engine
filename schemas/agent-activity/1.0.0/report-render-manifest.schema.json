@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:report-render-manifest:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "manifestKind", "ledgerRevision", "ledgerHash", "htmlHash", "pdfHash", "normalizedPaths", "renderedAt", "rendererVersion", "freshness", "pdfAuthority", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "manifestKind": {"const": "report-render-manifest"},
+    "ledgerRevision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "ledgerHash": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07DomainHash"},
+    "htmlHash": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07DomainHash"},
+    "pdfHash": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07DomainHash"},
+    "normalizedPaths": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ledger", "html", "pdf"],
+      "properties": {
+        "ledger": {"const": "artifacts/master-work-ledger.json"},
+        "html": {"const": "artifacts/master-work-report.html"},
+        "pdf": {"const": "artifacts/master-work-report.pdf"}
+      }
+    },
+    "renderedAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "rendererVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "freshness": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/freshness"},
+    "pdfAuthority": {"const": "human-snapshot-never-parsed"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  }
+}

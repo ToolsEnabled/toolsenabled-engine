@@ -1,0 +1,23 @@
+# Reviewed ordinary offline regression selection. No real provider or Scheduler opt-in.
+# Actual default pretest reaches this list; merely declaring an npm alias is not coverage.
+tests/agent-engine/adapter-lifecycle-settlement.test.js
+tests/agent-engine/codex-interrupted-late-events.test.js
+tests/agent-engine/acp-provider-isolation.test.js
+tests/agent-engine/acp-approval-lifecycle.test.js
+tests/hidden-spawn-native-containment.test.js
+tests/local-owner-session-binding.test.js
+tests/agent-resource-channel.test.js
+tests/agent-resource-direct-root.test.js
+tests/agent-resource-revalidation.test.js
+tests/windows-job-resource-admission.test.js
+tests/byte-authority.test.js
+tests/byte-authority-recovery.test.js
+tests/byte-authority-process.test.js
+tests/byte-authority-release-contention.test.js
+tests/byte-authority-write.test.js
+tests/byte-authority-write-recovery.test.js
+tests/byte-exposure-receipt.test.js
+tests/file-tool-invocation.test.js
+tests/repo-byte-transport.test.js
+tests/remote-byte-scope.test.js
+tests/fra-byte-mediation.test.js

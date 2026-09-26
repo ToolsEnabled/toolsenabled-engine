@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:evidence:1.0.0",
+  "title": "Coordinator platform evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "evidenceId": {"type": "string", "pattern": "^ev_[A-Za-z0-9_-]{8,128}$"},
+    "taskId": {"type": "string", "pattern": "^tsk_[A-Za-z0-9_-]{8,128}$"},
+    "provenance": {"enum": ["verified", "untrusted", "generated-model", "local-derived"]},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "required": ["schemaVersion", "evidenceId", "taskId", "provenance", "summary", "sha256"]
+}

@@ -1,0 +1,48 @@
+{
+  "policyVersion": "1.0.0",
+  "policyAuthority": "toolsenabled",
+  "idEncoding": {
+    "alphabet": "base64url",
+    "randomBytes": 24,
+    "encodedCharacters": 32,
+    "randomnessBits": 192
+  },
+  "idKinds": [
+    {"kind": "task", "prefix": "tsk"},
+    {"kind": "delegation", "prefix": "dlg"},
+    {"kind": "evidence", "prefix": "ev"},
+    {"kind": "context", "prefix": "ctx"},
+    {"kind": "approval", "prefix": "apr"},
+    {"kind": "resource-lease", "prefix": "lease"},
+    {"kind": "event", "prefix": "evt"},
+    {"kind": "capability", "prefix": "cap"},
+    {"kind": "budget", "prefix": "bud"},
+    {"kind": "memory", "prefix": "mem"},
+    {"kind": "finance-result", "prefix": "fin"},
+    {"kind": "tool-package", "prefix": "pkg"},
+    {"kind": "provider-session", "prefix": "ses"}
+  ],
+  "controlTimestamp": {
+    "format": "YYYY-MM-DDTHH:mm:ss.sssZ",
+    "timezone": "UTC",
+    "precision": "milliseconds",
+    "sourceMarketTimezone": "Store a source-market timezone in a separate, explicitly named field when a market-local time is also required."
+  },
+  "monotonicClock": {
+    "serialized": false,
+    "scope": "process-local elapsed-duration measurement only",
+    "crossProcessComparable": false
+  },
+  "canonicalHash": {
+    "algorithm": "sha256",
+    "frameVersion": "coordinator-platform-hash-v1",
+    "domainPattern": "^[a-z][a-z0-9:._-]{0,127}$",
+    "domainEncoding": "ASCII",
+    "payloadEncoding": "ASCII canonical JSON",
+    "frame": "ASCII(frameVersion) || 0x00 || uint64be(byteLength(domain)) || ASCII(domain) || uint64be(byteLength(payload)) || ASCII(payload)"
+  },
+  "authorization": {
+    "visiblePrefixGrantsAuthority": false,
+    "idValidationIsLexicalOnly": true
+  }
+}

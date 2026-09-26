@@ -1,0 +1,59 @@
+{
+  "$comment": [
+    "Built-in scheduled agentic-workflow digest.",
+    "This hourly workflow pulse runs as its own process and uses the selected delivery transport",
+    "in-process -- never through an MCP client session, which has a restricted",
+    "tool set and a bounded lifetime.",
+    "",
+    "No email address lives in this file. 'account' optionally names a standby",
+    "email alias in config/google-accounts.profile.json, used only if",
+    "owner-delivery selects email; when absent (the shipped default) this",
+    "falls back to that profile's own defaultAccount.",
+    "",
+    "grid: 7 days x 48 half-hour slots, host-local. Each cell is 'digest' (full",
+    "read), 'pulse' (compact hourly update), or absent (off). A slot fires at",
+    "most once, is marked fired BEFORE generation, and only within the bounded",
+    "grace window in src/lib/agent-digest/schedule.js."
+  ],
+  "schemaVersion": 1,
+  "enabled": true,
+  "tickSeconds": 30,
+  "generationTimeoutMs": 300000,
+  "grid": {
+    "mon": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "tue": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "wed": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "thu": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "fri": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "sat": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    },
+    "sun": {
+      "08:00": "digest", "09:00": "pulse", "10:00": "pulse", "11:00": "pulse", "12:00": "pulse",
+      "13:00": "pulse", "14:00": "pulse", "15:00": "pulse", "16:00": "pulse", "17:00": "pulse",
+      "18:00": "pulse", "19:00": "pulse", "21:00": "pulse", "22:00": "digest"
+    }
+  }
+}

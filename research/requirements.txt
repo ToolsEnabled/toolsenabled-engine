@@ -1,0 +1,2 @@
+trafilatura==2.1.0
+PyMuPDF==1.28.0

@@ -1,0 +1,43 @@
+{
+  "$comment": [
+    "SHIPPED DEFAULT service registry for a fresh installation.",
+    "",
+    "The capability layer refuses to start without a valid registry:",
+    "src/lib/service-registry.js loadRegistry() fails closed rather than",
+    "guessing a default or falling back to localhost. The builder's own",
+    "registry describes the builder's own machines -- their LAN addresses,",
+    "their home-directory roots, their peer topology -- and none of that is",
+    "true for, or any business of, a customer. So the build stages THIS file",
+    "in its place.",
+    "",
+    "It declares exactly one machine: the machine the product is installed",
+    "on, at the loopback address, which is true on every installation before",
+    "the customer has configured anything. It declares only the loopback",
+    "dashboard service and no cross-machine service, because a fresh install",
+    "has no peer topology and inventing one would be the same category of lie",
+    "as shipping the builder's.",
+    "",
+    "Setup writes over this once the customer says what their machines are.",
+    "Until then it is honest: one machine, itself, nothing remote."
+  ],
+  "schemaVersion": 1,
+  "machines": {
+    "this-machine": {
+      "address": "127.0.0.1",
+      "role": "installation-host",
+      "notes": "The machine this product is installed on. Replaced by setup when the customer declares their own machines."
+    }
+  },
+  "services": {
+    "dashboard": {
+      "displayName": "Agent Activity Dashboard",
+      "purpose": "Local web dashboard for agent activity, requests, and launch records.",
+      "transport": "http",
+      "port": 3889,
+      "resolution": "loopback",
+      "peerReachable": false,
+      "healthPath": "/health",
+      "notes": "Loopback-only dashboard service for this installation. It has no peer address and grants no cross-machine route."
+    }
+  }
+}
