@@ -12,7 +12,7 @@
 // value, and the second page of any cloud status read died between them.
 //
 // WHY THIS SUITE EXISTS SEPARATELY FROM THE INSTANCE CHECKS IN
-// tests/codex-cli-transport.test.js, which pin the real 2026-09-03 cursor
+// tests/codex-cli-transport.test.js, which pin a cursor in the shape
 // captured from codex-cli 0.146.1. Those prove the rule admits the cursor the
 // CLI emits TODAY. This proves the INVARIANT that made the gap possible in the
 // first place, over a spread of shapes, so that a future narrowing or widening
@@ -96,7 +96,7 @@ function listPage(cursor) {
    one of these was rejected by the accept rule that shipped before this was
    measured, while being handed out as a usable next page. */
 const REALISTIC = [
-  '+RID:~G4U-AJOIzhldOQcEAAjRAQ==#RT:1#TRC:1#RTD:FFMNeBmc06hP#ISV:2#IEO:65567#QCF:8#CID:2',
+  '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCur#ISV:2#IEO:65567#QCF:8#CID:2',
   'cursor-abc123',
   'AAAA+/==',
   'z',

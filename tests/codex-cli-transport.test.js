@@ -463,28 +463,28 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     assert.equal(spawnImpl.calls.length, 0);
   });
 
-  // A GROUND-TRUTH cursor, captured 2026-09-03 from `codex cloud list --json
-  // --limit 1` running codex-cli 0.146.1 on this machine (the base64 bodies
+  // A cursor in the exact shape `codex cloud list --json
+  // --limit 1` emits from codex-cli 0.146.1 (the base64 bodies
   // are shortened; the punctuation and the leading "+" are verbatim). The
-  // same call fed straight back as `--cursor` returned page 2 with a
-  // different task id, so this value is a WORKING cursor at the CLI. The two
+  // real cursor of this shape, fed straight back as `--cursor`, returned
+  // page 2 with a different task id, so the shape is a WORKING cursor. The two
   // checks below are about the transport being able to use it at all.
-  const REAL_CURSOR = '+RID:~G4U-AJOIzhldOQcEAAjRAQ==#RT:1#TRC:1#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLk1Y#ISV:2#IEO:65567#QCF:8#CID:2';
+  const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
 
   await asyncCheck('a cursor in the shape the CLI actually emits reaches argv instead of being refused as invalid input', async () => {
     const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: null }) }));
     const transport = createCodexCliTransport({ spawnImpl });
-    const listed = await transport.listTasks({ limit: 5, cursor: REAL_CURSOR });
+    const listed = await transport.listTasks({ limit: 5, cursor: SAMPLE_CURSOR });
     assert.deepEqual(listed.tasks, []);
     const args = spawnImpl.calls[0].args;
-    assert.equal(args[args.indexOf('--cursor') + 1], REAL_CURSOR, 'the cursor must be handed to the CLI verbatim');
+    assert.equal(args[args.indexOf('--cursor') + 1], SAMPLE_CURSOR, 'the cursor must be handed to the CLI verbatim');
   });
 
   await asyncCheck('the cursor the transport reports is a cursor the transport will accept back, so paging can advance', async () => {
-    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: REAL_CURSOR }) }));
+    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: SAMPLE_CURSOR }) }));
     const transport = createCodexCliTransport({ spawnImpl });
     const page1 = await transport.listTasks({ limit: 5 });
-    assert.equal(page1.cursor, REAL_CURSOR);
+    assert.equal(page1.cursor, SAMPLE_CURSOR);
     // Feeding the transport's own output back in is exactly what
     // cloudTaskStatus does; it must not be an input error.
     const page2 = await transport.listTasks({ limit: 5, cursor: page1.cursor });
@@ -544,12 +544,12 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
   // The dead guard's sentence, applied to the CLI's real cursor, would have
   // called a WORKING token malformed. Nothing may refuse this value.
   await asyncCheck('the shape the refusal describes is the shape the transport actually accepts', async () => {
-    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: REAL_CURSOR }) }));
+    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: SAMPLE_CURSOR }) }));
     const transport = createCodexCliTransport({ spawnImpl });
     const page = await transport.listTasks({ limit: 5 });
-    assert.equal(page.cursor, REAL_CURSOR, 'the CLI\'s own cursor must survive the round trip');
+    assert.equal(page.cursor, SAMPLE_CURSOR, 'the CLI\'s own cursor must survive the round trip');
     await transport.listTasks({ limit: 5, cursor: page.cursor });
-    assert.equal(spawnImpl.calls[1].args[spawnImpl.calls[1].args.indexOf('--cursor') + 1], REAL_CURSOR);
+    assert.equal(spawnImpl.calls[1].args[spawnImpl.calls[1].args.indexOf('--cursor') + 1], SAMPLE_CURSOR);
   });
 
   // --- integration-shaped: the provider wired with this transport ---------------

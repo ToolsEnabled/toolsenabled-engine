@@ -371,8 +371,8 @@ function seedPreference(deps, activeAccount = 'second') {
 
   // ---------------------------------------------------------------------
   // 8b. A status read must be able to reach page 2. The cursor below is the
-  //     shape `codex cloud list --json` really emits (captured 2026-09-03
-  //     from codex-cli 0.146.1 on this machine; base64 bodies shortened,
+  //     shape `codex cloud list --json` really emits (codex-cli
+  //     0.146.1; base64 bodies shortened,
   //     punctuation and the leading "+" verbatim). Handed back to the CLI as
   //     --cursor it returned a second page with a different task id, so the
   //     only thing that ever stopped paging was the transport refusing its
@@ -381,16 +381,16 @@ function seedPreference(deps, activeAccount = 'second') {
   //     against a caller who had supplied nothing but a task id.
   // ---------------------------------------------------------------------
   {
-    const REAL_CURSOR = '+RID:~G4U-AJOIzhldOQcEAAjRAQ==#RT:1#TRC:1#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLk1Y#ISV:2#IEO:65567#QCF:8#CID:2';
+    const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
     const cursorsSeen = [];
     const deps = baseDeps({
       transportFactory: () => ({
         listTasks: async ({ cursor = null } = {}) => {
           cursorsSeen.push(cursor);
           if (cursor === null) {
-            return { tasks: [{ id: 'task_e_page1aaa', status: 'ready', title: 'Newest', updatedAt: '2026-09-03T06:00:00Z', url: null }], cursor: REAL_CURSOR };
+            return { tasks: [{ id: 'task_e_page1aaa', status: 'ready', title: 'Newest', updatedAt: '2026-09-03T06:00:00Z', url: null }], cursor: SAMPLE_CURSOR };
           }
-          if (cursor !== REAL_CURSOR) throw new Error(`the paging loop must resend the cursor verbatim, got ${cursor}`);
+          if (cursor !== SAMPLE_CURSOR) throw new Error(`the paging loop must resend the cursor verbatim, got ${cursor}`);
           return { tasks: [{ id: 'task_e_page2bbb', status: 'in_progress', title: 'Older', updatedAt: '2026-09-02T06:00:00Z', url: null }], cursor: null };
         }
       })
@@ -400,7 +400,7 @@ function seedPreference(deps, activeAccount = 'second') {
     check(onPageTwo.found === true, 'status paging: a task on the second page must be found, not reported UNKNOWN and not raised as an error');
     check(onPageTwo.state === 'RUNNING', 'status paging: the second page task\'s provider status must be mapped, here in_progress -> RUNNING');
     check(onPageTwo.title === 'Older', 'status paging: the title must come from the page the task was actually on');
-    check(cursorsSeen.length === 2 && cursorsSeen[0] === null && cursorsSeen[1] === REAL_CURSOR,
+    check(cursorsSeen.length === 2 && cursorsSeen[0] === null && cursorsSeen[1] === SAMPLE_CURSOR,
       'status paging: page 1 is fetched with no cursor and page 2 with the cursor page 1 returned');
   }
 
@@ -410,7 +410,7 @@ function seedPreference(deps, activeAccount = 'second') {
   //     this raised CODEX_CLI_INPUT_INVALID on the second listTasks call.
   // ---------------------------------------------------------------------
   {
-    const REAL_CURSOR = '+RID:~G4U-AJOIzhldOQcEAAjRAQ==#RT:1#TRC:1#RTD:FFMNeBmc06hP2994zep3KwV2dGZzLk1Y#ISV:2#IEO:65567#QCF:8#CID:2';
+    const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
     const argvSeen = [];
     const pagingSpawn = (command, args) => {
       argvSeen.push([...args]);
@@ -421,7 +421,7 @@ function seedPreference(deps, activeAccount = 'second') {
       const second = args.includes('--cursor');
       const body = second
         ? { tasks: [{ id: 'task_e_deep2222', status: 'in_progress' }], cursor: null }
-        : { tasks: [{ id: 'task_e_shallow1', status: 'ready' }], cursor: REAL_CURSOR };
+        : { tasks: [{ id: 'task_e_shallow1', status: 'ready' }], cursor: SAMPLE_CURSOR };
       setImmediate(() => {
         child.stdout.emit('data', JSON.stringify(body));
         child.emit('close', 0);
@@ -436,7 +436,7 @@ function seedPreference(deps, activeAccount = 'second') {
     check(deep.found === true, 'status paging (real transport): a task only on page 2 must still be found');
     check(deep.state === 'RUNNING', 'status paging (real transport): the found task\'s status must be mapped, not left UNKNOWN');
     check(argvSeen.length === 2, 'status paging (real transport): the loop must actually issue a second cloud list call');
-    check(argvSeen[1][argvSeen[1].indexOf('--cursor') + 1] === REAL_CURSOR,
+    check(argvSeen[1][argvSeen[1].indexOf('--cursor') + 1] === SAMPLE_CURSOR,
       'status paging (real transport): the provider cursor must survive validation and land in argv unchanged');
   }
 
