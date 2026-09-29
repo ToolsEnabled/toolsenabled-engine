@@ -1,0 +1,21 @@
+{
+  "$comment": [
+    "THE SINGLE SWITCH for owner-facing delivery. Both owner-facing paths read this file:",
+    "the scheduled digest and the Duo push. Changing `channel` here changes both; there is",
+    "no second place to set it.",
+    "",
+    "This ships as the harness default. An operator's own choice overrides it in place.",
+    "",
+    "2026-08-23: this said `telegram-image-full` until the Telegram connector was removed",
+    "from the product. `email` is not a preference being asserted here -- it is the only",
+    "channel that still exists, and it is set explicitly so nothing points at a deleted one.",
+    "An earlier request had asked that reports go to the messaging channel rather than email;",
+    "that request is not withdrawn, it simply has no channel to name right now. Choosing the",
+    "replacement (the agent-comms journal, the product's own mobile app, or email as it now",
+    "stands) is an owner decision -- see the header of src/lib/owner-delivery.js for what the",
+    "digest actually loses, which is the phone-shaped IMAGE rather than the report itself."
+  ],
+  "schemaVersion": 1,
+  "channel": "email",
+  "dashboardUrl": "http://127.0.0.1:3889"
+}

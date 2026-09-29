@@ -1,0 +1,70 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__toolsenabled__*",
+      "mcp__playwright__*"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/tools/agent-onboarding.js",
+              "--hook"
+            ]
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/tools/claude-session-autoregister.js"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/tools/agent-onboarding.js",
+              "--hook"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/tools/clarify-gate-hook.js"]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/tools/no-blocking-prompt-hook.js"]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/tools/standing-orders-hook.js"]
+          }
+        ]
+      }
+    ]
+  }
+}

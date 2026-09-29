@@ -1,0 +1,280 @@
+{
+  "$comment": [
+    "SHIPPED DEFAULT managed-process registry for a fresh installation.",
+    "",
+    "This file declares the complete portable ToolsEnabled process set. It",
+    "contains no Windows principal, customer repository, cloud project id, or",
+    "other installation-specific value. Setup may replace portable placeholders",
+    "with customer-authorized values, but it must not fabricate mission-bridge",
+    "or other installation-only records. The owner host is app-owned and is not",
+    "a managed/scheduled process at all.",
+    "",
+    "The fleet-supervisor argv intentionally declares the required --project and",
+    "--backend flags without customer values. Its launch precondition therefore",
+    "refuses the unconfigured shipped default instead of guessing or inheriting a",
+    "builder's project. Customer setup must bind both values before registration.",
+    "",
+    "Every portable process declares all four health rungs. A rung that cannot be",
+    "observed honestly is explicitly unobservable with a bounded explanation; it",
+    "is never silently treated as healthy."
+  ],
+  "schemaVersion": 1,
+  "processes": {
+    "agent-digest": {
+      "displayName": "Agent workflow digest",
+      "taskName": "ToolsEnabled Agent Digest",
+      "kind": "worker",
+      "owner": "agent-digest",
+      "repo": "ToolsEnabled",
+      "entryPoint": "src/agent-digest.js",
+      "entryPattern": "src/agent-digest.js",
+      "declaredArgv": ["--serve"],
+      "cwd": ".",
+      "pidLockFile": "state/agent-digest.lock",
+      "stateFile": "state/agent-digest.json",
+      "registrar": "tools/agent-digest-task.ps1",
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock" },
+        "functioning": {
+          "kind": "counter-not-stuck",
+          "stateField": "agent_digest_last_fired",
+          "maxAgeMs": 43200000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "coordinator-duty-host": {
+      "displayName": "Coordinator duty host",
+      "taskName": "ToolsEnabled Coordinator Duty Host",
+      "kind": "worker",
+      "owner": "coordinator",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/coordinator-duty-host.js",
+      "entryPattern": "tools/coordinator-duty-host.js",
+      "declaredArgv": ["--serve"],
+      "cwd": ".",
+      "pidLockFile": "state/coordinator-duty-host.pid.lock",
+      "stateFile": "state/coordinator-duty-host.heartbeat.json",
+      "stopSentinel": "state/coordinator-duty-host.stop",
+      "logStdout": "logs/coordinator-duty-host.log",
+      "registrar": "tools/coordinator-duty-host-task.ps1",
+      "repetitionMinutes": 5,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock" },
+        "functioning": {
+          "kind": "counter-not-stuck",
+          "stateField": "observedAtMs",
+          "maxAgeMs": 300000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "dashboard": {
+      "displayName": "Agent Activity Dashboard",
+      "taskName": "ToolsEnabled Dashboard",
+      "kind": "listener",
+      "owner": "dashboard-agents",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/dashboard-task.ps1",
+      "entryPattern": "server/index.js",
+      "declaredArgv": [],
+      "correctionMode": "report-only",
+      "cwd": ".",
+      "port": 3889,
+      "registrar": "tools/dashboard-task.ps1",
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "port-listener" },
+        "functioning": { "kind": "port-listener" },
+        "correct": { "kind": "listener-identity" }
+      }
+    },
+    "fleet-supervisor": {
+      "displayName": "Agent fleet supervisor",
+      "taskName": "ToolsEnabled Fleet Supervisor",
+      "kind": "worker",
+      "owner": "fleet-supervisor",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/fleet-supervisor.js",
+      "entryPattern": "tools/fleet-supervisor.js",
+      "declaredArgv": ["--serve", "--project", "--backend"],
+      "cwd": ".",
+      "pidLockFile": "state/fleet-supervisor.pid.lock",
+      "stateFile": "state/fleet-supervisor.json",
+      "stopSentinel": "state/fleet-supervisor.stop",
+      "registrar": "tools/fleet-supervisor-task.ps1",
+      "repetitionMinutes": 15,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock" },
+        "functioning": {
+          "kind": "counter-not-stuck",
+          "stateField": "supervisor.heartbeatAt",
+          "maxAgeMs": 180000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "fra-keeper": {
+      "displayName": "Full Remote Access keeper",
+      "taskName": "ToolsEnabled FRA Keeper",
+      "kind": "worker",
+      "owner": "full-remote-access",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/fra-keeper.js",
+      "entryPattern": "tools/fra-keeper.js",
+      "declaredArgv": ["--resident"],
+      "cwd": ".",
+      "pidLockFile": "state/fra-keeper.pid",
+      "stateFile": "state/fra-keeper-heartbeat.json",
+      "stopSentinel": "state/full-remote-access.stop",
+      "registrar": "tools/fra-keeper-task.ps1",
+      "onDemand": true,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock" },
+        "functioning": {
+          "kind": "state-fresh",
+          "stateField": "generatedAt",
+          "failureField": "failureAt",
+          "maxAgeMs": 300000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "health-observer": {
+      "displayName": "Health observer",
+      "taskName": "ToolsEnabled Health Observer",
+      "kind": "worker",
+      "owner": "health-observer",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/health-observer.js",
+      "entryPattern": "tools/health-observer.js",
+      "declaredArgv": ["--serve"],
+      "cwd": ".",
+      "pidLockFile": "state/health-observer.pid.lock",
+      "stateFile": "state/health-snapshot.json",
+      "registrar": "tools/health-observer-task.ps1",
+      "repetitionMinutes": 15,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock" },
+        "functioning": {
+          "kind": "counter-not-stuck",
+          "stateField": "observedAtMs",
+          "maxAgeMs": 180000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "logs-retention": {
+      "displayName": "Logs retention keeper",
+      "taskName": "ToolsEnabled Logs Retention",
+      "kind": "one-shot",
+      "owner": "logs-retention",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/audit-logs-retention.js",
+      "entryPattern": "tools/audit-logs-retention.js",
+      "declaredArgv": ["--apply", "--heartbeat"],
+      "cwd": ".",
+      "stateFile": "state/logs-retention-heartbeat.json",
+      "stopSentinel": "state/logs-retention.stop",
+      "registrar": "tools/logs-retention-task.ps1",
+      "repetitionMinutes": 60,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": {
+          "kind": "unobservable",
+          "reason": "This keeper exits after each pass, so no resident process exists between scheduled runs."
+        },
+        "functioning": {
+          "kind": "state-fresh",
+          "stateField": "generatedAt",
+          "maxAgeMs": 7200000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "native-agent-worker": {
+      "displayName": "Native agent durable worker",
+      "taskName": "ToolsEnabled Native Agent Worker",
+      "kind": "worker",
+      "owner": "native-agent",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/native-agent-worker-reconcile.js",
+      "entryPattern": "tools/native-agent-worker-reconcile.js",
+      "declaredArgv": [],
+      "cwd": ".",
+      "pidLockFile": "state/native-agent-runtime/worker.json",
+      "stateFile": "state/native-agent-runtime/heartbeat.json",
+      "registrar": "tools/native-agent-worker-register-task.ps1",
+      "repetitionMinutes": 2,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "pid-lock", "startTimeSlackMs": 1000 },
+        "functioning": {
+          "kind": "state-fresh",
+          "stateField": "observedAtMs",
+          "maxAgeMs": 60000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "tunnel-bridge-keeper": {
+      "displayName": "Direct-link tunnel and bridge keeper",
+      "taskName": "ToolsEnabled Tunnel Bridge Keeper",
+      "kind": "worker",
+      "owner": "direct-link",
+      "repo": "ToolsEnabled",
+      "entryPoint": "tools/bridge-session-supervisor.ps1",
+      "entryPattern": "tools/bridge-session-supervisor.ps1",
+      "declaredArgv": [],
+      "cwd": ".",
+      "stateFile": "state/tunnel-bridge-supervisor.json",
+      "stopSentinel": "state/tunnel-bridge-supervisor.stop",
+      "registrar": "tools/tunnel-bridge-keeper-task.ps1",
+      "onDemand": true,
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": { "kind": "scheduled-task-running" },
+        "functioning": {
+          "kind": "state-fresh",
+          "stateField": "generatedAt",
+          "failureField": "failureAt",
+          "maxAgeMs": 60000
+        },
+        "correct": { "kind": "argv-match" }
+      }
+    },
+    "uac-delegation-helper": {
+      "displayName": "UAC Delegation Helper",
+      "taskName": "ToolsEnabled UAC Delegation Helper",
+      "kind": "on-demand",
+      "owner": "uac-delegation",
+      "repo": "ToolsEnabled",
+      "entryPoint": "src/uac-delegation-helper.js",
+      "entryPattern": "src/uac-delegation-helper.js",
+      "declaredArgv": [],
+      "cwd": ".",
+      "onDemand": true,
+      "registrar": "tools/uac-delegation-task.ps1",
+      "rungs": {
+        "registered": { "kind": "scheduled-task" },
+        "alive": {
+          "kind": "unobservable",
+          "reason": "The elevated helper starts only for an approved request and normally exits while idle."
+        },
+        "functioning": {
+          "kind": "unobservable",
+          "reason": "Function is proven by authenticated request receipts, not by a passive always-on probe."
+        },
+        "correct": {
+          "kind": "unobservable",
+          "reason": "The on-demand task action is verified by its dedicated delegation and registration audits."
+        }
+      }
+    }
+  }
+}

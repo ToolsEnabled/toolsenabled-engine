@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+'use strict';
+
+// Point Codex at the ChatGPT sign-in held by an attached OpenShell `codex`
+// provider. Run it inside the sandbox before starting Codex.
+//
+// The provider injects CODEX_AUTH_ACCESS_TOKEN as an opaque placeholder;
+// OpenShell's proxy swaps in the real token only on requests to the provider's
+// endpoints, and the gateway keeps and refreshes the refresh token. Codex
+// parses an ID token locally, so this writes a short-lived unsigned stand-in
+// that carries no identity. No real credential is read or written here.
+//
+// The account id is left unset. Codex 0.158 looks its local account id up in
+// the workspace list the server returns (/backend-api/wham/accounts/check), and
+// a placeholder never matches, so Codex stops with "selected workspace missing
+// from routing discovery". Unset, Codex takes the workspace from the server.
+// A person in several ChatGPT workspaces gets the server's default one.
+//
+// Follows the pattern of NVIDIA OpenShell's
+// examples/codex-app-server/start-codex-app-server (Apache-2.0).
+
+const fs = require('fs');
+const path = require('path');
+
+if (!process.env.CODEX_AUTH_ACCESS_TOKEN) {
+  console.error('CODEX_AUTH_ACCESS_TOKEN is not set: attach an OpenShell codex provider to this sandbox.');
+  process.exit(1);
+}
+
+const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+const now = Math.floor(Date.now() / 1000);
+const idToken = [
+  encode({ alg: 'none', typ: 'JWT' }),
+  encode({
+    iss: 'https://auth.openai.com',
+    aud: 'codex',
+    sub: 'openshell-sandbox',
+    email: 'sandbox@openshell.local',
+    iat: now,
+    exp: now + 3600,
+  }),
+  'placeholder',
+].join('.');
+
+const codexHome = process.env.CODEX_HOME || path.join(process.env.HOME, '.codex');
+fs.mkdirSync(codexHome, { recursive: true, mode: 0o700 });
+const authFile = path.join(codexHome, 'auth.json');
+fs.writeFileSync(authFile, `${JSON.stringify({
+  // The gateway owns refresh; Codex must not refresh these tokens itself.
+  auth_mode: 'chatgptAuthTokens',
+  OPENAI_API_KEY: null,
+  tokens: {
+    id_token: idToken,
+    access_token: process.env.CODEX_AUTH_ACCESS_TOKEN,
+    refresh_token: '',
+    account_id: null,
+  },
+  last_refresh: new Date().toISOString(),
+}, null, 2)}\n`, { mode: 0o600 });
+
+console.log(`wrote ${authFile} (OpenShell provider placeholders)`);

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:memory:1.0.0",
+  "title": "Coordinator platform memory candidate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "memoryId": {"type": "string", "pattern": "^mem_[A-Za-z0-9_-]{8,128}$"},
+    "namespace": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"},
+    "key": {"type": "string", "minLength": 1, "maxLength": 256},
+    "provenance": {"enum": ["verified", "untrusted", "generated-model", "local-derived"]},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 4096}
+  },
+  "required": ["schemaVersion", "memoryId", "namespace", "key", "provenance", "summary"]
+}

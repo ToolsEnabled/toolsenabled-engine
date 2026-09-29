@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "capability-index-v1",
+  "builderVersion": "capability-index-builder-v1",
+  "tokenizerVersion": "capability-tokenizer-v1",
+  "engineCommit": "565e4bc9f5b6cb1680a84c4a72ba3d15887c18e4",
+  "toolCount": 262,
+  "ownerToolPacksIncluded": false,
+  "ownerToolPacksNote": "Owner tool packs excluded, matching the installer payload (capability/src/lib has no tool-packs directory).",
+  "documents": 262,
+  "terms": 3953,
+  "postings": 27213,
+  "phrases": 681,
+  "constants": {
+    "k1": 1.2,
+    "weights": {
+      "identity": 8,
+      "title": 4,
+      "body": 1,
+      "alias": 6
+    },
+    "b": {
+      "identity": 0.4,
+      "title": 0.6,
+      "body": 0.75,
+      "alias": 0.4
+    },
+    "stemDiscount": 0.55,
+    "commonFraction": 0.4,
+    "strongTermFraction": 0.025,
+    "priorMass": 6,
+    "absentWeight": 0.4,
+    "focusTerms": 6,
+    "maxAbsentMass": 8,
+    "tieBand": 0.002,
+    "actionBoost": 0.15,
+    "phraseBoost": 0.3,
+    "floorAuto": 0.42,
+    "floorQuery": 0.25
+  },
+  "artifactBytes": 673364,
+  "artifactSha256": "6357e632b47ff9edc709c0eab235ab53d5ee45387f0ae4d1e5ce3298f419fe7e",
+  "canonicalArtifact": "engine=565e4bc9f5b6cb1680a84c4a72ba3d15887c18e4 | tools=262 | tokenizer=capability-tokenizer-v1 | sha256=6357e632b47ff9edc709c0eab235ab53d5ee45387f0ae4d1e5ce3298f419fe7e"
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:browser-event:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "projectionKind", "eventType", "sequence", "occurredAt", "context", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "projectionKind": {"const": "browser-safe-event"},
+    "eventType": {"type": "string", "enum": ["agent_state", "delegation_state", "phase_state", "checkpoint_observed", "help_state", "acceptance_state", "report_state", "source_state"]},
+    "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "occurredAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "context": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/contextTemplate"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  }
+}

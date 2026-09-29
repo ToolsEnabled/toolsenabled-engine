@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "dependency-acceptance-v1",
+  "baselineDependencies": [
+    {
+      "name": "playwright",
+      "reason": "Accepted as part of the built-in dependency baseline."
+    }
+  ],
+  "records": [
+    {
+      "name": "werift",
+      "kind": "crypto",
+      "license": "MIT",
+      "reuseType": "protocol-implementation",
+      "capturedAt": "built-in baseline"
+    }
+  ]
+}

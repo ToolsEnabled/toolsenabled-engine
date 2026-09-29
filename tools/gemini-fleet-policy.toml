@@ -1,0 +1,12 @@
+# Supplemental admin policy for disposable Gemini coding lanes.  The fleet
+# performs independent output-scope verification after each run; this policy
+# additionally prevents dependency-management commands from running at all.
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["npm", "npx", "pnpm", "yarn", "bun", "pip", "pip3", "uv"]
+decision = "deny"
+priority = 999
+modes = ["yolo"]
+interactive = false
+denyMessage = "Fleet lanes must not install, update, remove, or vendor dependencies. Use only existing focused node checks."

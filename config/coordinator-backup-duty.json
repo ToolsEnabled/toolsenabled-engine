@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "recurring-backup-definition",
+  "host": "coordinator-duty-host",
+  "mode": "report-only",
+  "intervalMs": 86400000,
+  "destination": {
+    "kind": "local-directory",
+    "path": "REPLACE_WITH_YOUR_BACKUP_DIRECTORY"
+  },
+  "retention": {
+    "maxSnapshots": 7
+  },
+  "plannedArtifacts": [
+    "git-bundle",
+    "vault-state-copy",
+    "manifest-sha256",
+    "retention-prune"
+  ],
+  "safety": {
+    "registerScheduledTask": false,
+    "createArtifacts": false,
+    "deleteArtifacts": false,
+    "readVaultContents": false,
+    "readDestinationMetadata": true
+  }
+}

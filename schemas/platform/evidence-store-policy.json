@@ -1,0 +1,111 @@
+{
+  "policyVersion": "1.0.0",
+  "policyAuthority": "toolsenabled",
+  "serviceId": "coordinator-platform-evidence-store-v1",
+  "database": {
+    "schemaVersion": 1,
+    "applicationId": 1413825878,
+    "applicationIdAscii": "TEEV",
+    "schemaFingerprint": "ab2dba5c9780e855d758b952d8b47bc36aa751ecb379674b3e187a833988521b",
+    "journalMode": "wal",
+    "synchronous": "full"
+  },
+  "storage": {
+    "hashAlgorithm": "sha256",
+    "hashMeaning": "raw stored bytes",
+    "objectPath": "objects/sha256/<first-two-hex>/<next-two-hex>/<sha256>.blob",
+    "temporaryPath": "tmp/<random>.tmp",
+    "trashPath": "trash/<sha256>.<random>.trash",
+    "bodiesInDatabase": false
+  },
+  "recordHash": {
+    "algorithm": "coordinator-platform-hash-v1",
+    "domain": "coordinator:evidence-record",
+    "excludes": ["recordHash"]
+  },
+  "tombstoneHash": {
+    "algorithm": "coordinator-platform-hash-v1",
+    "domain": "coordinator:evidence-tombstone",
+    "appendOnly": true
+  },
+  "identifiers": {
+    "evidenceIdKind": "evidence",
+    "taskIdKind": "task",
+    "scopeIdKind": "context",
+    "toolRequestIdKind": "event",
+    "tombstoneIdKind": "event",
+    "visiblePrefixGrantsAuthority": false
+  },
+  "recordKinds": [
+    "fact",
+    "calculation",
+    "tool-output",
+    "file",
+    "browser-trace",
+    "test-log",
+    "approval"
+  ],
+  "contentFormats": {
+    "public": ["text", "json"],
+    "protected": ["text", "json", "binary"]
+  },
+  "locatorKinds": [
+    "calculation",
+    "file",
+    "tool",
+    "browser",
+    "test",
+    "approval",
+    "other"
+  ],
+  "limits": {
+    "summaryCharacters": 4096,
+    "metadataJsonBytes": 65536,
+    "sourceVersionCharacters": 512,
+    "locatorValueCharacters": 4096,
+    "publicObjectBytes": 16777216,
+    "protectedObjectBytes": 1073741824,
+    "spanBytes": 65536,
+    "listRecords": 1000
+  },
+  "publicExport": {
+    "egress": "evidence-export",
+    "payloadFields": ["summary", "format", "content"],
+    "preparedEnvelopeRequired": true,
+    "protectedBytesReturned": false,
+    "protectedDescriptorReturnedPublic": false,
+    "writerReceiptReturnsEvidenceReference": true,
+    "provenanceDisplayReturnsSourceReferences": false
+  },
+  "retention": {
+    "defaultClass": "standard",
+    "classes": {
+      "transient": {"maxAgeMs": 604800000},
+      "standard": {"maxAgeMs": 7776000000},
+      "durable": {"maxAgeMs": null}
+    },
+    "deletion": {
+      "appendTombstoneBeforeObjectCollection": true,
+      "preserveRecordMetadata": true,
+      "collectOnlyWithoutLiveReferences": true,
+      "resurrectionById": false,
+      "reasonCodes": ["retention", "user-request", "corrupt", "superseded"]
+    }
+  },
+  "maintenance": {
+    "orphanGraceMs": 86400000,
+    "maximumSweepFiles": 1000,
+    "automaticStartupSweep": false
+  },
+  "authorization": {
+    "defaultWithoutAuthorizer": "deny",
+    "bindingFields": ["taskId", "scopeId"],
+    "exactMatchRequired": true,
+    "lexicalIdValidationGrantsAuthority": false
+  },
+  "activation": {
+    "runtimeRouteEnabled": false,
+    "mcpToolEnabled": false,
+    "providerEnabled": false
+  }
+}

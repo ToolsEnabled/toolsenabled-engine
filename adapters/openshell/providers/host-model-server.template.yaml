@@ -1,0 +1,52 @@
+# OpenShell provider profile TEMPLATE for a model server on the machine that
+# runs your OpenShell gateway (NIM, vLLM, Ollama, SGLang, LM Studio, llama.cpp)
+# that takes NO key, used by Codex in the ToolsEnabled OpenShell image.
+# See ../MODELS.md. For a server that does take a key, use
+# model-endpoint.template.yaml with <HOST> set to host.openshell.internal.
+#
+# OpenShell never loads this file on its own. Copy it, replace every <...>
+# placeholder, review it, then on the host:
+#
+#   openshell profile lint   -f <PROFILE_ID>.yaml
+#   openshell profile import -f <PROFILE_ID>.yaml
+#   openshell provider create --name <PROFILE_ID> --type <PROFILE_ID>
+#
+# `toolsenabled-openshell model profile <PROFILE_ID> --base-url
+# http://host.openshell.internal:<PORT>/v1` prints this same profile filled in.
+#
+# host.openshell.internal is OpenShell's name for the gateway's machine. With
+# the Docker driver it reaches the host's loopback, so a server listening only
+# on 127.0.0.1 is reachable; with other drivers bind the server to an address
+# the gateway runtime can reach. It is never your laptop when the gateway is
+# remote.
+#
+# Placeholders:
+#   <PROFILE_ID>    lowercase letters, digits and hyphens, e.g. vllm-host.
+#   <DISPLAY_NAME>  any short label, e.g. vLLM on this machine.
+#   <PORT>          the server's port, e.g. 8000 (vLLM, NIM), 11434 (Ollama),
+#                   30000 (SGLang), 1234 (LM Studio), 8080 (llama.cpp).
+#
+# Client binaries:  Codex's native binaries and curl (see
+#                   model-endpoint.template.yaml).
+# Credential scope: none.
+# Endpoint access:  host.openshell.internal:<PORT> under /v1/**, read-write,
+#                   L7 enforced.
+# Smoke test (inside the sandbox):
+#   curl -sS http://host.openshell.internal:<PORT>/v1/models
+
+id: <PROFILE_ID>
+display_name: "<DISPLAY_NAME>"
+description: "OpenAI-compatible model endpoint at host.openshell.internal"
+category: inference
+inference_capable: true
+credentials: []
+endpoints:
+  - host: host.openshell.internal
+    port: <PORT>
+    path: /v1/**
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/local/lib/node_modules/@openai/**
+  - /usr/bin/curl

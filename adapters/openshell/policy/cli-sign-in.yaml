@@ -1,0 +1,98 @@
+# Suggested sandbox policy for running ToolsEnabled with the person's own
+# Claude and Codex subscriptions.
+#
+# OpenShell never loads this file on its own and ToolsEnabled never applies it.
+# Review it, edit it for your image, then use it yourself:
+#
+#   openshell sandbox create --name <name> --from <image> \
+#     --policy adapters/openshell/policy/cli-sign-in.yaml --provider codex --detach
+#
+# Codex: attach an OpenShell `codex` provider with gateway-managed refresh
+# (NVIDIA OpenShell examples/codex-app-server). The provider contributes its
+# own network rule, and the sandbox holds only placeholders. Inside the
+# sandbox, run `codex-openshell-auth` once before `codex`.
+#
+# Claude Code: OpenShell's Claude provider takes API keys only, and gateway-held
+# subscription sign-in is tracked upstream (NVIDIA/OpenShell#3331). Until then
+# the person signs in with Claude Code's own flow inside the sandbox (`claude`,
+# then /login). Claude Code stores that sign-in under /sandbox/.claude, where
+# processes in the sandbox can read it; OpenShell's placeholders do not cover
+# it. ToolsEnabled never reads, copies or relays it. The claude_code rule below
+# is what that sign-in needs, and goes away once the provider can hold it.
+#
+# Each network rule covers the listed executables and every process they start
+# (upstream network-rules documentation). An MCP server that an agent CLI starts
+# over stdio, such as ToolsEnabled's, therefore shares that CLI's endpoints.
+# Binary paths match the npm global layout of ../image/Dockerfile; list real
+# paths, not symlinks.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /etc
+    - /opt/toolsenabled
+    - /proc
+    - /dev/urandom
+    - /var/log
+  read_write:
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: hard_requirement
+
+network_policies:
+  claude_code:
+    name: Claude Code
+    endpoints:
+      # Inference, account profile and roles.
+      - host: api.anthropic.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+      # Sign-in code exchange and token refresh (/v1/oauth/token).
+      - host: platform.claude.com
+        port: 443
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+      # Optional: the MCP connectors of your claude.ai account (for example
+      # Claude Docs) reach you through this host. Leave it out to keep them off
+      # inside the sandbox; Claude Code then reports those connectors as failed.
+      # - host: mcp-proxy.anthropic.com
+      #   port: 443
+      #   protocol: rest
+      #   access: read-write
+      #   enforcement: enforce
+    binaries:
+      - path: /usr/local/lib/node_modules/@anthropic-ai/**
+
+  # Optional, instead of the `codex` provider: Codex signed in inside this
+  # sandbox by the person (`codex login`, see README.md). Codex 0.158 then also
+  # runs an app-server daemon from a copy it keeps under
+  # /sandbox/.codex/packages/app-server-daemon, which is not one of the npm
+  # binaries; without that path its account check is refused and Codex stops
+  # with "workspace routing discovery failed". That folder is writable inside
+  # the sandbox, so this rule reaches these hosts for anything placed there:
+  # prefer the provider when you can.
+  # codex_signed_in_here:
+  #   name: Codex signed in inside the sandbox
+  #   endpoints:
+  #     - { host: api.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+  #     - { host: auth.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+  #     - { host: chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+  #     - { host: ab.chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+  #   binaries:
+  #     - path: /usr/local/lib/node_modules/@openai/**
+  #     - path: /sandbox/.codex/packages/app-server-daemon/**
+
+# Not allowed on purpose: Claude Code's telemetry and error logging
+# (http-intake.logs.us5.datadoghq.com and others) and Codex's update check
+# (releases.openai.com). Create the sandbox with
+# `--env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` so Claude Code stops trying;
+# an update check cannot succeed here anyway, because /usr/local is read-only.

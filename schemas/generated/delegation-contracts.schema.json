@@ -1,0 +1,556 @@
+{
+  "$defs": {
+    "DelegatedTask": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptanceCriteria": {
+          "items": {
+            "maxLength": 120,
+            "minLength": 3,
+            "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "baseSnapshot": {
+          "additionalProperties": false,
+          "properties": {
+            "commitSha1": {
+              "maxLength": 40,
+              "minLength": 40,
+              "pattern": "^[a-f0-9]{40}$",
+              "type": "string"
+            },
+            "rootId": {
+              "maxLength": 120,
+              "minLength": 3,
+              "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+              "type": "string"
+            },
+            "treeSha256": {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rootId",
+            "commitSha1",
+            "treeSha256"
+          ],
+          "type": "object"
+        },
+        "budgets": {
+          "additionalProperties": false,
+          "properties": {
+            "maxEvidenceBytes": {
+              "maximum": 8388608,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxModelTokens": {
+              "maximum": 2000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxToolCalls": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxWallMs": {
+              "maximum": 86400000,
+              "minimum": 1000,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "maxWallMs",
+            "maxModelTokens",
+            "maxToolCalls",
+            "maxEvidenceBytes"
+          ],
+          "type": "object"
+        },
+        "capabilityProfileHash": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "delegationId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^dlg_"
+            }
+          ]
+        },
+        "goalId": {
+          "maxLength": 120,
+          "minLength": 3,
+          "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+          "type": "string"
+        },
+        "phaseId": {
+          "maxLength": 120,
+          "minLength": 3,
+          "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "read_only_review",
+            "deterministic_verification",
+            "disposable_edit"
+          ]
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "terminalStates": {
+          "items": {
+            "enum": [
+              "complete",
+              "blocked",
+              "cancelled",
+              "failed"
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "delegationId",
+        "goalId",
+        "phaseId",
+        "role",
+        "baseSnapshot",
+        "acceptanceCriteria",
+        "capabilityProfileHash",
+        "budgets",
+        "terminalStates"
+      ],
+      "type": "object"
+    },
+    "EscalationPacket": {
+      "additionalProperties": false,
+      "properties": {
+        "delegationId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^dlg_"
+            }
+          ]
+        },
+        "disputedDecisionCode": {
+          "maxLength": 120,
+          "minLength": 3,
+          "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+          "type": "string"
+        },
+        "escalationId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^esc_"
+            }
+          ]
+        },
+        "evidenceBundleHash": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "failedCriteria": {
+          "items": {
+            "maxLength": 120,
+            "minLength": 3,
+            "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "requestedDecision": {
+          "enum": [
+            "clarify_scope",
+            "resolve_evidence",
+            "approve_repair_plan",
+            "route_to_owner"
+          ]
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "verifiedFactRefs": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[a-z][a-z0-9._:-]{2,159}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "escalationId",
+        "delegationId",
+        "disputedDecisionCode",
+        "verifiedFactRefs",
+        "failedCriteria",
+        "evidenceBundleHash",
+        "requestedDecision"
+      ],
+      "type": "object"
+    },
+    "EvidenceBundle": {
+      "additionalProperties": false,
+      "properties": {
+        "bundleId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^evb_"
+            }
+          ]
+        },
+        "delegationId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^dlg_"
+            }
+          ]
+        },
+        "records": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "verification",
+                  "artifact",
+                  "receipt"
+                ]
+              },
+              "ref": {
+                "maxLength": 160,
+                "minLength": 3,
+                "pattern": "^[a-z][a-z0-9._:-]{2,159}$",
+                "type": "string"
+              },
+              "sha256": {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "sizeBytes": {
+                "maximum": 8388608,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "ref",
+              "sha256",
+              "sizeBytes",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "workerResultHash": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "bundleId",
+        "delegationId",
+        "workerResultHash",
+        "records"
+      ],
+      "type": "object"
+    },
+    "WorkerResult": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "patch",
+                  "archive",
+                  "report",
+                  "test-output"
+                ]
+              },
+              "sha256": {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "sizeBytes": {
+                "maximum": 67108864,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "sha256",
+              "sizeBytes"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "attempt": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "baseSnapshot": {
+          "additionalProperties": false,
+          "properties": {
+            "commitSha1": {
+              "maxLength": 40,
+              "minLength": 40,
+              "pattern": "^[a-f0-9]{40}$",
+              "type": "string"
+            },
+            "rootId": {
+              "maxLength": 120,
+              "minLength": 3,
+              "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+              "type": "string"
+            },
+            "treeSha256": {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "rootId",
+            "commitSha1",
+            "treeSha256"
+          ],
+          "type": "object"
+        },
+        "blockerCode": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 120,
+              "minLength": 3,
+              "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+              "type": "string"
+            }
+          ]
+        },
+        "brokerAcceptanceState": {
+          "const": "UNACCEPTED"
+        },
+        "capabilityProfileHash": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "delegationId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^dlg_"
+            }
+          ]
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "terminalState": {
+          "enum": [
+            "complete",
+            "blocked",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "usage": {
+          "additionalProperties": false,
+          "properties": {
+            "modelTokens": {
+              "maximum": 2000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "toolCalls": {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "usageRecordRefs": {
+              "items": {
+                "maxLength": 160,
+                "minLength": 3,
+                "pattern": "^[a-z][a-z0-9._:-]{2,159}$",
+                "type": "string"
+              },
+              "maxItems": 64,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "wallMs": {
+              "maximum": 86400000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "modelTokens",
+            "toolCalls",
+            "wallMs",
+            "usageRecordRefs"
+          ],
+          "type": "object"
+        },
+        "verification": {
+          "additionalProperties": false,
+          "properties": {
+            "criterionIds": {
+              "items": {
+                "maxLength": 120,
+                "minLength": 3,
+                "pattern": "^[a-z][a-z0-9._-]{2,119}$",
+                "type": "string"
+              },
+              "maxItems": 128,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "evidenceRefs": {
+              "items": {
+                "maxLength": 160,
+                "minLength": 3,
+                "pattern": "^[a-z][a-z0-9._:-]{2,159}$",
+                "type": "string"
+              },
+              "maxItems": 128,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "state": {
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "criterionIds",
+            "evidenceRefs"
+          ],
+          "type": "object"
+        },
+        "workerResultId": {
+          "allOf": [
+            {
+              "maxLength": 100,
+              "minLength": 20,
+              "pattern": "^(?:dlg|wrk|evb|esc)_[A-Za-z0-9_-]{16,96}$",
+              "type": "string"
+            },
+            {
+              "pattern": "^wrk_"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "workerResultId",
+        "delegationId",
+        "attempt",
+        "terminalState",
+        "baseSnapshot",
+        "capabilityProfileHash",
+        "artifacts",
+        "verification",
+        "blockerCode",
+        "usage",
+        "brokerAcceptanceState"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:toolsenabled:delegation-contracts:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "schemaVersion": 1,
+  "title": "ToolsEnabled inert provider-neutral delegation contracts"
+}

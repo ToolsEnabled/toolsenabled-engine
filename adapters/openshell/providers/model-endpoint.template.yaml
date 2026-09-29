@@ -1,0 +1,65 @@
+# OpenShell provider profile TEMPLATE for one OpenAI-compatible model endpoint
+# that takes an API key, used by Codex in the ToolsEnabled OpenShell image.
+# See ../MODELS.md.
+#
+# OpenShell never loads this file on its own. Copy it, replace every <...>
+# placeholder, review it, then on the host:
+#
+#   openshell profile lint   -f <PROFILE_ID>.yaml
+#   openshell profile import -f <PROFILE_ID>.yaml
+#   <KEY_VARIABLE>=... openshell provider create --name <PROFILE_ID> --type <PROFILE_ID> --credential <KEY_VARIABLE>
+#
+# Put the key in <KEY_VARIABLE> only in your own shell on the host, for that
+# one command; OpenShell reads it from there and never shows it again. The
+# sandbox sees only an `openshell:resolve:...` placeholder, which the proxy
+# swaps for the key on requests to the endpoint below and refuses anywhere else.
+#
+# `toolsenabled-openshell model profile <PROFILE_ID> --base-url <URL> --key-env
+# <KEY_VARIABLE>` prints this same profile already filled in.
+#
+# Placeholders:
+#   <PROFILE_ID>    lowercase letters, digits and hyphens, e.g. together-ai.
+#                   Use the same name for `toolsenabled-openshell model add`.
+#   <DISPLAY_NAME>  any short label, e.g. Together AI.
+#   <HOST>          the endpoint's host name only, e.g. api.together.xyz.
+#   <PORT>          443 for https.
+#   <PATH_PREFIX>   the base URL's path, e.g. /v1 (so requests to /v1/... carry
+#                   the key). Delete the `path:` line if the base URL has no path.
+#   <KEY_VARIABLE>  upper-case variable name, e.g. TOGETHER_API_KEY. It is also
+#                   what `model add --key-env` names.
+#
+# Client binaries:  Codex's native binaries (npm global prefix of the image) and
+#                   curl for a smoke test. A rule also covers every process a
+#                   listed program starts, so the ToolsEnabled server that Codex
+#                   starts shares it. List real paths, not symlinks.
+# Credential scope: <KEY_VARIABLE>, sent as a bearer authorization header to
+#                   <HOST>:<PORT> under <PATH_PREFIX>/** and nowhere else.
+# Endpoint access:  <HOST>:<PORT>, read-write (GET, HEAD, OPTIONS, POST, PUT,
+#                   PATCH), L7 enforced.
+# Smoke test (inside the sandbox):
+#   curl -sS -H "Authorization: Bearer $<KEY_VARIABLE>" https://<HOST><PATH_PREFIX>/models
+
+id: <PROFILE_ID>
+display_name: "<DISPLAY_NAME>"
+description: "OpenAI-compatible model endpoint at <HOST>"
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: "API key for <DISPLAY_NAME>"
+    env_vars: [<KEY_VARIABLE>]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: <HOST>
+    port: <PORT>
+    path: <PATH_PREFIX>/**
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/local/lib/node_modules/@openai/**
+  - /usr/bin/curl

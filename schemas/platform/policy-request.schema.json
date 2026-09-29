@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:policy-request:1.0.0",
+  "title": "Coordinator deterministic policy request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "action": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]+(?:\\.[a-z0-9_]+)+$" },
+        "kind": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+        "effect": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+        "generatedCode": { "type": "boolean" }
+      },
+      "required": ["id", "kind", "effect", "generatedCode"]
+    },
+    "provenance": { "type": ["object", "null"] },
+    "capability": { "type": ["object", "null"] },
+    "task": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$" },
+        "risk": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+        "delegationDepth": { "type": "integer", "minimum": 0, "maximum": 16 }
+      },
+      "required": ["id", "risk", "delegationDepth"]
+    },
+    "target": {
+      "type": ["object", "null"],
+      "properties": {
+        "kind": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+        "identifierHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "pinned": { "type": "boolean" }
+      },
+      "required": ["kind", "identifierHash", "pinned"],
+      "additionalProperties": false
+    },
+    "user": {
+      "type": ["object", "null"],
+      "properties": { "kind": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": ["object", "null"],
+      "properties": { "status": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" } },
+      "required": ["status"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schemaVersion", "action", "provenance", "capability", "task", "target", "user", "approval"]
+}

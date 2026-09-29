@@ -1,0 +1,49 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel)\" && node \"$r/tools/agent-onboarding.js\" --hook",
+            "commandWindows": "$r = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -ne 0 -or -not $r) { Write-Error 'ToolsEnabled repository root was not found.'; exit 1 }; & node (Join-Path $r 'tools/agent-onboarding.js') --hook; exit $LASTEXITCODE",
+            "additionalContextLimit": 32768
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel)\" && node \"$r/tools/agent-onboarding.js\" --hook",
+            "commandWindows": "$r = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -ne 0 -or -not $r) { Write-Error 'ToolsEnabled repository root was not found.'; exit 1 }; & node (Join-Path $r 'tools/agent-onboarding.js') --hook; exit $LASTEXITCODE",
+            "additionalContextLimit": 24576
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel)\" && node \"$r/tools/clarify-gate-hook.js\"",
+            "commandWindows": "$r = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -ne 0 -or -not $r) { Write-Error 'ToolsEnabled repository root was not found.'; exit 1 }; & node (Join-Path $r 'tools/clarify-gate-hook.js'); exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel)\" && node \"$r/tools/no-blocking-prompt-hook.js\"",
+            "commandWindows": "$r = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -ne 0 -or -not $r) { Write-Error 'ToolsEnabled repository root was not found.'; exit 1 }; & node (Join-Path $r 'tools/no-blocking-prompt-hook.js'); exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "command": "r=\"$(git rev-parse --show-toplevel)\" && node \"$r/tools/standing-orders-hook.js\"",
+            "commandWindows": "$r = (& git rev-parse --show-toplevel 2>$null); if ($LASTEXITCODE -ne 0 -or -not $r) { Write-Error 'ToolsEnabled repository root was not found.'; exit 1 }; & node (Join-Path $r 'tools/standing-orders-hook.js'); exit $LASTEXITCODE"
+          }
+        ]
+      }
+    ]
+  }
+}

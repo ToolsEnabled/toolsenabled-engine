@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:coordinator:platform:evidence-store-record:1.0.0",
+  "title": "Coordinator platform immutable evidence store record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "evidenceId": {"type": "string", "pattern": "^ev_[A-Za-z0-9_-]{32}$"},
+    "taskId": {"type": "string", "pattern": "^tsk_[A-Za-z0-9_-]{32}$"},
+    "scopeId": {"type": "string", "pattern": "^ctx_[A-Za-z0-9_-]{32}$"},
+    "toolRequestId": {"type": "string", "pattern": "^evt_[A-Za-z0-9_-]{32}$"},
+    "kind": {
+      "enum": ["fact", "calculation", "tool-output", "file", "browser-trace", "test-log", "approval"]
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}/[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"
+    },
+    "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "protectedContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 1073741824},
+        "format": {"enum": ["text", "json", "binary"]}
+      },
+      "required": ["sha256", "sizeBytes", "format"]
+    },
+    "publicContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 16777216},
+        "format": {"enum": ["text", "json"]}
+      },
+      "required": ["sha256", "sizeBytes", "format"]
+    },
+    "provenance": {"$ref": "urn:coordinator:platform:provenance:1.0.0"},
+    "sourceVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{0,511}$"
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["calculation", "file", "tool", "browser", "test", "approval", "other"]},
+        "value": {"type": "string", "minLength": 1, "maxLength": 4096}
+      },
+      "required": ["kind", "value"]
+    },
+    "redactionReport": {"$ref": "urn:coordinator:platform:redaction-report:1.0.0"},
+    "retentionClass": {"enum": ["transient", "standard", "durable"]},
+    "expiresAt": {
+      "oneOf": [
+        {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"},
+        {"type": "null"}
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "recordHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "required": [
+    "schemaVersion",
+    "evidenceId",
+    "taskId",
+    "scopeId",
+    "toolRequestId",
+    "kind",
+    "mediaType",
+    "summary",
+    "protectedContent",
+    "publicContent",
+    "provenance",
+    "sourceVersion",
+    "locator",
+    "redactionReport",
+    "retentionClass",
+    "expiresAt",
+    "createdAt",
+    "recordHash"
+  ]
+}

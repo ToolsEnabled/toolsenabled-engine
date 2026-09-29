@@ -1,0 +1,208 @@
+{
+  "$comment": [
+    "NEUTRAL EXAMPLE agent organisation matching the shipped product configuration.",
+    "",
+    "config/agent-org.json is the checked-in neutral product default. It contains no",
+    "installation-specific fleet or owner directives, is classified open, and is included",
+    "in a customer's private Cloud Mirror with the runnable engine.",
+    "",
+    "This example is a schema-shaped reference for tooling and documentation. Runtime and",
+    "tests read config/agent-org.json directly; a missing shipped configuration is an",
+    "error to repair, not a reason to substitute an installation-specific file.",
+    "",
+    "A seat here is a DECLARATION, not a claim that credentials exist for it. The",
+    "fleet view renders declared agents and the surrounding copy already forces the",
+    "declared-versus-observed distinction, so declaring a seat you have no provider",
+    "login for is consistent with what the graph promises it means.",
+    "",
+    "The controller id stays neutral. agent.spawn binds its authenticated transport",
+    "actor to a fresh dispatch-only projection; setup does not persist one client",
+    "family as the controller. Claude worker seats therefore start at claude-1.",
+    "",
+    "Customers may edit their installation's declared seats without changing who owns",
+    "or supplies the dedicated private repository configured for Cloud Mirror."
+  ],
+  "schemaVersion": 1,
+  "revision": 1,
+  "agents": [
+    {
+      "id": "controller",
+      "displayName": "Controller",
+      "role": "controller",
+      "provider": "none",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "astra",
+      "displayName": "Astra",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "luna",
+      "displayName": "Luna",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "terra",
+      "displayName": "Terra",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "sol",
+      "displayName": "Sol",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "claude-1",
+      "displayName": "Claude seat 1",
+      "role": "builder",
+      "provider": "claude",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "claude-2",
+      "displayName": "Claude seat 2",
+      "role": "builder",
+      "provider": "claude",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "claude-3",
+      "displayName": "Claude seat 3",
+      "role": "builder",
+      "provider": "claude",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "claude-4",
+      "displayName": "Claude seat 4",
+      "role": "builder",
+      "provider": "claude",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "local-node-1",
+      "displayName": "Local node 1",
+      "role": "builder",
+      "provider": "local",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "local-node-2",
+      "displayName": "Local node 2",
+      "role": "builder",
+      "provider": "local",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "local-node-3",
+      "displayName": "Local node 3",
+      "role": "builder",
+      "provider": "local",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "local-node-4",
+      "displayName": "Local node 4",
+      "role": "builder",
+      "provider": "local",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    }
+  ],
+  "relationships": [
+    {
+      "from": "controller",
+      "to": "astra",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "luna",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "terra",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "sol",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "claude-1",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "claude-2",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "claude-3",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "claude-4",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "local-node-1",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "local-node-2",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "local-node-3",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "local-node-4",
+      "type": "manages"
+    }
+  ]
+}

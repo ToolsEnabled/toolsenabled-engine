@@ -1,0 +1,77 @@
+{
+  "fixtureVersion": "1.0.0",
+  "payloads": {
+    "nestedError": {
+      "error": {
+        "message": "Provider failed with TOOLSENABLED_CANARY_NESTED_ERROR_7429",
+        "inner": {
+          "stack": "at fixture (safe-fixture.js:12) TOOLSENABLED_CANARY_INNER_STACK_7429"
+        }
+      }
+    },
+    "headers": {
+      "headers": {
+        "authorization": "Bearer TOOLSENABLED_CANARY_AUTH_HEADER_7429",
+        "cookie": "fixture_session=TOOLSENABLED_CANARY_COOKIE_VALUE_7429; HttpOnly",
+        "x-trace": "safe-trace"
+      }
+    },
+    "browserTrace": {
+      "browserTrace": {
+        "url": "https://example.test/callback?code=TOOLSENABLED_CANARY_BROWSER_CODE_7429",
+        "title": "Fixture page",
+        "events": ["click", "TOOLSENABLED_CANARY_BROWSER_EVENT_7429"]
+      }
+    },
+    "providerStream": {
+      "chunks": [
+        "data: TOOLSENABLED_CANARY_PROVIDER_STREAM_7429",
+        "data: AAPL remains a harmless ticker"
+      ]
+    },
+    "finance": {
+      "ticker": "AAPL",
+      "accountId": "TOOLSENABLED_CANARY_FINANCE_ACCOUNT_7429",
+      "positions": [
+        {"symbol": "MSFT", "quantity": 10},
+        {"symbol": "BRK.B", "quantity": 2}
+      ],
+      "code": "const tokenCount = 12; const apiClient = buildClient();"
+    },
+    "customUserSensitive": {
+      "displayName": "Fixture Owner",
+      "personalNote": "Owner marker OWNER_PRIVATE_FIXTURE_7429",
+      "customIdentifier": "CUSTOM_FIELD_FIXTURE_7429"
+    },
+    "patternRegistry": {
+      "privateKeyText": "-----BEGIN FIXTURE PRIVATE KEY-----\nTOOLSENABLED_CANARY_PRIVATE_KEY_7429\n-----END FIXTURE PRIVATE KEY-----",
+      "secretHandleText": "vault://fixture/TOOLSENABLED_CANARY_VAULT_HANDLE_7429",
+      "authorizationText": "Bearer TOOLSENABLED_CANARY_BEARER_TOKEN_7429",
+      "providerTokenText": "sk_test_FAKEPROVIDERTOKEN",
+      "oauthText": "oauth_code: TOOLSENABLED_CANARY_OAUTH_CODE_7429",
+      "jwtText": "eyJFAKEHEADER12345.eyJFAKEPAYLOAD12345.FAKESIGNATURE12345",
+      "payment": {
+        "cardNumber": "TOOLSENABLED_CANARY_PAYMENT_CARD_7429",
+        "cvc": "TOOLSENABLED_CANARY_PAYMENT_CVC_7429"
+      }
+    }
+  },
+  "egressCases": [
+    {"egress": "provider", "payload": "providerStream"},
+    {"egress": "log", "payload": "nestedError"},
+    {"egress": "sse", "payload": "providerStream"},
+    {"egress": "evidence-export", "payload": "browserTrace"},
+    {"egress": "notification", "payload": "headers"},
+    {"egress": "training-candidate", "payload": "finance"}
+  ],
+  "customization": {
+    "sensitiveValues": ["OWNER_PRIVATE_FIXTURE_7429"],
+    "sensitiveFieldNames": ["customIdentifier"]
+  },
+  "harmless": {
+    "ticker": "AAPL",
+    "symbols": ["MSFT", "BRK.B"],
+    "code": "const tokenCount = 12; const apiClient = buildClient();",
+    "sentence": "Refresh token counts after parsing, but do not expose actual credentials."
+  }
+}

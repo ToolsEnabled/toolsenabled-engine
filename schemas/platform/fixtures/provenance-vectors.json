@@ -1,0 +1,122 @@
+{
+  "envelopes": {
+    "untrustedWeb": {
+      "schemaVersion": "1.0.0",
+      "labels": ["untrusted-web"],
+      "sources": [{"evidenceId": "ev_websource01", "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]
+    },
+    "verifiedFinance": {
+      "schemaVersion": "1.0.0",
+      "labels": ["verified-local-state"],
+      "sources": [{"evidenceId": "ev_finance001", "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]
+    },
+    "secretInput": {
+      "schemaVersion": "1.0.0",
+      "labels": ["secret"],
+      "sources": [{"evidenceId": "ev_secretsrc01", "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]
+    },
+    "trustedUser": {
+      "schemaVersion": "1.0.0",
+      "labels": ["trusted-user"],
+      "sources": []
+    },
+    "verifiedProject": {
+      "schemaVersion": "1.0.0",
+      "labels": ["verified-project"],
+      "sources": [{"evidenceId": "ev_Zsource01", "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]
+    },
+    "untrustedBrowser": {
+      "schemaVersion": "1.0.0",
+      "labels": ["untrusted-browser"],
+      "sources": [{"evidenceId": "ev_-source01", "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}]
+    },
+    "conflictingSecret": {
+      "schemaVersion": "1.0.0",
+      "labels": ["secret", "untrusted-agent"],
+      "sources": [{"evidenceId": "ev_conflict01", "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]
+    }
+  },
+  "invalidEnvelopes": [
+    {
+      "schemaVersion": "1.0.0",
+      "labels": ["untrusted-web", "generated-model"],
+      "sources": []
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "labels": ["untrusted-web", "untrusted-web"],
+      "sources": []
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "labels": ["trusted-user"],
+      "sources": [{"evidenceId": "ev_bad", "contentHash": "not-a-hash"}]
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "labels": ["Secret"],
+      "sources": []
+    }
+  ],
+  "operations": {
+    "concatenation": {
+      "inputs": ["trustedUser", "untrustedWeb"],
+      "expectedLabels": ["trusted-user", "untrusted-web"],
+      "expectedEvidenceIds": ["ev_websource01"]
+    },
+    "calculation": {
+      "inputs": ["verifiedFinance"],
+      "expectedLabels": ["verified-local-state"],
+      "expectedEvidenceIds": ["ev_finance001"]
+    },
+    "modelSummary": {
+      "inputs": ["untrustedWeb"],
+      "expectedLabels": ["generated-model", "untrusted-web"],
+      "expectedEvidenceIds": ["ev_websource01"]
+    },
+    "agentTransformation": {
+      "inputs": ["verifiedProject", "untrustedBrowser"],
+      "expectedLabels": ["untrusted-agent", "untrusted-browser", "verified-project"],
+      "expectedEvidenceIds": ["ev_-source01", "ev_Zsource01"]
+    },
+    "redaction": {
+      "inputs": ["secretInput"],
+      "expectedLabels": ["secret", "secret-derived"],
+      "expectedEvidenceIds": ["ev_secretsrc01"]
+    }
+  },
+  "sinkChecks": [
+    {
+      "sink": "command",
+      "input": "untrustedWeb",
+      "allowed": false,
+      "blockingLabels": ["untrusted-web"]
+    },
+    {
+      "sink": "memory",
+      "input": "verifiedFinance",
+      "allowed": true,
+      "blockingLabels": []
+    },
+    {
+      "sink": "network",
+      "input": "secretInput",
+      "allowed": false,
+      "blockingLabels": ["secret"]
+    },
+    {
+      "sink": "secret",
+      "input": "conflictingSecret",
+      "allowed": false,
+      "blockingLabels": ["untrusted-agent"]
+    }
+  ],
+  "safeDisplay": {
+    "input": "secretInput",
+    "expected": {
+      "labels": ["secret"],
+      "sourceCount": 1,
+      "containsSecret": true
+    }
+  }
+}

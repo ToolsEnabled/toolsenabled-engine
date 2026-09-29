@@ -1,0 +1,4 @@
+{
+  "_comment": "Machine-local mirror of the user setting agent.blocking_prompt_gate (tools/no-blocking-prompt-hook.js). THE REGISTRY ROW IS AUTHORITATIVE: if the settings file at %LOCALAPPDATA%\\ToolsEnabled\\settings.json carries a value for agent.blocking_prompt_gate with provenance source 'user' or 'installer', that value decides and this file is ignored. This file only decides when nobody has chosen -- i.e. when the setting is still at its registry default. ABSENCE of this file, of a boolean 'enabled' field, or a malformed file all mean the gate is ON. Only a literal boolean false disables it, and every disabled decision is logged to logs/no-blocking-prompt-hook.log.",
+  "enabled": true
+}

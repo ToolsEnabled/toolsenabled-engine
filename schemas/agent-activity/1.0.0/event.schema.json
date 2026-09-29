@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:toolsenabled:agent-activity:event:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "owner", "sequence", "eventType", "occurredAt", "context", "eventHash", "contentTrust", "grantsAuthority", "safeDisplay"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "eventId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"},
+    "owner": {"$ref": "#/$defs/ownerReference"},
+    "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "eventType": {"type": "string", "enum": ["agent_state", "delegation_state", "phase_state", "checkpoint_observed", "help_state", "acceptance_state", "report_state", "source_state"]},
+    "occurredAt": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/controlTimestamp"},
+    "context": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/contextTemplate"},
+    "eventHash": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07DomainHash"},
+    "contentTrust": {"const": "untrusted"},
+    "grantsAuthority": {"const": false},
+    "safeDisplay": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/safeDisplay"}
+  },
+  "$defs": {
+    "ownerReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entityType", "entityId"],
+      "properties": {
+        "entityType": {"type": "string", "enum": ["agent", "goal", "request", "phase", "task", "evidence", "report"]},
+        "entityId": {"$ref": "urn:toolsenabled:agent-activity:common:1.0.0#/$defs/p07OpaqueId"}
+      }
+    }
+  }
+}
