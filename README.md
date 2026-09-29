@@ -18,7 +18,7 @@ Download `toolsenabled-openshell-linux-x64.tar.gz` and `SHA256SUMS` from the [re
 
 ```bash
 sha256sum -c SHA256SUMS
-openshell sandbox upload YOUR_SANDBOX toolsenabled-openshell-linux-x64.tar.gz /sandbox/toolsenabled-openshell-linux-x64.tar.gz
+openshell sandbox upload --no-git-ignore YOUR_SANDBOX toolsenabled-openshell-linux-x64.tar.gz /sandbox/
 ```
 
 Inside that sandbox:
