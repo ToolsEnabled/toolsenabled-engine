@@ -8,47 +8,55 @@ if [[ ${OPENSHELL_SANDBOX:-} != 1 ]]; then
   printf '%s\n' 'Run this installer inside your OpenShell sandbox.' >&2
   exit 1
 fi
-if [[ ! -x /usr/bin/python3 ]]; then
-  printf '%s\n' 'System Python is missing. Run the supplied prerequisite command on the laptop first.' >&2
+if [[ $(uname -s) != Linux || $(uname -m) != x86_64 ]]; then
+  printf '%s\n' 'This package supports Linux x86_64.' >&2
   exit 1
 fi
-if [[ -e "$install_prefix" ]]; then
+if ! command -v node >/dev/null 2>&1 || ! node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1);
+'; then
+  printf '%s\n' 'Node.js 22.19.0 or newer is required on PATH. Install it in your sandbox image first.' >&2
+  exit 1
+fi
+if [[ ! -x /usr/bin/python3 ]]; then
+  printf '%s\n' 'Python 3 is required at /usr/bin/python3. Install it in your sandbox image first.' >&2
+  exit 1
+fi
+if [[ -e "$install_prefix" || -L "$install_prefix" ]]; then
   printf 'Installation directory already exists: %s\n' "$install_prefix" >&2
+  exit 1
+fi
+if [[ ! -f "$installer_dir/payload/engine/bin/toolsenabled-openshell.js" || ! -d "$installer_dir/payload/engine/node_modules" ]]; then
+  printf '%s\n' 'Incomplete ToolsEnabled package. Download and extract the release archive again.' >&2
   exit 1
 fi
 umask 077
 mkdir -p -- "$(dirname -- "$install_prefix")"
-install_tmp="${install_prefix}.install-$$"
+install_tmp=$(mktemp -d -- "${install_prefix}.install-XXXXXXXX")
 trap 'rm -rf -- "$install_tmp"' EXIT
 mkdir -p -- "$install_tmp/bin"
-cp -a -- "$installer_dir/payload" "$install_tmp/runtime"
-
-printf '%s\n' 'Installing Codex and Claude from their official npm packages…'
-PATH="$install_tmp/runtime/node/bin:$PATH" "$install_tmp/runtime/node/bin/node" \
-  "$install_tmp/runtime/node/lib/node_modules/npm/bin/npm-cli.js" install \
-  --global --prefix "$install_tmp/runtime/node" --no-audit --no-fund \
-  @openai/codex@0.158.0 @anthropic-ai/claude-code@2.1.284
-
-ln -s ../runtime/node/bin/node "$install_tmp/bin/node"
-ln -s ../runtime/node/lib/node_modules/npm/bin/npm-cli.js "$install_tmp/bin/npm"
-ln -s ../runtime/node/lib/node_modules/npm/bin/npx-cli.js "$install_tmp/bin/npx"
-ln -s ../runtime/node/lib/node_modules/@openai/codex/bin/codex.js "$install_tmp/bin/codex"
-ln -s ../runtime/node/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe "$install_tmp/bin/claude"
-ln -s /usr/bin/python3 "$install_tmp/bin/python3"
+mkdir -p -- "$install_tmp/runtime"
+cp -a -- "$installer_dir/payload/engine" "$install_tmp/runtime/engine"
+cp -- "$installer_dir/manifest.json" "$install_tmp/manifest.json"
 
 cat > "$install_tmp/bin/toolsenabled" <<'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
 toolsenabled_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-exec "$toolsenabled_root/runtime/node/bin/node" "$toolsenabled_root/runtime/engine/bin/toolsenabled-openshell.js" "$@"
+exec node "$toolsenabled_root/runtime/engine/bin/toolsenabled-openshell.js" "$@"
 WRAPPER
 chmod 755 "$install_tmp/bin/toolsenabled"
 ln -s toolsenabled "$install_tmp/bin/toolsenabled-openshell"
 printf 'export PATH=%q:"$PATH"\n' "$install_prefix/bin" > "$install_tmp/env.sh"
-mv -- "$install_tmp" "$install_prefix"
+mv -T --no-clobber -- "$install_tmp" "$install_prefix"
+if [[ -d "$install_tmp" ]]; then
+  printf 'Installation directory appeared during installation: %s\n' "$install_prefix" >&2
+  exit 1
+fi
 trap - EXIT
 
 printf 'ToolsEnabled installed in %s\n' "$install_prefix"
 printf 'Next: source %q\n' "$install_prefix/env.sh"
 printf '%s\n' 'Then: toolsenabled setup --agents --providers codex,claude --add'
-printf '%s\n' 'This installer does not sign in, start an agent, or change the sandbox policy.'
+printf '%s\n' 'Setup uses the Codex and/or Claude CLI already installed in your sandbox.'

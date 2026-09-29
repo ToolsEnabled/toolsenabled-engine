@@ -1,3 +1,4 @@
 node_modules/
 state/
 *.tar.gz
+/dist/

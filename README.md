@@ -1,48 +1,55 @@
 # ToolsEnabled OpenShell preview
 
-Manual installer for an existing minimal Ubuntu 24.04 OpenShell sandbox on Linux x86_64, using a local Docker gateway. This branch records the runtime source for `openshell-preview-20260929`.
+ToolsEnabled adds an MCP server and an optional agent tree to an existing OpenShell sandbox on Linux x86_64.
 
-The release bundles ToolsEnabled, Node 22.19.0 and npm 10.9.3. The person's install downloads Codex 0.158.0 and Claude Code 2.1.284 from their official npm packages.
+## Requirements
 
-## On the laptop
+Install these in your sandbox image before installing ToolsEnabled:
 
-The laptop needs `openshell`, Docker, Python 3 and curl. Create or keep an empty Ubuntu 24.04 sandbox named `clean-shell`, then run:
+- Node.js **22.19.0 or newer**, available as `node` on `PATH`.
+- Python 3 at `/usr/bin/python3`.
+- Codex and/or Claude Code, installed separately using the provider's instructions and available on `PATH`.
+
+The release archive contains ToolsEnabled and its locked production JavaScript dependencies. It does not bundle Node, npm, npx, Python, or provider CLIs. Installation is offline and does not install system packages or change OpenShell policy. Your sandbox's existing provider configuration and network policy govern provider access.
+
+## Install
+
+Download `toolsenabled-openshell-linux-x64.tar.gz` and `SHA256SUMS` from the [release](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-preview-20260929). Verify and upload the archive from your host:
 
 ```bash
-curl -fL https://github.com/ToolsEnabled/toolsenabled-engine/releases/download/openshell-preview-20260929/prepare-clean-shell.py -o /tmp/toolsenabled-prepare.py
-python3 /tmp/toolsenabled-prepare.py clean-shell
+sha256sum -c SHA256SUMS
+openshell sandbox upload YOUR_SANDBOX toolsenabled-openshell-linux-x64.tar.gz /sandbox/toolsenabled-openshell-linux-x64.tar.gz
 ```
 
-The helper builds Python prerequisites from Ubuntu packages, copies root-owned Python into the named sandbox, adds the npm and provider network endpoints, and uploads the checksum-verified release archive. It leaves ToolsEnabled uninstalled for the person to install inside the shell. Its network policy keeps OpenShell's default filesystem permissions. It refuses a sandbox with an existing network policy so that it cannot replace custom network rules accidentally.
-
-The default Docker socket is `/var/run/docker.sock`. Use `--docker-host SOCKET` when the gateway uses another local Docker socket. This helper targets the default workspace and local Docker gateway.
-
-## Inside clean-shell
+Inside that sandbox:
 
 ```bash
 cd /sandbox
-tar -xzf toolsenabled-installer.tar.gz
+tar -xzf toolsenabled-openshell-linux-x64.tar.gz
 bash toolsenabled-installer/install.sh
 source ~/.local/toolsenabled/env.sh
 toolsenabled setup --agents --providers codex,claude --add
 toolsenabled status
 ```
 
-Sign in with the official CLIs:
+Use `--providers codex` or `--providers claude` if you use only one provider. Sign in through that CLI's own login flow. Run `source ~/.local/toolsenabled/env.sh` in each new shell, or add that line to your shell profile.
+
+The default installation directory is `~/.local/toolsenabled`. Pass an absolute path as the installer's first argument to choose another location. The installer refuses an existing destination. It installs only the `toolsenabled` and `toolsenabled-openshell` commands; existing runtime and provider commands keep their own locations.
+
+## Build the release
+
+From a clean checkout of this branch, with Node.js and npm on the build machine:
 
 ```bash
-codex login --device-auth
-claude auth login
+bash installer/openshell/build.sh
 ```
 
-Both provider logins belong to this sandbox. After setup, Codex and Claude each have their own ToolsEnabled MCP registration. Start the CLI you want as the root session; its ToolsEnabled tree can use both providers after their logins are ready.
+This packages committed runtime files and runs `npm ci --omit=dev --ignore-scripts` in a temporary build directory. Output is the archive and `SHA256SUMS` in `dist/openshell/`. The build does not copy the build machine's Node installation, npm installation, global packages, or credentials. `manifest.json` records the source commit and runtime requirements.
 
-Run `source ~/.local/toolsenabled/env.sh` when opening a new shell. The installer refuses to overwrite an existing ToolsEnabled directory and never copies laptop credentials into the sandbox.
+The older `adapters/openshell/image/` recipe is an optional development image build, separate from this release installer.
 
 ## Validation and scope
 
-Validated in a separate minimal OpenShell sandbox: Python prerequisites, official npm package installation, Codex and Claude version checks, both MCP registrations, the saved Codex MCP initialize/tools-list exchange, Claude MCP connection, and OpenShell agent process cleanup. Real model turns require the person's provider login and are not part of the install check.
+The packaging fix is checked with installation and prerequisite failures, an archive-content audit, and MCP initialization in an OpenShell sandbox. It does not qualify every desktop-engine feature or a real provider model turn. The OpenShell runtime uses sandbox-compatible process-group handling; features using the general Linux pidfd helper remain subject to OpenShell's syscall restrictions.
 
-The OpenShell agent tree uses its sandbox-compatible process-group handling. Separate features that use the general Linux pidfd helper remain subject to OpenShell's syscall restrictions. This is a preview of the OpenShell runtime, not a qualification of the desktop engine's entire feature set.
-
-The runtime's MIT license, NOTICE and third-party notices are included. Node and npm notices are in the release payload. Provider CLIs are fetched from their own npm distributions during installation.
+The MIT license, NOTICE, and third-party dependency notices are included in the runtime.
