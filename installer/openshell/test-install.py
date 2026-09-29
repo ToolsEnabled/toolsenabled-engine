@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     with tarfile.open(args.archive) as archive:
         for member in archive.getmembers():
             parts = Path(member.name).parts
-            assert member.name.startswith('toolsenabled-installer/'), member.name
+            assert parts and parts[0] == 'toolsenabled-installer', member.name
             assert '..' not in parts, member.name
             assert member.isfile() or member.isdir() or member.issym(), member.name
             assert '/payload/node' not in member.name, member.name
@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     # invocation fails instead of silently reaching the host installation.
     commands = root / 'commands'
     commands.mkdir()
-    for name in ['bash', 'dirname', 'uname', 'mkdir', 'mktemp', 'rm', 'cp', 'chmod', 'mv', 'ln']:
+    for name in ['bash', 'dirname', 'uname', 'mkdir', 'mktemp', 'rm', 'cp', 'chmod', 'mv', 'ln', 'cat']:
         (commands / name).symlink_to(shutil.which(name))
     environment = {**os.environ, 'PATH': str(commands), 'OPENSHELL_SANDBOX': '1',
                    'TOOLSENABLED_STATE_ROOT': str(root / 'state')}
