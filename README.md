@@ -1,8 +1,14 @@
-# ToolsEnabled for OpenShell
+# ToolsEnabled Fleet for OpenShell
 
 ToolsEnabled is a terminal MCP server for Codex and Claude Code inside an NVIDIA OpenShell sandbox. It adds a shared work record, memory, coordinated file edits and an optional tree of worker agents. All user controls are terminal commands; this branch develops the OpenShell terminal build.
 
+ToolsEnabled Fleet installs the `toolsenabled` command.
+
 OpenShell provides filesystem and network confinement, access approvals and custody of the credentials it manages. ToolsEnabled provides the tools and coordination inside that boundary. Its work record, actor labels and optional signed audit run as the same sandbox user as the agents; they are not tamper-proof against those agents.
+
+The [2026-09-30 Linux beta](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta-20260930) is published. Its release notes record completed checks and remaining qualification work. Windows WSL 2 qualification is still in progress.
+
+The beta's [source snapshot](https://github.com/ToolsEnabled/toolsenabled-engine/tree/546fc62faeadeaedb3562ccf784a2d8d66e62279) is fixed at `546fc62`. Later documentation updates on the source branch retain that release reference.
 
 ## Install the runtime archive
 
@@ -57,6 +63,8 @@ bash installer/openshell/build.sh
 ```
 
 The build writes the runtime archive and `SHA256SUMS` to `dist/openshell/`; its manifest records the source commit. The [development image recipe](adapters/openshell/image/) is a separate convenience for sandbox development. A source test or development-image pass does not qualify the runtime archive.
+
+Builds from a public source export record that export's commit and timestamp. See the [source mapping note](installer/openshell/README.md#public-source-and-archive-identity) before comparing their checksums with a published archive.
 
 Release qualification must use the exact archive: audit its contents, install it offline, check refusals and both CLI connections, run the frozen hand-test pair and continuous soak, verify worker cleanup, and prove real Codex and Claude tool calls. Windows claims also need an artifact-specific parity report. This development branch and its historical test reports do not by themselves establish a qualified release.
 

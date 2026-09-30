@@ -1,4 +1,4 @@
-# ToolsEnabled OpenShell preview
+# ToolsEnabled Fleet for OpenShell: runtime
 
 ToolsEnabled adds an MCP server and an optional agent tree to an existing OpenShell sandbox on Linux x86_64.
 
@@ -40,7 +40,7 @@ The installer installs `toolsenabled` and its `toolsenabled-openshell` alias. Af
 
 Use `toolsenabled --version` to see the version and commit recorded in the installed `manifest.json`. To remove an installation, run `toolsenabled uninstall`. It removes the runtime and command wrappers, asks before deleting state, and deregisters ToolsEnabled from both installed CLIs. Use `toolsenabled uninstall --keep-state` to retain state without a prompt. Re-run `source ~/.local/toolsenabled/env.sh` in a new shell after an upgrade.
 
-## Build the release
+## Build a runtime archive
 
 From a clean checkout of this branch, with Node.js and npm on the build machine:
 
@@ -51,6 +51,12 @@ bash installer/openshell/build.sh
 This packages committed runtime files and runs `npm ci --omit=dev --ignore-scripts` in a temporary build directory. Output is the archive and `SHA256SUMS` in `dist/openshell/`. The build does not copy the build machine's Node installation, npm installation, global packages, or credentials. `manifest.json` records the source commit and runtime requirements.
 
 The older `adapters/openshell/image/` recipe is an optional development image build, separate from this release installer.
+
+### Public source and archive identity
+
+The [2026-09-30 beta](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta-20260930) archive was built from development commit `2d77e45e70b37b2911a2da342dda8ff23b583030`. Its public source export is [commit `546fc62faeadeaedb3562ccf784a2d8d66e62279`](https://github.com/ToolsEnabled/toolsenabled-engine/tree/546fc62faeadeaedb3562ccf784a2d8d66e62279). The release notes report that 1,220 ToolsEnabled files in the archive match that snapshot byte for byte. The source branch may contain later documentation updates.
+
+The build script embeds the current checkout's commit in `manifest.json` and uses that commit's timestamp for archive entries. Building the public export therefore produces a different archive checksum. Obtain the published asset and its `SHA256SUMS` from the release when testing that release's exact bytes.
 
 ## Validation and scope
 

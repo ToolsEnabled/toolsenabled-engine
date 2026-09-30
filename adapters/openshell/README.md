@@ -1,4 +1,4 @@
-# ToolsEnabled for OpenShell (work in progress)
+# ToolsEnabled Fleet for OpenShell: sandbox and development image guide
 
 ToolsEnabled's engine is an MCP server. This folder runs it inside your own
 [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandbox, next to the
@@ -19,22 +19,27 @@ The work is split this way:
   - optionally, a tree of Codex and Claude worker agents inside the same
     sandbox, which can start workers of their own (`--agents`).
 
-This is a recipe. You build the image yourself from this folder. No image is
-published, because it contains third-party CLIs that stay under their own
-terms.
+This guide covers sandbox setup and a development image recipe. For the
+published runtime archive, follow the
+[installer guide](../../installer/openshell/README.md). Build the optional
+development image yourself from this folder; its third-party CLIs stay under
+their own terms.
 
 ToolsEnabled is not made by, affiliated with, or endorsed by NVIDIA, Anthropic
 or OpenAI.
 
-> **Status:** work in progress, not released. It has been tested on one setup only
-> (see [Supported versions](#supported-versions)). Read
-> [Known limitations](#known-limitations) before you rely on it.
+> **Status:** the [2026-09-30 Linux beta](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta-20260930)
+> is published with remaining qualification work listed in its release notes.
+> The Windows WSL 2 route is still
+> being qualified. The [Supported versions](#supported-versions) table records
+> historical image tests. Read [Known limitations](#known-limitations) before
+> you rely on the beta.
 
 ---
 
 ## What you need
 
-- A Linux x86-64 machine with **Docker Engine**.
+- A Linux x86-64 machine with **Docker Engine**, or a Windows x86-64 machine with WSL 2 and Docker Desktop's Linux engine. The Windows path is experimental and remains under qualification.
 - **OpenShell 0.1.2** installed, with a running local gateway that uses Docker.
   To install it, follow OpenShell's own documentation.
 - `git`, `jq`, and the **Codex CLI on the host**. The Codex CLI on the host is
