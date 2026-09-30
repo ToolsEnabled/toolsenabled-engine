@@ -353,8 +353,8 @@ function runProcess({ experiment, run, artifactDir, beforeLaunch, requirePolicy,
         stderrTruncated: stderrBytes > stderr.length,
         durationMs: performance.now() - startedAt,
         processLifecycle: {
-          schemaVersion: 1, backend: linux ? 'linux-subreaper-pidfd-v2' : native ? 'windows-job' : 'posix-process-group',
-          scope: linux ? 'The retained Linux guardian, pidfd-verified children reaped to ECHILD and observed pipe closure.'
+          schemaVersion: 1, backend: linux ? linuxProcesses.BACKEND : native ? 'windows-job' : 'posix-process-group',
+          scope: linux ? 'The retained Linux subreaper, verified children reaped to ECHILD and observed pipe closure.'
             : native ? 'The retained native Job and observed wrapper/pipe closure.'
             : 'Normal root exit and pipe closure only; descendants that leave the process group are not observed.',
           started, rootExited, pipesClosed, wrapperClosed: native ? pipesClosed : null,

@@ -1,5 +1,11 @@
 # ToolsEnabled for OpenShell: compatibility
 
+This report covers the image recipe tested on 2026-09-29. Its platform table
+is historical evidence for that recipe, not a compatibility claim for a later
+runtime archive. Each archive's release notes and parity report identify its
+tested commit and checksum. The Windows host route uses WSL2 and Docker
+Desktop's Linux engine to run the Linux x64 archive inside OpenShell.
+
 Result so far: **pass** on the setup below. Each probe passed in two full runs
 on identical scripts, and each was also run with its condition deliberately
 broken to show that it fails when it should.
@@ -42,7 +48,7 @@ broken to show that it fails when it should.
 - **A placeholder sent to a host its provider is not bound to** is refused by
   the proxy (`credential_endpoint_mismatch`), not passed through.
 
-## Not tested
+## Not tested in these image-recipe runs
 
 Other OpenShell versions, rootless Docker, Podman, Docker Desktop, Kubernetes,
 the MicroVM driver, arm64, macOS and Windows.

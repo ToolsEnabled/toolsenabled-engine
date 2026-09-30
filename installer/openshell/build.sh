@@ -20,8 +20,9 @@ mkdir -p -- "$engine_dir"
 
 git archive HEAD LICENSE NOTICE THIRD-PARTY-LICENSES.md package.json package-lock.json registry.json \
   bin config schemas src tools packages sidecars adapters | tar -xf - -C "$engine_dir"
+rm -rf -- "$engine_dir/adapters/openshell/soak"
 git show HEAD:installer/openshell/install.sh > "$package_dir/install.sh"
-git show HEAD:README.md > "$package_dir/README.md"
+git show HEAD:installer/openshell/README.md > "$package_dir/README.md"
 chmod 755 "$package_dir/install.sh"
 (cd -- "$engine_dir" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
 

@@ -170,25 +170,25 @@ toolsenabled status
   boundary and the byte-mediated file tools need it; `--tier standard` or
   `--tier guided` (read-only) narrow it further. It creates `/sandbox/work`, and registers ToolsEnabled with each
   CLI through the CLI's own documented command (`claude mcp add-json` and
-  `codex mcp add`). In Codex's entry it also sets `required = true`: Codex
-  otherwise sends its first request without waiting for a server that is still
-  starting, and on a busy machine a session then has none of ToolsEnabled's
-  tools; required, Codex waits, and stops with an error if the server cannot
-  start. Without `--add` it prints those commands instead of running
-  them. It never signs in, reads a credential or touches the sandbox policy.
+  `codex mcp add`). Without `--add` it prints those commands instead of running
+  them. `--workspace DIR` must name a folder under the sandbox account's home
+  (normally `/sandbox`), where the file tools can work; setup refuses a file or
+  a symlink that leads outside it. It never signs in, reads a credential or
+  touches the sandbox policy. With `--add`, it sets Codex's
+  `daemon_auto_start = false` so each interactive app server stays inside its
+  session, and marks the MCP entry `required = true` so Codex waits for
+  ToolsEnabled before its first request. It keeps values you set yourself.
 
 Check with `claude mcp list` and `codex mcp list`.
 
 **Signing Codex in inside the sandbox instead of the provider.** Create the
 sandbox with the policy's optional `codex_signed_in_here` rule uncommented. The
 browser sign-in returns to `127.0.0.1:1455` on your machine, so forward that
-port to the sandbox first, then sign in and restart Codex's daemon so it picks
-the sign-in up:
+port to the sandbox first, then sign in:
 
 ```shell
 openshell forward start -d 1455 te            # on your machine
 codex login                                    # in the sandbox; open the printed link
-codex app-server daemon restart                # in the sandbox
 openshell forward stop 1455 te                 # on your machine, afterwards
 ```
 
@@ -319,6 +319,12 @@ inside the sandbox as the same user as the agents.
 ---
 
 ## Supported versions
+
+The table below records the image recipe tested on 2026-09-28. It does not
+describe the qualification status of a later runtime archive. That archive's
+release notes and parity report identify its tested commit and checksum.
+The Windows host route uses WSL2 and Docker Desktop's Linux engine to run the
+same Linux x64 archive inside OpenShell; it is not a native Windows runtime.
 
 | Component | Tested | Not tested |
 |---|---|---|

@@ -354,8 +354,14 @@ function writeAtomic(file, text) {
   let mode = 0o600;
   try { mode = fs.statSync(target).mode & 0o777; } catch { /* a new file */ }
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(temporary, text, { mode });
-  try { fs.renameSync(temporary, target); } catch (error) {
+  try {
+    fs.writeFileSync(temporary, text, { mode });
+    // OpenShell's umask can be stricter than the existing config's mode.
+    // Creation mode is only a ceiling, so restore the exact mode before the
+    // atomic replacement.
+    fs.chmodSync(temporary, mode);
+    fs.renameSync(temporary, target);
+  } catch (error) {
     try { fs.rmSync(temporary, { force: true }); } catch { /* best effort */ }
     throw error;
   }
@@ -405,10 +411,8 @@ function listMcpServerTools(server, { env = process.env, home = codexHome(env) }
   return 'added';
 }
 
-// Codex does not wait for an MCP server that is still starting before it sends
-// its first request (codex exec, 0.158), so on a busy machine a session could
-// start with no ToolsEnabled tools and nothing said. A required server is
-// waited for, and one that cannot start stops Codex with an error instead.
+// Codex 0.158 can send its first model request before a starting MCP server
+// lists its tools. Requiring the server makes Codex wait or fail visibly.
 const REQUIRED_LINE = 'required = true';
 
 function requireMcpServer(server, { env = process.env, home = codexHome(env) } = {}) {
@@ -426,6 +430,49 @@ function requireMcpServer(server, { env = process.env, home = codexHome(env) } =
   }
   const lines = [...scan.lines];
   lines.splice(table.index + 1, 0, REQUIRED_LINE);
+  writeAtomic(file, lines.join('\n'));
+  return 'added';
+}
+
+/* By default Codex 0.158's interactive mode copies itself to
+   <CODEX_HOME>/packages/app-server-daemon and runs its app server, and every
+   MCP server with it, from that copy. The copy outlives the session. OpenShell
+   admits a connection by the program and its ancestors, so once the session
+   has ended nothing in the orphaned copy's line is in the policy: the next
+   session reuses it and its model requests are refused (measured on the dev
+   gateway, handtest/lead-checks/codex-daemon.sh). `[features]
+   daemon_auto_start = false` is Codex's own setting for running the app
+   server inside the session instead. `codex exec` never uses the daemon.
+   Adds it when the file sets no daemon_auto_start; one the person set is
+   theirs and is kept. Every other line is left exactly as it was. Returns
+   'added', 'kept', or 'manual' when features is an inline table, which cannot
+   take the line without being rewritten. */
+const IN_SESSION_LINE = 'daemon_auto_start = false';
+
+function runCodexAppServerInSession({ env = process.env, home = codexHome(env) } = {}) {
+  const file = configFile(home);
+  const text = readText(file) ?? '';
+  const scan = scanToml(text);
+  // features set at the top level (inline, or dotted keys) cannot also have a [features] table.
+  const rootFeatures = [];
+  for (let index = 0; index < scan.rootEnd; index += 1) {
+    const key = scan.inString[index] ? null : keyOf(scan.lines[index]);
+    if (key && key[0] === 'features') rootFeatures.push(key);
+  }
+  if (rootFeatures.some((key) => key.length === 2 && key[1] === 'daemon_auto_start')) return 'kept';
+  if (rootFeatures.length > 0) return 'manual';
+  const table = scan.tables.find((candidate) => !candidate.array && candidate.parts.length === 1 && candidate.parts[0] === 'features');
+  const lines = [...scan.lines];
+  if (table) {
+    for (let index = table.index + 1; index < tableEnd(scan, table); index += 1) {
+      const key = scan.inString[index] ? null : keyOf(scan.lines[index]);
+      if (key && key.length === 1 && key[0] === 'daemon_auto_start') return 'kept';
+    }
+    lines.splice(table.index + 1, 0, IN_SESSION_LINE);
+  } else {
+    while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+    lines.push(...(lines.length > 0 ? [''] : []), '[features]', IN_SESSION_LINE, '');
+  }
   writeAtomic(file, lines.join('\n'));
   return 'added';
 }
@@ -794,11 +841,11 @@ function renderProviderProfile({ name, displayName, baseUrl, envKey = null, bina
 /* ------------------------------------------------------------------- CLI -- */
 
 const USAGE = [
-  'Usage: toolsenabled-openshell model add <name> --base-url URL --model ID [--key-env VAR] [--display-name TEXT] [--default]',
-  '       toolsenabled-openshell model list [--json]',
-  '       toolsenabled-openshell model use <name>',
-  '       toolsenabled-openshell model remove <name>',
-  '       toolsenabled-openshell model profile <name> --base-url URL [--key-env VAR] [--display-name TEXT] [--binary PATH]...'
+  'Usage: toolsenabled model add <name> --base-url URL --model ID [--key-env VAR] [--display-name TEXT] [--default]',
+  '       toolsenabled model list [--json]',
+  '       toolsenabled model use <name>',
+  '       toolsenabled model remove <name>',
+  '       toolsenabled model profile <name> --base-url URL [--key-env VAR] [--display-name TEXT] [--binary PATH]...'
 ];
 
 const VALUE_FLAGS = new Map([
@@ -865,7 +912,7 @@ function modelCommand(argv, { env = process.env, stdout = process.stdout } = {})
   if (action === 'list') {
     const entries = listModels({ env });
     if (args.json) { out(JSON.stringify(entries, null, 2)); return 0; }
-    if (entries.length === 0) { out('No model endpoints are configured. Add one with: toolsenabled-openshell model add'); return 0; }
+    if (entries.length === 0) { out('No model endpoints are configured. Add one with: toolsenabled model add'); return 0; }
     for (const entry of entries) {
       out(`${entry.isDefault ? '*' : ' '} ${entry.name}  ${entry.model || '(no model recorded)'}  ${entry.baseUrl || '(no base_url)'}  ${describeKey(entry)}${entry.managed ? '' : '  [added by hand]'}`);
     }
@@ -916,6 +963,8 @@ module.exports = Object.freeze({
   codexSelection,
   listMcpServerTools,
   EXPOSURE_LINE,
+  runCodexAppServerInSession,
+  IN_SESSION_LINE,
   requireMcpServer,
   REQUIRED_LINE,
   defaultModelEndpoint,

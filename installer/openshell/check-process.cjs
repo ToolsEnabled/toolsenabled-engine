@@ -1,6 +1,8 @@
 'use strict';
 const path = require('node:path');
-const runtime = path.join(process.env.HOME, '.local/toolsenabled/runtime/engine/src/lib');
+const prefix = process.env.TOOLSENABLED_INSTALL_PREFIX || path.join(process.env.HOME, '.local/toolsenabled');
+if (!path.isAbsolute(prefix)) throw new Error('TOOLSENABLED_INSTALL_PREFIX must be absolute');
+const runtime = path.join(prefix, 'runtime/engine/src/lib');
 const { spawn } = require('node:child_process');
 const { processStartTime, sameProcessAlive, terminateProcessTree } = require(path.join(runtime, 'proc/process-group'));
 (async () => {

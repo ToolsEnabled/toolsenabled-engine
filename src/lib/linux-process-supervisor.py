@@ -5,8 +5,10 @@ The private lifecycle descriptor (fd 3) never reaches the worker.
 
 Subreaper adoption includes double-forked and setsid descendants. A /proc child
 list is only a discovery hint: completeness is established by kernel ECHILD.
-Every signalled process is first a waitid(P_PIDFD)-verified child and its pidfd
-is retained until it is positively reaped. No numeric-PID or group kill.
+Normally every signalled process is waitid(P_PIDFD)-verified and its pidfd is
+retained until reaped. In OpenShell, whose seccomp denies pidfd_open, the
+single-threaded guardian signals only waitid(P_PID)-verified direct children
+that it keeps unreaped, so their numeric PIDs cannot be recycled meanwhile.
 Primary interfaces:
 https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html
 https://man7.org/linux/man-pages/man2/pidfd_open.2.html
@@ -88,9 +90,12 @@ def children():
     return [int(item) for item in value.split()]
 
 
-def prepare():
-    if not sys.platform.startswith("linux") or not all(hasattr(os, key) for key in
-            ("fork", "pidfd_open", "P_PIDFD", "waitid", "WNOWAIT")) or not hasattr(signal, "pidfd_send_signal"):
+def prepare(backend):
+    common = ("fork", "P_PID", "waitid", "WNOWAIT")
+    pidfd = ("pidfd_open", "P_PIDFD")
+    if (not sys.platform.startswith("linux") or not all(hasattr(os, key) for key in common)
+            or (backend == "linux-subreaper-pidfd-v2" and
+                (not all(hasattr(os, key) for key in pidfd) or not hasattr(signal, "pidfd_send_signal")))):
         raise RuntimeError("native ownership unavailable")
     signal.signal(signal.SIGCHLD, signal.SIG_DFL)
     libc = ctypes.CDLL(None, use_errno=True)
@@ -98,15 +103,21 @@ def prepare():
     libc.prctl.restype = ctypes.c_int
     if libc.prctl(36, 1, 0, 0, 0) != 0:
         raise RuntimeError("subreaper unavailable")
-    fd = os.pidfd_open(os.getpid())
-    try:
+    if backend == "linux-subreaper-pidfd-v2":
+        fd = os.pidfd_open(os.getpid())
         try:
-            os.waitid(os.P_PIDFD, fd, OBSERVE)
+            try:
+                os.waitid(os.P_PIDFD, fd, OBSERVE)
+            except ChildProcessError:
+                pass
+            signal.pidfd_send_signal(fd, 0)
+        finally:
+            os.close(fd)
+    else:
+        try:
+            os.waitid(os.P_PID, os.getpid(), OBSERVE)
         except ChildProcessError:
             pass
-        signal.pidfd_send_signal(fd, 0)
-    finally:
-        os.close(fd)
     children()
 
 
@@ -131,7 +142,9 @@ def main():
         return 2
     try:
         config = json.loads(raw, object_pairs_hook=unique_object)
-        if set(config) != {"version", "nonce", "command", "args", "cwd", "env", "terminateDescendantsOnRootExit"} or config["version"] != 2:
+        if set(config) != {"version", "nonce", "command", "args", "cwd", "env", "terminateDescendantsOnRootExit", "backend"} or config["version"] != 2:
+            return 2
+        if config["backend"] not in ("linux-subreaper-pidfd-v2", "linux-subreaper-waitid-v1"):
             return 2
         nonce = config["nonce"]
         if not isinstance(nonce, str) or len(nonce) != 64 or any(char not in "0123456789abcdef" for char in nonce):
@@ -163,7 +176,7 @@ def main():
         complete(reason="INPUT_INVALID")
         return 0
     try:
-        prepare()
+        prepare(config["backend"])
         os.set_inheritable(3, False)
         os.set_inheritable(4, False)
     except BaseException:
@@ -216,11 +229,15 @@ def main():
     os.close(barrier_read)
     os.close(error_write)
     os.close(4)
-    # The forked bootstrap cannot exec until its exact pidfd is retained. A
+    # The forked bootstrap cannot exec until its lifetime is retained. A
     # failed admission closes the barrier and positively reaps that bootstrap.
     try:
-        root_fd = os.pidfd_open(root_pid)
-        os.waitid(os.P_PIDFD, root_fd, OBSERVE)
+        if config["backend"] == "linux-subreaper-pidfd-v2":
+            root_fd = os.pidfd_open(root_pid)
+            os.waitid(os.P_PIDFD, root_fd, OBSERVE)
+        else:
+            root_fd = None
+            os.waitid(os.P_PID, root_pid, OBSERVE)
     except BaseException:
         os.close(barrier_write)
         os.waitpid(root_pid, 0)
@@ -239,15 +256,26 @@ def main():
     signal_attempts = {}
     signal_failed = False
 
-    def signal_child(fd, sig):
+    def wait_owned(pid, fd, flags):
+        return os.waitid(os.P_PID if fd is None else os.P_PIDFD,
+                         pid if fd is None else fd, flags)
+
+    def signal_child(pid, fd, sig):
         nonlocal reason, signal_failed
-        key = (fd, sig)
+        key = (pid, sig)
         attempts, next_at = signal_attempts.get(key, (0, 0))
         now = time.monotonic()
         if attempts >= 3 or now < next_at:
             return
         try:
-            signal.pidfd_send_signal(fd, sig)
+            if fd is None:
+                # The child remains ours and unreaped until the loop below.
+                # Even if it exits between this check and kill, its PID cannot
+                # be reassigned while the zombie is retained by this process.
+                if wait_owned(pid, fd, OBSERVE) is None:
+                    os.kill(pid, sig)
+            else:
+                signal.pidfd_send_signal(fd, sig)
         except ProcessLookupError:
             pass  # Only waitid/reaping below can establish that it is gone.
         except OSError:
@@ -265,17 +293,18 @@ def main():
             for pid in children():
                 if pid in owned:
                     continue
-                fd = os.pidfd_open(pid)
+                fd = os.pidfd_open(pid) if config["backend"] == "linux-subreaper-pidfd-v2" else None
                 try:
-                    os.waitid(os.P_PIDFD, fd, OBSERVE)
+                    wait_owned(pid, fd, OBSERVE)
                 except BaseException:
-                    os.close(fd)
+                    if fd is not None:
+                        os.close(fd)
                     raise
                 owned[pid] = fd
                 observed += 1
             finished = []
             for pid, fd in list(owned.items()):
-                event = os.waitid(os.P_PIDFD, fd, OBSERVE)
+                event = wait_owned(pid, fd, OBSERVE)
                 if event is not None:
                     if pid == root_pid and not root_observed:
                         root_observed = True
@@ -295,13 +324,14 @@ def main():
                 sig = signal.SIGKILL if time.monotonic() - cleanup_at >= 0.25 else signal.SIGTERM
                 for pid, fd in list(owned.items()):
                     if (pid, fd) not in finished:
-                        signal_child(fd, sig)
+                        signal_child(pid, fd, sig)
             for pid, fd in finished:
-                os.waitid(os.P_PIDFD, fd, REAP)
-                os.close(fd)
+                wait_owned(pid, fd, REAP)
+                if fd is not None:
+                    os.close(fd)
                 del owned[pid]
                 for sig in (signal.SIGTERM, signal.SIGKILL):
-                    signal_attempts.pop((fd, sig), None)
+                    signal_attempts.pop((pid, sig), None)
                 reaped += 1
             try:
                 os.waitid(os.P_ALL, 0, OBSERVE)
@@ -328,8 +358,8 @@ def main():
             # Keep the guardian alive and retry child reconciliation. The JS
             # deadline can return UNKNOWN, but no receipt claims empty until
             # the kernel and every retained child agree.
-            for fd in list(owned.values()):
-                signal_child(fd, signal.SIGKILL)
+            for pid, fd in list(owned.items()):
+                signal_child(pid, fd, signal.SIGKILL)
             time.sleep(0.25 if signal_failed else 0.025)
 
 

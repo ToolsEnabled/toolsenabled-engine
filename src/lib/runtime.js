@@ -181,7 +181,11 @@ let commandPathEnvKey = null;
 function commandPathEnvironment() {
   return [
     process.env.PATH || '', process.env.PATHEXT || '', process.env.LOCALAPPDATA || '',
-    process.env.APPDATA || '', process.env.ProgramFiles || ''
+    process.env.APPDATA || '', process.env.ProgramFiles || '',
+    // POSIX PATH entries and slash paths may be relative. An unset PATH also
+    // uses the process launcher's default, whereas an empty PATH means cwd.
+    process.platform === 'win32' ? '' : process.cwd(),
+    process.platform === 'win32' ? '' : typeof process.env.PATH
   ].join('\u0000');
 }
 
@@ -209,18 +213,47 @@ function resetCommandPathCache() {
 }
 
 function resolveCommandPath(command) {
-  const probe = process.platform === 'win32' ? 'where.exe' : 'which';
-  const found = spawnSync(probe, [command], { encoding: 'utf8', windowsHide: true, shell: false });
-  if (found.error || found.status === null) {
-    const causeCode = found.error && found.error.code
-      ? found.error.code
-      : (found.signal ? `SIGNAL_${found.signal}` : 'NO_ANSWER');
+  function unknown(causeCode) {
     const error = new Error(
       `Command lookup for '${command}' could not be completed (${causeCode}), so whether it is installed is unknown; this is not a claim that it is absent.`
     );
     error.code = 'COMMAND_LOOKUP_UNKNOWN';
     error.causeCode = causeCode;
-    throw error;
+    return error;
+  }
+  const probe = process.platform === 'win32' ? 'where.exe' : 'which';
+  const found = spawnSync(probe, [command], { encoding: 'utf8', windowsHide: true, shell: false });
+  // Minimal OpenShell installations need not contain the optional `which`
+  // utility. Only its absence permits a direct lookup; a refused, timed out,
+  // or otherwise failed helper still means that readiness is unknown.
+  if (process.platform !== 'win32' && found.error?.code === 'ENOENT') {
+    const name = String(command);
+    if (!name) return null;
+    const searchPath = process.env.PATH === undefined ? '/usr/bin:/bin' : process.env.PATH;
+    const candidates = name.includes('/') ? [path.resolve(name)]
+      : searchPath.split(path.delimiter).map(directory => path.resolve(directory || '.', name));
+    for (const candidate of candidates) {
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+      } catch (error) {
+        if (['ENOENT', 'ENOTDIR'].includes(error.code)) continue;
+        throw unknown(error.code || 'FILESYSTEM_STAT');
+      }
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch (error) {
+        if (['ENOENT', 'ENOTDIR', 'EACCES'].includes(error.code)) continue;
+        throw unknown(error.code || 'FILESYSTEM_ACCESS');
+      }
+    }
+    return null;
+  }
+  if (found.error || found.status === null) {
+    const causeCode = found.error && found.error.code
+      ? found.error.code
+      : (found.signal ? `SIGNAL_${found.signal}` : 'NO_ANSWER');
+    throw unknown(causeCode);
   }
   if (found.status === 0) {
     const candidate = String(found.stdout || '').split(/\r?\n/).find(Boolean) || command;

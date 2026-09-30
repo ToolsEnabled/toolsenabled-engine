@@ -9,7 +9,9 @@ import tempfile
 import time
 import tomllib
 
-config = tomllib.loads((Path.home() / '.codex/config.toml').read_text())
+codex_home = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+assert codex_home.is_absolute(), 'CODEX_HOME must be absolute'
+config = tomllib.loads((codex_home / 'config.toml').read_text())
 matches = [value for name, value in config['mcp_servers'].items() if 'toolsenabled' in name.lower()]
 assert len(matches) == 1, 'Expected one ToolsEnabled MCP registration'
 server = matches[0]

@@ -3,16 +3,16 @@
 
 // Set ToolsEnabled up inside a person's own NVIDIA OpenShell sandbox.
 //
-//   toolsenabled-openshell setup [--tier unrestricted|standard|guided] [--workspace DIR] [--agents] [--audit] [--add]
+//   toolsenabled setup [--tier unrestricted|standard|guided] [--workspace DIR] [--agents] [--audit] [--add]
 //                                [--providers codex,claude] [--max-tier cheap|standard|premium] [--lead-role ROLE]
-//   toolsenabled-openshell status
-//   toolsenabled-openshell tree [--json]
-//   toolsenabled-openshell ledger [--all]
-//   toolsenabled-openshell ledger answer|decline <A#> <words...>
-//   toolsenabled-openshell ledger done|remove <T#|A#>
-//   toolsenabled-openshell ledger add rule|task <words...>
-//   toolsenabled-openshell settings [get <id>] | settings set <id> <value>
-//   toolsenabled-openshell model add|list|use|remove|profile ...   (src/lib/openshell-models.js)
+//   toolsenabled status
+//   toolsenabled tree [--json]
+//   toolsenabled ledger [--all]
+//   toolsenabled ledger answer|decline <A#> <words...>
+//   toolsenabled ledger done|remove <T#|A#>
+//   toolsenabled ledger add rule|task <words...>
+//   toolsenabled settings [get <id>] | settings set <id> <value>
+//   toolsenabled model add|list|use|remove|profile ...   (src/lib/openshell-models.js)
 //
 // `setup` records the permission level in the engine's sealed machine record,
 // creates the working folder, and prints the documented `claude mcp add` and
@@ -71,7 +71,12 @@ function parseArgs(argv) {
     else if (token === '--agents') args.agents = true;
     else if (token === '--audit') args.audit = true;
     else if (token === '--json') args.json = true;
-    else if (['--tier', '--workspace', '--providers', '--max-tier', '--lead-role'].includes(token)) args[token.slice(2)] = argv[++index];
+    else if (['--tier', '--workspace', '--providers', '--max-tier', '--lead-role'].includes(token)) {
+      const value = argv[index + 1];
+      if (value === undefined || value.trim() === '' || value.startsWith('-')) throw new SetupError(`${token} needs a value.`);
+      args[token.slice(2)] = value;
+      index += 1;
+    }
     else if (token.startsWith('--')) throw new SetupError(`Unknown option ${token}.`);
     else args._.push(token);
   }
@@ -98,10 +103,65 @@ function requireInsideSandbox() {
   useSandboxStateRoot();
 }
 
+// host.* is confined to the sandbox's home. Validate the chosen working
+// folder before provisionWorkspace creates it or the machine record names it.
+// Check both the spelling and the nearest existing ancestor's real path, so
+// a symlink inside home cannot point agents at an inaccessible folder outside.
+function checkedSandboxWorkspace(candidate) {
+  // Match the Linux host file tools' account-home boundary, which comes from
+  // the OS user record rather than a caller-controlled HOME environment value.
+  const home = path.resolve(os.userInfo().homedir);
+  const resolved = path.resolve(candidate);
+  const inside = (root, value) => {
+    const relative = path.relative(root, value);
+    return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+  };
+  const outside = () => new SetupError('Choose a working folder inside your sandbox home so the file tools can use it.');
+  if (!inside(home, resolved)) throw outside();
+  let canonicalHome;
+  try {
+    if (!fs.statSync(home).isDirectory()) throw new Error('home is not a folder');
+    canonicalHome = fs.realpathSync(home);
+  } catch {
+    throw new SetupError('The sandbox home could not be checked, so setup did not change anything.');
+  }
+  let ancestor = resolved;
+  while (true) {
+    let entry;
+    try { entry = fs.lstatSync(ancestor); } catch (error) {
+      if (!['ENOENT', 'ENOTDIR'].includes(error.code)) {
+        throw new SetupError('The working folder could not be checked, so setup did not change anything.');
+      }
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) throw new SetupError('The working folder could not be checked, so setup did not change anything.');
+      ancestor = parent;
+      continue;
+    }
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+      throw new SetupError('The working folder or one of its parents is a file. Choose a folder instead.');
+    }
+    let canonicalAncestor;
+    try {
+      canonicalAncestor = fs.realpathSync(ancestor);
+      if (!fs.statSync(ancestor).isDirectory()) {
+        throw new SetupError('The working folder or one of its parents is a file. Choose a folder instead.');
+      }
+    } catch (error) {
+      if (error instanceof SetupError) throw error;
+      throw new SetupError('The working folder could not be checked, so setup did not change anything.');
+    }
+    const canonicalCandidate = path.resolve(canonicalAncestor, path.relative(ancestor, resolved));
+    if (!inside(canonicalHome, canonicalCandidate)) throw outside();
+    return resolved;
+  }
+}
+
 // OpenShell's CA bundle for its TLS-inspecting proxy. CLIs start MCP servers
 // with a reduced environment, and a worker started from the server needs these
 // to reach its provider through the proxy.
 const CA_BUNDLE_ENV = Object.freeze(['SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO']);
+const SERVICE_PROFILE_ENV = Object.freeze(['HOME', 'XDG_DATA_HOME', 'LOCALAPPDATA']);
+const AGENT_PROFILE_ENV = Object.freeze(['CODEX_HOME', 'CLAUDE_CONFIG_DIR']);
 
 /** The stdio server entry: the engine's generated entry, narrowed to the OpenShell tools. */
 function serverEntry(record, options) {
@@ -150,12 +210,16 @@ function serverEntryFrom(generated, { agents = false, env = process.env, agentLi
       // is written in explicitly; setup only runs inside a sandbox.
       OPENSHELL_SANDBOX: '1',
       TOOLSENABLED_STATE_ROOT: env.TOOLSENABLED_STATE_ROOT,
+      // The machine record and settings also depend on these paths. A client
+      // may drop them from its inherited environment, silently selecting the
+      // fail-closed tier in a different service directory.
+      ...Object.fromEntries(SERVICE_PROFILE_ENV.filter((key) => env[key]).map((key) => [key, env[key]])),
       TOOLSENABLED_TOOL_ALLOWLIST: openShellAllowlist(tierAllowlist, { agents }).join(','),
       ...(agents ? {
         TOOLSENABLED_OPENSHELL_AGENTS: '1',
         ...agentLimitEnv(agentLimits),
         ...leadRoleEnv,
-        ...Object.fromEntries(CA_BUNDLE_ENV.filter((key) => env[key]).map((key) => [key, env[key]]))
+        ...Object.fromEntries([...CA_BUNDLE_ENV, ...AGENT_PROFILE_ENV].filter((key) => env[key]).map((key) => [key, env[key]]))
       } : {})
     }
   };
@@ -187,8 +251,12 @@ function installed(program, env = process.env) {
 
 // Registering a server needs only the CLI's own home and path, never the
 // provider placeholders or anything else in this process's environment.
-function registrationEnv(env = process.env) {
-  return Object.fromEntries(['HOME', 'PATH', 'USER', 'LANG', 'LC_ALL', 'TERM']
+function registrationEnv(env = process.env, { cli } = {}) {
+  const names = ['HOME', 'PATH', 'USER', 'LANG', 'LC_ALL', 'TERM'];
+  // Each CLI registration must use the same profile root as its later session.
+  if (cli === 'codex') names.push('CODEX_HOME');
+  if (cli === 'claude') names.push('CLAUDE_CONFIG_DIR');
+  return Object.fromEntries(names
     .filter((key) => env[key] !== undefined).map((key) => [key, env[key]]));
 }
 
@@ -217,15 +285,23 @@ function offeredToLead(entry) {
 }
 
 function setup(args) {
-  requireInsideSandbox();
+  if (args._.length !== 1) throw new SetupError(`Unexpected setup argument "${args._[1]}".`);
   for (const option of ['providers', 'max-tier', 'lead-role']) {
     if (args[option] !== undefined && !args.agents) throw new SetupError(`--${option} applies to the agent tree; add --agents.`);
   }
-  const tier = args.tier || 'unrestricted';
+  const tier = args.tier === undefined ? 'unrestricted' : args.tier;
   if (!TIERS.includes(tier)) throw new SetupError(`--tier must be one of: ${TIERS.join(', ')}.`);
+  // Validate every setup choice before creating a workspace or committing a
+  // new machine record, so a typo cannot leave a partially changed setup.
+  const agentLimits = { providers: args.providers, maxTier: args['max-tier'] };
+  agentLimitEnv(agentLimits);
+  const chosenLeadRoleEnv = leadRoleEnv(args['lead-role']);
+  if (args.add && process.env.CODEX_HOME) models().codexHome();
+  requireInsideSandbox();
   const servicesRoot = machineRecord.resolveServicesRoot({});
   const nodePath = machineRecord.resolveNodePath({ override: null });
-  const provisioned = workspace.provisionWorkspace(args.workspace || path.join(os.homedir(), 'work'), { installRoot: INSTALL_ROOT, tier });
+  const chosenWorkspace = checkedSandboxWorkspace(args.workspace || path.join(os.userInfo().homedir, 'work'));
+  const provisioned = workspace.provisionWorkspace(chosenWorkspace, { installRoot: INSTALL_ROOT, tier });
   const record = machineRecord.buildMachineRecord({
     tier, installRoot: INSTALL_ROOT, servicesRoot, nodePath, workspaceRoots: [provisioned.workspace]
   });
@@ -233,8 +309,8 @@ function setup(args) {
   if (args.audit) settingsPage.set([['audit.enabled', true], ['audit.activity', 'Full']]);
   const entry = serverEntry(record, {
     agents: args.agents === true,
-    agentLimits: { providers: args.providers, maxTier: args['max-tier'] },
-    leadRoleEnv: leadRoleEnv(args['lead-role'])
+    agentLimits,
+    leadRoleEnv: chosenLeadRoleEnv
   });
   const commands = registrationCommands(entry);
 
@@ -246,35 +322,49 @@ function setup(args) {
     out('  Agents             on: a tree of Codex and Claude workers inside this sandbox, bounded by its OpenShell policy');
     out(`  Agent limits       providers ${entry.env.TOOLSENABLED_OPENSHELL_PROVIDERS || AGENT_PROVIDERS.join(',')}; widest tier ${entry.env.TOOLSENABLED_OPENSHELL_MAX_TIER || 'premium'}`);
     if (entry.env.TOOLSENABLED_OPENSHELL_LEAD_ROLE) out(`  Lead role          ${entry.env.TOOLSENABLED_OPENSHELL_LEAD_ROLE}`);
-    out('  See the tree       toolsenabled-openshell tree');
+    out('  See the tree       toolsenabled tree');
   }
   if (args.audit) out('  Activity audit     on: signed summaries of every tool call (toolsenabled audit settings: audit.enabled, audit.activity)');
   out('');
+  let registrationFailed = false;
   for (const [cli, command] of Object.entries(commands)) {
     if (args.add && installed(cli)) {
       // Setup is re-run after an upgrade. Codex's add replaces an existing
       // entry; Claude's refuses one, so Claude's entry is removed first.
       if (cli === 'claude') {
-        spawnSync('claude', ['mcp', 'remove', '--scope', 'user', SERVER_NAME], { stdio: 'ignore', env: safeLaunchEnvironment(registrationEnv(), { context: 'OpenShell setup: claude mcp remove' }), windowsHide: true });
+        spawnSync('claude', ['mcp', 'remove', '--scope', 'user', SERVER_NAME], { stdio: 'ignore', env: safeLaunchEnvironment(registrationEnv(process.env, { cli }), { context: 'OpenShell setup: claude mcp remove' }), windowsHide: true });
       }
-      const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit', env: safeLaunchEnvironment(registrationEnv(), { context: `OpenShell setup: ${cli} mcp add` }), windowsHide: true });
-      out(result.status === 0 ? `  ${cli}: ToolsEnabled added.` : `  ${cli}: adding failed (exit ${result.status}).`);
+      const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit', env: safeLaunchEnvironment(registrationEnv(process.env, { cli }), { context: `OpenShell setup: ${cli} mcp add` }), windowsHide: true });
+      if (result.status === 0) out(`  ${cli}: ToolsEnabled added.`);
+      else {
+        registrationFailed = true;
+        const detail = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
+        out(`  ${cli}: adding failed (${detail}).`);
+      }
       // Codex's current models reach tools only through code mode, which
       // hides a server's tools unless its table lists them (openshell-models.js).
-      const exposure = cli === 'codex' && result.status === 0 ? models().listMcpServerTools(SERVER_NAME) : false;
-      if (exposure === 'added') out('  codex: its current models are shown ToolsEnabled\'s tools in code mode.');
-      if (exposure === 'kept') out(`  codex: kept your own omit_tools_from for ${SERVER_NAME}; with "deferred" in it, code mode hides ToolsEnabled's tools.`);
-      // Codex does not otherwise wait for the server before its first request.
-      const waited = cli === 'codex' && result.status === 0 ? models().requireMcpServer(SERVER_NAME) : false;
-      if (waited === 'added') out('  codex: waits for ToolsEnabled to start before its first request (required = true).');
-      if (waited === 'kept') out(`  codex: kept your own required setting for ${SERVER_NAME}; without it, a session can start before ToolsEnabled's tools are listed.`);
+      if (cli === 'codex' && result.status === 0) {
+        const exposure = models().listMcpServerTools(SERVER_NAME);
+        if (exposure === 'added') out('  codex: its current models are shown ToolsEnabled\'s tools in code mode.');
+        if (exposure === 'kept') out(`  codex: kept your own omit_tools_from for ${SERVER_NAME}; ["deferred"] lists ToolsEnabled's tools in code mode.`);
+        const waited = models().requireMcpServer(SERVER_NAME);
+        if (waited === 'added') out('  codex: waits for ToolsEnabled to start before its first request (required = true).');
+        if (waited === 'kept') out(`  codex: kept your own required setting for ${SERVER_NAME}; without it, a session can start before ToolsEnabled's tools are listed.`);
+        const inSession = models().runCodexAppServerInSession();
+        if (inSession === 'added') out('  codex: its app server will run inside each session.');
+        if (inSession === 'kept') out('  codex: kept your own daemon_auto_start setting; set it to false if later sessions cannot connect in OpenShell.');
+        if (inSession === 'manual') out('  codex: set daemon_auto_start to false in your existing features config so later sessions can connect in OpenShell.');
+      }
     } else {
       out(`  Add it to ${cli}:`);
       out(`    ${command.map(shellQuote).join(' ')}`);
-      if (cli === 'codex') out(`    then, under [mcp_servers.${SERVER_NAME}] in ~/.codex/config.toml: ${models().EXPOSURE_LINE} and ${models().REQUIRED_LINE}`);
+      if (cli === 'codex') {
+        out(`    then, under [mcp_servers.${SERVER_NAME}] in ~/.codex/config.toml: ${models().EXPOSURE_LINE} and ${models().REQUIRED_LINE}`);
+        out(`    and set ${models().IN_SESSION_LINE} in Codex's [features] config so later sessions can connect in OpenShell.`);
+      }
     }
   }
-  return 0;
+  return registrationFailed ? 1 : 0;
 }
 
 async function status() {
@@ -290,7 +380,7 @@ async function status() {
     out(`Setup               the saved setup could not be trusted: ${error.message}`);
     return 1;
   }
-  out(`Setup               ${record ? `${record.tier}, working folder ${record.workspaceRoots.join(', ')}` : 'not yet: run toolsenabled-openshell setup'}`);
+  out(`Setup               ${record ? `${record.tier}, working folder ${record.workspaceRoots.join(', ')}` : 'not yet: run toolsenabled setup'}`);
   if (!sandbox.insideSandbox || sandbox.advisor !== 'on') out(`\n${sandbox.message}`);
   return 0;
 }
@@ -305,12 +395,13 @@ function ledger(args) {
     ledgerPage.format(ledgerPage.view({ includeClosed: args.all === true })).forEach((line) => out(line));
     return 0;
   }
+  if ((verb === 'done' || verb === 'remove') && rest.length > 0) throw new SetupError(`Unexpected words after ledger ${verb} ${id}.`);
   const actions = {
     add: () => {
       const text = [...rest].join(' ');
       if (id === 'rule') return ledgerPage.addRule({ words: text });
       if (id === 'task') return ledgerPage.addTask({ words: text });
-      throw new SetupError('Add a rule or a task: toolsenabled-openshell ledger add rule|task <words>.');
+      throw new SetupError('Add a rule or a task: toolsenabled ledger add rule|task <words>.');
     },
     answer: () => ledgerPage.answer({ id, words }),
     decline: () => ledgerPage.decline({ id, reason: words }),
@@ -328,14 +419,19 @@ function settings(args) {
   if (isInsideOpenShellSandbox()) useSandboxStateRoot();
   const [, verb, id, ...rest] = args._;
   if (verb === undefined || verb === 'list') {
+    if (id !== undefined) throw new SetupError(`Unexpected settings argument "${id}".`);
     settingsPage.format(settingsPage.list()).forEach((line) => out(line));
     return 0;
   }
   if (verb === 'get') {
-    settingsPage.format(settingsPage.list({ ids: [id] })).forEach((line) => out(line));
+    if (id === undefined || rest.length > 0) throw new SetupError('Use: toolsenabled settings get <id>.');
+    const rows = settingsPage.list({ ids: [id] });
+    if (rows.length === 0) throw new SetupError(`There is no setting "${id}".`);
+    settingsPage.format(rows).forEach((line) => out(line));
     return 0;
   }
   if (verb === 'set') {
+    if (id === undefined || rest.length === 0) throw new SetupError('Use: toolsenabled settings set <id> <value>.');
     const result = settingsPage.set([[id, settingsPage.parseValue(rest.join(' '))]]);
     out(`${id} saved (settings revision ${result.revision}).`);
     return 0;
@@ -374,6 +470,18 @@ function treeNodeView(node, live, store) {
 }
 
 async function main(argv) {
+  // Help is read-only, even when it follows setup flags with missing values.
+  if (argv.includes('--help') || argv.includes('-h')) return usage();
+  if (argv.length === 1 && argv[0] === '--version') {
+    out(require('../src/lib/openshell-install-lifecycle').version(__dirname));
+    return 0;
+  }
+  if (argv[0] === 'uninstall') {
+    if (argv.length > 2 || (argv.length === 2 && argv[1] !== '--keep-state')) {
+      throw new SetupError('Use: toolsenabled uninstall [--keep-state].');
+    }
+    return require('../src/lib/openshell-install-lifecycle').uninstall(__dirname, { keepState: argv[1] === '--keep-state' });
+  }
   // `model` has its own options (src/lib/openshell-models.js), so it is
   // dispatched before this command's strict option parser.
   if (argv[0] === 'model') {
@@ -383,22 +491,30 @@ async function main(argv) {
   const args = parseArgs(argv);
   const [command] = args._;
   if (command === 'setup') return setup(args);
+  if (['status', 'tree', 'help'].includes(command) && args._.length > 1) throw new SetupError(`Unexpected ${command} argument "${args._[1]}".`);
   if (command === 'status') return status();
   if (command === 'ledger') return ledger(args);
   if (command === 'settings') return settings(args);
   if (command === 'tree') return tree(args);
-  out('Usage: toolsenabled-openshell setup [--tier unrestricted|standard|guided] [--workspace DIR] [--agents] [--audit] [--add]');
+  if (command !== undefined && command !== 'help') throw new SetupError(`Unknown command "${command}". Use toolsenabled --help.`);
+  return usage();
+}
+
+function usage() {
+  out('Usage: toolsenabled setup [--tier unrestricted|standard|guided] [--workspace DIR] [--agents] [--audit] [--add]');
   out('                                    [--providers codex,claude] [--max-tier cheap|standard|premium] [--lead-role ROLE]   (with --agents)');
-  out('       toolsenabled-openshell status');
-  out('       toolsenabled-openshell tree [--json]');
-  out('       toolsenabled-openshell ledger [--all]');
-  out('       toolsenabled-openshell ledger answer|decline <A#> <words...>');
-  out('       toolsenabled-openshell ledger done|remove <T#|A#>');
-  out('       toolsenabled-openshell ledger add rule|task <words...>');
-  out('       toolsenabled-openshell settings [get <id>]');
-  out('       toolsenabled-openshell settings set <id> <value>');
-  out('       toolsenabled-openshell model add <name> --base-url URL --model ID [--key-env VAR] [--default] | list | use <name> | remove <name>');
-  return command === undefined || command === 'help' ? 0 : 2;
+  out('       toolsenabled status');
+  out('       toolsenabled tree [--json]');
+  out('       toolsenabled ledger [--all]');
+  out('       toolsenabled ledger answer|decline <A#> <words...>');
+  out('       toolsenabled ledger done|remove <T#|A#>');
+  out('       toolsenabled ledger add rule|task <words...>');
+  out('       toolsenabled settings [get <id>]');
+  out('       toolsenabled settings set <id> <value>');
+  out('       toolsenabled model add <name> --base-url URL --model ID [--key-env VAR] [--default] | list | use <name> | remove <name>');
+  out('       toolsenabled --version');
+  out('       toolsenabled uninstall [--keep-state]');
+  return 0;
 }
 
 if (require.main === module) {

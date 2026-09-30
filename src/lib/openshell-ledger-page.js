@@ -36,18 +36,44 @@ function requireText(text, what) {
 }
 
 /** Records to show: open work first. `kinds` narrows to R, T and/or A. */
-function view({ kinds = KINDS, limit = 50, includeClosed = false } = {}, { read = (args) => new MinorLedgerAgentControl().read(args) } = {}) {
+function view(options = {}, { read = (args) => new MinorLedgerAgentControl().read(args) } = {}) {
+  const { kinds = KINDS, limit = 50, includeClosed = false } = options;
+  // The terminal's --all has no next-page control. An explicitly limited
+  // caller still gets one page; an omitted limit must walk the whole ledger.
+  const allPages = includeClosed && options.limit === undefined;
   const wanted = kinds.filter((kind) => KINDS.includes(kind));
   if (wanted.length === 0) throw refuse('LEDGER_PAGE_KIND_INVALID', 'Choose rules (R), tasks (T) or asks (A).');
   // Declined and removed records are kept but hidden from a plain read; --all shows them too.
-  const page = read({ kinds: wanted, limit, ...(includeClosed ? { removed: true } : {}) });
-  const records = Array.isArray(page && page.records) ? page.records : [];
+  const request = { kinds: wanted, limit, ...(includeClosed ? { removed: true } : {}) };
+  let page = read(request);
+  let records = Array.isArray(page && page.records) ? page.records : [];
   const closed = new Set(['done', 'answered', 'declined', 'removed', 'completed']);
-  return {
-    records: includeClosed ? records : records.filter((record) => !closed.has(record.status)),
+  const result = {
+    records: includeClosed ? [...records] : records.filter((record) => !closed.has(record.status)),
     total: page && typeof page.total === 'number' ? page.total : records.length,
     note: NOT_A_BOUNDARY
   };
+  if ((includeClosed && !allPages) || !Number.isSafeInteger(limit) || limit < 1) return result;
+
+  // The store pages all records before this view filters closed work. Keep
+  // reading until the person's limit is filled or the store is exhausted.
+  if (!allPages) result.records = result.records.slice(0, limit);
+  const counted = page && Number.isSafeInteger(page.total) && page.total >= 0;
+  // A trustworthy total bounds forward offsets. A malformed reader without
+  // that count gets a finite budget too, so it cannot trap the terminal.
+  const maxPages = counted ? Math.max(1, result.total) : 1000;
+  let offset = 0;
+  for (let pages = 1; (allPages || result.records.length < limit) && pages < maxPages; pages += 1) {
+    const nextOffset = page && page.nextOffset;
+    if (records.length === 0 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset
+      || (counted && nextOffset >= result.total)) break;
+    offset = nextOffset;
+    page = read({ ...request, offset });
+    records = Array.isArray(page && page.records) ? page.records : [];
+    result.records.push(...(allPages ? records
+      : records.filter((record) => !closed.has(record.status)).slice(0, limit - result.records.length)));
+  }
+  return result;
 }
 
 function answer({ id, words }, { writer = store } = {}) {

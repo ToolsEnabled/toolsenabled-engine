@@ -1,8 +1,9 @@
 'use strict';
 
-// A retained Linux descendant scope. The Job-shaped interface is shared with
-// existing callers; its proof is explicitly Linux subreaper/pidfd + ECHILD,
-// never a Windows Job, PID disappearance, or process-group signal.
+// A retained Linux descendant scope. OpenShell's seccomp denies pidfd_open,
+// so there the single-threaded subreaper retains each direct child unreaped
+// while signalling it. Both modes require a final ECHILD before claiming
+// cleanup; neither relies on PID disappearance or a process-group signal.
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { randomBytes, randomUUID } = require('node:crypto');
@@ -12,7 +13,8 @@ const { constants } = require('node:os');
 
 const HELPER = path.join(__dirname, 'linux-process-supervisor.py');
 const PYTHON = '/usr/bin/python3';
-const BACKEND = 'linux-subreaper-pidfd-v2';
+const BACKEND = process.env.OPENSHELL_SANDBOX === '1'
+  ? 'linux-subreaper-waitid-v1' : 'linux-subreaper-pidfd-v2';
 const COMPLETE_KEYS = ['version', 'nonce', 'type', 'started', 'quiescent', 'cancelled',
   'exitCode', 'exitSignal', 'reason', 'observedChildren', 'reapedChildren'].sort().join(',');
 const REASONS = new Set([null, 'INPUT_INVALID', 'NATIVE_UNAVAILABLE', 'EXEC_FAILED', 'CANCELLED', 'OBSERVER_FAILED']);
@@ -41,7 +43,7 @@ class LinuxOwnedChild extends EventEmitter {
     this._started = false;
     this._closed = false;
     const nonce = randomBytes(32).toString('hex');
-    const config = JSON.stringify({ version: 2, nonce, command, args,
+    const config = JSON.stringify({ version: 2, nonce, command, args, backend: BACKEND,
       cwd: path.resolve(options.cwd || process.cwd()),
       env: dependencies.safeLaunchEnvironment(options.env || process.env, { context: 'Linux owned process' }),
       terminateDescendantsOnRootExit: options.terminateDescendantsOnRootExit === true });

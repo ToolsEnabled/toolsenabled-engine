@@ -73,13 +73,10 @@ network_policies:
       - path: /usr/local/lib/node_modules/@anthropic-ai/**
 
   # Optional, instead of the `codex` provider: Codex signed in inside this
-  # sandbox by the person (`codex login`, see README.md). Codex 0.158 then also
-  # runs an app-server daemon from a copy it keeps under
-  # /sandbox/.codex/packages/app-server-daemon, which is not one of the npm
-  # binaries; without that path its account check is refused and Codex stops
-  # with "workspace routing discovery failed". That folder is writable inside
-  # the sandbox, so this rule reaches these hosts for anything placed there:
-  # prefer the provider when you can.
+  # sandbox by the person (`codex login`, see README.md). Run
+  # `toolsenabled setup --add` so Codex keeps its interactive app server
+  # inside the session, under the npm-installed binary path below. Prefer the
+  # provider when you can.
   # codex_signed_in_here:
   #   name: Codex signed in inside the sandbox
   #   endpoints:
@@ -89,7 +86,6 @@ network_policies:
   #     - { host: ab.chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
   #   binaries:
   #     - path: /usr/local/lib/node_modules/@openai/**
-  #     - path: /sandbox/.codex/packages/app-server-daemon/**
 
 # Not allowed on purpose: Claude Code's telemetry and error logging
 # (http-intake.logs.us5.datadoghq.com and others) and Codex's update check

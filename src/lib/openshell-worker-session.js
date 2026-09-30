@@ -56,6 +56,11 @@ const CLIENT_INFO = Object.freeze({ name: 'toolsenabled-openshell', title: 'Tool
 // server's own settings, never its identity.
 const FORWARDED_SERVER_ENV = Object.freeze([
   'NODE_OPTIONS', 'ELECTRON_RUN_AS_NODE',
+  // A nested worker starts from this server. Keep the CLI profile roots that
+  // the parent used, so it sees the same sign-in and settings.
+  'HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR',
+  // Keep the parent's machine record and settings across reduced MCP envs.
+  'XDG_DATA_HOME', 'LOCALAPPDATA',
   'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
   'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy',
 ]);
