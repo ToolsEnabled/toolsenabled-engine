@@ -30,7 +30,10 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     package = root / 'toolsenabled-installer'
     assert {p.name for p in package.iterdir()} == {'README.md', 'install.sh', 'manifest.json', 'payload'}
     readme = (package / 'README.md').read_text()
-    assert readme.startswith('# ToolsEnabled OpenShell preview'), 'package must include the OpenShell install README'
+    assert readme.startswith(('# ToolsEnabled Fleet for OpenShell: runtime', '# ToolsEnabled OpenShell preview')), 'package must include the OpenShell install README'
+    brand = 'ToolsEnabled Fleet' if readme.startswith('# ToolsEnabled Fleet ') else 'ToolsEnabled'
+    if brand == 'ToolsEnabled Fleet':
+        assert 'Fleet installs the `toolsenabled` command.' in readme
     assert 'bash toolsenabled-installer/install.sh' in readme
     assert 'toolsenabled uninstall' in readme
     assert 'To limit agent-tree workers to one provider' in readme
@@ -38,6 +41,8 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     assert {p.name for p in (package / 'payload').iterdir()} == {'engine'}
     manifest = json.loads((package / 'manifest.json').read_text())
     assert len(manifest['source_commit']) == 40
+    assert manifest['version'] in ('1.4.0', '1.4.1'), 'No reviewed uninstall contract for this archive version'
+    retains_unproven_state = manifest['version'] == '1.4.1'
     assert not (package / 'payload/engine/adapters/openshell/soak').exists()
     print('PASS archive contains only ToolsEnabled and its production libraries')
 
@@ -77,11 +82,11 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     assert not destination.exists()
     broken = root / 'broken-link'
     broken.symlink_to(root / 'missing')
-    assert 'not a ToolsEnabled install' in install(broken)
+    assert f'not a {brand} install' in install(broken)
     assert broken.is_symlink()
     entry = package / 'payload/engine/bin/toolsenabled-openshell.js'
     entry.rename(entry.with_suffix('.saved'))
-    assert 'Incomplete ToolsEnabled package' in install()
+    assert f'Incomplete {brand} package' in install()
     assert not destination.exists()
     entry.with_suffix('.saved').rename(entry)
     print('PASS prerequisite, sandbox, incomplete-package and symlink refusals leave no installation')
@@ -112,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     for script in [destination / 'bin/toolsenabled', destination / 'bin/toolsenabled-openshell']:
         version = subprocess.run([str(script), '--version'], env={**environment, 'PATH': str(commands) + os.pathsep + str(destination / 'bin')},
                                  text=True, capture_output=True)
-        assert version.returncode == 0 and manifest['version'] in version.stdout and new_commit in version.stdout, version.stdout + version.stderr
+        assert version.returncode == 0 and version.stdout.startswith(f"{brand} {manifest['version']} ") and new_commit in version.stdout, version.stdout + version.stderr
     print('PASS offline installation, in-place upgrade, PATH and installed status')
 
     cli_log = root / 'removed-clis.txt'
@@ -143,11 +148,22 @@ with tempfile.TemporaryDirectory(prefix='toolsenabled-package-test-') as directo
     install(ok=True)
     removed = subprocess.run([str(destination / 'bin/toolsenabled'), 'uninstall'], input='no\n',
                              env=environment, text=True, capture_output=True)
-    assert removed.returncode == 0 and 'Delete ToolsEnabled state' in removed.stdout, removed.stdout + removed.stderr
+    assert removed.returncode == 0 and f'Delete {brand} state' in removed.stdout, removed.stdout + removed.stderr
     assert not destination.exists() and (state / 'keep.txt').exists()
     install(ok=True)
+    calls_before = cli_log.read_text()
     removed = subprocess.run([str(destination / 'bin/toolsenabled'), 'uninstall'], input='yes\n',
                              env=environment, text=True, capture_output=True)
-    assert removed.returncode == 0, removed.stdout + removed.stderr
-    assert not destination.exists() and not state.exists()
-    print('PASS version, both CLI removals, state-retaining and confirmed state-deleting uninstall')
+    if retains_unproven_state:
+        assert removed.returncode != 0 and 'Exclusive ownership' in removed.stderr, removed.stdout + removed.stderr
+        assert destination.is_dir() and (state / 'keep.txt').read_text() == 'state survives upgrade\n'
+        assert cli_log.read_text() == calls_before, 'purge refusal ran a CLI removal'
+        kept = subprocess.run([str(destination / 'bin/toolsenabled'), 'uninstall', '--keep-state'],
+                              env=environment, text=True, capture_output=True)
+        assert kept.returncode == 0 and not destination.exists() and state.is_dir(), kept.stdout + kept.stderr
+        print('PASS version, selected CLI removals, retained state and pre-mutation refusal of unproven purge')
+    else:
+        # Historical 1.4.0 behavior is evidence, not the beta2 deletion contract.
+        assert removed.returncode == 0, removed.stdout + removed.stderr
+        assert not destination.exists() and not state.exists()
+        print('PASS historical 1.4.0 version, CLI removals and confirmed state-deleting uninstall')

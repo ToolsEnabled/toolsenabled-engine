@@ -196,8 +196,8 @@ function stateWord(node, live = true) {
 
 /** The tree as lines a person reads in a terminal. */
 function formatTrees(trees) {
-  if (trees.length === 0) return ['No agent tree yet. Agents appear here once a session starts one with agent.spawn.'];
-  const lines = [];
+  const lines = ['ToolsEnabled Fleet — Agent tree', ''];
+  if (trees.length === 0) return [...lines, 'No agent tree yet. Agents appear here once a session starts one with agent.spawn.'];
   for (const tree of trees) {
     if (tree.error) { lines.push(`${tree.treeKey}  (unreadable: ${tree.error})`); continue; }
     const { document } = tree;

@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   printf '%s\n' 'Usage: bash toolsenabled-installer/install.sh [ABSOLUTE_INSTALL_DIR]'
-  printf '%s\n' 'Installs or upgrades ToolsEnabled inside this OpenShell sandbox.'
+  printf '%s\n' 'Installs or upgrades ToolsEnabled Fleet inside this OpenShell sandbox.'
 }
 case "${1:-}" in
   --help|-h) usage; exit 0 ;;
@@ -40,7 +40,7 @@ if [[ ! -x /usr/bin/python3 ]]; then
   exit 1
 fi
 if [[ ! -f "$installer_dir/payload/engine/bin/toolsenabled-openshell.js" || ! -d "$installer_dir/payload/engine/node_modules" || ! -f "$installer_dir/manifest.json" ]]; then
-  printf '%s\n' 'Incomplete ToolsEnabled package. Download and extract the release archive again.' >&2
+  printf '%s\n' 'Incomplete ToolsEnabled Fleet package. Download and extract the release archive again.' >&2
   exit 1
 fi
 manifest_commit() {
@@ -52,17 +52,17 @@ manifest_commit() {
   ' "$1"
 }
 new_commit=$(manifest_commit "$installer_dir/manifest.json") || {
-  printf '%s\n' 'Incomplete ToolsEnabled package: invalid manifest.' >&2
+  printf '%s\n' 'Incomplete ToolsEnabled Fleet package: invalid manifest.' >&2
   exit 1
 }
 old_commit=''
 if [[ -e $install_prefix || -L $install_prefix ]]; then
   if [[ -L $install_prefix || ! -d $install_prefix || ! -f $install_prefix/manifest.json || ! -f $install_prefix/bin/toolsenabled || ! -d $install_prefix/runtime/engine ]]; then
-    printf 'Installation directory exists but is not a ToolsEnabled install: %s\n' "$install_prefix" >&2
+    printf 'Installation directory exists but is not a ToolsEnabled Fleet install: %s\n' "$install_prefix" >&2
     exit 1
   fi
   old_commit=$(manifest_commit "$install_prefix/manifest.json") || {
-    printf 'Installation directory has an invalid ToolsEnabled manifest: %s\n' "$install_prefix" >&2
+    printf 'Installation directory has an invalid ToolsEnabled Fleet manifest: %s\n' "$install_prefix" >&2
     exit 1
   }
 fi
@@ -105,9 +105,9 @@ trap - EXIT
 if [[ -n $backup ]]; then rm -rf -- "$backup"; fi
 
 if [[ -n $old_commit ]]; then
-  printf 'ToolsEnabled upgraded in %s\nOld commit: %s\nNew commit: %s\n' "$install_prefix" "$old_commit" "$new_commit"
+  printf 'ToolsEnabled Fleet upgraded in %s\nOld commit: %s\nNew commit: %s\n' "$install_prefix" "$old_commit" "$new_commit"
 else
-  printf 'ToolsEnabled installed in %s\nCommit: %s\n' "$install_prefix" "$new_commit"
+  printf 'ToolsEnabled Fleet installed in %s\nCommit: %s\n' "$install_prefix" "$new_commit"
 fi
 printf 'Next: source %q\n' "$install_prefix/env.sh"
 printf '%s\n' 'Then: toolsenabled setup --agents --providers codex,claude --add'

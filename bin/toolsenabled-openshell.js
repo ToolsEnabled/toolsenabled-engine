@@ -299,13 +299,43 @@ function setup(args) {
   if (args.add && process.env.CODEX_HOME) models().codexHome();
   requireInsideSandbox();
   const servicesRoot = machineRecord.resolveServicesRoot({});
+  // Preserve registration history before replacing the setup record. An old
+  // record has unknown history; unreadable history must not become fresh proof.
+  const previousRecord = machineRecord.readMachineRecord({ servicesRoot, adopt: false });
+  const historyEntryExists = (file) => {
+    try { fs.lstatSync(file); return true; }
+    catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  };
+  // A surviving integrity key or dangling record entry is evidence of an old
+  // or interrupted setup, even when readMachineRecord found no readable record.
+  const freshRegistrationScope = previousRecord === null
+    && !historyEntryExists(machineRecord.machineRecordKeyPath(servicesRoot))
+    && !historyEntryExists(machineRecord.machineRecordPath(servicesRoot));
+  const openShellRegistrations = {
+    version: 1,
+    providers: Object.fromEntries(AGENT_PROVIDERS.map((provider) => [provider, {
+      ...machineRecord.openShellRegistrationContext(provider, { installRoot: INSTALL_ROOT }),
+      status: freshRegistrationScope ? 'never' : machineRecord.openShellRegistrationState(previousRecord, provider, {
+        installRoot: INSTALL_ROOT, servicesRoot
+      })
+    }]))
+  };
   const nodePath = machineRecord.resolveNodePath({ override: null });
   const chosenWorkspace = checkedSandboxWorkspace(args.workspace || path.join(os.userInfo().homedir, 'work'));
   const provisioned = workspace.provisionWorkspace(chosenWorkspace, { installRoot: INSTALL_ROOT, tier });
-  const record = machineRecord.buildMachineRecord({
-    tier, installRoot: INSTALL_ROOT, servicesRoot, nodePath, workspaceRoots: [provisioned.workspace]
+  let record = machineRecord.buildMachineRecord({
+    tier, installRoot: INSTALL_ROOT, servicesRoot, nodePath, workspaceRoots: [provisioned.workspace], openShellRegistrations
   });
   machineRecord.writeMachineRecord(record, { servicesRoot });
+  const saveRegistrationStatus = (provider, status) => {
+    const next = { ...record, openShellRegistrations: {
+      version: 1,
+      providers: { ...record.openShellRegistrations.providers,
+        [provider]: { ...record.openShellRegistrations.providers[provider], status } }
+    } };
+    machineRecord.writeMachineRecord(next, { servicesRoot });
+    record = next;
+  };
   if (args.audit) settingsPage.set([['audit.enabled', true], ['audit.activity', 'Full']]);
   const entry = serverEntry(record, {
     agents: args.agents === true,
@@ -314,7 +344,7 @@ function setup(args) {
   });
   const commands = registrationCommands(entry);
 
-  out(`ToolsEnabled is set up in this OpenShell sandbox.`);
+  out(`ToolsEnabled Fleet is set up in this OpenShell sandbox.`);
   out(`  Permission level   ${tier}`);
   out(`  Working folder     ${provisioned.workspace}`);
   out(`  Tools offered      ${offeredToLead(entry)}`);
@@ -329,13 +359,21 @@ function setup(args) {
   let registrationFailed = false;
   for (const [cli, command] of Object.entries(commands)) {
     if (args.add && installed(cli)) {
+      // Persist uncertainty BEFORE either external mutation. A crash or failed
+      // add cannot leave a false never-configured statement. Past success stays
+      // configured even when this replacement fails or the CLI later vanishes.
+      saveRegistrationStatus(cli, record.openShellRegistrations.providers[cli].status === 'configured' ? 'configured' : 'unknown');
       // Setup is re-run after an upgrade. Codex's add replaces an existing
       // entry; Claude's refuses one, so Claude's entry is removed first.
       if (cli === 'claude') {
         spawnSync('claude', ['mcp', 'remove', '--scope', 'user', SERVER_NAME], { stdio: 'ignore', env: safeLaunchEnvironment(registrationEnv(process.env, { cli }), { context: 'OpenShell setup: claude mcp remove' }), windowsHide: true });
       }
       const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit', env: safeLaunchEnvironment(registrationEnv(process.env, { cli }), { context: `OpenShell setup: ${cli} mcp add` }), windowsHide: true });
-      if (result.status === 0) out(`  ${cli}: ToolsEnabled added.`);
+      if (result.status === 0 && !result.error && !result.signal) {
+        // Save success before any follow-up Codex config operation can throw.
+        saveRegistrationStatus(cli, 'configured');
+        out(`  ${cli}: ToolsEnabled Fleet added.`);
+      }
       else {
         registrationFailed = true;
         const detail = result.error ? result.error.message : result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
@@ -345,11 +383,11 @@ function setup(args) {
       // hides a server's tools unless its table lists them (openshell-models.js).
       if (cli === 'codex' && result.status === 0) {
         const exposure = models().listMcpServerTools(SERVER_NAME);
-        if (exposure === 'added') out('  codex: its current models are shown ToolsEnabled\'s tools in code mode.');
-        if (exposure === 'kept') out(`  codex: kept your own omit_tools_from for ${SERVER_NAME}; ["deferred"] lists ToolsEnabled's tools in code mode.`);
+        if (exposure === 'added') out('  codex: its current models are shown ToolsEnabled Fleet\'s tools in code mode.');
+        if (exposure === 'kept') out(`  codex: kept your own omit_tools_from for ${SERVER_NAME}; ["deferred"] lists ToolsEnabled Fleet's tools in code mode.`);
         const waited = models().requireMcpServer(SERVER_NAME);
-        if (waited === 'added') out('  codex: waits for ToolsEnabled to start before its first request (required = true).');
-        if (waited === 'kept') out(`  codex: kept your own required setting for ${SERVER_NAME}; without it, a session can start before ToolsEnabled's tools are listed.`);
+        if (waited === 'added') out('  codex: waits for ToolsEnabled Fleet to start before its first request (required = true).');
+        if (waited === 'kept') out(`  codex: kept your own required setting for ${SERVER_NAME}; without it, a session can start before ToolsEnabled Fleet's tools are listed.`);
         const inSession = models().runCodexAppServerInSession();
         if (inSession === 'added') out('  codex: its app server will run inside each session.');
         if (inSession === 'kept') out('  codex: kept your own daemon_auto_start setting; set it to false if later sessions cannot connect in OpenShell.');
@@ -370,6 +408,8 @@ function setup(args) {
 async function status() {
   if (isInsideOpenShellSandbox()) useSandboxStateRoot();
   const sandbox = await openshellTools.status();
+  out('ToolsEnabled Fleet — Status');
+  out('');
   out(`OpenShell sandbox   ${sandbox.insideSandbox ? 'yes' : 'no'}`);
   out(`Policy advisor      ${sandbox.advisor}`);
   if (Array.isArray(sandbox.networkRules)) out(`Network rules       ${sandbox.networkRules.join(', ') || 'none'}`);

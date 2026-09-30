@@ -129,6 +129,8 @@ const DISCORD_GATEWAY_STATES = new Set(['idle', 'connecting', 'ready', 'resuming
 const MAX_LEGACY_BYTES = 10 * 1024 * 1024;
 const OPERATION_STATES = new Set(['reserved', 'executing', 'succeeded', 'retryable_failed', 'uncertain']);
 const TASK_STATES = new Set(['queued', 'leased', 'running', 'retry_wait', 'succeeded', 'failed', 'uncertain', 'cancelled']);
+// Expired is a read-time lease projection, never a persisted lifecycle state.
+const TASK_READ_STATES = new Set([...TASK_STATES, 'expired']);
 const SCHEDULER_OUTBOX_STATES = new Set(['pending', 'executing', 'succeeded', 'retryable_failed', 'error', 'uncertain', 'superseded']);
 const STARTUP_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const REQUIRED_SCHEMA_V1 = Object.freeze({
@@ -5578,23 +5580,32 @@ class StateStore {
     const values = [];
     if (source.queue !== undefined) { clauses.push('queue_name = ?'); values.push(this._taskIdentifier(source.queue, 'queue')); }
     if (source.type !== undefined) { clauses.push('task_type = ?'); values.push(this._taskIdentifier(source.type, 'type')); }
+    let statuses;
     if (source.status !== undefined) {
-      if (!TASK_STATES.has(source.status)) throw stateError('STATE_INVALID_ARGUMENT', 'status is invalid.', { field: 'status' });
-      clauses.push('status = ?'); values.push(source.status);
+      if (!TASK_READ_STATES.has(source.status)) throw stateError('STATE_INVALID_ARGUMENT', 'status is invalid.', { field: 'status' });
+      statuses = [source.status];
     }
     if (source.statuses !== undefined) {
-      const statuses = source.statuses;
-      if (!Array.isArray(statuses) || statuses.length < 1 || statuses.length > TASK_STATES.size
-          || Array.from(statuses).some(status => !TASK_STATES.has(status))
+      statuses = source.statuses;
+      if (!Array.isArray(statuses) || statuses.length < 1 || statuses.length > TASK_READ_STATES.size
+          || Array.from(statuses).some(status => !TASK_READ_STATES.has(status))
           || new Set(statuses).size !== statuses.length) {
         throw stateError('STATE_INVALID_ARGUMENT', 'statuses must contain unique valid task states.', { field: 'statuses' });
       }
-      clauses.push(`status IN (${statuses.map(() => '?').join(',')})`);
-      values.push(...statuses);
+    }
+    const now = this._now();
+    if (statuses) {
+      // Match _taskRow's reported status before ordering/LIMIT. Filtering raw
+      // status (or filtering the limited rows afterward) hides expired work.
+      // The same captured clock drives this predicate and the returned rows;
+      // no reaper or transition runs on this read path.
+      clauses.push(`(CASE WHEN status IN ('leased','running') AND lease_expires_at_ms IS NOT NULL AND lease_expires_at_ms <= ?
+        THEN CASE WHEN status = 'leased' THEN 'expired' ELSE 'uncertain' END
+        ELSE status END) IN (${statuses.map(() => '?').join(',')})`);
+      values.push(now, ...statuses);
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     values.push(limit);
-    const now = this._now();
     return this._read(db => db.prepare(`SELECT * FROM tasks ${where} ORDER BY updated_at_ms DESC, id DESC LIMIT ?`).all(...values)
       .map(row => this._taskRow(row, { includePayload: false, includeCheckpoint: false, includeResult: false, includeError: false, now })));
   }

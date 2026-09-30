@@ -14,6 +14,14 @@ honors `soak/PAUSE`, and holds the channel's runner lock. The coordinator owns t
 dedicated release runner; do not start a competing continuous run in the login
 sandbox. `--through K6` and similar partial runs are diagnostic evidence only.
 
+The isolated test wrapper requires an explicit channel, so an ordinary source
+test run does not start archive work merely because release candidates exist:
+
+```sh
+TOOLSENABLED_PORT_CHANNEL=/path/to/scratch-check-channel \
+  node tests/run-isolated.js tests/openshell-soak-candidate.test.js
+```
+
 K1–K8 use a fresh installation and state each iteration. K9 has a separate
 installation of the same archive and keeps its MCP process and scratch state
 alive across iterations. It repeatedly updates one fixed memory entry, checks
@@ -29,6 +37,22 @@ pagination and the terminal's `ledger --all`. K8 seeds a task, memory entry and
 nondefault setting in the prior candidate, reads them after upgrade and after
 a retained-state reinstall, and checks both state directories after confirmed
 uninstall.
+
+K3 rejects invalid inputs for all 46 Controller tools and checks successful
+file, memory, search and diagnostic calls. Rule filing remains disabled in
+the scratch settings; the test requires its exact refusal code. A synthetic
+denial with a unique `.invalid` host must be refused before any policy proposal
+is filed. Queue, ledger and agent operations use K4 and K6's valid stateful
+fixtures. Their tool coverage stays pending until those scenarios pass in the
+same iteration; `verificationCoverage` records that distinction.
+
+K6 compares fresh completion records for resume, restart and message turns,
+checks model/effort/provider changes through simulated Codex and Claude, and
+keeps the full six-node topology through a lead crash. It verifies saved
+conversations, exactly-once report delivery and a resumed turn after recovery.
+Process cleanup checks retain PID/start identities proved to descend from the
+owned lead before lifecycle operations, so removing a tree row cannot hide a
+surviving worker.
 
 K7 reports whether audit was enabled and actually verified in
 `verificationCoverage`. The standard setup has audit off. To check the

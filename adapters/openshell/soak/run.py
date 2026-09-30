@@ -128,9 +128,12 @@ def run_iteration(candidate: Candidate, recorder: Recorder, channel: Path, throu
     root = scratch_directory()
     context = Iteration(candidate, root)
     recorder.current_candidate = candidate.name
+    recorder.verification_coverage[candidate.name] = {"iteration": recorder.iterations}
     recorder.partial = through < 9
     completed = True
     try:
+        print(f"{utc_now()} {candidate.name} ITERATION_START iteration={recorder.iterations} "
+              f"sha256={candidate.sha256} source={candidate.commit}", flush=True)
         context.leak_watch = recorder.watcher(candidate) if through == 9 else None
         for number in range(1, through + 1):
             # A new archive is accepted between scenarios, without restarting
@@ -171,10 +174,17 @@ def run_iteration(candidate: Candidate, recorder: Recorder, channel: Path, throu
                 elapsed = (time.monotonic() - started) * 1000
                 context.timings_ms[scenario] = elapsed
                 recorder.pass_scenario(candidate.name, recorder.iterations, scenario, elapsed)
+                if number in (4, 6) and "k3" in context.measures:
+                    coverage = context.measures["k3"]
+                    completed_tools = {name: required for name, required in coverage["deferred"].items()
+                                       if required == scenario}
+                    coverage.setdefault("verifiedElsewhere", {}).update(completed_tools)
+                    coverage["deferred"] = {name: required for name, required in coverage["deferred"].items()
+                                            if name not in completed_tools}
+                if number in (3, 6, 7) and f"k{number}" in context.measures:
+                    recorder.verification_coverage.setdefault(candidate.name, {})[scenario] = context.measures[f"k{number}"]
             if number == 9 and "k9" in context.measures:
                 recorder.measurements[candidate.name] = [context.measures["k9"]]
-            if number == 7 and "k7" in context.measures:
-                recorder.verification_coverage[candidate.name] = {"K7": context.measures["k7"]}
             recorder.write_summary()
         return completed and through == 9
     finally:

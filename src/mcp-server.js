@@ -101,7 +101,7 @@ function lastWordsMemory() {
 function writeLastWords() {
   if (lastWords.file === null || lastWords.state === null) return false;
   try {
-    fs.writeFileSync(lastWords.file, `${JSON.stringify(lastWords.state, null, 2)}\n`);
+    fs.writeFileSync(lastWords.file, `${JSON.stringify(lastWords.state, null, 2)}\n`, { mode: 0o600 });
     return true;
   } catch {
     return false;
@@ -125,7 +125,9 @@ function openLastWords({ stateFile = null, now = () => new Date().toISOString() 
     const file = stateFile === null
       ? path.join(statePath(...LAST_WORDS_DIRECTORY), `mcp-server-${process.pid}.json`)
       : stateFile;
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Fresh diagnostics must stay private regardless of the launcher's umask.
+    // These creation modes intentionally leave existing permissions unchanged.
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     lastWords.file = file;
     lastWords.state = {
       pid: process.pid,

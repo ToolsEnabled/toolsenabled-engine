@@ -61,6 +61,8 @@ const BRIDGE_PORT_RANGE = Object.freeze({ first: 4610, last: 4619 });
 const LOOPBACK_HOST = '127.0.0.1';
 
 const MACHINE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const OPENSHELL_REGISTRATION_PROVIDERS = Object.freeze(['codex', 'claude']);
+const OPENSHELL_REGISTRATION_STATES = Object.freeze(['never', 'configured', 'unknown']);
 
 class SetupRefusal extends Error {
   constructor(code, message, details = {}) {
@@ -138,6 +140,90 @@ function defaultMachineLabel(hostnameProvider = os.hostname) {
   return 'This computer';
 }
 
+function registrationPath(value) {
+  return typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
+    && !/[\x00-\x1f\x7f]/.test(value)
+    && !value.split(path.sep).some(component => component === '.' || component === '..');
+}
+
+function canonicalRegistrationPath(value) {
+  if (!registrationPath(value)) {
+    throw new SetupRefusal('SETUP_REGISTRATION_CONTEXT_INVALID', 'Registration context must use bounded absolute folder paths.');
+  }
+  let ancestor = path.resolve(value);
+  const suffix = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(ancestor);
+      if (!fs.statSync(real).isDirectory()) throw new Error('Registration context is not a folder.');
+      return path.join(real, ...suffix);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      // A dangling link is not a previously absent profile directory.
+      try {
+        if (fs.lstatSync(ancestor).isSymbolicLink()) throw new Error('Registration context contains a dangling link.');
+      } catch (entryError) { if (entryError.code !== 'ENOENT') throw entryError; }
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) throw error;
+      suffix.unshift(path.basename(ancestor));
+      ancestor = parent;
+    }
+  }
+}
+
+function openShellRegistrationContext(provider, { installRoot, env = process.env } = {}) {
+  if (!OPENSHELL_REGISTRATION_PROVIDERS.includes(provider)) {
+    throw new SetupRefusal('SETUP_REGISTRATION_CONTEXT_INVALID', 'Unknown registration provider.');
+  }
+  const home = canonicalRegistrationPath(env.HOME === undefined ? os.homedir() : env.HOME);
+  const selectedProfile = provider === 'codex' ? env.CODEX_HOME : env.CLAUDE_CONFIG_DIR;
+  const profile = selectedProfile === undefined ? path.join(home, provider === 'codex' ? '.codex' : '.claude') : selectedProfile;
+  return Object.freeze({ installRoot: canonicalRegistrationPath(installRoot), homeRoot: home, profileRoot: canonicalRegistrationPath(profile),
+    // An explicit directory may select a different registration store even
+    // when it spells the CLI's default profile directory (notably Claude).
+    profileMode: selectedProfile === undefined ? 'default' : 'explicit' });
+}
+
+function validateOpenShellRegistrations(value) {
+  const exactKeys = (entry, keys) => entry && typeof entry === 'object' && !Array.isArray(entry)
+    && Object.keys(entry).sort().join(',') === [...keys].sort().join(',');
+  return exactKeys(value, ['version', 'providers']) && value.version === 1
+    && exactKeys(value.providers, OPENSHELL_REGISTRATION_PROVIDERS)
+    && OPENSHELL_REGISTRATION_PROVIDERS.every((provider) => {
+      const entry = value.providers[provider];
+      return exactKeys(entry, ['installRoot', 'homeRoot', 'profileRoot', 'profileMode', 'status'])
+        && registrationPath(entry.installRoot) && registrationPath(entry.homeRoot) && registrationPath(entry.profileRoot)
+        && ['default', 'explicit'].includes(entry.profileMode)
+        && OPENSHELL_REGISTRATION_STATES.includes(entry.status);
+    });
+}
+
+// This describes setup history in one sealed machine-record scope, not current
+// registration absence or registrations made manually/in another services root.
+function openShellRegistrationState(record, provider, {
+  installRoot, env = process.env, servicesRoot = record && record.servicesRoot
+} = {}) {
+  try {
+    if (!validateMachineRecord(record).ok || !validateOpenShellRegistrations(record.openShellRegistrations)
+      || !verifyMachineRecordIntegrity(record, { servicesRoot }).ok) return 'unknown';
+    const context = openShellRegistrationContext(provider, { installRoot, env });
+    if (canonicalRegistrationPath(record.installRoot) !== context.installRoot
+      || canonicalRegistrationPath(record.servicesRoot) !== canonicalRegistrationPath(servicesRoot)) return 'unknown';
+    const entry = record.openShellRegistrations.providers[provider];
+    return entry.installRoot === context.installRoot && entry.profileRoot === context.profileRoot
+      && entry.profileMode === context.profileMode && entry.homeRoot === context.homeRoot ? entry.status : 'unknown';
+  } catch { return 'unknown'; }
+}
+
+function readOpenShellRegistrationState({
+  provider, installRoot, env = process.env, servicesRoot = resolveServicesRoot({ env })
+} = {}) {
+  try {
+    const record = readMachineRecord({ servicesRoot, adopt: false });
+    return openShellRegistrationState(record, provider, { installRoot, env, servicesRoot });
+  } catch { return 'unknown'; }
+}
+
 /**
  * Build a complete record from resolved values. Every field is required: a record
  * with a hole in it is how a generated file ends up with `undefined` in a path.
@@ -154,7 +240,8 @@ function buildMachineRecord(input = {}) {
     shellPortRange = SHELL_PORT_RANGE,
     bridgePortRange = BRIDGE_PORT_RANGE,
     loopbackHost = LOOPBACK_HOST,
-    createdAtMs = Date.now()
+    createdAtMs = Date.now(),
+    openShellRegistrations
   } = input;
 
   const record = {
@@ -170,7 +257,8 @@ function buildMachineRecord(input = {}) {
     loopbackHost,
     shellPortRange: { first: shellPortRange.first, last: shellPortRange.last },
     bridgePortRange: { first: bridgePortRange.first, last: bridgePortRange.last },
-    createdAtMs
+    createdAtMs,
+    ...(openShellRegistrations === undefined ? {} : { openShellRegistrations })
   };
 
   const validation = validateMachineRecord(record);
@@ -186,7 +274,15 @@ function buildMachineRecord(input = {}) {
     machine: Object.freeze(record.machine),
     workspaceRoots: Object.freeze(record.workspaceRoots.slice()),
     shellPortRange: Object.freeze(record.shellPortRange),
-    bridgePortRange: Object.freeze(record.bridgePortRange)
+    bridgePortRange: Object.freeze(record.bridgePortRange),
+    ...(openShellRegistrations === undefined ? {} : {
+      openShellRegistrations: Object.freeze({
+        version: 1,
+        providers: Object.freeze(Object.fromEntries(OPENSHELL_REGISTRATION_PROVIDERS.map((provider) => [
+          provider, Object.freeze({ ...openShellRegistrations.providers[provider] })
+        ])))
+      })
+    })
   });
 }
 
@@ -232,6 +328,9 @@ function validateMachineRecord(record) {
     }
   }
   if (!Number.isFinite(record.createdAtMs)) errors.push('createdAtMs must be a number');
+  if (record.openShellRegistrations !== undefined && !validateOpenShellRegistrations(record.openShellRegistrations)) {
+    errors.push('openShellRegistrations must contain bounded version-1 setup history for codex and claude');
+  }
 
   return { ok: errors.length === 0, errors };
 }
@@ -1318,6 +1417,9 @@ module.exports = Object.freeze({
   validateMachineRecord,
   readMachineRecord,
   writeMachineRecord,
+  openShellRegistrationContext,
+  openShellRegistrationState,
+  readOpenShellRegistrationState,
   machineRecordKeyPath,
   sealMachineRecord,
   verifyMachineRecordIntegrity,

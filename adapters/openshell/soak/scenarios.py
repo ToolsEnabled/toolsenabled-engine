@@ -17,6 +17,7 @@ from typing import Any
 from core import Candidate, MCP, SoakError, discover_candidates, extract_candidate, install_candidate, minimal_path, require, run_cli, scratch_env, tool_ok, tool_value
 from simulator import Simulator, contract
 from leak_watch import LeakWatch
+from surface_checks import check_surface
 
 
 @dataclass
@@ -75,9 +76,9 @@ def k2_setup(context: Iteration) -> None:
                     args += ["--agents", "--providers", ",".join(providers)]
                 result = run_cli(context.prefix, environment, *args)
                 require(result.returncode == 0, "SETUP_EXIT", f"{label}: {result.stderr[-400:]}")
-                require(result.stdout.count("ToolsEnabled added.") == len(providers),
+                require(len(re.findall(r"^  (?:codex|claude): ToolsEnabled(?: Fleet)? added\.$", result.stdout, re.MULTILINE)) == len(providers),
                         "SETUP_REGISTRATION", f"{label}: wrong CLI registration count")
-                require("ToolsEnabled is set up" in result.stdout and workspace.is_dir(),
+                require(re.search(r"^ToolsEnabled(?: Fleet)? is set up in this OpenShell sandbox\.$", result.stdout, re.MULTILINE) is not None and workspace.is_dir(),
                         "SETUP_WORKSPACE", f"{label}: no setup workspace")
                 entry = _server_entry(context, environment, agents)
                 names = entry["env"]["TOOLSENABLED_TOOL_ALLOWLIST"].split(",")
@@ -139,49 +140,8 @@ def k2_setup(context: Iteration) -> None:
             "SETUP_STATE_ROOT", "Server entry changed the scratch state root")
 
 
-def _sample_argument(key: str, schema: dict[str, Any], context: Iteration) -> Any:
-    if isinstance(schema.get("enum"), list) and schema["enum"]:
-        return schema["enum"][0]
-    fixed = {
-        "actor": "codex", "scope": "global", "words": "Soak fixture entry", "id": "T999999",
-        "path": str(context.root / "surface-file.txt"), "content": "soak sample\n",
-        "oldText": "soak sample", "newText": "soak edited", "root": str(context.root / "search-sample"),
-        "queue": "soak-surface", "type": "probe", "idempotencyKey": "soak-surface-once",
-        "objective": "Check the scratch queue", "title": "Scratch probe", "expiryPolicy": "uncertain",
-        "maxAttempts": 1, "checkpointKey": "soak-checkpoint", "expectedRevision": 0,
-        "disposition": "failed", "code": "TEST_FAILURE", "status": "in-progress",
-        "reason": "Scratch soak probe", "namespace": "soak", "key": "surface",
-        "query": "soak", "denial": "soak-no-such-denial", "intent": "Scratch soak probe",
-        "from": "root", "to": "soak-no-such-worker", "body": "Scratch probe",
-        "contract": "Scratch soak worker probe", "tier": "cheap", "nodeId": "soak-missing-node",
-        "model": "soak-model", "effort": "low", "provider": "codex", "taskId": "soak-missing-task",
-        "value": {"fixture": True}, "result": {"summary": "Scratch probe"},
-    }
-    if key in fixed:
-        return fixed[key]
-    if isinstance(schema.get("oneOf"), list) and schema["oneOf"]:
-        return _sample_argument(key, schema["oneOf"][0], context)
-    kind = schema.get("type")
-    if isinstance(kind, list):
-        kind = next((part for part in kind if part != "null"), kind[0])
-    if kind == "object" or "properties" in schema:
-        properties = schema.get("properties") or {}
-        return {name: _sample_argument(name, properties.get(name, {}), context)
-                for name in schema.get("required", [])}
-    if kind == "array":
-        return []
-    if kind == "integer" or kind == "number":
-        return max(0, schema.get("minimum", 0))
-    if kind == "boolean":
-        return False
-    return "a" * max(4, schema.get("minLength", 0))
-
-
 def k3_surface(context: Iteration) -> None:
     require(context.prefix is not None and bool(context.server_env), "K3_ORDER", "K2 did not set up the server", "harness")
-    search_root = context.root / "search-sample"
-    search_root.mkdir()
-    (search_root / "note.txt").write_text("soak search sample\n")
     with MCP(context.prefix, context.server_env, context.root) as mcp:
         tools = mcp.tools()
         # K2's main fixture is unrestricted, agent-enabled, and uses the
@@ -207,29 +167,32 @@ def k3_surface(context: Iteration) -> None:
                 f"Controller surface mismatch: missing={sorted(expected - offered)}; "
                 f"unexpected={sorted(offered - expected)}")
         latencies = []
+        def call(name: str, arguments: Any, label: str) -> dict:
+            started = time.monotonic()
+            reply = mcp.call(name, arguments, timeout=15)
+            elapsed = (time.monotonic() - started) * 1000
+            latencies.append(elapsed)
+            context.timings_ms[f"K3/{name}/{label}"] = elapsed
+            require(isinstance(reply.get("error") or reply.get("result"), dict),
+                    "TOOL_RESPONSE", f"{name} {label} returned no structured response")
+            require(mcp.process.poll() is None, "MCP_SURFACE_DIED", f"Server exited after {name} {label}")
+            return reply
+
         for name, tool in tools.items():
             schema = tool.get("inputSchema") or {}
-            # These generated calls check transport and response shape, not
-            # successful semantics; frozen hand tests cover each tool's work.
-            valid = {key: _sample_argument(key, (schema.get("properties") or {}).get(key, {}), context)
-                     for key in schema.get("required", [])}
-            if name == "host.list_dir":
-                valid["path"] = str(context.root)
             # A wrong top-level type works even for tools without required
             # fields. Required-field omission also exercises each schema.
             invalid = {} if schema.get("required") else []
-            for label, arguments in (("invalid", invalid), ("valid", valid)):
-                started = time.monotonic()
-                reply = mcp.call(name, arguments, timeout=15)
-                elapsed = (time.monotonic() - started) * 1000
-                latencies.append(elapsed)
-                context.timings_ms[f"K3/{name}/{label}"] = elapsed
-                require(isinstance(reply.get("error") or reply.get("result"), dict),
-                        "TOOL_RESPONSE", f"{name} {label} returned no structured response")
-                if label == "invalid":
-                    require("error" in reply or reply.get("result", {}).get("isError") is True,
-                            "TOOL_INVALID_ACCEPTED", f"{name} accepted an invalid top-level or missing-required input")
-                require(mcp.process.poll() is None, "MCP_SURFACE_DIED", f"Server exited after {name} {label}")
+            reply = call(name, invalid, "invalid")
+            require("error" in reply or reply.get("result", {}).get("isError") is True,
+                    "TOOL_INVALID_ACCEPTED", f"{name} accepted an invalid top-level or missing-required input")
+        # Real queue/ledger/agent positives require K4/K6's fixtures. Keep
+        # them explicitly pending; fabricated IDs and blanket error acceptance
+        # cannot establish successful valid-input coverage.
+        coverage = check_surface(context.root, call)
+        covered = set(coverage["positive"]) | set(coverage["refusal"]) | set(coverage["deferred"])
+        require(covered == offered, "SURFACE_COVERAGE", "K3 coverage contract does not match the offered tools", "harness")
+        context.measures["k3"] = coverage
         context.measures["tool_latencies_ms"] = latencies
 
 
@@ -345,6 +308,16 @@ def k4_ledger_tasks(context: Iteration) -> None:
         cancelled = tool_ok(first.call("task.get", {"taskId": cancel_id}), "task.get")
         require(cancelled.get("status") == "cancelled" or cancelled.get("cancellationRequested") is True,
                 "TASK_CANCEL", "First session did not see cancellation")
+        listed = tool_ok(first.call("task.list", {"limit": 10}), "task.list")
+        rows = listed.get("tasks", [])
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows),
+                "TASK_LIST_STATE", "Task listing returned no task metadata array")
+        by_id = {row.get("taskId"): row.get("status") for row in rows}
+        expected = {queued_id: "succeeded", fail_id: "failed", cancel_id: cancelled.get("status")}
+        require(listed.get("count") == len(rows) <= 10
+                and len(by_id) == len(rows)
+                and all(isinstance(status, str) and by_id.get(identity) == status for identity, status in expected.items()),
+                "TASK_LIST_STATE", "Task listing omitted or changed the seeded task IDs/states")
 
 
 def k5_concurrent_edits(context: Iteration) -> None:
@@ -441,110 +414,319 @@ def _assert_simulator_verdicts(context: Iteration) -> None:
                 "TREE_SIM_VERDICT", f"{marker} simulator turn verdicts: {verdicts}")
 
 
+def _tree_document(context: Iteration) -> dict[str, Any]:
+    """Read only the live scratch tree; CLI rows omit saved conversation/PID identities."""
+    result = run_cli(context.prefix, context.env, "tree", "--json", timeout=15)
+    require(result.returncode == 0, "TREE_PAGE", f"Tree page failed: {result.stderr[-300:]}")
+    live = [tree for tree in json.loads(result.stdout) if tree.get("live") is True]
+    require(len(live) == 1, "TREE_LIVE", "Expected exactly one live scratch tree")
+    key = live[0]["treeKey"]
+    require(re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", key) is not None,
+            "TREE_KEY", "Tree page returned an invalid scratch tree key")
+    return json.loads((Path(context.env["TOOLSENABLED_STATE_ROOT"]) / "openshell-tree" / key / "tree.json").read_text())
+
+
+def _tree_descendants(pid: int, proc_root: Path = Path("/proc")) -> set[int]:
+    # A CLI's non-main thread can spawn its MCP process. Reading only the
+    # leader thread's children silently misses those descendants.
+    found, pending = set(), [pid]
+    while pending:
+        current = pending.pop()
+        for file in (proc_root / str(current) / "task").glob("*/children"):
+            try:
+                children = file.read_text().split()
+            except FileNotFoundError:
+                continue
+            for child in children:
+                value = int(child)
+                if value != pid and value not in found:
+                    found.add(value)
+                    pending.append(value)
+    return found
+
+
+def _tree_track(context: Iteration, mcp: MCP, node_ids: list[str], owned: dict[int, str]) -> dict[int, str]:
+    require(mcp.started_ticks is not None and _pid_start(mcp.pid) == str(mcp.started_ticks),
+            "TREE_PROCESS_OWNER", "The harness-owned MCP lead changed identity")
+    descendants = _tree_descendants(mcp.pid)
+    require(_pid_start(mcp.pid) == str(mcp.started_ticks), "TREE_PROCESS_OWNER",
+            "The MCP lead changed identity while checking worker ancestry")
+    nodes = {node["nodeId"]: node for node in _tree_document(context)["nodes"]}
+    tracked = {}
+    for identity in node_ids:
+        process = nodes[identity].get("process") or {}
+        pid, started = process.get("pid"), process.get("startTime")
+        require(isinstance(pid, int) and pid > 0 and started is not None and _pid_start(pid) == str(started),
+                "TREE_PROCESS_TRACKING", f"No live owned worker identity for {identity}")
+        # Candidate-written metadata is not authority to signal a process.
+        # Its first observation must prove ancestry from our exact MCP child.
+        # A previously proved identity remains ours if a faulty stop detaches it.
+        require(owned.get(pid) == str(started) or pid in descendants,
+                "TREE_PROCESS_ANCESTRY", f"Worker {identity} is not owned by this scratch MCP lead")
+        tracked[pid] = str(started)
+        for child in _tree_descendants(pid):
+            if (birth := _pid_start(child)) is not None:
+                tracked[child] = birth
+        require(_pid_start(pid) == str(started), "TREE_PROCESS_TRACKING",
+                f"Worker identity changed while recording descendants for {identity}")
+    require(bool(tracked), "TREE_PROCESS_TRACKING", "Worker process tracking was empty")
+    owned.update(tracked)
+    return tracked
+
+
+def _tree_gone(tracked: dict[int, str], code: str = "TREE_ORPHAN") -> None:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and any(_pid_start(pid) == birth for pid, birth in tracked.items()):
+        time.sleep(0.1)
+    require(not any(_pid_start(pid) == birth for pid, birth in tracked.items()),
+            code, "An owned worker process survived its lifecycle operation")
+
+
+class _TreeReports:
+    """Keep transport receipts and durable report IDs across the lead's death."""
+    def __init__(self, context: Iteration):
+        self.context = context
+        self.expected: dict[str, str] = {}
+        self.received: list[str] = []
+
+    @staticmethod
+    def fingerprint(item: dict[str, Any], stored: bool = False) -> str:
+        return json.dumps([item.get("fromNodeId" if stored else "nodeId"),
+                           *[item.get(key) for key in ("kind", "status", "text", "at")]], sort_keys=True)
+
+    def call(self, mcp: MCP, name: str, arguments: dict[str, Any], **kwargs) -> dict[str, Any]:
+        value = tool_ok(mcp.call(name, arguments, **kwargs), name)
+        self.received.extend(self.fingerprint(item) for item in value.get("reports", []))
+        return value
+
+    def snapshot(self) -> dict[str, Any]:
+        document = _tree_document(self.context)
+        current = {item["id"]: self.fingerprint(item, stored=True) for item in document.get("inbox", [])}
+        require(all(current.get(identity) == value for identity, value in self.expected.items()),
+                "TREE_REPORT_PERSISTENCE", "A recorded report vanished or changed")
+        self.expected.update(current)
+        return document
+
+    def drain(self, mcp: MCP) -> None:
+        from collections import Counter
+        self.snapshot()
+        for _ in range(8):
+            response = self.call(mcp, "agent_comms.local_roster", {"from": "Codex"})
+            if not response.get("moreReports"):
+                break
+        else:
+            raise SoakError("product", "TREE_REPORT_PAGES", "Root reports never finished paging")
+        # A second read also checks that draining did not requeue a report.
+        self.call(mcp, "agent_comms.local_roster", {"from": "Codex"})
+        self.snapshot()
+        require(Counter(self.received) == Counter(self.expected.values()), "TREE_REPORT_MULTIPLICITY",
+                "Root reports were lost, duplicated, or replayed")
+
+
 def k6_tree(context: Iteration) -> None:
     require(context.prefix is not None, "K6_ORDER", "K1 did not install a candidate", "harness")
-    with Simulator(context.root) as sim:
-        sim.configure(context)
-        with MCP(context.prefix, context.server_env, context.root) as mcp:
-            direct = []
-            reports = []
-            for index in range(4):
-                marker, role = ("depth1", "MANAGER") if index == 0 else ("leaf", "WORKER")
-                spawned = tool_ok(mcp.call("agent.spawn", {
-                    "contract": contract(marker, role), "tier": "luna", "surface": "tree", "effort": "low"
-                }, timeout=45), "agent.spawn")
-                direct.append(spawned["nodeId"])
-                reports.extend(spawned.get("reports", []))
-            nodes = _wait_tree(context, lambda rows: len(rows) >= 6 and all(
-                (row.get("lastTurn") or {}).get("status") == "completed" and row.get("turn") == "idle"
-                for row in rows), "TREE_DEPTH", "Four wide, three deep scratch tree did not finish", timeout=120)
-            _assert_simulator_verdicts(context)
-            by_id = {row["nodeId"]: row for row in nodes}
-            require(sum(row["parent"] == "root" for row in nodes) == 4, "TREE_WIDTH",
-                    "Tree did not retain four direct children")
-            depths = {}
-            def depth(node_id: str) -> int:
-                if node_id in depths:
-                    return depths[node_id]
-                parent = by_id[node_id]["parent"]
-                depths[node_id] = 1 if parent == "root" else 1 + depth(parent)
-                return depths[node_id]
-            require(max(depth(row["nodeId"]) for row in nodes) == 3, "TREE_DEPTH",
-                    "The nested simulator chain did not reach depth three")
-            roster = tool_ok(mcp.call("agent_comms.local_roster", {"from": "Codex"}), "agent_comms.local_roster")
-            reports.extend(roster.get("reports", []))
-            require(set(direct).issubset({item.get("nodeId") for item in reports}), "TREE_REPORTS",
-                    "A direct worker did not deliver its report")
-            again = tool_ok(mcp.call("agent_comms.local_roster", {"from": "Codex"}), "agent_comms.local_roster")
-            require(not again.get("reports"), "TREE_REPORT_DUPLICATE", "Reports were delivered more than once")
+    owned: dict[int, str] = {}
+    courier = _TreeReports(context)
 
-            stopped = tool_ok(mcp.call("agent.stop", {"nodeId": direct[1]}), "agent.stop")
-            require(stopped.get("stopped") is True, "TREE_STOP", "First worker was not stopped")
-            resumed = tool_ok(mcp.call("agent.resume", {"nodeId": direct[1],
-                                                        "assignment": "[[leaf]] Complete another scratch turn"}), "agent.resume")
-            require(resumed.get("resumed") is True, "TREE_RESUME", "Stopped worker did not resume")
-            _wait_tree(context, lambda rows: any(row["nodeId"] == direct[1] and row["state"] == "running"
-                                                 and (row.get("lastTurn") or {}).get("status") == "completed"
-                                                 and row["turn"] == "idle" for row in rows),
-                       "TREE_RESUME_TURN", "Resumed worker did not complete")
-            restarted = tool_ok(mcp.call("agent.restart", {"nodeId": direct[2]}), "agent.restart")
-            require(restarted.get("restarted") is True, "TREE_RESTART", "Worker did not restart")
-            _wait_tree(context, lambda rows: any(row["nodeId"] == direct[2] and row["state"] == "running"
-                                                 and (row.get("lastTurn") or {}).get("status") == "completed"
-                                                 and row["turn"] == "idle" for row in rows),
-                       "TREE_RESTART_TURN", "Restarted worker did not complete")
-            tool_ok(mcp.call("agent.stop", {"nodeId": direct[3]}), "agent.stop")
-            removed = tool_ok(mcp.call("agent.remove", {"nodeId": direct[3]}), "agent.remove")
-            require(removed.get("removed") is True, "TREE_REMOVE", "Stopped worker was not removed")
-            require(all(row["nodeId"] != direct[3] for row in _tree_nodes(context)), "TREE_REMOVE_PAGE",
-                    "Removed worker remains on the tree")
+    def node(identity: str) -> dict[str, Any]:
+        return next(row for row in _tree_document(context)["nodes"] if row["nodeId"] == identity)
 
-            # Clean every remaining slot from deepest to shallowest. The
-            # worker groups should be gone before the lead exits.
-            remaining = _tree_nodes(context)
-            by_id = {row["nodeId"]: row for row in remaining}
-            depths.clear()
-            for row in sorted(remaining, key=lambda item: depth(item["nodeId"]), reverse=True):
-                if row["state"] in ("running", "starting"):
-                    tool_ok(mcp.call("agent.stop", {"nodeId": row["nodeId"]}), "agent.stop")
-                tool_ok(mcp.call("agent.remove", {"nodeId": row["nodeId"]}), "agent.remove")
-            require(not _tree_nodes(context), "TREE_CLEANUP", "Worker slots remained after cleanup")
+    def fresh(mcp: MCP, identity: str, before: dict[str, Any], report_count: int,
+              code: str, drain: bool = True) -> dict[str, Any]:
+        _tree_track(context, mcp, [identity], owned)
+        completed = (before.get("lastTurn") or {}).get("completedAt")
+        _wait_tree(context, lambda rows: any(
+            row["nodeId"] == identity and row["state"] == "running" and row["turn"] == "idle"
+            and (row.get("lastTurn") or {}).get("status") == ("success" if row.get("provider") == "claude" else "completed")
+            and (row.get("lastTurn") or {}).get("completedAt", "") > (completed or "")
+            for row in rows), code, "Worker did not complete a fresh turn")
+        after = node(identity)
+        last = after.get("lastTurn") or {}
+        previous = before.get("lastTurn") or {}
+        require((last.get("turnId"), last.get("completedAt")) !=
+                (previous.get("turnId"), previous.get("completedAt"))
+                and "SIM-RESULT leaf PASS" in last.get("text", ""),
+                code, "Worker kept an old completion or failed its simulator turn")
+        document = courier.snapshot()
+        reports = [item for item in document.get("inbox", []) if item.get("fromNodeId") == identity]
+        require(len(reports) == report_count + 1 and reports[-1].get("text") == last.get("text"),
+                "TREE_TURN_REPORT", "A completed direct-worker turn did not produce exactly one report")
+        _assert_simulator_verdicts(context)
+        if drain:
+            courier.drain(mcp)
+        return after
 
-            # One idle worker remains when the lead is killed. The new lead
-            # must recover its slot as stopped and reap the old CLI process.
-            survivor = tool_ok(mcp.call("agent.spawn", {
-                "contract": contract("leaf"), "tier": "luna", "surface": "tree"
-            }, timeout=45), "agent.spawn")
-            survivor_id = survivor["nodeId"]
-            _wait_tree(context, lambda rows: any(row["nodeId"] == survivor_id
-                                                 and (row.get("lastTurn") or {}).get("status") == "completed"
-                                                 for row in rows),
-                       "TREE_LEAD_WORKER", "Worker did not finish before lead restart")
-            tracked = {pid: started for pid in _descendants(mcp.pid) if (started := _pid_start(pid)) is not None}
-            try:
+    def report_count(identity: str) -> int:
+        return sum(item.get("fromNodeId") == identity for item in courier.snapshot().get("inbox", []))
+
+    def stopped(mcp: MCP, identity: str) -> dict[str, Any]:
+        tracked = _tree_track(context, mcp, [identity], owned)
+        receipt = courier.call(mcp, "agent.stop", {"nodeId": identity})
+        require(receipt.get("stopped") is True, "TREE_STOP", "Worker was not stopped")
+        _wait_tree(context, lambda rows: any(row["nodeId"] == identity and row["state"] == "stopped"
+                                             and row["turn"] == "none" for row in rows),
+                   "TREE_STOP_STATE", "Stop did not persist the stopped state")
+        _tree_gone(tracked)
+        return node(identity)
+
+    try:
+        with Simulator(context.root) as sim:
+            sim.configure(context)
+            with MCP(context.prefix, context.server_env, context.root) as mcp:
+                direct = []
+                for index in range(4):
+                    marker, role = ("depth1", "MANAGER") if index == 0 else ("leaf", "WORKER")
+                    spawned = courier.call(mcp, "agent.spawn", {
+                        "contract": contract(marker, role), "tier": "luna", "surface": "tree", "effort": "low"
+                    }, timeout=45)
+                    direct.append(spawned["nodeId"])
+                    _tree_track(context, mcp, [spawned["nodeId"]], owned)
+                nodes = _wait_tree(context, lambda rows: len(rows) == 6 and all(
+                    (row.get("lastTurn") or {}).get("status") == "completed" and row.get("turn") == "idle"
+                    for row in rows), "TREE_DEPTH", "Four wide, three deep scratch tree did not finish", timeout=120)
+                _assert_simulator_verdicts(context)
+                by_id = {row["nodeId"]: row for row in nodes}
+                require(sum(row["parent"] == "root" for row in nodes) == 4, "TREE_WIDTH",
+                        "Tree did not retain four direct children")
+
+                def depth(identity: str) -> int:
+                    parent = by_id[identity]["parent"]
+                    return 1 if parent == "root" else 1 + depth(parent)
+
+                require(max(depth(row["nodeId"]) for row in nodes) == 3, "TREE_DEPTH",
+                        "The nested simulator chain did not reach depth three")
+                _tree_track(context, mcp, list(by_id), owned)
+                document = courier.snapshot()
+                require(set(direct).issubset({item.get("fromNodeId") for item in document.get("inbox", [])}),
+                        "TREE_REPORTS", "A direct worker did not produce a report")
+                require(all(sum(item.get("fromNodeId") == identity for item in document.get("inbox", [])) == 1
+                            for identity in direct[1:]), "TREE_INITIAL_REPORT_COUNT",
+                        "An initial direct worker did not produce exactly one report")
+                courier.drain(mcp)
+
+                before = stopped(mcp, direct[1])
+                count = report_count(direct[1])
+                receipt = courier.call(mcp, "agent.resume", {"nodeId": direct[1],
+                                       "assignment": "[[leaf]] Complete another scratch turn"})
+                require(receipt.get("resumed") is True, "TREE_RESUME", "Stopped worker did not resume")
+                after = fresh(mcp, direct[1], before, count, "TREE_RESUME_TURN")
+                require(after.get("threadId") == before.get("threadId") and bool(after.get("threadId"))
+                        and after.get("sessionId") != before.get("sessionId"),
+                        "TREE_RESUME_IDENTITY", "Resume did not retain the conversation in a new session")
+
+                before = node(direct[2])
+                tracked = _tree_track(context, mcp, [direct[2]], owned)
+                count = report_count(direct[2])
+                receipt = courier.call(mcp, "agent.restart", {"nodeId": direct[2]})
+                require(receipt.get("restarted") is True, "TREE_RESTART", "Worker did not restart")
+                after = fresh(mcp, direct[2], before, count, "TREE_RESTART_TURN")
+                require(bool(after.get("threadId")) and after.get("threadId") != before.get("threadId")
+                        and after.get("sessionId") != before.get("sessionId"),
+                        "TREE_RESTART_IDENTITY", "Restart reused its old session or conversation")
+                _tree_gone(tracked)
+
+                # Positive coverage for K3's configuration and message tools.
+                target = direct[3]
+                for name, field, choice, expected in (
+                    ("agent.set_model", "model", "terra", "gpt-5.6-terra"),
+                    ("agent.set_effort", "effort", "medium", "medium"),
+                ):
+                    _tree_track(context, mcp, [target], owned)
+                    receipt = courier.call(mcp, name, {"nodeId": target, field: choice})
+                    require(receipt.get("status") == "applied" and node(target).get(field) == expected,
+                            "TREE_CONFIGURATION", f"{name} did not change the saved worker configuration")
+                before = node(target)
+                count = report_count(target)
+                message = courier.call(mcp, "agent_comms.send_local", {
+                    "from": "Codex", "to": target, "body": "[[leaf]] Verify the configured Codex turn"})
+                require(message.get("accepted") is True and message.get("delivered") is True,
+                        "TREE_MESSAGE", "The running worker did not accept its local message")
+                fresh(mcp, target, before, count, "TREE_MESSAGE_TURN")
+                tracked = _tree_track(context, mcp, [target], owned)
+                receipt = courier.call(mcp, "agent.set_provider", {"nodeId": target, "provider": "claude"})
+                require(receipt.get("status") == "applied" and node(target).get("provider") == "claude"
+                        and node(target).get("model") == "sonnet",
+                        "TREE_CONFIGURATION", "Provider change did not persist the Claude configuration")
+                _tree_gone(tracked)
+                before = node(target)
+                count = report_count(target)
+                courier.call(mcp, "agent_comms.send_local", {
+                    "from": "Codex", "to": target, "body": "[[leaf]] Verify the Claude provider turn"})
+                fresh(mcp, target, before, count, "TREE_PROVIDER_TURN")
+                _tree_track(context, mcp, [target], owned)
+
+                # Leave one completed report unread and every original slot in
+                # place. Both delivered and waiting reports must survive restart.
+                before = node(direct[2])
+                count = report_count(direct[2])
+                courier.call(mcp, "agent_comms.send_local", {
+                    "from": "Codex", "to": direct[2], "body": "[[leaf]] Report across lead restart"})
+                fresh(mcp, direct[2], before, count, "TREE_LEAD_WORKER", drain=False)
+                document = courier.snapshot()
+                require(any(not item.get("deliveredAt") for item in document.get("inbox", [])),
+                        "TREE_REPORT_RECOVERY_SETUP", "Lead restart has no waiting report to recover", "harness")
+                topology = {row["nodeId"]: (row.get("parentNodeId"), row.get("threadId"))
+                            for row in document["nodes"]}
+                require(all(thread for _, thread in topology.values()), "TREE_THREAD", "A worker lost its saved conversation")
+                tracked = _tree_track(context, mcp, list(topology), owned)
                 mcp.process.kill()
                 mcp.process.wait(timeout=5)
                 with MCP(context.prefix, context.server_env, context.root) as recovered:
-                    rows = _wait_tree(context, lambda items: any(row["nodeId"] == survivor_id for row in items),
-                                      "TREE_RECOVER", "Restarted lead did not load the worker slot")
-                    restored = next(row for row in rows if row["nodeId"] == survivor_id)
-                    require(restored["state"] == "stopped", "TREE_RECOVER_STATE",
-                            f"Restarted lead left the old worker in state {restored['state']}")
-                    tool_ok(recovered.call("agent.remove", {"nodeId": survivor_id}), "agent.remove")
-                    require(not _tree_nodes(context), "TREE_RECOVER_REMOVE",
-                            "Restarted lead could not remove the recovered slot")
-                deadline = time.monotonic() + 5
-                while time.monotonic() < deadline and any(_pid_start(pid) == start for pid, start in tracked.items()):
-                    time.sleep(0.1)
-                require(not any(_pid_start(pid) == start for pid, start in tracked.items()),
-                        "TREE_ORPHAN", "A worker process survived lead death and recovery")
-            finally:
-                # Only the exact worker PIDs this scratch lead owned are
-                # eligible for emergency cleanup, guarded against PID reuse.
-                for pid, start in tracked.items():
-                    if start is not None and _pid_start(pid) == start:
-                        try: os.kill(pid, signal.SIGTERM)
-                        except ProcessLookupError: pass
+                    _wait_tree(context, lambda rows: {row["nodeId"] for row in rows} == set(topology)
+                               and all(row["state"] == "stopped" for row in rows),
+                               "TREE_RECOVER", "Restarted lead did not restore every slot stopped")
+                    restored = _tree_document(context)
+                    require({row["nodeId"]: (row.get("parentNodeId"), row.get("threadId"))
+                             for row in restored["nodes"]} == topology,
+                            "TREE_RECOVER_IDENTITY", "Recovery changed the saved topology or conversations")
+                    _tree_gone(tracked)
+                    courier.drain(recovered)
+                    before = node(direct[1])
+                    count = report_count(direct[1])
+                    receipt = courier.call(recovered, "agent.resume", {"nodeId": direct[1],
+                                           "assignment": "[[leaf]] Continue after lead recovery"})
+                    require(receipt.get("resumed") is True, "TREE_RECOVER_RESUME", "Recovered slot could not resume")
+                    after = fresh(recovered, direct[1], before, count, "TREE_RECOVER_TURN")
+                    require(after.get("threadId") == before.get("threadId") and bool(after.get("sessionId")),
+                            "TREE_RECOVER_IDENTITY", "Recovered resume lost its saved conversation")
+                    _tree_track(context, recovered, [direct[1]], owned)
+                    # Remove child-first only after full-topology recovery.
+                    by_id = {row["nodeId"]: row for row in _tree_nodes(context)}
+                    for identity in sorted(by_id, key=depth, reverse=True):
+                        if node(identity)["state"] in ("running", "starting"):
+                            stopped(recovered, identity)
+                        receipt = courier.call(recovered, "agent.remove", {"nodeId": identity})
+                        require(receipt.get("removed") is True
+                                and all(row["nodeId"] != identity for row in _tree_nodes(context)),
+                                "TREE_REMOVE_PAGE", "Removed worker remains on the tree")
+                    require(not _tree_nodes(context), "TREE_CLEANUP", "Worker slots remained after cleanup")
+                    courier.drain(recovered)
+                require(not recovered.orphan_cleanup_required, "TREE_ORPHAN", "Recovery needed harness process cleanup")
+                _tree_gone(owned)
+            require(not mcp.orphan_cleanup_required, "TREE_ORPHAN", "Lead needed harness process cleanup")
+    finally:
+        # A failing assertion still reaps only identities observed under this
+        # scratch tree, including workers already detached by a faulty stop.
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            remaining = {pid: birth for pid, birth in owned.items() if _pid_start(pid) == birth}
+            if not remaining:
+                break
+            for pid in remaining:
+                if _pid_start(pid) == remaining[pid]:
+                    try:
+                        os.kill(pid, sig)
+                    except ProcessLookupError:
+                        pass
+            if sig == signal.SIGTERM:
+                time.sleep(0.1)
+        _tree_gone(owned, "TREE_EMERGENCY_CLEANUP")
+    context.measures["k6"] = {
+        "topologyNodeCount": len(topology), "depth": 3, "width": 4,
+        "freshResume": True, "freshRestart": True,
+        "reportPersistence": True, "exactOnce": True,
+        "configuration": ["model", "effort", "provider"], "message": True,
+        "recoveryResume": True, "ownedProcessesGone": True,
+    }
 
 
 def k7_restart(context: Iteration) -> None:
@@ -586,6 +768,9 @@ def k7_restart(context: Iteration) -> None:
 
 def k8_upgrade(context: Iteration) -> None:
     require(context.package is not None, "K8_ORDER", "K1 did not extract a candidate", "harness")
+    version_contract = json.loads((context.package / "manifest.json").read_text()).get("version")
+    require(version_contract in ("1.4.0", "1.4.1"), "UNINSTALL_CONTRACT_VERSION",
+            "K8 has no reviewed uninstall contract for this archive version", "harness")
     root = context.root / "upgrade"
     root.mkdir()
     path_dir = minimal_path(root, cli_names=("codex", "claude"))
@@ -699,30 +884,26 @@ def k8_upgrade(context: Iteration) -> None:
     verify_state("after --keep-state and reinstall")
     removed = subprocess.run([str(prefix / "bin/toolsenabled"), "uninstall"], input="yes\n",
                              env=environment, text=True, capture_output=True, timeout=30)
-    require(removed.returncode == 0 and not prefix.exists()
-            and all(not item.exists() and not item.is_symlink() for item in state_paths),
-            "UNINSTALL_DELETE", f"Confirmed uninstall failed: {(removed.stdout + removed.stderr)[-400:]}")
+    if version_contract == "1.4.1":
+        require(removed.returncode != 0 and "Exclusive ownership" in removed.stderr
+                and prefix.is_dir() and marker.is_file() and marker.read_text() == "keep across upgrade\n"
+                and all(item.is_dir() for item in state_paths),
+                "UNINSTALL_UNPROVEN_STATE", "Uninstall did not retain runtime/state when deletion ownership was unproven")
+        verify_state("after refused unproven state deletion")
+        kept = run_cli(prefix, environment, "uninstall", "--keep-state")
+        require(kept.returncode == 0 and not prefix.exists() and marker.is_file()
+                and all(item.is_dir() for item in state_paths),
+                "UNINSTALL_KEEP", f"Retained-state uninstall after refusal failed: {(kept.stdout + kept.stderr)[-400:]}")
+    else:
+        # Keep exact candidate-7/1.4.0 evidence meaningful; no historical frozen
+        # copy is edited or silently treated as implementing beta2's refusal.
+        require(removed.returncode == 0 and not prefix.exists()
+                and all(not item.exists() and not item.is_symlink() for item in state_paths),
+                "UNINSTALL_DELETE", f"Historical confirmed uninstall failed: {(removed.stdout + removed.stderr)[-400:]}")
     prefix = install_candidate(context.package, root, environment)
     version = run_cli(prefix, environment, "--version")
     require(version.returncode == 0 and context.candidate.commit in version.stdout,
             "REINSTALL_VERSION", "Reinstall did not restore this candidate")
-
-
-def _descendants(pid: int) -> set[int]:
-    found = set()
-    pending = [pid]
-    while pending:
-        current = pending.pop()
-        try:
-            children = (Path(f"/proc/{current}/task/{current}/children").read_text()).split()
-        except FileNotFoundError:
-            continue
-        for child in children:
-            value = int(child)
-            if value not in found:
-                found.add(value)
-                pending.append(value)
-    return found
 
 
 def _pid_start(pid: int) -> str | None:

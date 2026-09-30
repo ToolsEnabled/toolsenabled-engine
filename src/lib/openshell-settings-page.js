@@ -101,6 +101,8 @@ function set(changes, { reg = registry(), file = require('./settings').resolveVa
 
 function format(rows) {
   return [
+    'ToolsEnabled Fleet — Settings',
+    '',
     ...rows.map((row) => `${row.id} = ${JSON.stringify(row.value)}${row.source === 'default' ? '' : `  (${row.source})`}${row.readOnly ? '  read-only' : ''}${row.options ? `  [${row.options.join(' | ')}]` : ''}`),
     '',
     NOT_A_BOUNDARY

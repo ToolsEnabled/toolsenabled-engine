@@ -1105,6 +1105,10 @@ const taskStatus = choice(
   ['queued', 'leased', 'running', 'retry_wait', 'succeeded', 'failed', 'cancelled', 'uncertain'],
   'Durable task lifecycle state.'
 );
+const taskReadStatus = choice(
+  [...taskStatus.enum, 'expired'],
+  'Reported task status: an expired leased claim reports expired, and an expired running lease reports uncertain.'
+);
 const sandboxId = {
   type: 'string', minLength: 24, maxLength: 24, pattern: '^sbx-[a-f0-9]{20}$',
   description: 'Deterministic disposable sandbox ID returned by sandbox.create.'
@@ -3141,9 +3145,9 @@ const CORE_TOOLS = [
   define('task.list', 'List bounded task metadata without payloads, results, checkpoints, errors, or lease capabilities.', schema({
     queue: taskRoute('Optional queue filter.'),
     type: taskRoute('Optional task-type filter.'),
-    status: taskStatus,
-    statuses: { type: 'array', items: taskStatus, minItems: 1, maxItems: 8, uniqueItems: true,
-      description: 'Match any listed lifecycle state, before ordering and limit. Use status OR statuses, never both; omit both for all states.' },
+    status: taskReadStatus,
+    statuses: { type: 'array', items: taskReadStatus, minItems: 1, maxItems: 9, uniqueItems: true,
+      description: 'Match any listed reported status, including lease expiry, before ordering and limit. Use status OR statuses, never both; omit both for all states.' },
     limit: integer('Maximum metadata rows from 1 through 100.', { minimum: 1, maximum: 100 })
   }), args => tasks().list(args), { effect: 'local-read' }),
 

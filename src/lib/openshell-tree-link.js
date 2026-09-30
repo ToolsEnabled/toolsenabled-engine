@@ -8,7 +8,8 @@
 // server holds the tree -- the workers' processes, the records, the courier --
 // so a worker's server does not decide anything about the tree itself. It
 // carries each agent.* and agent_comms.* request to the root over a Unix socket
-// under the state root, and brings the answer back, refusals included.
+// under the state root (or a named pipe on Windows), and brings the answer back,
+// refusals included.
 //
 // WHO IS ASKING is established here, never claimed. Each worker session is
 // started with its own random link token, and the root maps a token to exactly
@@ -18,8 +19,9 @@
 //
 // THE SANDBOX IS STILL THE BOUNDARY. Every process in the sandbox runs as the
 // same user, so the token binds identity between cooperating workers; it does
-// not defend one worker from another that goes looking for it. The socket and
-// its folder are private to that user.
+// not defend one worker from another that goes looking for it. On Linux the
+// socket and its folder are private to that user. On Windows the caller still
+// needs the session's random token to make a request.
 //
 // One JSON line each way per request, then the connection closes.
 
@@ -39,8 +41,15 @@ function refusal(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
-/** A usable socket path for `preferred`, shortened into the temp folder when too long. */
+/** A usable local IPC address for `preferred`, stable for this tree. */
 function socketPathFor(preferred) {
+  if (process.platform === 'win32') {
+    // Windows cannot listen on a Unix socket pathname. A named pipe does not
+    // leave a stale file after a crash, and hashing the state path keeps names
+    // distinct across installations and user profiles.
+    const digest = crypto.createHash('sha256').update(preferred, 'utf8').digest('hex').slice(0, 32);
+    return `\\\\.\\pipe\\te-tree-${digest}`;
+  }
   if (Buffer.byteLength(preferred, 'utf8') <= MAX_SOCKET_PATH_BYTES) return preferred;
   const digest = crypto.createHash('sha256').update(preferred, 'utf8').digest('hex').slice(0, 16);
   return path.join(os.tmpdir(), `te-tree-${digest}.sock`);
@@ -104,6 +113,7 @@ function createTreeLinkServer({ socketPath, handle }) {
   }
   if (typeof handle !== 'function') throw refusal('OPENSHELL_TREE_LINK_INVALID', 'The tree link needs a request handler.');
   const connections = new Set();
+  const namedPipe = process.platform === 'win32';
   const server = net.createServer(socket => {
     connections.add(socket);
     socket.on('close', () => connections.delete(socket));
@@ -125,19 +135,26 @@ function createTreeLinkServer({ socketPath, handle }) {
   return Object.freeze({
     socketPath,
     async listen() {
-      fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
-      if (fs.existsSync(socketPath)) {
-        if (await probe(socketPath)) {
-          throw refusal('OPENSHELL_TREE_LINK_IN_USE', 'Another ToolsEnabled server already holds this tree.');
+      if (!namedPipe) {
+        fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
+        if (fs.existsSync(socketPath)) {
+          if (await probe(socketPath)) {
+            throw refusal('OPENSHELL_TREE_LINK_IN_USE', 'Another ToolsEnabled server already holds this tree.');
+          }
+          fs.rmSync(socketPath, { force: true });
         }
-        fs.rmSync(socketPath, { force: true });
       }
       await new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(socketPath, () => { server.off('error', reject); resolve(); });
+        const onError = error => reject(namedPipe && error.code === 'EADDRINUSE'
+          ? refusal('OPENSHELL_TREE_LINK_IN_USE', 'Another ToolsEnabled server already holds this tree.')
+          : error);
+        server.once('error', onError);
+        server.listen(socketPath, () => { server.off('error', onError); resolve(); });
       });
       listening = true;
-      try { fs.chmodSync(socketPath, 0o600); } catch { /* the folder is private anyway */ }
+      if (!namedPipe) {
+        try { fs.chmodSync(socketPath, 0o600); } catch { /* the folder is private anyway */ }
+      }
       server.unref();
     },
     async close() {
@@ -145,7 +162,9 @@ function createTreeLinkServer({ socketPath, handle }) {
       listening = false;
       for (const socket of connections) socket.destroy();
       await new Promise(resolve => server.close(() => resolve()));
-      try { fs.rmSync(socketPath, { force: true }); } catch { /* already gone */ }
+      if (!namedPipe) {
+        try { fs.rmSync(socketPath, { force: true }); } catch { /* already gone */ }
+      }
     },
   });
 }

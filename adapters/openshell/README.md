@@ -1,14 +1,16 @@
 # ToolsEnabled Fleet for OpenShell: sandbox and development image guide
 
-ToolsEnabled's engine is an MCP server. This folder runs it inside your own
+ToolsEnabled Fleet's engine is an MCP server. This folder runs it inside your own
 [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandbox, next to the
 official Claude Code and Codex CLIs.
+
+Fleet installs the `toolsenabled` command.
 
 The work is split this way:
 
 - **OpenShell** provides the sandbox, the network policy, custody of the
   credentials it holds, and access approvals.
-- **ToolsEnabled** adds:
+- **ToolsEnabled Fleet** adds:
   - a shared work record (tasks and a ledger), so work started in Claude Code
     can be picked up in Codex and the other way round;
   - memory and local search that carry across sessions and agents;
@@ -25,21 +27,22 @@ published runtime archive, follow the
 development image yourself from this folder; its third-party CLIs stay under
 their own terms.
 
-ToolsEnabled is not made by, affiliated with, or endorsed by NVIDIA, Anthropic
+ToolsEnabled Fleet is not made by, affiliated with, or endorsed by NVIDIA, Anthropic
 or OpenAI.
 
-> **Status:** the [2026-09-30 Linux beta](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta-20260930)
-> is published with remaining qualification work listed in its release notes.
-> The Windows WSL 2 route is still
-> being qualified. The [Supported versions](#supported-versions) table records
+> **Status recorded 2026-09-30 08:20 UTC:** the [Linux beta1](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta-20260930)
+> was published with remaining qualification work listed in its release notes.
+> Beta2, version 1.4.1, was still in development, pending publication and qualification.
+> The [Windows WSL 2 route](WINDOWS.md#qualification-status-2026-09-30) was also
+> under qualification. Consult release notes for later results. The [Supported versions](#supported-versions) table records
 > historical image tests. Read [Known limitations](#known-limitations) before
-> you rely on the beta.
+> relying on Fleet.
 
 ---
 
 ## What you need
 
-- A Linux x86-64 machine with **Docker Engine**, or a Windows x86-64 machine with WSL 2 and Docker Desktop's Linux engine. The Windows path is experimental and remains under qualification.
+- A Linux x86-64 machine with **Docker Engine**, or a Windows x86-64 machine with WSL 2 and Docker Desktop's Linux engine. The Windows path is experimental; see [WINDOWS.md](WINDOWS.md).
 - **OpenShell 0.1.2** installed, with a running local gateway that uses Docker.
   To install it, follow OpenShell's own documentation.
 - `git`, `jq`, and the **Codex CLI on the host**. The Codex CLI on the host is

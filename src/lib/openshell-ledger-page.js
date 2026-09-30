@@ -117,13 +117,14 @@ function oneLine(text, max = 160) {
 
 /** Plain terminal lines for view()'s result. */
 function format({ records, note }) {
-  if (records.length === 0) return ['Nothing open on the ledger.', '', note];
+  const heading = ['ToolsEnabled Fleet — Ledger', ''];
+  if (records.length === 0) return [...heading, 'Nothing open on the ledger.', '', note];
   const lines = records.map((record) => {
     const who = record.filedBy ? ` (from ${record.filedBy})` : '';
     const words = record.verbatim || record.request || record.words || '';
     return `${record.id}  ${record.status || 'open'}${who}  ${oneLine(words)}`;
   });
-  return [...lines, '', note];
+  return [...heading, ...lines, '', note];
 }
 
 module.exports = Object.freeze({ view, answer, decline, removeAsk, completeTask, removeTask, addRule, addTask, format, NOT_A_BOUNDARY });
