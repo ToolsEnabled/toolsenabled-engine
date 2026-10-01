@@ -85,6 +85,7 @@ function set(changes, { reg = registry(), file = require('./settings').resolveVa
     const reason = validateSettingValue(entry, value);
     if (reason) throw refuse('SETTINGS_PAGE_INVALID', reason);
   }
+  if (process.env.TOOLSENABLED_FLEET_LOCK_FD !== undefined) require('./openshell-lifecycle-lock').markMutation();
   return withLock(file, () => {
     const document = readDocument(file);
     for (const [id, value] of changes) {

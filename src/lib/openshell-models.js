@@ -348,6 +348,7 @@ function readText(file) {
 
 /** Replace a file's contents in one step, keeping its mode (0600 when new). */
 function writeAtomic(file, text) {
+  if (process.env.TOOLSENABLED_FLEET_LOCK_FD !== undefined) require('./openshell-lifecycle-lock').markMutation();
   let target = file;
   try { target = fs.realpathSync(file); } catch { /* a new file */ }
   fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -944,7 +945,10 @@ function modelCommand(argv, { env = process.env, stdout = process.stdout } = {})
 // run as: node /opt/toolsenabled/engine/src/lib/openshell-models.js <subcommand>
 if (require.main === module) {
   try {
-    process.exitCode = modelCommand(process.argv.slice(2));
+    const argv = process.argv.slice(2);
+    const mutable = ['add', 'use', 'remove'].includes(argv[0]) && process.platform === 'linux' && process.env.OPENSHELL_SANDBOX === '1';
+    const held = mutable ? require('./openshell-lifecycle-lock').runLocked(__filename, argv) : null;
+    process.exitCode = held === null ? modelCommand(argv) : held;
   } catch (error) {
     process.stderr.write(`${error instanceof OpenShellModelError ? error.message : error.stack}\n`);
     process.exitCode = error instanceof OpenShellModelError && error.code === 'MODEL_USAGE' ? 2 : 1;

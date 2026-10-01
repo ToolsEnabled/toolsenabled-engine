@@ -141,9 +141,11 @@ function defaultMachineLabel(hostnameProvider = os.hostname) {
 }
 
 function registrationPath(value) {
+  // Windows accepts both separators. Reject dot components before resolution
+  // can normalize them away, while preserving POSIX backslash filenames.
   return typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value)
     && !/[\x00-\x1f\x7f]/.test(value)
-    && !value.split(path.sep).some(component => component === '.' || component === '..');
+    && !value.split(path.sep === '\\' ? /[\\/]/ : path.sep).some(component => component === '.' || component === '..');
 }
 
 function canonicalRegistrationPath(value) {

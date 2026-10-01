@@ -30,19 +30,6 @@ function version(binDir) {
   return `ToolsEnabled Fleet ${manifest.version} (${manifest.source_commit})`;
 }
 
-function launchEnv(cli) {
-  const names = ['HOME', 'PATH', 'USER', 'LANG', 'LC_ALL', 'TERM'];
-  if (cli === 'codex') names.push('CODEX_HOME');
-  if (cli === 'claude') names.push('CLAUDE_CONFIG_DIR');
-  return Object.fromEntries(names.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
-}
-
-function onPath(name) {
-  return String(process.env.PATH || '').split(path.delimiter).filter(Boolean).some((directory) => {
-    try { fs.accessSync(path.join(directory, name), fs.constants.X_OK); return true; } catch { return false; }
-  });
-}
-
 async function confirmStateDeletion(paths) {
   if (paths.length === 0) return false;
   const input = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -93,8 +80,16 @@ function safeStatePath(candidate, prefix) {
   return chosen;
 }
 
-async function uninstall(binDir, { keepState = false } = {}) {
-  if (process.env.OPENSHELL_SANDBOX !== '1') throw new Error('Run uninstall inside your OpenShell sandbox.');
+async function uninstall(binDir, { keepState = false, archive, sha256 } = {}) {
+  if (process.platform !== 'linux' || process.env.OPENSHELL_SANDBOX !== '1') throw new Error('Run uninstall inside your Linux OpenShell sandbox.');
+  const pins = [];
+  if (archive !== undefined || sha256 !== undefined) {
+    if (typeof archive !== 'string' || !path.isAbsolute(archive) || /[\x00-\x1f\x7f]/.test(archive)
+      || typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(sha256)) {
+      throw Object.assign(new Error('INTEGRITY: an absolute archive and independently published SHA-256 must be supplied together.'), { code: 'INTEGRITY' });
+    }
+    pins.push('--archive', archive, '--sha256', sha256);
+  }
   const { prefix } = installedManifest(binDir);
   assertUninstallPrefixSafe(prefix);
   const stateRoot = safeStatePath(process.env.TOOLSENABLED_STATE_ROOT || path.join(os.homedir(), '.toolsenabled'), prefix);
@@ -110,66 +105,39 @@ async function uninstall(binDir, { keepState = false } = {}) {
       { code: 'STATE_OWNERSHIP_UNPROVEN' });
   }
 
-  // Remove both registrations before removing the command that can repair them.
-  const { safeLaunchEnvironment } = require('./providers/subscription-launch-env');
-  const commands = [
-    ['claude', ['mcp', 'remove', '--scope', 'user', 'toolsenabled']],
-    ['codex', ['mcp', 'remove', 'toolsenabled']]
-  ];
-  // An unavailable executable cannot prove that its registration is absent.
-  // Check both providers before changing either registration; only sealed setup
-  // evidence for this exact engine/profile can establish no setup attempt.
-  const available = new Map();
-  for (const [cli] of commands) {
-    const present = onPath(cli);
-    available.set(cli, present);
-    if (present) continue;
-    const history = require('./setup/machine-record').readOpenShellRegistrationState({
-      servicesRoot, provider: cli, installRoot: path.join(prefix, 'runtime/engine'), env: process.env
-    });
-    if (history !== 'never') {
-      throw new Error(`${cli} registration could not be inspected; setup registration history is ${history}. The runtime and state were kept. Make ${cli} available in this profile before retrying.`);
-    }
+  // The Python driver owns the inventory, journal and retained directory handles
+  // across both provider calls and deletion. JavaScript never deletes the tree.
+  const lock = require('./openshell-lifecycle-lock');
+  lock.check();
+  const fd = Number(process.env.TOOLSENABLED_FLEET_LOCK_FD);
+  const driver = path.join(binDir, '../libexec/fleet_uninstall.py');
+  const result = spawnSync('/usr/bin/python3', ['-B', driver, '--prefix', prefix, '--keep-state', ...pins], {
+    env: { ...process.env, TOOLSENABLED_FLEET_LOCK_FD: '3' }, stdio: ['inherit', 'inherit', 'inherit', fd],
+    windowsHide: true
+  });
+  if (result.error || result.signal || !Number.isInteger(result.status)) {
+    throw Object.assign(new Error('OUTCOME_UNCERTAIN: uninstall did not settle; retain the runtime, archive and reported recovery evidence.'),
+      { code: 'OUTCOME_UNCERTAIN' });
   }
-  for (const [cli, args] of commands) {
-    if (!available.get(cli)) {
-      process.stdout.write(`${cli} is not available; sealed setup history records no registration attempt for this installation and profile.\n`);
-      continue;
-    }
-    const cliEnv = safeLaunchEnvironment({ ...launchEnv(cli), LANG: 'C', LC_ALL: 'C' },
-      { context: `OpenShell uninstall: ${cli} mcp remove` });
-    const cliCwd = os.homedir();
-    const result = spawnSync(cli, args, {
-      env: cliEnv, cwd: cliCwd,
-      stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', windowsHide: true,
-      timeout: 30_000, maxBuffer: 65_536
-    });
-    if (result.error) throw new Error(`${cli} registration could not be removed: ${result.error.message}; the runtime and state were kept. Manual command: ${[cli, ...args].join(' ')}`);
-    if (result.status !== 0 || result.signal) {
-      if (!result.signal && Number.isInteger(result.status)) {
-        const inspection = require('./openshell-registration-inspection').probe(cli, {
-          env: cliEnv, cwd: cliCwd, removalResult: result
-        });
-        if (inspection.absent) {
-          process.stdout.write(`${cli} registration is absent (verified with ${inspection.version}).\n`);
-          continue;
-        }
-      }
-      const detail = result.signal ? `signal ${result.signal}` : `exit ${result.status}`;
-      throw new Error(`${cli} registration could not be removed (${detail}); absence could not be verified. The runtime was kept for retry. State was kept. Earlier CLI removals may already have succeeded. Manual command: ${[cli, ...args].join(' ')}`);
-    }
-    process.stdout.write(`${cli} registration removed.\n`);
-  }
-  // Registration commands are external processes. Recheck aliases/overlap before
-  // deleting the runtime so --keep-state also holds if their work moved a root.
-  for (const item of selectedStatePaths) safeStatePath(item, prefix);
-  const currentServicesRoot = require('./setup/machine-record').resolveServicesRoot({});
-  if (currentServicesRoot !== servicesRoot) throw new Error('The selected service state location changed; the runtime and state were kept.');
-  assertUninstallPrefixSafe(prefix);
-  fs.rmSync(prefix, { recursive: true });
-  process.stdout.write(`ToolsEnabled Fleet runtime and wrappers removed from ${prefix}.\n`);
-  process.stdout.write(`ToolsEnabled Fleet state kept${statePaths.length ? ` at ${statePaths.join(' and ')}` : ''}.\n`);
-  return 0;
+  return result.status;
 }
 
-module.exports = Object.freeze({ installedManifest, version, uninstall });
+function parseUninstallArgs(argv) {
+  const options = {}, seen = new Set();
+  const usage = () => { throw new Error('Use: toolsenabled uninstall [--keep-state] [--archive ABSOLUTE_ARCHIVE --sha256 RELEASE_SHA256].'); };
+  for (let index = 0; index < argv.length; index++) {
+    const flag = argv[index];
+    if (seen.has(flag)) usage();
+    seen.add(flag);
+    if (flag === '--keep-state') options.keepState = true;
+    else if (flag === '--archive' || flag === '--sha256') {
+      const value = argv[++index];
+      if (!value || value.startsWith('-')) usage();
+      options[flag === '--archive' ? 'archive' : 'sha256'] = value;
+    } else usage();
+  }
+  if ((options.archive === undefined) !== (options.sha256 === undefined)) usage();
+  return options;
+}
+
+module.exports = Object.freeze({ installedManifest, version, uninstall, parseUninstallArgs });

@@ -322,6 +322,10 @@ function setup(args) {
   };
   const nodePath = machineRecord.resolveNodePath({ override: null });
   const chosenWorkspace = checkedSandboxWorkspace(args.workspace || path.join(os.userInfo().homedir, 'work'));
+  require('../src/lib/openshell-lifecycle-context').verifyFreshSetup({
+    prefix: path.resolve(INSTALL_ROOT, '../..'), tier, providers: args.providers || AGENT_PROVIDERS.join(',')
+  });
+  if (process.env.TOOLSENABLED_FLEET_LOCK_FD !== undefined) require('../src/lib/openshell-lifecycle-lock').markMutation();
   const provisioned = workspace.provisionWorkspace(chosenWorkspace, { installRoot: INSTALL_ROOT, tier });
   let record = machineRecord.buildMachineRecord({
     tier, installRoot: INSTALL_ROOT, servicesRoot, nodePath, workspaceRoots: [provisioned.workspace], openShellRegistrations
@@ -516,11 +520,17 @@ async function main(argv) {
     out(require('../src/lib/openshell-install-lifecycle').version(__dirname));
     return 0;
   }
+  const mutatesLifecycle = argv[0] === 'setup' || argv[0] === 'uninstall'
+    || argv[0] === 'settings' && argv[1] === 'set'
+    || argv[0] === 'model' && ['add', 'use', 'remove'].includes(argv[1]);
+  if (mutatesLifecycle && process.platform === 'linux' && process.env.OPENSHELL_SANDBOX === '1') {
+    const result = require('../src/lib/openshell-lifecycle-lock').runLocked(__filename, argv);
+    if (result !== null) return result;
+  }
+  if (argv[0] === 'upgrade') return require('../src/lib/openshell-upgrade').upgrade(__dirname, argv.slice(1));
   if (argv[0] === 'uninstall') {
-    if (argv.length > 2 || (argv.length === 2 && argv[1] !== '--keep-state')) {
-      throw new SetupError('Use: toolsenabled uninstall [--keep-state].');
-    }
-    return require('../src/lib/openshell-install-lifecycle').uninstall(__dirname, { keepState: argv[1] === '--keep-state' });
+    const lifecycle = require('../src/lib/openshell-install-lifecycle');
+    return lifecycle.uninstall(__dirname, lifecycle.parseUninstallArgs(argv.slice(1)));
   }
   // `model` has its own options (src/lib/openshell-models.js), so it is
   // dispatched before this command's strict option parser.
@@ -553,7 +563,10 @@ function usage() {
   out('       toolsenabled settings set <id> <value>');
   out('       toolsenabled model add <name> --base-url URL --model ID [--key-env VAR] [--default] | list | use <name> | remove <name>');
   out('       toolsenabled --version');
-  out('       toolsenabled uninstall [--keep-state]');
+  out('       toolsenabled upgrade --archive ABSOLUTE_ARCHIVE --sha256 RELEASE_SHA256');
+  out('                            [--previous-archive ABSOLUTE_ARCHIVE --previous-sha256 RELEASE_SHA256]');
+  out('       toolsenabled uninstall [--keep-state] [--archive ABSOLUTE_ARCHIVE --sha256 RELEASE_SHA256]');
+  out('       Before uninstall, stop other writers to the runtime; Fleet requires a quiescent tree.');
   return 0;
 }
 

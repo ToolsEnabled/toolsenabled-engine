@@ -24,6 +24,11 @@ rm -rf -- "$engine_dir/adapters/openshell/soak"
 git show HEAD:installer/openshell/install.sh > "$package_dir/install.sh"
 git show HEAD:installer/openshell/README.md > "$package_dir/README.md"
 chmod 755 "$package_dir/install.sh"
+mkdir -p -- "$engine_dir/libexec"
+for helper in fleet_fs.py fleet_install.py fleet_bootstrap.py fleet_upgrade.py fleet_uninstall.py fleet_legacy_inventory.json; do
+  git show "HEAD:installer/openshell/$helper" > "$package_dir/$helper"
+  cp -- "$package_dir/$helper" "$engine_dir/libexec/$helper"
+done
 (cd -- "$engine_dir" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
 
 node - "$package_dir" "$source_commit" <<'NODE'
@@ -41,13 +46,13 @@ fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
   name: 'toolsenabled-openshell',
   version: pkg.version,
   source_commit: commit,
-  requirements: { node: pkg.engines.node, python: '/usr/bin/python3', providers: 'Separately installed Codex and/or Claude Code' },
+  requirements: { node: pkg.engines.node, python: '/usr/bin/python3 >=3.9', providers: 'Separately installed Codex and/or Claude Code' },
   dependencies: pkg.dependencies
 }, null, 2) + '\n');
 NODE
 
 archive=toolsenabled-openshell-linux-x64.tar.gz
-tar --sort=name --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner \
+tar --sort=name --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner --mode=go-w \
   -cf - -C "$build_tmp" toolsenabled-installer | gzip -n > "$output_dir/$archive"
 (cd -- "$output_dir" && sha256sum "$archive" > SHA256SUMS)
 printf 'Built %s from %s\n' "$output_dir/$archive" "$source_commit"

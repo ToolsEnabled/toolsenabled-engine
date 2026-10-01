@@ -1,6 +1,6 @@
 {
   "name": "toolsenabled",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "license": "MIT",
   "description": "AI-agnostic autonomous capability layer exposed through MCP.",
