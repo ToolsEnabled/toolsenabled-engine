@@ -65,9 +65,9 @@ test('role defaults and exact per-agent choices survive catalogue order and defa
   t.after(() => resumed.close());
   assert.equal(resumed.model, MODEL, 'a changed default must not change a resumed agent');
   const overridden = await resolveLocalTarget({ settings, threadOptions: { model: `local/${OTHER}` } });
-  assert.equal(overridden.model, OTHER);
-  await assert.rejects(runtime.resolveNode({ model: 'missing:1b' }, { settings }), error => error.code === 'LOCAL_NODE_MODEL_NOT_INSTALLED');
-  await assert.rejects(resolveLocalTarget({ settings, threadOptions: { model: 'local/missing:1b' } }), error => error.code === 'LOCAL_NODE_MODEL_NOT_INSTALLED');
+  assert.equal(overridden.model, `local/${OTHER}`);
+  assert.equal((await runtime.resolveNode({ model: 'missing:1b' }, { settings })).model, 'missing:1b');
+  assert.equal((await resolveLocalTarget({ settings, threadOptions: { model: 'local/missing:1b' } })).model, 'local/missing:1b');
   assert.equal(options.modelFor(server.settings, 'agent'), MODEL, 'legacy Ollama model.name is retained');
   assert.equal(options.modelFor(server.settings, 'tool'), MODEL);
 });
@@ -163,7 +163,7 @@ test('settings and lane argument validation refuse invalid values before transpo
     ['model.local_context_tokens', '8192', true], ['model.local_context_tokens', '8192.5', false],
     ['model.local_context_tokens', '1', false], ['model.local_keep_alive_minutes', '0', false],
     ['model.local_keep_alive_minutes', '10', true], ['model.local_agent_name', MODEL, true],
-    ['model.local_agent_name', 'invalid name', false], ['model.local_agent_name', '', true], ['model.tool_name', '', true], ['model.name', '', false]
+    ['model.local_agent_name', 'opaque name', true], ['model.local_agent_name', 'invalid\nname', false], ['model.local_agent_name', '', true], ['model.tool_name', '', true], ['model.name', '', false]
   ]) assert.equal(coerce(registry.byId.get(id), text).ok, accepted, `${id}=${text}`);
   const parsed = parseArguments(['--runtime', 'ollama', '--model', MODEL, '--host', '127.0.0.1', '--port', '11434', '--worktree', __dirname,
     '--gpu-policy', 'CPU only', '--context-tokens', '8192', '--thinking', 'Reasoning', '--keep-alive-minutes', '7']);

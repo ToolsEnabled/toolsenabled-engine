@@ -2,8 +2,8 @@
 
 // WHEN the agentic-workflow digest emails the owner.
 //
-// This is a deliberate port of an earlier, proven report-schedule module.
-// That grid has already survived real incidents; the four invariants
+// This is a deliberate port of a scheduler from another project of the owner's.
+// That grid has already survived real incidents on this laptop; the four invariants
 // below are the reason it is copied rather than reinvented.
 //
 // Semantics:
@@ -30,7 +30,7 @@ const KIND_SET = new Set(KINDS);
 const SLOTS_PER_DAY = 48;
 
 // Fire up to this long after the slot boundary (restarts, a busy loop, a slow
-// audit verification). ToolsEnabled shares its machine with heavy local model,
+// audit verification). ToolsEnabled shares this laptop with heavy local model,
 // browser, and CLI work, so a tight window silently DROPS digests. 20 min gives
 // real headroom while staying (a) well under "hours", so a machine down all
 // morning still cannot replay the day, and (b) under the 30-min minimum slot

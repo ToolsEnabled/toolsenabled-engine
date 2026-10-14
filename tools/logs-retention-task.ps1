@@ -1,7 +1,7 @@
 # Registers the scheduled task that keeps logs/ from growing without bound.
 #
-# WHY THIS EXISTS. logs/ reached hundreds of MB on a development install with
-# nothing anywhere that prunes it. A cleanup script that reclaims disk once is not retention --
+# WHY THIS EXISTS. logs/ reached 783 MB on this machine with nothing anywhere
+# that prunes it. A cleanup script that reclaims disk once is not retention --
 # it is a mechanism wired to nothing, which is the failure this repo keeps
 # repeating. This is the wire.
 #
@@ -104,7 +104,7 @@ $repeating = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionDuration (New-TimeSpan -Days 9999)
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeating -IncludeStartup
 
 $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Limited

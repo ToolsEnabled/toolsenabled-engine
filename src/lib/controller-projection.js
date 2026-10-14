@@ -35,7 +35,7 @@ const PROVIDER_OPAQUE_IDS = new Map(METER_PROVIDERS.map(id => [
 const PROVIDER_OPERATION_ACTION = 'coordinator.audit.provider.operation';
 const PROVIDER_TERMINAL_OPERATIONS = new Set(['provider.complete', 'provider.release_review']);
 // Read WHEN NEEDED, never snapshotted at import. This is the twin of the
-// controller-metering.js defect (R1531): config/google-accounts.profile.json
+// controller-metering.js defect (R1531 w8): config/google-accounts.profile.json
 // is gitignored user data, so freezing it at module load meant the dashboard
 // showed the roster this process happened to load first -- an account the
 // customer registered a minute ago simply did not exist until a restart, and a
@@ -753,7 +753,7 @@ function staleProjection(projection) {
 // --- agent roster: real lane identity (Q-lane-identity) ---------------------
 //
 // snapshot.agents/snapshot.edges are governed by the generated Agent Activity
-// wire contract (the dashboard reader's src/generated/agent-activity-
+// wire contract (AgentActivityVisualizer/src/generated/agent-activity-
 // contracts.js), which this repo does not own edit rights to change right
 // now: browserAgent.alias is a CLOSED 4-value enum (coordinator/worker/
 // reviewer/observer) with additionalProperties:false, so it cannot carry a
@@ -761,7 +761,7 @@ function staleProjection(projection) {
 // how this producer is shaped. Rather than silently pretend that distinction
 // doesn't matter, it is carried in a new sibling envelope field,
 // `agentRoster`, whose shape this module owns end to end (producer here,
-// hand-written consumer allowlist in the dashboard reader's server/
+// hand-written consumer allowlist in AgentActivityVisualizer/server/
 // controller-projection.js). snapshot.agents/edges are still improved as far
 // as the closed contract allows (see the 'observer' entry and the edge
 // multiplication below), but real lane identity lives in agentRoster.

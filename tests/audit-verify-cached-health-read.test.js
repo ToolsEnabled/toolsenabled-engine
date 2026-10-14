@@ -4,10 +4,10 @@
 //
 // system-status.js's auditState() is what system.status and system.doctor
 // return, and both are polled. It called audit.verify(), which is deliberately
-// uncached -- a complete chain-and-signature walk of every live event. On a
-// development install with about ten thousand live rows that took seconds,
-// paid on every poll, on the same single-writer ledger that every tool call
-// has to get through.
+// uncached -- a complete chain-and-signature walk of every live event. On the
+// owner's install (10,019 live rows) that is 1.6 s, paid on every poll, on the
+// same single-writer ledger that every tool call has to get through. Measured
+// there: system.status p50 9.6 s, system.doctor p50 21.9 s.
 //
 // verify({ cached: true }) is the opt-in that lets a health read reuse the
 // verification the write path already trusts. What these checks pin:

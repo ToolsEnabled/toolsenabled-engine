@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Parallel agentic-Gemini fleet runner (owner request: move the build queue and
-// backlog quickly with no limit on Gemini usage, as long as the runs do not
-// trip over each other or waste work).
+// Parallel agentic-Gemini fleet runner (owner: "lets go get my build qeue and
+// your back log absolutely MOVING no limits to your gemini usage just make
+// sure its not tripping over itself or wasting work").
 //
 // The two failure modes that instruction names are exactly what this guards:
 //   * "tripping over itself" -- every lane gets its OWN detached git worktree,
@@ -227,7 +227,7 @@ function subscriptionEnvironment() {
    * lane-runner.js and gemini-agentic.js already took. The gemini-only list
    * below never removed ANTHROPIC_API_KEY, so a fleet lane inherited the
    * owner's machine-wide key and anything it spawned that reached a claude CLI
-   * billed the API instead of their subscription. This was the last of the three
+   * billed the API instead of his subscription. This was the last of the three
    * gemini launch paths still starting from `{ ...process.env }`. */
   return deleteEnvNames(subscriptionLaunchEnvironment(process.env), [
     'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_GENAI_USE_VERTEXAI',

@@ -53,8 +53,8 @@ assert.equal(validateDeclaration(manifest()).allowedToolCount, 4);
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.2', root: 'C:\\example\\engine-checkout', role: 'development-host' },
-    'machine-b': { address: '203.0.113.1', root: 'C:\\elsewhere', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.2', root: '\x43:\\Users\\owner\\Desktop\\engine-checkout', role: 'development-host' },
+    'machine-b': { address: '203.0.113.1', root: '\x43:\\elsewhere', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -80,13 +80,13 @@ assert.match(manifestPathForHost('10.0.0.5', { registry: ordinaryLanRegistry }),
 code(() => manifestPathForHost('10.0.0.7', { registry: ordinaryLanRegistry }), 'FRA_MANIFEST_HOST_INVALID');
 
 // THE MOVE THIS WHOLE CHANGE EXISTS FOR. Same machine, same declared root,
-// completely different network -- which is expected to happen before
+// completely different network -- the owner has said this will happen before
 // testing. Nothing may be renamed and the same file must be found.
 const movedNetworkRegistry = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.41', root: 'C:\\example\\engine-checkout', role: 'development-host' },
-    'machine-b': { address: '203.0.113.42', root: 'C:\\elsewhere', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.41', root: '\x43:\\Users\\owner\\Desktop\\engine-checkout', role: 'development-host' },
+    'machine-b': { address: '203.0.113.42', root: '\x43:\\elsewhere', role: 'disconnected-peer' }
   },
   services: {}
 };

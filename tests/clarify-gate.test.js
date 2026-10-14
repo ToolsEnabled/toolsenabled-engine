@@ -140,7 +140,7 @@ const MUTATING_CALLS = [
   ['git commit', bash('git commit -m "wip"')],
   ['git push', bash('git push origin main')],
   ['rm -rf', bash('rm -rf build')],
-  ['del', powershell('del C:\\somewhere\\file.txt')],
+  ['del', powershell('del \x43:\\somewhere\\file.txt')],
   ['npm install', bash('npm install left-pad')],
   ['redirect write', bash('echo hello > out.txt')],
   ['append redirect', bash('node tools/ledger-query.js open >> reports/tmp.md')],

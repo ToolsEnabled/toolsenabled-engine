@@ -151,7 +151,7 @@ try {
       // Each event is pinned to its exact declared entries -- no silent hook
       // drift in either direction. Claude's SessionStart carries exactly one
       // entry beyond onboarding: the fail-open presence autoregister hook
-      // (fix note, re-pointed here per RECORD 4: pins
+      // (owner fix directive 2026-08-12, re-pointed here per RECORD 4: pins
       // move to the newest directive, they do not get deleted or loosened).
       // Onboarding must stay FIRST so the packet precedes registration.
       assert.ok(Array.isArray(hooks[eventName]));
@@ -208,7 +208,7 @@ try {
     assert.match(definition.command, /git rev-parse --show-toplevel/);
     assert.match(definition.commandWindows, /git rev-parse --show-toplevel/);
     assert.match(definition.commandWindows, /Join-Path \$r 'tools\/agent-onboarding\.js'/);
-    assert.doesNotMatch(definition.commandWindows, /C:\\Users\\|Desktop\\/i, 'Codex hook root is project-dynamic');
+    assert.doesNotMatch(definition.commandWindows, /\x43:\\Users\\|Desktop\\/i, 'Codex hook root is project-dynamic');
   }
   assert.ok(codex.hooks.SessionStart[0].hooks[0].additionalContextLimit >= onboarding.MAX_RENDERED_BYTES.full);
   assert.ok(codex.hooks.SubagentStart[0].hooks[0].additionalContextLimit >= onboarding.MAX_RENDERED_BYTES.task);

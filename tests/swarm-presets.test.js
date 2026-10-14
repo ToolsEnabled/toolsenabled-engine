@@ -77,7 +77,7 @@ for (const size of swarm.SIZES) {
 {
   const five = swarm.presetFor(5);
   const hundred = swarm.presetFor(100);
-  /* THE PLANNER SEAT WAS REMOVED ON PURPOSE (product note: planning is
+  /* THE PLANNER SEAT WAS REMOVED ON PURPOSE (owner, 2026-08-24: planning is
      the coordinator plus the mechanical pipeline). A field describing an agent
      that will never exist is the declared-but-unconsumed defect, so its ABSENCE
      is pinned: a preset that grows one back is reintroducing a seat the
@@ -120,18 +120,18 @@ for (const size of swarm.SIZES) {
 // THE FORECAST WARNS BEFORE, WHICH IS THE ONLY MOMENT IT IS WORTH ANYTHING.
 // -------------------------------------------------------------------
 {
-  const healthy = swarm.forecast(25, { accounts: [{ name: 'a', usedPercent: 40 }, { name: 'b', usedPercent: 30 }] });
+  const healthy = swarm.forecast(25, { account: { name: 'a', usedPercent: 40 } });
   check(healthy.tokens.low < healthy.tokens.high,
     'the token estimate is a BAND -- a single number would be planned against, and this cost depends on what each task finds');
   check(/rough bands, not a quote/.test(healthy.summary),
     'and it says so in the sentence a person actually reads');
-  check(healthy.warnings.length === 0, 'two healthy accounts against a 25 swarm warns about nothing');
+  check(healthy.warnings.length === 0, 'the selected healthy account against a 25 swarm warns about nothing');
   check(healthy.dispatchSeconds > 0, 'the forecast says how long dispatch will take, not only what it costs');
 }
 
 {
   // The case that matters: nearly out of quota.
-  const thin = swarm.forecast(150, { accounts: [{ name: 'a', usedPercent: 95 }, { name: 'b', usedPercent: 92 }] });
+  const thin = swarm.forecast(150, { account: { name: 'a', usedPercent: 95 } });
   check(thin.warnings.some((w) => /allowance remains/.test(w)),
     'a swarm that may not finish warns BEFORE it starts');
   check(thin.warnings.some((w) => /cannot be cancelled or refunded/.test(w)),
@@ -140,50 +140,35 @@ for (const size of swarm.SIZES) {
 
 {
   // UNKNOWN ALLOWANCE IS NOT A FULL ONE.
-  const unknown = swarm.forecast(50, { accounts: [{ name: 'a', usedPercent: null }, { name: 'b', usedPercent: 10 }] });
+  const unknown = swarm.forecast(50, { account: { name: 'a', usedPercent: null } });
   check(unknown.unknownAllowanceFor.includes('a'),
     'an account whose allowance could not be read is named');
   check(unknown.warnings.some((w) => /could not be read/.test(w)),
     'and warned about, rather than counted as headroom -- treating "we could not ask" as "there is plenty" is how a batch runs a person dry');
-  check(unknown.headroomPercent === Math.max(0, 99 - 10),
-    'the unknown account contributes NOTHING to the headroom sum');
+  check(unknown.headroomPercent === null,
+    'the selected unknown account carries no definite allowance');
 }
 
 {
   // NON-FINITE ALLOWANCE IS ALSO NOT A MEASUREMENT.
   for (const usedPercent of [NaN, Infinity, -Infinity]) {
-    const unknown = swarm.forecast(5, { accounts: [{ name: 'a', usedPercent }] });
+    const unknown = swarm.forecast(5, { account: { name: 'a', usedPercent } });
     check(unknown.unknownAllowanceFor.includes('a'),
       `${usedPercent} is carried as an unknown allowance rather than a definite measurement`);
-    check(unknown.headroomPercent === 0,
-      `${usedPercent} contributes NOTHING to the headroom sum`);
+    check(unknown.headroomPercent === null,
+      `${usedPercent} carries no definite selected-account allowance`);
   }
 }
 
-{
-  // A size tuned for more machines than are present says so, with the real number.
-  const short = swarm.forecast(100, { accounts: [{ name: 'a', usedPercent: 10 }] });
-  check(short.warnings.some((w) => /tuned for 2 machine/.test(w)),
-    'a size needing two machines run on one warns');
-  check(short.warnings.some((w) => /21 launches a minute/.test(w)),
-    'and gives the MEASURED rate it will really get, not the one the preset declares');
-}
-
 // -------------------------------------------------------------------
-// Bounds refuse rather than clamp, exactly as admission does.
+// Batch bounds carry the selected-account launch rate.
 // -------------------------------------------------------------------
 {
-  const bounds = swarm.boundsFor(25, 2);
-  check(bounds.launchesPerMinute === swarm.presetFor(25).launchesPerMinute && bounds.accounts === 2,
+  const bounds = swarm.boundsFor(25);
+  check(bounds.launchesPerMinute === swarm.presetFor(25).launchesPerMinute && Object.keys(bounds).length === 1,
     'bounds come straight from the preset');
-  check(bounds.launchesPerMinute === 21 && bounds.accounts === 2,
-    'bounds preserve the independently measured 25-task launch rate and account count');
-  const error = raises('SWARM_ACCOUNTS_INSUFFICIENT', () => swarm.boundsFor(150, 1),
-    'a preset tuned for three accounts offered one refuses -- its rate has never been measured on fewer, so serving it would promise a configuration nobody has run');
-  check(/Add an account or pick a smaller size/.test(error.message),
-    'and offers the two things that would actually fix it');
-  raises('SWARM_ACCOUNTS_INVALID', () => swarm.boundsFor(25, 0),
-    'zero accounts refuses -- a batch with nowhere to launch has nowhere to go');
+  check(bounds.launchesPerMinute === 21 && Object.keys(bounds).length === 1,
+    'bounds preserve the independently measured 25-task launch rate without an account count');
 }
 
-console.log(`swarm-presets tests passed (${checks} checks: six tuned sizes each internally coherent and each carrying its reasoning, composition tuned per size rather than scaled, an unlisted size REFUSING and naming both neighbours instead of interpolating a configuration nobody has run, a fractional and a non-numeric size refused distinctly, the forecast given as a band and labelled rough, a thin allowance warned about BEFORE dispatch with what it costs, an unreadable allowance contributing nothing to headroom rather than being read as plenty, a size run on too few machines told the MEASURED rate it will really get, and bounds refusing rather than clamping).`);
+console.log(`swarm-presets tests passed (${checks} checks: six tuned sizes each internally coherent and each carrying its reasoning, composition tuned per size rather than scaled, an unlisted size REFUSING and naming both neighbours instead of interpolating a configuration nobody has run, a fractional and a non-numeric size refused distinctly, the forecast given as a band and labelled rough, a thin allowance warned about BEFORE dispatch with what it costs, an unreadable allowance contributing nothing to headroom rather than being read as plenty, bounds retaining the selected-account launch rate).`);

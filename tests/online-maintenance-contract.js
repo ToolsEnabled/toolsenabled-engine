@@ -113,7 +113,7 @@ function refusesWithoutEffects(run, code) {
     error.code === 'ONLINE_MAINTENANCE_INVALID_VALUE' || error.code === 'ONLINE_MAINTENANCE_PATH_DENIED'
   ));
   throws(() => request({ commandId: 'backup.manifest', args: { relativePath: 'daily/manifest.txt' } }), error => error.code === 'ONLINE_MAINTENANCE_PATH_DENIED');
-  throws(() => request({ commandId: 'backup.manifest', args: { relativePath: 'C:/manifest.json' } }), error => (
+  throws(() => request({ commandId: 'backup.manifest', args: { relativePath: '\x43:/manifest.json' } }), error => (
     error.code === 'ONLINE_MAINTENANCE_INVALID_VALUE' || error.code === 'ONLINE_MAINTENANCE_PATH_DENIED'
   ));
   throws(() => request({ commandId: 'health.snapshot', timeout: 10_001 }), error => error.code === 'ONLINE_MAINTENANCE_INVALID_VALUE');

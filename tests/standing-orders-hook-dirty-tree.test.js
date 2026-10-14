@@ -26,7 +26,7 @@
 // by the matcher or status code under test.
 
 // Contract tests for tools/standing-orders-hook.js Rule 6 (GIT-DESTRUCTIVE-
-// DIRTY-TREE hard guard, R1162 follow-up).
+// DIRTY-TREE hard guard, R1162 follow-up, git-safety-guard lane 2026-08-10).
 //
 // This is a NEW, standalone test file (tests/standing-orders-hook*.js is this
 // lane's territory). Unlike Rule 5's contract test, this rule's whole point

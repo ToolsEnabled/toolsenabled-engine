@@ -61,7 +61,7 @@ function run() {
       retentionDeletionAuthorized: false
     });
     assert.equal(Object.isFrozen(result), true);
-    assert.equal(JSON.stringify(result).includes('C:\\'), false);
+    assert.equal(JSON.stringify(result).includes('\x43:\\'), false);
   });
 
   check('fails closed for every attempted activation or safety relaxation', () => {

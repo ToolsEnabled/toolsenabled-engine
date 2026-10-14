@@ -1,7 +1,8 @@
 'use strict';
-// WHO ADDS STANDING RULES (product note): settings offer the ledger page
-// only, the ledger page and /request, or agents as well, as today; and when it
-// is disabled, agents do not ask either.
+// WHO ADDS STANDING RULES (owner, 2026-09-15): "the settings needs to include
+// settings for either manually on the ledger page only, or ledger page and
+// /request, or agent and such like now", and "agents shouldnt ask if its
+// disabled either".
 //
 // One three-way choice, rules.filing_from, over every door into the rules
 // ledger. The switch every reader was built on, rules.capture_spoken, stays in

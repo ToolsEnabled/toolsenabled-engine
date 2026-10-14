@@ -13,10 +13,10 @@
 // FOUND (5), whole-check guard: empty live data returned before the R44
 // divergence assertions. Those assertions now always run against either live
 // R44 or the preserved regression fixture. Mutation: gradingContext replaced
-// "that we had published" with "that we had drafted". RED:
+// "previously submitted" with "that i had drafted". RED:
 // "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:"
-// followed by the actual "that we had drafted" versus expected "that we had
-// published" (exit 1). This mutation also proves the earlier whitelist
+// followed by the actual "that i had drafted" versus expected "that i had
+// submitted" (exit 1). This mutation also proves the earlier whitelist
 // assertion discriminates; the same altered value is what the unskipped R44
 // assertion rejects.
 // NOT-FOUND (2): no process exit-status or merely-truthy-return assertion.
@@ -42,11 +42,11 @@
 // under test is the part that decides -- the whitelist projection, the
 // interpretation-leak assertion, quote grounding, the classification enum, the
 // verdict derivation, the durable store, and discovery. The live provider run
-// (the R44 demonstration and the measured cost) is tests/intent-fidelity-live.js.
+// (the scholarship demonstration and the measured cost) is tests/intent-fidelity-live.js.
 //
 // Each case maps to a real failure:
 //   - grades against the VERBATIM, never the interpretation. A divergent
-//     paraphrase is planted and the prompt is proven to carry their words and not
+//     paraphrase is planted and the prompt is proven to carry his words and not
 //     the paraphrase; then the leak assertion is proven to actually fire, so
 //     the test cannot pass merely because the detector is asleep.
 //   - a scope-drifted artifact is caught with the RIGHT clause quoted.
@@ -98,27 +98,24 @@ const cleanup = () => { try { fs.rmSync(scratch, { recursive: true, force: true 
 // Fixtures
 // ---------------------------------------------------------------------------
 
-// The R44 shape, as synthetic stand-in text: the request carries "that we had published", and the
+// The real R44 shape: his own words carry "previously submitted", and the
 // controller's recorded paraphrase does not.
-const R44_VERBATIM = [
-  "[1] 'there is a product brief draft somewhere in the shared drafts folder, the newest one, with the pricing table.",
-  "Take that one, add a short summary section (or about five bullet points) in our usual tone, and keep it",
-  "high level without any deep dives. Then upload it to the team wiki.'",
-  "[2] 'once the summary section is in, add the rest of the brief (i think there is",
-  "a copy that is close to this that we had published last sprint)'",
-  "[3] 'make sure you upload it to the right space. there is an archived space from the old project you should ignore'"
+const SCHOLARSHIP_VERBATIM = [
+  "Use the newest short example manuscript as the base.",
+  "Add a brief section in the existing style, then append the previously submitted synthetic version.",
+  "Keep the example concise without adding technical depth.",
+  "Deliver the completed manuscript to the active example writing class and ignore its archived predecessor."
 ].join(' ');
 
-const R44_INTERPRETATION = 'Find my most recent product brief draft, add a short summary section in the usual '
-  + 'tone that stays high level, append the rest of my brief, and upload it to the team wiki.';
+const SCHOLARSHIP_INTERPRETATION = 'Use the newest short example manuscript, add a brief section, append the remaining content and send it to the current example writing course.';
 
 function fixtureEntry(overrides = {}) {
   return {
     id: 'R44',
-    verbatim: R44_VERBATIM,
-    request: `(interpretation) ${R44_INTERPRETATION}`,
+    verbatim: SCHOLARSHIP_VERBATIM,
+    request: `(interpretation) ${SCHOLARSHIP_INTERPRETATION}`,
     status: 'done',
-    gates: [{ instruction: 'upload to the current space, not the archived one', met: false, evidence: '' }],
+    gates: [{ instruction: 'send the document to the current example writing course, excluding the archived course', met: false, evidence: '' }],
     evidence: 'Document assembled and uploaded.',
     ...overrides
   };
@@ -147,11 +144,11 @@ check('gradingContext exposes only requestId/verbatim/gates and never the paraph
     ['gradeable', 'gates', 'requestId', 'ungradeableReason', 'verbatim'].sort(),
     'a new ledger field must not be able to ride into the grading context'
   );
-  assert.equal(context.verbatim, R44_VERBATIM);
+  assert.equal(context.verbatim, SCHOLARSHIP_VERBATIM);
   assert.equal(context.requestId, 'R44');
   assert.equal(context.gradeable, true);
   const serialized = JSON.stringify(context);
-  assert.ok(!serialized.includes('append the rest of my brief'), 'the paraphrase must not survive the projection');
+  assert.ok(!serialized.includes('append the rest of my paper'), 'the paraphrase must not survive the projection');
   assert.ok(!serialized.includes('someFutureParaphraseField'));
 });
 
@@ -171,13 +168,13 @@ check('the assembled prompt carries the OWNER VERBATIM and not the divergent int
     context: intent.gradingContext(entry),
     work: intent.assembleRequestWork(entry)
   });
-  assert.ok(prompt.includes('that we had published last sprint'), 'the dropped clause must be in the prompt');
-  assert.ok(prompt.includes(R44_VERBATIM), 'their words go in unedited');
-  assert.ok(!intent.normalizeForMatch(prompt).includes(intent.normalizeForMatch(R44_INTERPRETATION)),
+  assert.ok(prompt.includes("the previously submitted synthetic version"), 'the dropped clause must be in the prompt');
+  assert.ok(prompt.includes(SCHOLARSHIP_VERBATIM), 'his words go in unedited');
+  assert.ok(!intent.normalizeForMatch(prompt).includes(intent.normalizeForMatch(SCHOLARSHIP_INTERPRETATION)),
     'the controller paraphrase must not appear in the prompt');
-  // The distinctive phrases of the paraphrase -- the ones that are NOT also their
+  // The distinctive phrases of the paraphrase -- the ones that are NOT also his
   // words -- are individually absent too.
-  const shingles = intent.interpretationShingles(R44_INTERPRETATION, R44_VERBATIM);
+  const shingles = intent.interpretationShingles(SCHOLARSHIP_INTERPRETATION, SCHOLARSHIP_VERBATIM);
   assert.ok(shingles.length > 0, 'the fixture paraphrase must actually diverge, or this test proves nothing');
   for (const shingle of shingles) {
     assert.ok(!intent.normalizeForMatch(prompt).includes(shingle), `paraphrase-only phrase leaked: ${shingle}`);
@@ -191,7 +188,7 @@ check('the leak assertion actually fires -- a prompt built from the paraphrase i
   // grades against the summary. If the detector were asleep the test above
   // would pass for the wrong reason, so it is proven to bite here.
   const drifted = intent.buildIntentPrompt({
-    context: intent.gradingContext({ ...entry, verbatim: R44_INTERPRETATION }),
+    context: intent.gradingContext({ ...entry, verbatim: SCHOLARSHIP_INTERPRETATION }),
     work: intent.assembleRequestWork(entry)
   });
   assert.throws(
@@ -205,13 +202,13 @@ check('the leak assertion is scoped to the statement-of-intent region, not the d
   // describe the same deliverable. Measured on the live ledger: R80 and R94
   // share a phrase between their evidence and their summary. Failing those
   // closed would take the checker off real work for no safety gain.
-  const entry = fixtureEntry({ evidence: `Delivered exactly this: ${R44_INTERPRETATION}` });
+  const entry = fixtureEntry({ evidence: `Delivered exactly this: ${SCHOLARSHIP_INTERPRETATION}` });
   const prompt = intent.buildIntentPrompt({
     context: intent.gradingContext(entry),
     work: intent.assembleRequestWork(entry)
   });
-  assert.ok(prompt.includes(R44_INTERPRETATION), 'the paraphrase really is present, in section 2');
-  assert.ok(!intent.intentRegionOf(prompt).includes(R44_INTERPRETATION), 'but not in the intent region');
+  assert.ok(prompt.includes(SCHOLARSHIP_INTERPRETATION), 'the paraphrase really is present, in section 2');
+  assert.ok(!intent.intentRegionOf(prompt).includes(SCHOLARSHIP_INTERPRETATION), 'but not in the intent region');
   assert.doesNotThrow(() => intent.assertPromptExcludesInterpretation(prompt, entry));
 });
 
@@ -219,7 +216,7 @@ check('a phrase shared between a recorded GATE and the paraphrase is not treated
   // Gates are owner sub-instructions (RECORD rule 1) and are part of what this
   // checker grades against, so wording common to a gate and the summary is a
   // shared source, not a leak. R94's live entry is exactly this shape.
-  const shared = 'append the rest of my brief and upload it to the team wiki';
+  const shared = 'append the remaining manuscript and send it to the example course';
   const entry = fixtureEntry({ gates: [{ instruction: shared, met: false, evidence: '' }] });
   const prompt = intent.buildIntentPrompt({
     context: intent.gradingContext(entry),
@@ -231,7 +228,7 @@ check('a phrase shared between a recorded GATE and the paraphrase is not treated
   assert.throws(
     () => intent.assertPromptExcludesInterpretation(
       intent.buildIntentPrompt({
-        context: intent.gradingContext({ ...entry, gates: [{ instruction: R44_INTERPRETATION, met: false, evidence: '' }] }),
+        context: intent.gradingContext({ ...entry, gates: [{ instruction: SCHOLARSHIP_INTERPRETATION, met: false, evidence: '' }] }),
         work: intent.assembleRequestWork(entry)
       }),
       entry
@@ -270,8 +267,8 @@ check('every gradeable entry in a disposable owner ledger builds a prompt with n
 
 check('the delivered-artifact assembly also excludes the intent-side ledger fields', () => {
   const work = intent.assembleRequestWork(fixtureEntry());
-  assert.ok(!work.text.includes(R44_INTERPRETATION), 'the paraphrase is not delivered work');
-  assert.ok(!work.text.includes(R44_VERBATIM), 'their request is not delivered work either');
+  assert.ok(!work.text.includes(SCHOLARSHIP_INTERPRETATION), 'the paraphrase is not delivered work');
+  assert.ok(!work.text.includes(SCHOLARSHIP_VERBATIM), 'his request is not delivered work either');
   assert.ok(work.text.includes('Document assembled and uploaded.'), 'the delivered account is what gets graded');
   assert.match(work.sourceLabel, /SELF-REPORT/, 'a controller account must be labelled as a self-report');
 });
@@ -281,8 +278,8 @@ check('a gate is split: its INSTRUCTION is intent, its EVIDENCE is delivered wor
   // R53 as FAILED on two gates whose recorded evidence answered the finding.
   const entry = fixtureEntry({
     gates: [
-      { instruction: 'upload to the current space, not the archived one', met: true, evidence: 'uploaded to space 100001; the archived space was located and skipped' },
-      { instruction: 'do not rewrite the existing sections', met: false, evidence: '' }
+      { instruction: 'send the document to the current example writing course, excluding the archived course', met: true, evidence: 'uploaded to example course 100000; the 2025 course was located and skipped' },
+      { instruction: 'do not rewrite his prose', met: false, evidence: '' }
     ]
   });
   const context = intent.gradingContext(entry);
@@ -290,12 +287,12 @@ check('a gate is split: its INSTRUCTION is intent, its EVIDENCE is delivered wor
   const prompt = intent.buildIntentPrompt({ context, work });
 
   // The instruction is intent-side and is quotable as an owner requirement.
-  assert.ok(intent.intentRegionOf(prompt).includes('upload to the current space'));
-  assert.equal(intent.groundQuote('upload to the current space', context).source, 'gate');
+  assert.ok(intent.intentRegionOf(prompt).includes('send the document to the current example writing course'));
+  assert.equal(intent.groundQuote('send the document to the current example writing course', context).source, 'gate');
   // The evidence is delivery-side, and never in the intent region.
-  assert.ok(work.text.includes('(g1) recorded as MET: uploaded to space 100001'));
+  assert.ok(work.text.includes('(g1) recorded as MET: uploaded to example course 100000'));
   assert.ok(work.text.includes('(g2) recorded as NOT MET: (no evidence recorded)'));
-  assert.ok(!intent.intentRegionOf(prompt).includes('uploaded to space 100001'),
+  assert.ok(!intent.intentRegionOf(prompt).includes('uploaded to example course 100000'),
     'a delivery claim must never sit inside the statement of intent');
   // And an unmet gate with no evidence must read as unmet, not be hidden.
   assert.ok(!work.text.includes('recorded as MET: (no evidence recorded)'));
@@ -305,22 +302,22 @@ check('the preserved R44 regression fixture has verbatim text that diverges from
   const entry = fixtureEntry();
   const context = intent.gradingContext(entry);
   assert.ok(context.gradeable);
-  assert.ok(context.verbatim.includes('that we had published'), "R44's verbatim must contain the clause that was dropped");
-  assert.ok(!intent.interpretationOf(entry).includes('that we had published'),
+  assert.ok(context.verbatim.includes("previously submitted"), "R44's verbatim must contain the clause that was dropped");
+  assert.ok(!intent.interpretationOf(entry).includes("previously submitted"),
     "R44's recorded interpretation must NOT contain it -- that omission is the incident");
 });
 
 // ---------------------------------------------------------------------------
-// 2. Quote grounding -- a finding must be their words
+// 2. Quote grounding -- a finding must be his words
 // ---------------------------------------------------------------------------
 
 check('a quote is grounded only when it really occurs in the verbatim or a gate', () => {
   const context = intent.gradingContext(fixtureEntry());
-  const good = intent.groundQuote('that we had published last sprint', context);
+  const good = intent.groundQuote("the previously submitted synthetic version", context);
   assert.equal(good.grounded, true);
   assert.equal(good.source, 'verbatim');
 
-  const gated = intent.groundQuote('not the archived one', context);
+  const gated = intent.groundQuote('excluding the archived course', context);
   assert.equal(gated.grounded, true);
   assert.equal(gated.source, 'gate');
   assert.equal(gated.gateIndex, 0);
@@ -330,7 +327,7 @@ check('a quote is grounded only when it really occurs in the verbatim or a gate'
   assert.match(invented.reason, /not-found/);
 
   // Presentation differences must not decide grounding; words must.
-  const smart = intent.groundQuote('THAT WE HAD   PUBLISHED last sprint', context);
+  const smart = intent.groundQuote("THE PREVIOUSLY   SUBMITTED SYNTHETIC VERSION", context);
   assert.equal(smart.grounded, true);
 
   const tooShort = intent.groundQuote('add the', context);
@@ -360,15 +357,15 @@ const context = intent.gradingContext(fixtureEntry());
 check('a scope-drifted artifact FAILS, and the gap quotes the exact clause that was violated', () => {
   const parsed = intent.parseIntentVerdict([
     'INTENT-VERDICT: FAIL-WITH-GAPS',
-    'INTENT-REASON: the appended content was not the version the team had published',
-    'CHECKED: add a short summary section (or about five bullet points) || five bullet points were added',
-    'GAP: that we had published last sprint || not-delivered || a title-similar local file chosen by name || the source was picked by title similarity, never by checking what had actually been published'
+    'INTENT-REASON: the appended content was not the version he submitted',
+    'CHECKED: add a brief section || 13 sentences were added',
+    "GAP: the previously submitted synthetic version || not-delivered || a title-similar local file chosen by name || the source was picked by title similarity, never by checking what he actually submitted"
   ].join('\n'), context);
 
   assert.equal(parsed.verdict, 'FAIL-WITH-GAPS');
   assert.equal(parsed.counts.counting, 1);
   const gap = parsed.gaps[0];
-  assert.equal(gap.quote, 'that we had published last sprint');
+  assert.equal(gap.quote, "the previously submitted synthetic version");
   assert.equal(gap.quoteGrounded, true);
   assert.equal(gap.quoteSource, 'verbatim');
   assert.equal(gap.classification, 'not-delivered');
@@ -379,9 +376,9 @@ check('a genuinely-complete artifact PASSES -- this is not a reject-everything c
   const parsed = intent.parseIntentVerdict([
     'INTENT-VERDICT: PASS',
     'INTENT-REASON: every clause accounted for',
-    'CHECKED: add a short summary section (or about five bullet points) || five bullet points added, listed in the evidence',
-    'CHECKED: that we had published last sprint || the appended body is the revision pulled from the published page history',
-    'CHECKED: make sure you upload it to the right space || uploaded to the current space id'
+    'CHECKED: add a brief section || 13 sentences added, listed in the evidence',
+    "CHECKED: the previously submitted synthetic version || the appended body is the file pulled from his prior submission",
+    'CHECKED: send the document to the current example writing course || uploaded to the 2026 course id'
   ].join('\n'), context);
   assert.equal(parsed.verdict, 'PASS');
   assert.equal(parsed.counts.counting, 0);
@@ -403,7 +400,7 @@ check('UNCERTAIN is preserved, never coerced to PASS or to FAIL', () => {
     'INTENT-VERDICT: UNCERTAIN',
     'INTENT-REASON: cannot tell which source document was used',
     'UNCERTAIN-BECAUSE: the account names no source file; the file name or a hash would settle it',
-    'GAP: that we had published last sprint || cannot-tell || (nothing stated) || the account is silent about the source'
+    "GAP: the previously submitted synthetic version || cannot-tell || (nothing stated) || the account is silent about the source"
   ].join('\n'), context);
   assert.equal(parsed.verdict, 'UNCERTAIN');
   assert.equal(parsed.modelVerdict, 'UNCERTAIN');
@@ -417,9 +414,9 @@ check('"I cannot confirm it" style gaps do not fail the work -- they yield UNCER
   const parsed = intent.parseIntentVerdict([
     'INTENT-VERDICT: FAIL-WITH-GAPS',
     'INTENT-REASON: several requirements are unverifiable from the artifact',
-    'GAP: add a short summary section (or about five bullet points) in our usual tone || cannot-tell || five bullet points added || no evidence about tone',
-    'GAP: keep it high level without any deep dives || cannot-tell || (nothing stated) || depth not described',
-    'GAP: make sure you upload it to the right space || delivered-differently || uploaded to a space id || the id was not checked against the name'
+    'GAP: add a brief section in the existing style || cannot-tell || 13 sentences added || no evidence about voice',
+    'GAP: without adding technical depth || cannot-tell || (nothing stated) || depth not described',
+    'GAP: send the document to the current example writing course || delivered-differently || uploaded to a course id || the id was not checked against the name'
   ].join('\n'), context);
   assert.equal(parsed.verdict, 'UNCERTAIN');
   assert.equal(parsed.counts.counting, 0);
@@ -442,8 +439,8 @@ check('a PASS that nonetheless reports a grounded not-delivered gap resolves tow
   const parsed = intent.parseIntentVerdict([
     'INTENT-VERDICT: PASS',
     'INTENT-REASON: broadly fine',
-    'CHECKED: add a short summary section (or about five bullet points) || done',
-    'GAP: that we had published last sprint || not-delivered || a different local file || the source was never checked'
+    'CHECKED: add a brief section || done',
+    "GAP: the previously submitted synthetic version || not-delivered || a different local file || the source was never checked"
   ].join('\n'), context);
   assert.equal(parsed.verdict, 'FAIL-WITH-GAPS');
   assert.match(parsed.reason, /resolved toward the finding/);
@@ -465,9 +462,9 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
     const storePath = tempStore('return');
     const runCheckerImpl = scriptedChecker([
       'INTENT-VERDICT: FAIL-WITH-GAPS',
-      'INTENT-REASON: appended content was not the published version',
-      'CHECKED: add a short summary section (or about five bullet points) || five added',
-      'GAP: that we had published last sprint || not-delivered || a title-similar file || nobody checked what had been published'
+      'INTENT-REASON: appended content was not his submitted version',
+      'CHECKED: add a brief section || 13 added',
+      "GAP: the previously submitted synthetic version || not-delivered || a title-similar file || nobody checked what he submitted"
     ].join('\n'));
 
     const result = await intent.checkOne({
@@ -483,8 +480,8 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
 
     // The dispatched prompt is the owner's words, proven at the call site.
     const dispatched = runCheckerImpl.calls[0].prompt;
-    assert.ok(dispatched.includes('that we had published last sprint'));
-    assert.ok(!intent.normalizeForMatch(dispatched).includes(intent.normalizeForMatch(R44_INTERPRETATION)));
+    assert.ok(dispatched.includes("the previously submitted synthetic version"));
+    assert.ok(!intent.normalizeForMatch(dispatched).includes(intent.normalizeForMatch(SCHOLARSHIP_INTERPRETATION)));
 
     const store = intent.readStore(storePath);
     const returns = intent.openReturns(store);
@@ -492,7 +489,7 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
     assert.equal(returns[0].workKey, 'request:R44');
     assert.equal(returns[0].returned, true);
     assert.equal(returns[0].gaps.filter(gap => gap.counts).length, 1);
-    assert.equal(returns[0].gaps[0].quote, 'that we had published last sprint');
+    assert.equal(returns[0].gaps[0].quote, "the previously submitted synthetic version");
     // A verdict is a verdict, not a re-assignment: no rework field of any kind.
     assert.ok(!('dispatched' in returns[0]) && !('rework' in returns[0]) && !('assignedTo' in returns[0]));
   });
@@ -504,8 +501,8 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
       runCheckerImpl: scriptedChecker([
         'INTENT-VERDICT: PASS',
         'INTENT-REASON: every clause is accounted for',
-        'CHECKED: that we had published last sprint || the appended body came from the published page history',
-        'CHECKED: add a short summary section (or about five bullet points) || five bullet points added'
+        "CHECKED: the previously submitted synthetic version || the appended body came from his prior submission",
+        'CHECKED: add a brief section || 13 sentences added'
       ].join('\n'))
     });
     assert.equal(result.verdict, 'PASS');
@@ -535,7 +532,7 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
       runCheckerImpl: scriptedChecker([
         'INTENT-VERDICT: FAIL-WITH-GAPS',
         `INTENT-REASON: uploaded using ${secret}`,
-        `GAP: that we had published last sprint || not-delivered || uploaded with ${apiKey} || wrong source`
+        `GAP: the previously submitted synthetic version || not-delivered || uploaded with ${apiKey} || wrong source`
       ].join('\n'))
     });
     assert.equal(result.verdict, 'FAIL-WITH-GAPS');
@@ -545,7 +542,7 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
     const onDisk = fs.readFileSync(storePath, 'utf8');
     assert.ok(!onDisk.includes('eyJhbGciOiJIUzI1NiJ9.abcdefghijklmnop'));
     assert.ok(!onDisk.includes(apiKey));
-    // The store keeps hashes and their quotes, never the raw artifact.
+    // The store keeps hashes and his quotes, never the raw artifact.
     const stored = intent.readStore(storePath).checks['request:R44'];
     assert.match(stored.verbatimSha256, /^[0-9a-f]{64}$/);
     assert.match(stored.workSha256, /^[0-9a-f]{64}$/);
@@ -584,7 +581,7 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
     assert.match(skipped.reason, /paraphrase/);
   });
 
-  check('a checked item is not re-checked until their words or the artifact change', () => {
+  check('a checked item is not re-checked until his words or the artifact change', () => {
     const ledgerFile = path.join(scratch, 'ledger2.json');
     const entry = fixtureEntry({ id: 'R90', status: 'done' });
     fs.writeFileSync(ledgerFile, JSON.stringify({ requests: [entry] }, null, 2), 'utf8');
@@ -600,7 +597,7 @@ check('a reply with no verdict line, or a verdict with no reason, is inconclusiv
     );
 
     // owner-capture.js appends to verbatim; an append must re-open a prior PASS.
-    const appended = { ...entry, verbatim: `${entry.verbatim}\n[APPEND] and make sure the prices are current` };
+    const appended = { ...entry, verbatim: `${entry.verbatim}\n[APPEND] and make sure the citations are real` };
     fs.writeFileSync(ledgerFile, JSON.stringify({ requests: [appended] }, null, 2), 'utf8');
     const after = intent.discoverCompletedWork({ repoRoot: scratch, ledgerFile, store, includeLanes: false });
     assert.equal(after.candidates.length, 1);

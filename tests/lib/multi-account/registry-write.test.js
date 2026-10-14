@@ -62,7 +62,8 @@ try {
     // the field when absent; this in-memory return value is a different
     // contract, deliberately.
     expectEmail: null,
-    priority: 8,
+    // The app made this home, so removing the account later may destroy it.
+    homeCreatedByApp: true,
     registryPath
   });
   assert.equal(Object.isFrozen(added), true);
@@ -70,21 +71,22 @@ try {
 
   const written = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
   assert.equal(written.$comment, 'preserve fields the writer does not interpret');
+  // 1.0.50: the switching priority is retired, so it is dropped on save; every
+  // field the writer does not interpret (role here) is kept.
   assert.deepEqual(written.accounts[0], {
     name: 'existing',
     provider: 'codex',
     profileDir: path.join(homesRoot, 'existing'),
-    priority: 7,
     role: 'primary'
   });
   assert.deepEqual(written.accounts[1], {
     name: 'new account',
     provider: 'codex',
     profileDir: path.join(homesRoot, 'new account'),
-    priority: 8
+    homeCreatedByApp: true
   });
 
-  process.stdout.write('ok - addAccount preserves existing data and assigns the next priority\n');
+  process.stdout.write('ok - addAccount preserves existing data and writes no retired switching priority\n');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

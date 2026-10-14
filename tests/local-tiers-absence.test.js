@@ -1,7 +1,7 @@
 'use strict';
 /* "NOTHING IS CONFIGURED" IS AN ANSWER TO A STATUS QUESTION, NOT A FAILURE.
  *
- * MEASURED 2026-09-03 on a live ledger: research.local_tiers_status
+ * MEASURED 2026-09-03 on the owner's own ledger: research.local_tiers_status
  * was called 21 times over four days and failed 21 times, every one
  * MODEL_NO_GPU_PEER_CONFIGURED at HTTP 409, median 19 ms server-side. This
  * machine has no GPU peer, which is the ordinary single-machine case -- the

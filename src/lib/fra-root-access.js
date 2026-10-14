@@ -51,7 +51,7 @@ function plainObject(value) {
 }
 
 function powershellPath(environment = process.env) {
-  const windowsRoot = environment.SystemRoot || environment.WINDIR || 'C:\\Windows';
+  const windowsRoot = environment.SystemRoot || environment.WINDIR || '\x43:\\Windows';
   return path.win32.join(
     windowsRoot,
     'System32',
@@ -63,8 +63,8 @@ function powershellPath(environment = process.env) {
 
 function probeEnvironment(root, environment = process.env) {
   const selected = {
-    SystemRoot: environment.SystemRoot || environment.WINDIR || 'C:\\Windows',
-    WINDIR: environment.WINDIR || environment.SystemRoot || 'C:\\Windows',
+    SystemRoot: environment.SystemRoot || environment.WINDIR || '\x43:\\Windows',
+    WINDIR: environment.WINDIR || environment.SystemRoot || '\x43:\\Windows',
     TOOLSENABLED_FRA_ROOT_ACCESS_TARGET: root
   };
   for (const key of ['TEMP', 'TMP', 'COMPUTERNAME']) {

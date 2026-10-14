@@ -101,3 +101,28 @@ test('direct-user action policy is generic and fails closed without trusted turn
   active = false;
   assert.throws(() => functions.assertDirectUserAction(write, role, principal), { code: 'ROLE_DIRECT_USER_REQUEST_REQUIRED' });
 });
+
+
+test('installed default task hand-out survives a legacy saved directions sheet', () => {
+  for (const id of ['controller', 'manager', 'builder']) {
+    const stateStore = createStateStore({ file: ':memory:' });
+    try {
+      const definition = { id, baseDefaultRole: null, rules };
+      stateStore.setMemory({ namespace: 'custom-roles', key: `default:${id}`,
+        value: { schemaVersion: 1, kind: 'default', definition } });
+      const store = createCustomRoleStore({ stateStore });
+      const loaded = store.getRole(id);
+      const selected = functions.narrowFunctionNames(['t_ledger.assign', 'agent.set_model', 'system.status'], loaded);
+      assert.deepEqual(selected, ['t_ledger.assign', 'system.status']);
+      assert.deepEqual(loaded.rules, rules);
+      for (const policy of [null, [], ['system.status']]) {
+        store.editDefaultRole({ id, expectedRevision: store.getRoleRecord(id).revision, rules, functions: policy });
+        assert.deepEqual(functions.narrowFunctionNames(['t_ledger.assign'], store.getRole(id)), []);
+      }
+      const customId = `custom-${id}`;
+      stateStore.setMemory({ namespace: 'custom-roles', key: `custom:${customId}`,
+        value: { schemaVersion: 1, kind: 'custom', definition: { id: customId, baseDefaultRole: id, rules } } });
+      assert.deepEqual(functions.narrowFunctionNames(['t_ledger.assign'], store.getRole(customId)), []);
+    } finally { stateStore.close(); }
+  }
+});

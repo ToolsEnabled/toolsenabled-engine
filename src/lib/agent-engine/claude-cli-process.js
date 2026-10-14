@@ -37,7 +37,7 @@ const providerIsolation = require('../provider-session-isolation');
 const toolchain = require('../providers/provider-toolchain');
 const { ClaudeCliAdapter, ClaudeCliError, claudeArgs, claudeResumeArgs, claudeForkArgs, nativeModePolicyFor } = require('./claude-cli-adapter');
 const { resumeRefusalFor } = require('./resume-provider-guard');
-const { deleteEnvNames, envValues } = require('../env-scrub');
+const { envValues } = require('../env-scrub');
 /* THE ONE CANDIDATE LIST. Where `claude` may be, which installer put it there
  * and what its version does with a model alias all live in
  * ./claude-cli-install.js, and this file READS that list rather than keeping a
@@ -63,28 +63,9 @@ const STDERR_LIMIT = 64 * 1024;
    lines remain deliverable, while an unframed line cannot grow forever. */
 const MAX_CLAUDE_LINE_BYTES = 8_000_000;
 
-/* WHAT THE CHILD MUST NEVER INHERIT, and this is not the same list as a scrub
- * for tidiness.
- *
- * Claude Code gives ANTHROPIC_API_KEY precedence over the claude.ai
- * subscription login. An inherited key can therefore route a session to a
- * metered account even while `claude auth status` reports a valid login.
- *
- * So this engine's entire purpose -- run on the person's own subscription --
- * depends on the key NOT reaching the child. Stripping it is not defensive
- * tidying; it is the mechanism.
- *
- * BASE_URL IS HERE FOR A DIFFERENT HARM. It redirects the conversation, and the
- * file contents it carries, to an arbitrary host. The session still starts,
- * still answers, and is indistinguishable from a correct one, so there is no
- * failure for anyone to notice.
- *
- * src/lib/providers/subscription-launch-env.js is the product's fuller answer
- * and the shell already applies it before calling in here. This list is the
- * floor, applied again locally, because an embedder or a test that calls this
- * module directly must not be able to reach a state the shell would have
- * prevented. Scrubbing twice costs nothing; scrubbing never is the whole
- * outage. */
+/* Names whose values must be redacted from native CLI diagnostics. Native
+ * authentication settings are passed through to Claude Code, which owns their
+ * interpretation; this list is for output redaction, not auth selection. */
 const CREDENTIAL_ENV_NAMES = Object.freeze([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
@@ -97,7 +78,27 @@ const CREDENTIAL_ENV_NAMES = Object.freeze([
   'AWS_BEDROCK_API_KEY',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
-  'AWS_SESSION_TOKEN'
+  'AWS_SESSION_TOKEN',
+  /* Read by Claude Code 2.1.281 and missing here until now: cloud routes that
+     bill elsewhere, their credentials, workload-identity and refresh-token
+     sign-in (a DIFFERENT account than the selected home), and endpoint
+     overrides that redirect the conversation exactly as ANTHROPIC_BASE_URL
+     does. Kept identical to supervision/launch-environment.js's claude rows. */
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS',
+  'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+  'CLAUDE_CODE_USE_MANTLE',
+  'CLAUDE_CODE_USE_GATEWAY',
+  'ANTHROPIC_AWS_API_KEY',
+  'ANTHROPIC_FOUNDRY_API_KEY',
+  'ANTHROPIC_FOUNDRY_AUTH_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN_FILE',
+  'CLAUDE_CODE_OAUTH_REFRESH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_API_BASE_URL',
+  'CLAUDE_CODE_CUSTOM_OAUTH_URL',
+  'ANTHROPIC_UNIX_SOCKET'
 ]);
 
 function appendBounded(current, chunk, limit = STDERR_LIMIT) {
@@ -110,10 +111,10 @@ function appendBounded(current, chunk, limit = STDERR_LIMIT) {
  * WHAT WAS LOST, AND HOW. `stderr` above lives in this process's memory and is
  * handed to the caller exactly once, in finish(), when the child ends. That is
  * enough when the CHILD dies. It is nothing at all when THIS process dies --
- * and during one evening this process died repeatedly
- * without ever running its will-quit path
- * (the crash investigation findings). Two of one
- * assistant's MCP servers had aborted out of memory; the claude CLI
+ * and on 2026-09-03 this process died about eight times between 19:30 and 21:26
+ * local without ever running its will-quit path
+ * (REPORT-crash-20260903/00-CONTROLLER-FINDINGS.md sections 1 and 2). Two of one
+ * assistant's MCP servers had aborted out of memory at 21:11:56; the claude CLI
  * that owned them would have written that on its stderr, into this buffer, and
  * the buffer went with the app. There is no record anywhere on this machine of
  * what the CLI said about those deaths.
@@ -207,21 +208,12 @@ function redactCredentials(chunk, env) {
   return output;
 }
 
-/* THE ENVIRONMENT THE CHILD ACTUALLY GETS.
- *
- * `env === undefined` DOES NOT MEAN "the whole ambient environment". That
- * fallback is exactly the defect codex-process.js documents and the shell had
- * to work around at every call site: a caller who simply forgot to pass an
- * environment handed the child every credential on the machine. Here an omitted
- * env means the ambient one MINUS the credentials, never the raw one, so the
- * careless path is the safe path rather than the dangerous one.
- *
- * PATH SURVIVES, and must: it is how `claude` is found at all. The scrub is a
- * named credential list, not a filter. */
+/* Copy the native CLI environment without changing its authentication. */
 function launchEnvironment(env) {
   const source = env === undefined || env === null ? process.env : env;
   const copy = { ...source };
-  deleteEnvNames(copy, CREDENTIAL_ENV_NAMES);
+  // The native CLI owns authentication. Preserve the person's selected API,
+  // cloud and Claude.ai settings; ACP has its own separate credential fence.
   return copy;
 }
 
@@ -236,10 +228,7 @@ function launchEnvironment(env) {
  *     omitted directory returns the environment IDENTICALLY, so the default path
  *     is not "the same as before in effect" but the same object contents.
  *   - It does not open, read, copy or move anything. It assigns a name.
- *   - It does not scrub, re-add, or reorder any other variable. The credential
- *     scrub above has already run and is not repeated, weakened or bypassed --
- *     ANTHROPIC_API_KEY is gone before this is reached, which is what keeps the
- *     session on the subscription rather than on a metered key.
+ *   - It does not change the person's authentication method or endpoint.
  *   - It does not create the directory. A directory nobody has signed into is
  *     the official program's business to report, in its own words, to the person
  *     who owns the account. Making it here would manufacture a home that looks
@@ -304,6 +293,7 @@ function claudeCliVersion({ command = 'claude', timeoutMs = 5_000, env, configDi
          would start, not to whatever the ambient PATH happens to find. */
       const invocation = privateExecutable || resolveInvocation(command, { env: environment });
       child = spawnHidden(invocation.command, [...(privateExecutable?.prefixArgs || []), '--version'], {
+        nativeClaudeCode: true,
         env: privateExecutable ? { ...environment, ...privateExecutable.env } : environment,
         stdio: ['ignore', 'pipe', 'ignore']
       });
@@ -327,10 +317,10 @@ function claudeCliVersion({ command = 'claude', timeoutMs = 5_000, env, configDi
   return reading;
 }
 
-/* WHAT THIS CLAUDE SUPPORTS, ASKED FROM ITS OWN --help (release-candidate review).
+/* WHAT THIS CLAUDE SUPPORTS, ASKED FROM ITS OWN --help (rc-0922).
  *
- * Product rule: handle CLI version differences automatically instead
- * of pinning the product to one CLI version by hand. Nothing is
+ * The owner: "we should really be able to handle these automatically so we
+ * dont need to try to parent the codex version all the time". Nothing is
  * pinned to a Claude version: every option claude-cli-adapter.js passes is
  * listed in the provider toolchain (provider-toolchain.js, the `claude` row),
  * and this asks the program that is about to run whether it lists them.
@@ -344,9 +334,34 @@ function claudeCliVersion({ command = 'claude', timeoutMs = 5_000, env, configDi
  * asked once per copy and again after any update, including one made outside
  * the app. Same hidden-spawn seam and best-effort rules as claudeCliVersion(). */
 const FEATURE_PROBE_TIMEOUT_MS = 5_000;
-const FEATURE_PROBE_LIMIT = 65536;
+/* The measured listing is ~21.7 KB (2.1.281). The cap is well above it, and a
+   listing that overruns the cap is UNKNOWN (see claudeCliFeatures): the
+   earlier 64 KiB cap silently dropped every chunk past it, and a dropped tail
+   is exactly where --tools and --verbose sit. */
+const FEATURE_PROBE_LIMIT = 1024 * 1024;
 
+/* A LISTING IS EVIDENCE OF A MISSING OPTION ONLY WHEN IT IS WHOLE.
+ *
+ * MEASURED 2026-09-23 on claude 2.1.281: its `--help` read through a shell
+ * pipe (`| tee`, `| grep`) ended after exactly 16384 bytes, at line 230 of
+ * 306, and the program still exited 0. Every option after the cut -- --tools
+ * and --verbose among them -- was absent, so the start was refused with "does
+ * not support --verbose, --tools. Update the Claude CLI", and that verdict was
+ * then remembered for the program's (path, size, mtime) and refused every
+ * later start as well. Read directly by this process the same program gave
+ * all 21735 bytes in 45 of 45 runs; which readers truncate (other pipe types,
+ * Windows named pipes, a wrapper between us and the program) is not something
+ * this module gets to choose.
+ *
+ * So only a complete listing may say "missing": Claude's help (commander)
+ * prints its `Options:` table and then its `Commands:` table, so a listing that
+ * reached `Commands:` has printed every option -- the toolchain row declares
+ * that shape and toolchain.helpListingComplete() applies it. Anything else --
+ * cut off, unrecognised, not this program's help -- is unknown, and unknown
+ * keeps the existing policy: the session starts exactly as before. A genuinely
+ * old CLI prints a whole listing without the option, and is still refused. */
 function readableHelpResult(text) {
+  if (toolchain.helpListingComplete('claude', text) !== true) return null;
   const present = toolchain.featuresFromHelp('claude', text);
   if (!present) return null;
   const required = toolchain.rowFor('claude').features.list.filter(entry => entry.required);
@@ -374,6 +389,7 @@ function claudeCliFeatures({ command = 'claude', env, configDir = null, timeoutM
         if (held) { finish(held); return; }
       }
       child = spawnHidden(invocation.command, [...(privateExecutable?.prefixArgs || []), '--help'], {
+        nativeClaudeCode: true,
         env: { ...(privateExecutable ? { ...environment, ...privateExecutable.env } : environment), ...ownedSelfUpdateOff(target, env) },
         stdio: ['ignore', 'pipe', 'ignore']
       });
@@ -381,12 +397,24 @@ function claudeCliFeatures({ command = 'claude', env, configDir = null, timeoutM
     const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } finish(null); }, timeoutMs);
     if (timer.unref) timer.unref();
     let text = '';
+    let overflow = false;
     child.stdout.setEncoding('utf8');
-    child.stdout.on('data', chunk => { if (text.length < FEATURE_PROBE_LIMIT) text += chunk; });
+    /* Everything up to the cap, or nothing: a listing with its tail dropped
+       would read as a program missing whatever was in the tail. The stream is
+       still drained to its end, so the program is never blocked on a full
+       pipe while this waits for it to exit. */
+    child.stdout.on('data', chunk => {
+      if (overflow) return;
+      if (text.length + chunk.length > FEATURE_PROBE_LIMIT) { overflow = true; text = ''; return; }
+      text += chunk;
+    });
     child.on('error', () => { clearTimeout(timer); finish(null); });
+    /* 'close', not 'exit': it fires only after the program has exited AND its
+       output stream has ended, so every byte it wrote is in `text`. A non-zero
+       exit, a signal (the timeout's kill), or an overrun is unknown. */
     child.on('close', code => {
       clearTimeout(timer);
-      const result = code === 0 ? readableHelpResult(text) : null;
+      const result = code === 0 && !overflow ? readableHelpResult(text) : null;
       if (result && copy) toolchain.rememberProbe(copy, result);
       finish(result);
     });
@@ -457,7 +485,32 @@ function ownedSelfUpdateOff(target, env) {
  * It returns the invocation rather than just a path so the decision travels
  * with the command that needs it. `appData` is kept for callers and tests that
  * describe a Windows profile without an environment; an explicit `env` (the
- * child's own, scrubbed environment) wins over it. */
+ * child's own selected environment) wins over it. */
+/* AN npm SHIM WHOSE PROGRAM IS BESIDE IT IS NOT STARTED THROUGH cmd.exe
+ * (platform review 1.0.50 E4).
+ *
+ * Since the 2.1.2xx line the npm package's program is bin\claude.exe, and the
+ * claude.cmd npm writes only starts it. When the app names that shim (the
+ * first PATHEXT match), or the walk below finds it on PATH under an npm prefix
+ * other than %APPDATA%\npm (nvm-windows, scoop, a custom prefix), hidden-spawn
+ * had to run it through cmd.exe, which splits the path of a Windows account
+ * named R&D at the `&`. The program beside the shim is started
+ * instead, with no cmd.exe. Anything else -- no program beside it, an older
+ * layout, a folder that cannot be read -- keeps the shim, as before. */
+const CLAUDE_NPM_PROGRAM = Object.freeze(['node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
+
+function npmShimProgram(command, platform, statSync) {
+  if (platform !== 'win32' || typeof command !== 'string') return command;
+  const api = path.win32;
+  if (!api.isAbsolute(command) || !/^claude\.(?:cmd|bat)$/i.test(api.basename(command))) return command;
+  const program = api.join(api.dirname(command), ...CLAUDE_NPM_PROGRAM);
+  try {
+    return statSync(program).isFile() ? program : command;
+  } catch {
+    return command;
+  }
+}
+
 function resolveInvocation(command, {
   platform = process.platform,
   appData = process.env.APPDATA,
@@ -473,13 +526,13 @@ function resolveInvocation(command, {
     const bare = platform === 'win32'
       && path.basename(command) === command
       && path.extname(command) === '';
-    return { command: bare ? `${command}.cmd` : command };
+    return { command: bare ? `${command}.cmd` : npmShimProgram(command, platform, statSync) };
   }
   const environment = env && typeof env === 'object'
     ? env
     : { ...process.env, ...(appData === undefined ? {} : { APPDATA: appData }) };
   const located = claudeInstall.locateClaudeCli({ platform, env: environment, statSync });
-  if (located.path) return { command: located.path };
+  if (located.path) return { command: npmShimProgram(located.path, platform, statSync) };
   if (located.unreadable.length > 0) {
     const failure = new ClaudeCliError(
       'CLAUDE_CLI_RESOLUTION_FAILED',
@@ -554,6 +607,7 @@ function createClaudeCliTransport({
     // The CLI launches workspace tools of its own. A Windows PID-tree walk
     // cannot find one after the CLI exits, so establish kernel containment
     // before the CLI runs its first instruction.
+    nativeClaudeCode: true,
     containProcessTree: true,
     ...(rootLaunch ? { rootLaunch } : {})
   });

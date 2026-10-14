@@ -36,8 +36,8 @@
 // owner sent three Telegram messages, got three acks from the bridge, and
 // never got a reply, because nothing drained the inbox. So the load-bearing
 // assertions here are the ordering one (send strictly before acknowledge),
-// the failure one (a delivery failure leaves them visibly waiting), and the
-// verbatim one (their exact bytes survive the round trip to the screen).
+// the failure one (a delivery failure leaves him visibly waiting), and the
+// verbatim one (his exact bytes survive the round trip to the screen).
 
 require('./lib/isolated-environment').activate('owner-chat');
 const assert = require('node:assert/strict');
@@ -66,12 +66,12 @@ function fixedClock(startMs) {
   return clock;
 }
 
-// Three synthetic owner messages, plus the machine-generated
-// auto-resume directive that sits alongside them in the inbox.
+// The owner's three real messages, byte-for-byte, plus the machine-generated
+// auto-resume directive that sits alongside them in the live inbox.
 const OWNER_MESSAGES = Object.freeze([
-  'if more reviewers would clear the backlog faster, start them. reply to me here for now',
-  'please turn on replies in this chat so we can talk here',
-  'once replies are on, answer here'
+  'if you need more terra agents to speed up the reviews (it looks like a lot is stuck in review) you can do that. chat to me here for now',
+  'you should be able to respond to me here like a chat basically please enable',
+  'when you do enable this chat for yourself please respond'
 ]);
 
 function seedOwnerInbox(overrides, { count = 3 } = {}) {
@@ -157,11 +157,11 @@ async function run() {
     assert.throws(() => ownerChat.pending({ nope: 1 }, files), error => error.code === 'OWNER_CHAT_INVALID');
     assert.throws(() => ownerChat.pending({ includeMachine: 'yes' }, files), error => error.code === 'OWNER_CHAT_INVALID');
 
-    // The suggested next command must offer --reply for THEIR messages and --ack
+    // The suggested next command must offer --reply for HIS messages and --ack
     // for the machine-generated one. Suggesting --reply on a system-generated
-    // status record would Telegram them about their own scheduled task.
+    // status record would Telegram him about his own scheduled task.
     const rendered = ownerChatCli.renderPending(all);
-    assert.ok(rendered.includes(`--reply ${ids[0]} --text`), 'the reply suggestion must target their oldest message');
+    assert.ok(rendered.includes(`--reply ${ids[0]} --text`), 'the reply suggestion must target his oldest message');
     assert.ok(!rendered.includes(`--reply ${machine.id}`), 'a machine directive must never be offered as a reply target');
     assert.ok(rendered.includes(`--ack ${machine.id} --note`), 'a machine directive must be offered the send-nothing verb');
     for (const id of ids.slice(1)) {
@@ -260,7 +260,7 @@ async function run() {
     };
     await assert.rejects(
       () => ownerChat.reply(
-        { id: ids[0], text: 'this never reaches them' },
+        { id: ids[0], text: 'this never reaches him' },
         { sendToOwner: failingSend, acknowledge: () => { ackCalls += 1; } },
         files
       ),
@@ -332,9 +332,9 @@ async function run() {
 
     const view = ownerChat.pending({}, files);
     assert.equal(view.deliveredButUnacknowledged.length, 1,
-      'a reply that reached them but was not acknowledged must be named, not hidden');
+      'a reply that reached him but was not acknowledged must be named, not hidden');
     assert.equal(view.items[0].alreadyDelivered, true,
-      'the drain must warn that a reply already reached them, so they are not messaged twice');
+      'the drain must warn that a reply already reached him, so he is not messaged twice');
     assert.ok(ownerChatCli.renderPending(view).includes('DELIVERED BUT NOT ACKNOWLEDGED'));
   }
 
@@ -368,7 +368,7 @@ async function run() {
   }
 
   // -------------------------------------------------------------------------
-  // 7. One reply can answer several messages (their three, in one go)
+  // 7. One reply can answer several messages (his three, in one go)
   // -------------------------------------------------------------------------
   {
     const files = freshFiles();
@@ -541,8 +541,7 @@ async function run() {
     let sends = 0;
     await assert.rejects(
       () => ownerChat.reply(
-        // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-        { id: ids[0], text: 'here it is, api_key: sk-' + 'ABCDEFGHIJKLMNOPQRSTUVWX' },
+        { id: ids[0], text: 'here it is, api_key: \x73k-ABCDEFGHIJKLMNOPQRSTUVWX' },
         { sendToOwner: async () => { sends += 1; return { messageId: 'message-test-sensitive' }; } },
         files
       ),
@@ -563,7 +562,7 @@ async function run() {
     const clock = fixedClock(base + 1000);
     const [firstId, secondId] = seedInboxAt(files, [
       { text: OWNER_MESSAGES[1], atMs: base },
-      { text: 'how many reviewers are running now?', atMs: base + 2000 }
+      { text: 'great, how many terra agents are running?', atMs: base + 2000 }
     ]);
 
     await ownerChat.reply({ id: firstId, text: 'Enabled. Replying here now.' },
@@ -578,7 +577,7 @@ async function run() {
       'the merged transcript must read as an alternating conversation without conversation ids');
     assert.equal(thread.items[0].text, OWNER_MESSAGES[1]);
     assert.equal(thread.items[1].text, 'Enabled. Replying here now.');
-    assert.equal(thread.items[2].text, 'how many reviewers are running now?');
+    assert.equal(thread.items[2].text, 'great, how many terra agents are running?');
 
     clock.set(base + 3000);
     await ownerChat.reply({ id: secondId, text: 'Four.' },
@@ -601,7 +600,7 @@ async function run() {
     ]);
     const thread = ownerChat.transcript({}, files);
     assert.deepEqual(thread.items.map(item => item.direction), ['owner', 'system', 'system'],
-      'only words the owner actually typed may be labelled as theirs');
+      'only words the owner actually typed may be labelled as his');
     const rendered = ownerChatCli.renderTranscript(thread);
     assert.equal((rendered.match(/OWNER/g) || []).length, 1,
       'the rendered transcript must show exactly one OWNER line for one owner message');

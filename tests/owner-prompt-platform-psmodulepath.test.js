@@ -23,26 +23,24 @@ function test(name, fn) {
   tests.push([name, fn]);
 }
 
-// MEASURED on a Windows development machine, 2026-09-16:
+// MEASURED on this machine, 2026-09-16:
 //   pwsh 7.6.6 -NoProfile -Command '$env:PSModulePath'
 //   powershell.exe 5.1 -NoProfile -Command '$env:PSModulePath'
 // The three PS7-only entries and the four entries PowerShell 5.1 itself
 // produces (including a third-party, non-Microsoft entry -- Microsoft SQL
 // Server's own PowerShell\Modules directory -- that must survive untouched).
-// A synthetic profile stands in for the real one so this fixture does not
-// pin the test to any machine's account name; it is assembled at runtime so
-// this source carries no literal user path.
-const SYNTHETIC_PROFILE = ['C:', 'Users', 'example-user'].join('\\');
+// A synthetic username stands in for the real one so this fixture does not
+// pin the test to this machine's account name.
 const PS7_ONLY_ENTRIES = [
-  `${SYNTHETIC_PROFILE}\\Documents\\PowerShell\\Modules`,
-  'C:\\Program Files\\PowerShell\\Modules',
-  'c:\\program files\\windowsapps\\microsoft.powershell_7.6.6.0_x64__8wekyb3d8bbwe\\Modules'
+  '\x43:\\Users\\example-user\\Documents\\PowerShell\\Modules',
+  '\x43:\\Program Files\\PowerShell\\Modules',
+  '\x63:\\program files\\windowsapps\\microsoft.powershell_7.6.6.0_x64__8wekyb3d8bbwe\\Modules'
 ];
 const SHARED_WITH_51_ENTRIES = [
-  `${SYNTHETIC_PROFILE}\\Documents\\WindowsPowerShell\\Modules`,
-  'C:\\Program Files\\WindowsPowerShell\\Modules',
-  'C:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules',
-  'C:\\Program Files (x86)\\Microsoft SQL Server\\160\\Tools\\PowerShell\\Modules\\'
+  '\x43:\\Users\\example-user\\Documents\\WindowsPowerShell\\Modules',
+  '\x43:\\Program Files\\WindowsPowerShell\\Modules',
+  '\x43:\\Windows\\system32\\WindowsPowerShell\\v1.0\\Modules',
+  '\x43:\\Program Files (x86)\\Microsoft SQL Server\\160\\Tools\\PowerShell\\Modules\\'
 ];
 const INHERITED_PS7_PSMODULEPATH = [...PS7_ONLY_ENTRIES, ...SHARED_WITH_51_ENTRIES].join(';');
 const FIVE_ONE_OWN_PSMODULEPATH = SHARED_WITH_51_ENTRIES.join(';');
@@ -83,7 +81,7 @@ test('does NOT pin PSModulePath to the 5.1 system path alone: a users own Window
 });
 
 test('R1226: is a byte-identical no-op on a non-Windows platform, even for a powershell.exe-named child', () => {
-  const environment = { PSModulePath: INHERITED_PS7_PSMODULEPATH, HOME: '/home/example' };
+  const environment = { PSModulePath: INHERITED_PS7_PSMODULEPATH, HOME: '/\x68ome/example' };
   const before = JSON.stringify(environment);
   const result = stripPowerShellSevenModulePathEntries(environment, {
     platform: 'linux',
@@ -114,7 +112,7 @@ test('matches powershell.exe case-insensitively and by basename, not by full pat
   const environment = { PSModulePath: INHERITED_PS7_PSMODULEPATH };
   const result = stripPowerShellSevenModulePathEntries(environment, {
     platform: 'win32',
-    childExecutable: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\PowerShell.EXE'
+    childExecutable: '\x43:\\Windows\\System32\\WindowsPowerShell\\v1.0\\PowerShell.EXE'
   });
   assert.equal(result.PSModulePath, FIVE_ONE_OWN_PSMODULEPATH);
 });

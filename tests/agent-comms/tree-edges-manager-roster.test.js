@@ -1,6 +1,6 @@
 'use strict';
 
-// Tree edges, parts (b) and (c): a child's managerName equals its
+// Lane 1-3 (tree-edges), parts (b) and (c): a child's managerName equals its
 // parent's registered name, and a manager's roster lists every worker it
 // spawned as reports-to-sender -- including once a same-role sibling manager
 // has also registered.
@@ -11,7 +11,7 @@
 // and Manager 1's own roster listed zero of the five workers it created while
 // Manager 2's roster listed all three of its own. The cause was upstream of
 // this directory (a display name recomputed at read time in the app's
-// src/fleet-trees.js, fixed by an earlier commit -- see the sibling test
+// src/fleet-trees.js, fixed by commit bd80beb -- see the sibling test
 // tools/test/tree-edges-name-stability.test.mjs in the app worktree), but
 // this directory is the file that has to hold the edge once the names it is
 // given are right, and it is the layer agent_comms.local_roster actually

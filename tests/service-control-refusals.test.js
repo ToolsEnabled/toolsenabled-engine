@@ -155,7 +155,7 @@ async function main() {
   const snapshotScheduler = scheduler();
   const ports = [];
   const fresh = { ...unexpected, pid: 4243,
-    commandLine: 'node /fixture/agent-dashboard/server/index.js' };
+    commandLine: 'node /fixture/AgentActivityVisualizer/server/index.js' };
   const snapshotReport = await control.restartService('dashboard', {
     probe: port => {
       ports.push(port);

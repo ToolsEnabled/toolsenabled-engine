@@ -1,6 +1,6 @@
 'use strict';
 
-// The legacy delivery switch for the scheduled agent digest.
+// The legacy delivery switch for the scheduled agent digest and Duo notice.
 // Email is the only selectable transport. Historical config values name no
 // live provider and resolve to email with a named fallback reason; they are not
 // silently aliased onto another channel.
@@ -13,7 +13,7 @@
 //
 // Every attempt record is bounded and atomic. It stores purpose, channel,
 // outcome, an error code, and content sizes, never message text. That matters
-// for any message whose body can contain a short-lived secret.
+// for the Duo path, whose body can contain a short-lived second factor.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -33,7 +33,7 @@ const RECORD_VERSION = 1;
 const RECENT_LIMIT = 20;
 
 // 'discord-text' was a fifth channel until 2026-08-22. Discord left the product
-// entirely (product decision). A config that still names it is not special-
+// entirely (owner ruling, O4). A config that still names it is not special-
 // cased: normalizeChannel() returns null for it exactly as for any unknown
 // value, and resolveChannel() falls back to the default with its existing
 // typed reason -- the owner sees why, nothing is silently rewritten.
@@ -267,8 +267,8 @@ function writeDeliveryRecord(record, file = RECORD_FILE()) {
 
 /**
  * Persist one delivery attempt. NOTHING from the message body is stored --
- * only its length -- because a message body can carry a short-lived
- * secret.
+ * only its length -- because the Duo relay's body can carry a short-lived
+ * second factor.
  *
  * Recording must never be the thing that breaks a delivery, so a write failure
  * degrades to a returned flag rather than throwing over a message that was in
@@ -320,8 +320,8 @@ function recordDelivery(attempt, dependencies = {}) {
     // This catch said "reported below". Nothing below reported it. The audit
     // trace beneath fires only when the DELIVERY failed and carries the
     // delivery's own code, and `persisted` is returned to callers that all
-    // discard it -- agent-digest/index.js calls recordDelivery() twice as a
-    // bare statement. So a write
+    // discard it -- agent-digest/index.js (twice) and duo-owner-relay.js
+    // (three times) all call recordDelivery() as a bare statement. So a write
     // failure here left no trace anywhere, in this process or on disk.
     //
     // WHAT THAT COSTS is the thing this file is written to protect.

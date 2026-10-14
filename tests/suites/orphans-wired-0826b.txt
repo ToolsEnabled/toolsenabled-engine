@@ -24,6 +24,7 @@ tests/audit-lock-scope.test.js
 tests/audit-anchor-fork-heals.test.js
 tests/auth.duo/duo-desktop.js
 tests/auth.duo/run.js
+tests/auth.duo/institution-sso.js
 tests/auth.google/run.js
 tests/bridge-status.js
 tests/cloud-mirror.test.js

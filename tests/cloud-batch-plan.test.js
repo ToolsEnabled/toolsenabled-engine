@@ -154,7 +154,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
   });
 
   const plan = planner.planBatch({
-    corpusDir: mixed, project: 'engine', batchId: 'wave-1', launchesPerMinute: 60, accounts: 2
+    corpusDir: mixed, project: 'engine', batchId: 'wave-1', launchesPerMinute: 60
   });
 
   check(plan.summary.read === 6,
@@ -204,7 +204,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
   // -------------------------------------------------------------------
   {
     const again = planner.planBatch({
-      corpusDir: mixed, project: 'engine', batchId: 'wave-1', launchesPerMinute: 60, accounts: 2
+      corpusDir: mixed, project: 'engine', batchId: 'wave-1', launchesPerMinute: 60
     });
     check(again.summary.admissionSha256 === plan.summary.admissionSha256,
       'determinism: planning the same corpus twice produces the same seal, so a journal header still identifies the declaration it ran from');
@@ -219,7 +219,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const outFile = path.join(TEMP, 'declaration-a.json');
     const exit = await planner.main([
       '--corpus', mixed, '--project', 'engine', '--batch-id', 'wave-1',
-      '--launches-per-minute', '60', '--accounts', '2', '--out', outFile
+      '--launches-per-minute', '60', '--out', outFile
     ], { log: () => {}, logError: () => {} });
     check(exit === 0, `cli: a corpus that plans exits 0 (got ${exit})`);
 
@@ -244,7 +244,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
   {
     const commit = 'a'.repeat(40);
     const drifted = planner.planBatch({
-      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1, againstCommit: commit
+      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, againstCommit: commit
     });
     check(drifted.declaration.against && drifted.declaration.against.publishedCommit === commit,
       'source: a declared published commit reaches the declaration, where admission\'s drift gate can key on it');
@@ -268,7 +268,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     // rule -- this planner does not keep a second copy of it.
     await raises('CLOUD_BATCH_MALFORMED',
       () => planner.planBatch({
-        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1, againstCommit: 'abc1234'
+        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, againstCommit: 'abc1234'
       }),
       'source: an abbreviated commit is refused by parseBatchTarget before anything is written, rather than by a rule restated here');
   }
@@ -283,7 +283,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       'engine__other.contract': brief({ target: 'src/lib/elsewhere.js' })
     });
     const error = await raises('CLOUD_BATCH_PLAN_TARGET_COLLISION',
-      () => planner.planBatch({ corpusDir: clashing, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 }),
+      () => planner.planBatch({ corpusDir: clashing, project: 'engine', batchId: 'w', launchesPerMinute: 10 }),
       'collision: two briefs on one target refuse the whole plan rather than the planner picking one');
     check(error.message.includes('engine__first.contract') && error.message.includes('engine__second.contract'),
       `collision: BOTH files are named, which is the value of refusing here -- admission can only say "tasks 0 and 1" (${refusalOf(error)})`);
@@ -295,7 +295,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       'engine__two.contract': brief({ target: 'src\\lib\\shared.js' })
     });
     const spellingError = await raises('CLOUD_BATCH_PLAN_TARGET_COLLISION',
-      () => planner.planBatch({ corpusDir: spelled, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 }),
+      () => planner.planBatch({ corpusDir: spelled, project: 'engine', batchId: 'w', launchesPerMinute: 10 }),
       'collision: one file spelled with a different case and separator is still one file');
     check(spellingError.message.includes('engine__one.contract') && spellingError.message.includes('engine__two.contract'),
       'collision: the spelling variant names both files too');
@@ -304,7 +304,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const outFile = path.join(TEMP, 'declaration-collision.json');
     const exit = await planner.main([
       '--corpus', clashing, '--project', 'engine', '--batch-id', 'w',
-      '--launches-per-minute', '10', '--accounts', '1', '--out', outFile
+      '--launches-per-minute', '10', '--out', outFile
     ], { log: () => {}, logError: () => {} });
     check(exit === 1, `cli: a refused plan exits nonzero (got ${exit})`);
     check(fs.existsSync(outFile) === false,
@@ -319,7 +319,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const outputErrors = [];
     const outputExit = await planner.main([
       '--corpus', mixed, '--project', 'engine', '--batch-id', 'w',
-      '--launches-per-minute', '10', '--accounts', '1', '--out', outUnreadable
+      '--launches-per-minute', '10', '--out', outUnreadable
     ], {
       fsImpl: fsWith({ lstatSync: () => { const error = new Error('lookup denied'); error.code = 'EACCES'; throw error; } }),
       log: () => {},
@@ -331,12 +331,12 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       'output: an unverified destination is not written');
 
     const absent = await raises('CLOUD_BATCH_PLAN_CORPUS_ABSENT',
-      () => planner.planBatch({ corpusDir: path.join(TEMP, 'no-such-corpus'), project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 }),
+      () => planner.planBatch({ corpusDir: path.join(TEMP, 'no-such-corpus'), project: 'engine', batchId: 'w', launchesPerMinute: 10 }),
       'corpus: a path that does not exist says so');
 
     const unreadable = await raises('CLOUD_BATCH_PLAN_CORPUS_UNREADABLE',
       () => planner.planBatch({
-        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1,
+        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10,
         fsImpl: fsWith({ readdirSync: () => { const e = new Error('EACCES: permission denied'); e.code = 'EACCES'; throw e; } })
       }),
       'corpus: a directory that could not be read is a DIFFERENT answer from one that is not there');
@@ -346,7 +346,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     await raises('CLOUD_BATCH_PLAN_CORPUS_EMPTY',
       () => planner.planBatch({
         corpusDir: corpus('no-briefs', { 'README.md': '# nothing here\n' }),
-        project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1
+        project: 'engine', batchId: 'w', launchesPerMinute: 10
       }),
       'corpus: a directory with no briefs in it refuses rather than writing a declaration with no work in it');
   }
@@ -359,7 +359,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const locked = path.join(mixed, 'engine__beta.contract');
     const error = await raises('CLOUD_BATCH_PLAN_BRIEF_UNREADABLE',
       () => planner.planBatch({
-        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1,
+        corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10,
         fsImpl: fsWith({
           readFileSync: (file, ...rest) => {
             if (String(file) === locked) { const e = new Error('EBUSY: resource busy'); e.code = 'EBUSY'; throw e; }
@@ -377,7 +377,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     // excluded before anything tries to read it.
     const strayFile = path.join(mixed, 'stray.contract');
     const stillPlans = planner.planBatch({
-      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1,
+      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: 10,
       fsImpl: fsWith({
         readFileSync: (file, ...rest) => {
           if (String(file) === strayFile) { const e = new Error('EBUSY: resource busy'); e.code = 'EBUSY'; throw e; }
@@ -398,7 +398,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       'website__two.contract': brief({ target: 'src/two.js' })
     });
     const error = await raises('CLOUD_BATCH_PLAN_EMPTY',
-      () => planner.planBatch({ corpusDir: others, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 }),
+      () => planner.planBatch({ corpusDir: others, project: 'engine', batchId: 'w', launchesPerMinute: 10 }),
       'empty selection: a corpus holding nothing for this project refuses instead of writing an empty declaration');
     check(error.message.includes('app') && error.message.includes('website'),
       `empty selection: the repo prefixes actually present are named, so "wrong --project" is one read away (${refusalOf(error)})`);
@@ -409,15 +409,14 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
   // retyped here.
   // -------------------------------------------------------------------
   {
-    const accounts = 2;
-    const ceiling = batchTarget.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT * accounts;
+    const ceiling = batchTarget.MAX_LAUNCHES_PER_MINUTE;
     const atCeiling = planner.planBatch({
-      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: ceiling, accounts
+      corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: ceiling
     });
     check(atCeiling.summary.bounds.launchesPerMinute === ceiling,
       'bounds: exactly the measured ceiling is planned, not clamped down to something the operator did not ask for');
     await raises('CLOUD_BATCH_PLAN_BOUNDS',
-      () => planner.planBatch({ corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: ceiling + 1, accounts }),
+      () => planner.planBatch({ corpusDir: mixed, project: 'engine', batchId: 'w', launchesPerMinute: ceiling + 1 }),
       'bounds: one launch a minute over the ceiling is refused at planning time rather than writing a file admission would refuse');
   }
 
@@ -428,8 +427,8 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const body = brief({ target: 'src/crlf.js' });
     const withBom = corpus('line-endings', { 'engine__crlf.contract': `﻿${body.replace(/\n/g, '\r\n')}` });
     const lf = corpus('line-endings-lf', { 'engine__crlf.contract': body });
-    const bomPlan = planner.planBatch({ corpusDir: withBom, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 });
-    const lfPlan = planner.planBatch({ corpusDir: lf, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 });
+    const bomPlan = planner.planBatch({ corpusDir: withBom, project: 'engine', batchId: 'w', launchesPerMinute: 10 });
+    const lfPlan = planner.planBatch({ corpusDir: lf, project: 'engine', batchId: 'w', launchesPerMinute: 10 });
     check(bomPlan.summary.planned === 1,
       'normalization: a BOM and CRLF line endings do not make a valid brief unreadable');
     check(bomPlan.summary.admissionSha256 === lfPlan.summary.admissionSha256,
@@ -457,7 +456,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       'engine__huge.contract': oversized,
       'engine__fits.contract': brief({ target: 'src/fits.js' })
     });
-    const plan = planner.planBatch({ corpusDir: bigCorpus, project: 'engine', batchId: 'w', launchesPerMinute: 10, accounts: 1 });
+    const plan = planner.planBatch({ corpusDir: bigCorpus, project: 'engine', batchId: 'w', launchesPerMinute: 10 });
     check(plan.summary.planned === 1 && plan.declaration.tasks[0].target === 'src/fits.js',
       'ceiling: the brief that fits is still planned');
     const dropped = plan.summary.excluded.find((entry) => entry.code === planner.EXCLUSION.PROMPT_TOO_LONG);
@@ -511,7 +510,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
       const out = path.join(TEMP, 'drift-subproject.json');
       const run = spawnSync(process.execPath, [
         CLI, '--corpus', driftCorpus, '--project', 'engine', '--batch-id', 'drift-sub',
-        '--launches-per-minute', '10', '--accounts', '1',
+        '--launches-per-minute', '10',
         '--against-commit', base, '--drift-check', project, '--out', out
       ], { encoding: 'utf8' });
 
@@ -532,7 +531,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
     const outFile = path.join(TEMP, 'declaration-cli.json');
     const first = spawnSync(process.execPath, [
       CLI, '--corpus', mixed, '--project', 'engine', '--batch-id', 'wave-2',
-      '--launches-per-minute', '60', '--accounts', '2', '--out', outFile
+      '--launches-per-minute', '60', '--out', outFile
     ], { encoding: 'utf8' });
     check(first.status === 0, `cli: the documented command line runs (exit ${first.status}) ${first.stderr}`);
     check(first.stdout.includes('engine__broken.contract'),
@@ -545,7 +544,7 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
 
     const second = spawnSync(process.execPath, [
       CLI, '--corpus', mixed, '--project', 'engine', '--batch-id', 'wave-2',
-      '--launches-per-minute', '60', '--accounts', '2', '--out', outFile
+      '--launches-per-minute', '60', '--out', outFile
     ], { encoding: 'utf8' });
     check(second.status === 1,
       `cli: an --out that already exists refuses rather than overwriting a declaration a journal may point at (exit ${second.status})`);
@@ -554,15 +553,15 @@ function refusalOf(error) { return `${error && error.code}: ${error && error.mes
 
     const missing = spawnSync(process.execPath, [
       CLI, '--corpus', mixed, '--project', 'engine', '--batch-id', 'wave-3',
-      '--launches-per-minute', '60', '--out', path.join(TEMP, 'never.json')
+      '--out', path.join(TEMP, 'never.json')
     ], { encoding: 'utf8' });
     check(missing.status === 2, `cli: a missing required flag is a usage error, distinct from a refused plan (exit ${missing.status})`);
-    check(missing.stderr.includes('accounts'), 'cli: the usage error names the flag that was missing');
+    check(missing.stderr.includes('launches-per-minute'), 'cli: the usage error names the flag that was missing');
     check(fs.existsSync(path.join(TEMP, 'never.json')) === false, 'cli: a usage error writes nothing');
 
     const badNumber = spawnSync(process.execPath, [
       CLI, '--corpus', mixed, '--project', 'engine', '--batch-id', 'wave-4',
-      '--launches-per-minute', '60abc', '--accounts', '2', '--out', path.join(TEMP, 'never-2.json')
+      '--launches-per-minute', '60abc', '--out', path.join(TEMP, 'never-2.json')
     ], { encoding: 'utf8' });
     check(badNumber.status === 2,
       `cli: a bound that is not an integer refuses instead of being rounded into one nobody typed (exit ${badNumber.status})`);

@@ -2,7 +2,7 @@
 /* When a decrypted vault value may be served without asking the vault again.
  *
  * The saving is large and boring: every read spawns a powershell.exe, measured
- * on a development machine at roughly 600 ms, of which about 350 ms is interpreter
+ * on the owner's machine at roughly 600 ms, of which about 350 ms is interpreter
  * start and script parsing before any decryption happens. One cloud tool call
  * pays several of those back to back for an answer that cannot have changed in
  * between, which is why cloud.account_list had a median of 3.6 seconds.

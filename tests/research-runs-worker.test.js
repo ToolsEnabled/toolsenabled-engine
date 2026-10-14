@@ -201,8 +201,8 @@ test('a failing declared command fails the run with its exit detail', async () =
 });
 
 test('credential-shaped generated run IDs retain their durable links without failing ordinary checkpoints', async t => {
-  // Same shape as an ID from a native Electron validation failure, not a credential.
-  const runId = 'rr-eaab0123456789abcdef0123456789abcdef';
+  // Exact ID from a native Electron validation failure, not a credential.
+  const runId = 'rr-eaab22346864e533f600cf03edd980127118';
   for (const exitCode of [0, 3]) await t.test(`real command exits ${exitCode}`, async () => {
     const { dir, state, control, project } = build();
     try {

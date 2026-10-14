@@ -43,7 +43,7 @@ async function run() {
   const context = { permissionSession: { origin: 'local', tier: 'full' } };
   const added = await executeTool('cloud.account_add', { name: 'cloud-alpha' }, context);
   assert.deepEqual(added, {
-    account: 'cloud-alpha', provider: 'codex', priority: 1,
+    account: 'cloud-alpha', provider: 'codex',
     registered: true, signInRequired: true
   });
   assert.equal(Object.prototype.hasOwnProperty.call(added, 'home'), false, 'a tool receipt must not expose the profile path');

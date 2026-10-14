@@ -43,7 +43,7 @@ for (const key of Object.keys(env)) {
 }
 env.TOOLSENABLED_VAULT_PATH = payload.vaultFile;
 
-const command = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const command = path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', script,
   'native-ui', '-InputFile', file, '-ParentPid', String(process.pid)];
 

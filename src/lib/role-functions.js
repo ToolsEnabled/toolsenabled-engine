@@ -16,6 +16,13 @@ const SLOT_CONFIGURATION_FUNCTIONS = Object.freeze(['agent.set_model', 'agent.se
 // Builder lists include it.
 const TASK_HANDOUT_FUNCTIONS = Object.freeze(['t_ledger.assign']);
 const EXPLICIT_GRANT_SET = new Set([...SLOT_CONFIGURATION_FUNCTIONS, ...TASK_HANDOUT_FUNCTIONS]);
+// ONLY THE PERSON MOVES AN AGENT TO ANOTHER ACCOUNT (1.0.50 review, accounts A).
+// Automatic account switching is gone: an agent runs only on the account the
+// person chose for it. The shipped Controller, Manager and Builder therefore no
+// longer carry the account and provider slot controls (a provider change lands
+// the agent on another account too). The application refuses either request
+// from any agent, so a role that still selects one explicitly is refused there.
+const PERSON_ONLY_SLOT_FUNCTIONS = Object.freeze(['agent.set_account', 'agent.set_provider']);
 function invalid(message) {
   throw Object.assign(new Error(message), { code: 'ROLE_FUNCTIONS_INVALID' });
 }
@@ -38,13 +45,16 @@ function normalizeFunctions(value) {
   // missing identifier as a wildcard or make the whole saved role unreadable.
   return Object.freeze([...value].sort());
 }
-function defaultFunctionPolicy(roleId, { includeSlotConfiguration = true } = {}) {
+function defaultFunctionPolicy(roleId, { includeSlotConfiguration = true, includeTaskHandout = includeSlotConfiguration } = {}) {
   return Object.freeze({
     functions: roleId === 'coordinator-assistant'
       ? normalizeFunctions(functionCatalog().filter(entry => /-read$/.test(entry.effect)
         || ['app.navigate', 'accessibility.propose', 'agent.resume', 'agent_comms.send_local'].includes(entry.id)).map(entry => entry.id))
-      : includeSlotConfiguration && ['controller', 'manager', 'builder'].includes(roleId)
-        ? normalizeFunctions(functionCatalog().filter(entry => entry.id !== 'agent.set_role').map(entry => entry.id))
+      : (includeSlotConfiguration || includeTaskHandout) && ['controller', 'manager', 'builder'].includes(roleId)
+        ? normalizeFunctions(functionCatalog().filter(entry => entry.id !== 'agent.set_role'
+          && !PERSON_ONLY_SLOT_FUNCTIONS.includes(entry.id)
+          && (includeSlotConfiguration || !SLOT_CONFIGURATION_FUNCTIONS.includes(entry.id))
+          && (includeTaskHandout || !TASK_HANDOUT_FUNCTIONS.includes(entry.id))).map(entry => entry.id))
         : null,
     requiresDirectUserAuthorization: roleId === 'coordinator-assistant',
   });

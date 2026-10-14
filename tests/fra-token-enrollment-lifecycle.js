@@ -41,8 +41,8 @@ const {
 const LAB_REGISTRY = Object.freeze({
   schemaVersion: 1,
   machines: Object.freeze({
-    'machine-a': Object.freeze({ address: '203.0.113.1', root: 'C:\\fixture-a', role: 'development-host' }),
-    'machine-b': Object.freeze({ address: '203.0.113.2', root: 'C:\\fixture-b', role: 'disconnected-peer' })
+    'machine-a': Object.freeze({ address: '203.0.113.1', root: '\x43:\\fixture-a', role: 'development-host' }),
+    'machine-b': Object.freeze({ address: '203.0.113.2', root: '\x43:\\fixture-b', role: 'disconnected-peer' })
   }),
   services: Object.freeze({
     'full-remote-access': Object.freeze({ resolution: 'peer', port: 8790 })

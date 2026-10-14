@@ -122,7 +122,11 @@ try {
         const resolved = executableFor(provider, {
           platform,
           environment: { APPDATA: empty, npm_config_prefix: empty, PATH: '', HOME: path.join(root, 'nobody') },
-          loginHome: path.join(root, 'nobody')
+          loginHome: path.join(root, 'nobody'),
+          // npm's default prefix is derived from the running node. Pin it inside
+          // the empty prefix: the host's own node installation may really hold
+          // a global CLI, and "nothing installed" must mean nothing here.
+          execPath: path.join(empty, 'bin', 'node')
         });
         assert.deepEqual(resolved, { command: provider, prefixArgs: [] },
           `${provider}/${platform} with nothing installed must fail closed on the bare command`);

@@ -80,8 +80,8 @@ const MACHINE_B = '203.0.113.1';
 const LAB_REGISTRY = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: MACHINE_A, root: 'C:\\lab\\machine-a', role: 'development-host' },
-    'machine-b': { address: MACHINE_B, root: 'C:\\lab\\machine-b', role: 'disconnected-peer' }
+    'machine-a': { address: MACHINE_A, root: '\x43:\\lab\\machine-a', role: 'development-host' },
+    'machine-b': { address: MACHINE_B, root: '\x43:\\lab\\machine-b', role: 'disconnected-peer' }
   },
   services: {}
 };

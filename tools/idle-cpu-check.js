@@ -11,12 +11,12 @@
 // from every other minute of every session. If this process burns CPU while
 // nothing is asking it to, that cost is charged to every install, all day,
 // whether or not the product is in active use -- exactly the shape of the
-// bug fixed in an earlier commit (a DPAPI vault read shelled out to a fresh
+// bug fixed in commit 48598d3 (a DPAPI vault read shelled out to a fresh
 // powershell.exe every 2s on three listeners, ~43,200 spawns/day each).
 //
 // THE CEILING: 1% of one logical CPU core, sustained over a >=30s idle
 // window, per idle product process.
-//   - Directly measured (this repo, 2026-08-10): every one
+//   - Directly measured (this repo, 2026-08-10, 16 logical cores): every one
 //     of 12 sampled live mcp-server.js/mcp-owner-proxy.js/owner-host.js/
 //     mission-bridge.js instances that had no in-flight request showed
 //     EXACTLY 0.000% CPU delta over a real 35s window (see the Q116.5 report
@@ -25,7 +25,7 @@
 //     GC/event-loop bookkeeping noise and a slower reference machine.
 //   - The bug this whole effort exists to catch was NOT subtle at this scale:
 //     one powershell.exe spawn every 2s cost roughly 5-7% of one core,
-//     continuously (an earlier commit: "8+ CPU-hours" over ~6 days on one
+//     continuously (commit 8811d24: "8+ CPU-hours" over ~6 days on one
 //     listener). A 1% ceiling catches that class of regression with margin
 //     to spare long before it reaches the severity that made the owner's
 //     machine unusable, rather than waiting until it is that bad again.

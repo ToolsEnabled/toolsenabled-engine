@@ -32,14 +32,14 @@ test('the shared launcher supplies the shipped script first and enables Node mod
     Object.defineProperty(process.versions, 'electron', { value: '43.0.0', configurable: true });
     for (const platform of ['linux', 'win32']) {
       const spec = native.launchSpec('/fixture/owner-prompt-runner.js', '/fixture/queue.json', {
-        platform, node: '/fixture/runtime', environment: { SystemRoot: 'D:\\Windows', NODE_OPTIONS: '--inspect', PYTHONPATH: '/bad' }
+        platform, node: '/fixture/runtime', environment: { SystemRoot: '\x44:\\Windows', NODE_OPTIONS: '--inspect', PYTHONPATH: '/bad' }
       });
       assert.equal(spec.options.env.ELECTRON_RUN_AS_NODE, '1');
       assert.equal(spec.options.env.NODE_OPTIONS, undefined);
       assert.equal(spec.options.env.PYTHONPATH, undefined);
       assert.deepEqual(platform === 'win32' ? spec.args.slice(2) : spec.args,
         ['/fixture/owner-prompt-runner.js', '--queue', '/fixture/queue.json']);
-      if (platform === 'win32') assert.equal(spec.command, 'D:\\Windows\\System32\\conhost.exe');
+      if (platform === 'win32') assert.equal(spec.command, '\x44:\\Windows\\System32\\conhost.exe');
     }
   } finally {
     if (descriptor) Object.defineProperty(process.versions, 'electron', descriptor); else delete process.versions.electron;

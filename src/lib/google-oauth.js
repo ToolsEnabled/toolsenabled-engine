@@ -4,11 +4,11 @@
 // IT MUST NOT BE REUSED AS ONE.
 //
 // What this file is for: letting the OWNER's own agents call Google APIs AS
-// THEM. It is a CONFIDENTIAL-CLIENT refresh-token flow -- it reads
+// HIM. It is a CONFIDENTIAL-CLIENT refresh-token flow -- it reads
 // `google_client_secret` from the vault on this machine and exchanges a
 // long-lived refresh token for access tokens with Drive/Gmail/Calendar scopes.
-// That is correct here: this runs on their computer, the secret is theirs, and the
-// vault is DPAPI-sealed to their Windows login.
+// That is correct here: this runs on his computer, the secret is his, and the
+// vault is DPAPI-sealed to his Windows login.
 //
 // Every one of those properties is FALSE in the shipped desktop product:
 //
@@ -82,7 +82,7 @@ async function accessToken({ accessKey, refreshKey, clientIdKey, clientSecretKey
   // The client id/secret ARE owner-suppliable, so they keep the prompt. But ask
   // only once a refresh is actually possible: without a refresh token those two
   // values cannot mint anything, and prompting for them would ask the owner for
-  // something that cannot fix the failure they are looking at.
+  // something that cannot fix the failure he is looking at.
   const clientId = refreshToken ? optionalSecret(clientIdKey) : '';
   const clientSecret = refreshToken ? optionalSecret(clientSecretKey) : '';
   if (!refreshToken || !clientId || !clientSecret) {

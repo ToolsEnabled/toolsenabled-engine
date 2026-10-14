@@ -123,7 +123,7 @@ try {
     { label: 'plain text with bcc', to: 'a@example.com', subject: 'S', text: 'B', bcc: 'd@example.com' },
     { label: 'plain text with cc+bcc', to: 'a@example.com', subject: 'S', text: 'B', cc: 'c@example.com', bcc: 'd@example.com' },
     { label: 'plain text, unicode body', to: 'a@example.com', subject: 'S', text: 'héllo — wörld 🚀\r\nline two' },
-    { label: 'plain text, multiline', to: 'a@e.com, b@e.com', subject: 'S', text: 'one\r\ntwo\r\nthree' }
+    { label: 'plain text, multiline', to: 'person-769091ce@example.com, person-c3c9f7a2@example.com', subject: 'S', text: 'one\r\ntwo\r\nthree' }
   ];
 
   for (const entry of matrix) {
@@ -174,7 +174,7 @@ try {
   // 2. An attachment produces a valid, correctly-encoded multipart/mixed.
   // =========================================================================
   const pdfBytes = Buffer.concat([Buffer.from('%PDF-1.7\n'), crypto.randomBytes(4096), Buffer.from('\n%%EOF\n')]);
-  const pdfPath = path.join(tempDir, 'QUARTERLY-AUDIT.pdf');
+  const pdfPath = path.join(tempDir, 'LEAN-BENCH-AUDIT.pdf');
   fs.writeFileSync(pdfPath, pdfBytes);
 
   const mixedRaw = google.buildMimeEmail({
@@ -197,9 +197,9 @@ try {
   ok('body part preserves the text/plain body exactly (first-line print settings intact)');
 
   const attachPart = splitPartHeaders(parts[1]);
-  assert.match(attachPart.headers, /^Content-Type: application\/pdf; name="QUARTERLY-AUDIT\.pdf"$/m);
+  assert.match(attachPart.headers, /^Content-Type: application\/pdf; name="LEAN-BENCH-AUDIT\.pdf"$/m);
   assert.match(attachPart.headers, /^Content-Transfer-Encoding: base64$/m);
-  assert.match(attachPart.headers, /^Content-Disposition: attachment; filename="QUARTERLY-AUDIT\.pdf"$/m);
+  assert.match(attachPart.headers, /^Content-Disposition: attachment; filename="LEAN-BENCH-AUDIT\.pdf"$/m);
   ok('attachment part carries Content-Type from the extension, base64 CTE, and a filename disposition');
 
   const decodedAttachment = Buffer.from(attachPart.body.replace(/\r\n/g, ''), 'base64');
@@ -306,7 +306,7 @@ try {
   // Over many draws the boundary is always fresh and never repeats.
   const drawn = new Set();
   for (let i = 0; i < 200; i += 1) {
-    const sample = decode(google.buildMimeEmail({ to: 'a@e.com', subject: 'S', text: 'x', html: '<p>x</p>' }));
+    const sample = decode(google.buildMimeEmail({ to: 'person-769091ce@example.com', subject: 'S', text: 'x', html: '<p>x</p>' }));
     drawn.add(/boundary="(=_toolsenabled_[a-f0-9]{24})"/.exec(sample)[1]);
   }
   assert.equal(drawn.size, 200, 'boundaries repeated across draws');

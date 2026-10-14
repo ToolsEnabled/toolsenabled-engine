@@ -105,6 +105,21 @@ assert.match(standingOrdersHook.checkConsoleVisibility('New-ScheduledTaskPrincip
 assert.equal(standingOrdersHook.checkConsoleVisibility('Start-Process powershell.exe -Verb RunAs # VISIBLE-SHELL-ALLOWLIST: required for owner UAC consent'), null,
   'a narrowly marked owner-facing visible-shell exception remains possible');
 
+const serverControlPanelSource = read('packages/servercontrol/Server-Control-Panel.ps1');
+assert.match(serverControlPanelSource, /function Start-HiddenPowerShellProcess/,
+  'Server Control must centralize background PowerShell launches behind the native hidden boundary');
+assert.match(serverControlPanelSource, /Start-HiddenPowerShellProcess[\s\S]{0,900}CreateNoWindow\s*=\s*\$true/,
+  'Server Control background PowerShell launches must opt out of console allocation');
+assert.match(serverControlPanelSource, /Start-HiddenPowerShellProcess[\s\S]{0,950}WindowStyle\s*=\s*\[System\.Diagnostics\.ProcessWindowStyle\]::Hidden/,
+  'Server Control background PowerShell launches must request a hidden window style');
+assert.doesNotMatch(serverControlPanelSource.replace(/^\s*#.*$/gm, ''), /Start-Process\s+(?:-FilePath\s+)?(?:powershell|pwsh|cmd)(?:\.exe)?/i,
+  'Server Control must not retain the flashing Start-Process PowerShell/cmd hop');
+const quietPanelLauncher = read('packages/servercontrol/Launch Control Panel.vbs');
+assert.match(quietPanelLauncher, /shellObject\.Run command, 0, False/,
+  'the primary Explorer panel launcher must use WScript hidden-window mode');
+assert.match(read('packages/servercontrol/Launch Control Panel.cmd'), /wscript\.exe/i,
+  'the legacy cmd launcher must forward to the quiet WScript entry point');
+
 assertDirectNode(gemini.command, 'Gemini ToolsEnabled MCP');
 assert.deepEqual(gemini.args, ['tools\\mcp-owner-proxy.js']);
 assert.equal(gemini.env.TOOLSENABLED_AGENT_ACTOR, 'gemini');
@@ -112,10 +127,12 @@ assertDirectNode(project.command, 'Playwright MCP');
 assert.deepEqual(project.args, ['src/playwright-gateway.js', '@playwright/mcp@0.0.78']);
 // REMOVED: assertions about SHELVED projects in sibling repositories.
 //
-// 1. The whole sibling-project `.mcp.json` block. It pinned that project's
-//    playwright server to one fixed checkout path, so THIS SUITE WAS RED because
-//    of the contents of a different project's config file — one nothing here
-//    owns, writes, or can fix. That project is out of scope for ToolsEnabled.
+// 1. The whole `../<sibling-product>/.mcp.json` block. It pinned that project's
+//    playwright server to 'C:\ToolsEnabled\src\playwright-gateway.js'. Measured
+//    2026-08-09: it actually reads '<profile-root>/owner\Desktop\ToolsEnabled\src\
+//    playwright-gateway.js', so THIS SUITE WAS RED because of the contents of a different
+//    project's config file — one nothing here owns, writes, or can fix. That sibling
+//    project is out of scope for ToolsEnabled.
 // 2. The four sidecar-specific assertions inside the ServerControl block below. That sidecar is
 //    shelved, so how a sibling tool launches it is not this repository's contract.
 //
@@ -188,7 +205,7 @@ assert.match(read('src/lib/providers/web.js'), /execFile\(pythonEnv,[\s\S]{0,260
     vaultKey: 'custom.terminal-suppression-check', label: 'Terminal suppression check', kind: 'credential',
     requester: 'toolsenabled', requestContext: { purpose: 'test', scope: 'test', lifetime: 'test' }
   };
-  createUI({ platform: 'win32', environment: { SystemRoot: 'C:\\Windows' }, execute: fakeExecute }).begin(1, item);
+  createUI({ platform: 'win32', environment: { SystemRoot: '\x43:\\Windows' }, execute: fakeExecute }).begin(1, item);
   assert.ok(captured, 'createUI must call execute() to launch the native Windows UI host');
   assert.equal(captured.options.windowsHide, true,
     'the native Windows UI launch must request a hidden window from its caller');
@@ -240,6 +257,22 @@ assert.doesNotMatch(read('install.ps1'), /cmd\.exe '\/d' '\/s' '\/c'/);
 assert.doesNotMatch(read('install.ps1'), /Telegram/i,
   'the installer must not claim a removed provider or bridge is release-ready');
 
+const visualizerLauncher = read('tools/start-agent-activity-visualizer.ps1');
+assert.match(visualizerLauncher, /Split-Path -Parent \$PSScriptRoot/,
+  'Agent Activity Visualizer launcher must resolve the ToolsEnabled checkout dynamically');
+assert.doesNotMatch(visualizerLauncher, /\x43:\\Users\\owner\\Desktop\\AgentActivityVisualizer/i,
+  'Agent Activity Visualizer launcher must not pin the source machine Desktop path');
+assert.match(visualizerLauncher, /ProcessStartInfo/,
+  'Agent Activity Visualizer must have a native launcher rather than npm/Git-Bash wrappers');
+assert.match(visualizerLauncher, /CreateNoWindow\s*=\s*\$true/,
+  'Agent Activity Visualizer launcher must opt out of console allocation');
+assert.match(visualizerLauncher, /WindowStyle\s*=\s*\[System\.Diagnostics\.ProcessWindowStyle\]::Hidden/);
+assert.match(visualizerLauncher, /RedirectStandardOutput\s*=\s*\$true/);
+assert.match(visualizerLauncher, /RedirectStandardError\s*=\s*\$true/);
+assert.match(visualizerLauncher, /visualizer-runtime-logs/,
+  'Visualizer launcher must fall back to a workspace-local log path when the owner checkout is ACL-protected');
+assert.doesNotMatch(visualizerLauncher.replace(/^\s*#.*$/gm, ''), /npm|git[\\/]bin[\\/]bash|cmd\.exe/i,
+  'Agent Activity Visualizer launcher must not route through npm, Git Bash, or cmd.exe');
 // REMOVED: the quiet-launcher assertions. That sidecar is a shelved project and that
 // file no longer exists, so read() threw ENOENT and took the entire suite down before any
 // later assertion ran. The shelve deleted the launcher and left its contract behind.
@@ -256,13 +289,13 @@ assert.match(idleRehome, /Has-ActiveLocalModelClients/,
   'the legacy LocalFallback repair must wait for a truly idle local model');
 assert.match(idleRehome, /Start-Process -FilePath \$ollama\.Source[\s\S]{0,120}-WindowStyle Hidden/,
   'the legacy LocalFallback repair must relaunch Ollama without a visible console');
-// --- The sibling launchers: REMOVED 2026-08-13 ------------------------------
+// --- The Desktop siblings: REMOVED 2026-08-13 -------------------------------
 //
 // Three blocks lived here, and all three read a file OUTSIDE this repository
-// via `path.resolve(root, '..', ...)` -- a trio of launcher scripts (.cmd, .vbs
-// and .ps1) in the folder above the checkout. They are untracked here; asked
+// via `path.resolve(root, '..', ...)` -- the Desktop trio
+// Start-ToolsEnabled-Admin.cmd, .vbs and .ps1. They are untracked here; asked
 // about the .cmd, git does not answer "ignored", it answers "outside
-// repository".
+// repository at '<profile-root>/owner/Desktop'".
 //
 // The .cmd block went red on 2026-08-13: the launcher runs
 // `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER%"` with no
@@ -270,25 +303,25 @@ assert.match(idleRehome, /Start-Process -FilePath \$ollama\.Source[\s\S]{0,120}-
 // owner action. What it is not is something this suite can hold: no commit here
 // can add that flag, and on every other machine -- CI, a fresh clone, any
 // worktree -- the file is absent and the whole block announced a skip instead.
-// Skipped everywhere or permanently red on one machine, with no third outcome,
+// Skipped everywhere or permanently red on one desktop, with no third outcome,
 // is not a contract; it is a nag that took ~150 repo-owned assertions down with
 // it, because assert throws and everything below it stops running.
 //
 // This file already made this exact call twice, and wrote down the rule both
-// times. The sibling-project block: "THIS SUITE WAS RED because of the contents of a
+// times. the companion application: "THIS SUITE WAS RED because of the contents of a
 // different project's config file -- one nothing here owns, writes, or can
 // fix." And the shelved sidecar launcher: "a scope cut that deletes FILES
 // without deleting the ASSERTIONS ABOUT THEM ... fails in an unrelated suite."
-// The launcher trio is the same shape, so it gets the same answer.
+// The Desktop trio is the same shape, so it gets the same answer.
 //
 // All three went, not just the red one. The .vbs and .ps1 blocks were green
 // today, but they are the same untracked trio reached through the same
-// sibling read helper, and keeping them means the next hand-edit to an
-// out-of-repo file re-breaks this suite from outside the repo again. Fixing the one
+// Desktop-sibling read helper, and keeping them means the next hand-edit to a
+// Desktop file re-breaks this suite from outside the repo again. Fixing the one
 // that happened to be red would have been fixing the symptom.
 //
 // THE REAL REPAIR, if the owner wants this launcher under test: check it INTO
-// this repo and deploy it from here. Then every
+// this repo and deploy it to the Desktop from here. Then every
 // property those blocks pinned -- no VBScript dependency, -NoProfile
 // -NonInteractive -File, delegation to the hidden ProcessStartInfo boundary,
 // pause only on a failure path -- becomes enforceable, because a commit can

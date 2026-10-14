@@ -20,7 +20,7 @@
 //
 // Until 2026-08-22 this module also carried a CONDITIONAL entry for the
 // Discord bridge task, admitted only on an exact managed-process declaration
-// match. Discord was removed from the product entirely (product decision), so
+// match. Discord was removed from the product entirely (owner ruling, O4), so
 // the conditional path, its declaration constant and the .ps1's matching
 // gate are gone; the list is once again exactly the derived set below.
 const managedProcesses = require('../managed-processes');

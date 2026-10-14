@@ -10,7 +10,7 @@
 // The behaviours pinned here are the ones that were WRONG when this path was
 // first built and were only found by launching a real cloud task:
 //   - a Codex Cloud environment is scoped to the account that created it, so
-//     the launcher must fail over across accounts on env-not-found;
+//     the launcher refuses env-not-found without selecting another account;
 //   - `codex cloud exec` reports env-not-found with a NONZERO exit, so the
 //     transport must classify by content and not by exit code;
 //   - a freshly accepted task reports provider status "pending";
@@ -70,9 +70,9 @@ function freshPaths() {
 const REGISTRY = Object.freeze({
   exhaustedAtPercent: 95,
   accounts: Object.freeze([
-    Object.freeze({ name: 'first', role: 'institutional', profileDir: '.codex-first', priority: 1 }),
-    Object.freeze({ name: 'second', role: 'personal', profileDir: '.codex-second', priority: 2 }),
-    Object.freeze({ name: 'third', role: 'work', profileDir: '.codex-third', priority: 3 })
+    Object.freeze({ name: 'first', provider: 'codex', role: 'institutional', profileDir: '.codex-first', priority: 1 }),
+    Object.freeze({ name: 'second', provider: 'codex', role: 'personal', profileDir: '.codex-second', priority: 2 }),
+    Object.freeze({ name: 'third', provider: 'codex', role: 'work', profileDir: '.codex-third', priority: 3 })
   ])
 });
 
@@ -92,6 +92,7 @@ function transportError(code, message) {
 
 function baseDeps(overrides) {
   const paths = freshPaths();
+  fs.writeFileSync(paths.statePath, JSON.stringify({ manualPinByProvider: { codex: 'first' }, history: [] }));
   return Object.assign({
     accountRegistryPathImpl: () => path.join(TEMP_ROOT, 'accounts.json'),
     loadRegistryImpl: () => REGISTRY,
@@ -114,6 +115,7 @@ function baseDeps(overrides) {
 function seedPreference(deps, activeAccount = 'second') {
   const state = `${JSON.stringify({
     activeAccount,
+    manualPinByProvider: { codex: activeAccount },
     lastSwitch: null,
     history: [{ at: '2026-08-10T00:00:00.000Z', outcome: 'manual-switch', account: activeAccount }]
   }, null, 2)}\n`;
@@ -141,23 +143,18 @@ function seedPreference(deps, activeAccount = 'second') {
         }
       })
     });
-    const result = await launcher.launchCloudTask(
-      { environment: ENVIRONMENT, branch: 'main', prompt: 'do a thing', repository: REPOSITORY }, deps);
-
-    check(result.ok === true, 'env-scoped failover: a launch that succeeds on the third account must report ok:true');
-    check(result.taskId === 'task_e_abcdef123456', 'env-scoped failover: the provider task id must be reported verbatim');
-    check(result.account.name === 'third', 'env-scoped failover: the SERVING account must be the one that could see the environment, not the first tried');
-    check(result.accountsConsidered.length === 3, 'env-scoped failover: every account tried must appear in accountsConsidered');
-    check(result.state === 'SUBMITTED', 'env-scoped failover: provider status "pending" must map to SUBMITTED, not UNKNOWN');
+    let raised = null;
+    try {
+      await launcher.launchCloudTask(
+        { account: 'first', environment: ENVIRONMENT, branch: 'main', prompt: 'do a thing', repository: REPOSITORY }, deps);
+    } catch (error) { raised = error; }
+    check(raised && raised.code === 'CLOUD_LAUNCH_ENVIRONMENT_NOT_VISIBLE',
+      'a selected account that cannot see the environment must refuse');
+    check(attemptedBy.length === 1, 'an invisible environment must not switch to another account');
     const committedState = JSON.parse(fs.readFileSync(deps.statePath, 'utf8'));
-    const committedPin = JSON.parse(fs.readFileSync(deps.codexConfigPath, 'utf8'));
-    check(committedState.activeAccount === 'third',
-      'env-scoped failover: only the account that received a concrete provider task id becomes active');
-    check(committedState.history.filter(entry => entry.outcome === 'selected').length === 1
-      && committedState.history.at(-1).account === 'third',
-    'env-scoped failover: failed preflight attempts must never leave selected-account history');
-    check(committedPin.profileDir === '.codex-third',
-      'env-scoped failover: the profile pin is committed only to the account that actually launched');
+    check(committedState.history.length === 0, 'a refused launch must not commit account selection');
+    check(committedState.manualPinByProvider.codex === 'first', 'the explicit choice must remain selected');
+
   }
 
   // ---------------------------------------------------------------------
@@ -179,7 +176,7 @@ function seedPreference(deps, activeAccount = 'second') {
     check(raised !== null, 'invisible environment: exhausting every account must throw rather than resolve');
     check(raised.code === 'CLOUD_LAUNCH_ENVIRONMENT_NOT_VISIBLE',
       'invisible environment: the refusal must be ENVIRONMENT_NOT_VISIBLE, not the generic NO_ACCOUNT_AVAILABLE');
-    check(/scoped to the account that created it/.test(raised.message),
+    check(/selected account cannot see/.test(raised.message),
       'invisible environment: the message must explain that an environment belongs to its creating account');
     check(fs.readFileSync(deps.statePath, 'utf8') === preferenceBefore.state
       && fs.readFileSync(deps.codexConfigPath, 'utf8') === preferenceBefore.pin,
@@ -332,13 +329,13 @@ function seedPreference(deps, activeAccount = 'second') {
   {
     let observed = null;
     const deps = baseDeps({
-      executableImpl: () => ({ command: 'C:/resolved/codex.exe', prefixArgs: ['--flagless-prefix'] }),
+      executableImpl: () => ({ command: '\x43:/resolved/codex.exe', prefixArgs: ['--flagless-prefix'] }),
       environmentImpl: (account) => ({ CODEX_HOME: `home-for-${account.name}` }),
       transportFactory: (options) => { observed = options; return { createTask: async () => ({ id: 'task_e_pinned01', status: 'pending' }) }; }
     });
     await launcher.launchCloudTask({ environment: ENVIRONMENT, branch: 'main', prompt: 'x', repository: REPOSITORY }, deps);
 
-    check(observed.codexBinary === 'C:/resolved/codex.exe',
+    check(observed.codexBinary === '\x43:/resolved/codex.exe',
       'account pinning: the transport must receive the RESOLVED executable path (bare "codex" cannot spawn with shell:false on Windows)');
     check(observed.env && observed.env.CODEX_HOME === 'home-for-first',
       'account pinning: the transport must receive the chosen account\'s CODEX_HOME, or the call silently runs as the ambient account');
@@ -371,8 +368,8 @@ function seedPreference(deps, activeAccount = 'second') {
 
   // ---------------------------------------------------------------------
   // 8b. A status read must be able to reach page 2. The cursor below is the
-  //     shape `codex cloud list --json` really emits (codex-cli
-  //     0.146.1; base64 bodies shortened,
+  //     shape `codex cloud list --json` really emits (captured 2026-09-03
+  //     from codex-cli 0.146.1 on this machine; base64 bodies shortened,
   //     punctuation and the leading "+" verbatim). Handed back to the CLI as
   //     --cursor it returned a second page with a different task id, so the
   //     only thing that ever stopped paging was the transport refusing its
@@ -381,16 +378,16 @@ function seedPreference(deps, activeAccount = 'second') {
   //     against a caller who had supplied nothing but a task id.
   // ---------------------------------------------------------------------
   {
-    const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
+    const REAL_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
     const cursorsSeen = [];
     const deps = baseDeps({
       transportFactory: () => ({
         listTasks: async ({ cursor = null } = {}) => {
           cursorsSeen.push(cursor);
           if (cursor === null) {
-            return { tasks: [{ id: 'task_e_page1aaa', status: 'ready', title: 'Newest', updatedAt: '2026-09-03T06:00:00Z', url: null }], cursor: SAMPLE_CURSOR };
+            return { tasks: [{ id: 'task_e_page1aaa', status: 'ready', title: 'Newest', updatedAt: '2026-09-03T06:00:00Z', url: null }], cursor: REAL_CURSOR };
           }
-          if (cursor !== SAMPLE_CURSOR) throw new Error(`the paging loop must resend the cursor verbatim, got ${cursor}`);
+          if (cursor !== REAL_CURSOR) throw new Error(`the paging loop must resend the cursor verbatim, got ${cursor}`);
           return { tasks: [{ id: 'task_e_page2bbb', status: 'in_progress', title: 'Older', updatedAt: '2026-09-02T06:00:00Z', url: null }], cursor: null };
         }
       })
@@ -400,7 +397,7 @@ function seedPreference(deps, activeAccount = 'second') {
     check(onPageTwo.found === true, 'status paging: a task on the second page must be found, not reported UNKNOWN and not raised as an error');
     check(onPageTwo.state === 'RUNNING', 'status paging: the second page task\'s provider status must be mapped, here in_progress -> RUNNING');
     check(onPageTwo.title === 'Older', 'status paging: the title must come from the page the task was actually on');
-    check(cursorsSeen.length === 2 && cursorsSeen[0] === null && cursorsSeen[1] === SAMPLE_CURSOR,
+    check(cursorsSeen.length === 2 && cursorsSeen[0] === null && cursorsSeen[1] === REAL_CURSOR,
       'status paging: page 1 is fetched with no cursor and page 2 with the cursor page 1 returned');
   }
 
@@ -410,7 +407,7 @@ function seedPreference(deps, activeAccount = 'second') {
   //     this raised CODEX_CLI_INPUT_INVALID on the second listTasks call.
   // ---------------------------------------------------------------------
   {
-    const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
+    const REAL_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
     const argvSeen = [];
     const pagingSpawn = (command, args) => {
       argvSeen.push([...args]);
@@ -421,7 +418,7 @@ function seedPreference(deps, activeAccount = 'second') {
       const second = args.includes('--cursor');
       const body = second
         ? { tasks: [{ id: 'task_e_deep2222', status: 'in_progress' }], cursor: null }
-        : { tasks: [{ id: 'task_e_shallow1', status: 'ready' }], cursor: SAMPLE_CURSOR };
+        : { tasks: [{ id: 'task_e_shallow1', status: 'ready' }], cursor: REAL_CURSOR };
       setImmediate(() => {
         child.stdout.emit('data', JSON.stringify(body));
         child.emit('close', 0);
@@ -429,14 +426,14 @@ function seedPreference(deps, activeAccount = 'second') {
       return child;
     };
     const deps = baseDeps({
-      transportFactory: () => createCodexCliTransport({ codexBinary: 'C:/resolved/codex.exe', spawnImpl: pagingSpawn })
+      transportFactory: () => createCodexCliTransport({ codexBinary: '\x43:/resolved/codex.exe', spawnImpl: pagingSpawn })
     });
 
     const deep = await launcher.cloudTaskStatus({ taskId: 'task_e_deep2222' }, deps);
     check(deep.found === true, 'status paging (real transport): a task only on page 2 must still be found');
     check(deep.state === 'RUNNING', 'status paging (real transport): the found task\'s status must be mapped, not left UNKNOWN');
     check(argvSeen.length === 2, 'status paging (real transport): the loop must actually issue a second cloud list call');
-    check(argvSeen[1][argvSeen[1].indexOf('--cursor') + 1] === SAMPLE_CURSOR,
+    check(argvSeen[1][argvSeen[1].indexOf('--cursor') + 1] === REAL_CURSOR,
       'status paging (real transport): the provider cursor must survive validation and land in argv unchanged');
   }
 
@@ -460,7 +457,7 @@ function seedPreference(deps, activeAccount = 'second') {
       return child;
     };
     const transport = createCodexCliTransport({
-      codexBinary: 'C:/resolved/codex.exe',
+      codexBinary: '\x43:/resolved/codex.exe',
       prefixArgs: ['prefix-one'],
       env: { CODEX_HOME: 'pinned-home', PATH: 'p' },
       spawnImpl: fakeSpawn
@@ -621,8 +618,8 @@ function seedPreference(deps, activeAccount = 'second') {
       check(raised && raised.code === 'CLOUD_LAUNCH_BINDING_UNVERIFIED',
         `binding: an incomplete reading with named accounts must still refuse as unverified (got ${raised && raised.code})`);
       check(Boolean(raised) && typeof raised.message === 'string'
-        && raised.message.includes('work') && raised.message.includes('ETIMEDOUT'),
-        'binding: the refusal must name the unread account and its reason, not just say "incomplete"');
+        && raised.message.includes('official Codex CLI cloud picker') && !raised.message.includes('ETIMEDOUT'),
+        'binding: incomplete discovery refuses with a native repair route and omits raw reader diagnostics');
       check(Boolean(raised) && typeof raised.message === 'string' && !raised.message.includes('second'),
         'binding: an account that answered "authorized" must not be listed among the unread ones');
     }
@@ -712,7 +709,7 @@ function seedPreference(deps, activeAccount = 'second') {
   // ---------------------------------------------------------------------
   // The cloud mirror freshness gate. A launch against a mirror that is not at
   // this checkout's HEAD is the measured cause of empty applies and citations
-  // pointing at unrelated code (hundreds of commits of drift on the app repository,
+  // pointing at unrelated code (467 commits of drift on the app repository,
   // 2026-08-24), so it must refuse BEFORE a transport exists and it must key on
   // the repository the PROVIDER reported, not the one the caller declared.
   // ---------------------------------------------------------------------
@@ -909,7 +906,7 @@ function seedPreference(deps, activeAccount = 'second') {
   }
 
   try { fs.rmSync(TEMP_ROOT, { recursive: true, force: true }); } catch { /* best effort */ }
-  console.log(`codex-cloud-launch tests passed (${checks} checks: account-scoped environment failover, invisible-environment refusal, no-retry on ambiguous submit, unconfirmed-submit honesty, argv input hardening, natural-language prompts, account CODEX_HOME pinning with resolved executable, list-surface status reads, exact env passthrough to spawn, content-based nonzero classification, provider status vocabulary, the repository binding gate that refuses an unbound or mismatched launch before anything is sent, the cloud-mirror freshness gate that refuses a stale mirror before any transport exists and lets the same launch through when it is fresh, and the retrieval leg -- byte-for-byte diff passthrough, announced truncation, an empty diff reported as changedNothing rather than as a failure, and an account-scoped refusal that says so, and cloud.account_list keeping two same-named accounts on different providers from borrowing each other's environment data, and cloud.task_status/cloud.task_diff/cloud.task_list -- all three declared read-only -- never adopting the account they read as the account everything else now runs as).`);
+  console.log(`codex-cloud-launch tests passed (${checks} checks: selected-account environment refusal, invisible-environment refusal, no-retry on ambiguous submit, unconfirmed-submit honesty, argv input hardening, natural-language prompts, account CODEX_HOME pinning with resolved executable, list-surface status reads, exact env passthrough to spawn, content-based nonzero classification, provider status vocabulary, the repository binding gate that refuses an unbound or mismatched launch before anything is sent, the cloud-mirror freshness gate that refuses a stale mirror before any transport exists and lets the same launch through when it is fresh, and the retrieval leg -- byte-for-byte diff passthrough, announced truncation, an empty diff reported as changedNothing rather than as a failure, and an account-scoped refusal that says so, and cloud.account_list keeping two same-named accounts on different providers from borrowing each other's environment data, and cloud.task_status/cloud.task_diff/cloud.task_list -- all three declared read-only -- never adopting the account they read as the account everything else now runs as).`);
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
   process.exitCode = 1;

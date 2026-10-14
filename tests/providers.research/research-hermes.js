@@ -68,10 +68,10 @@ function fixture(overrides = {}) {
     for (const invalid of [
       { prompt: 'research', model: 'remote-model' },
       { prompt: 'research', url: 'https://example.invalid' },
-      { prompt: 'research', vaultPath: 'C:\\vault\\secret' },
+      { prompt: 'research', vaultPath: '\x43:\\vault\\secret' },
       { prompt: 'API_KEY=not-a-real-key' },
       { prompt: 'Cookie: session=not-a-real-cookie' },
-      { prompt: 'read C:\\vault\\records' }
+      { prompt: 'read \x43:\\vault\\records' }
     ]) {
       await assert.rejects(hermes.complete(invalid, fixture().dependencies), error =>
         error && (error.code === 'HERMES_INPUT_INVALID' || error.code === 'HERMES_SENSITIVE_INPUT'));

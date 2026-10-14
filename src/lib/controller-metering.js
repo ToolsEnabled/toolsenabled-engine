@@ -28,7 +28,7 @@ const UNATTRIBUTED = 'unattributed';
 //     first tools/google-oauth-login.js run -- validated every record against
 //     a roster of one. 12 engine test files failed there and passed only where
 //     that gitignored file happened to exist, which is why a trustworthy
-//     engine baseline could not be measured from a worktree at all (R1531).
+//     engine baseline could not be measured from a worktree at all (R1531 w8).
 // The roster is therefore resolved WHEN NEEDED, once per public call, and the
 // empty case is a NAMED state carried on the error rather than a silent wrong
 // answer that looks identical to a genuinely unknown alias.

@@ -1,8 +1,9 @@
 'use strict';
 // TWO LEDGERS, ONE NAME SPACE.
 //
-// The R-ledger problem had come up repeatedly and had never actually been
-// fixed.
+// The owner, 2026-08-11 (reports/OWNER-REQUEST-LEDGER.json R1233, verbatim):
+//   "Ok but the R issue has come up maybe 10 times and no one ever actually
+//    fixes it"
 //
 // One of the reasons: this machine holds two owner-request ledgers whose id
 // spaces overlap but whose entries do not agree. Measured the same day --

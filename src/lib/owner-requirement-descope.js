@@ -2,28 +2,29 @@
 
 // WHEN AN AGENT DROPS SOMETHING THE OWNER ASKED FOR, THAT MUST LEAVE A MARK.
 //
-// The worked example: a requested $350 purchase was dropped to satisfy a $100
-// daily cap that no person had set. Two separate failures stacked:
+// The worked example, on this tree, today. The owner asked for a $350 USPTO
+// trademark filing. A lane removed it from his purchase list because "$350
+// alone breaks his own $100/day cap". Two separate failures stacked:
 //
-//   1. The $100/day cap was never a person's choice. It traces to an earlier
-//      commit, the ROOT commit, Co-Authored-By an AI agent.
+//   1. The $100/day cap was never his. It traces to commit 02b27ac, the ROOT
+//      commit, Co-Authored-By an AI agent. No human chose it.
 //   2. The removal happened INVISIBLY. No record named the requirement that was
 //      dropped, the constraint invoked, or the identity that decided.
 //
 // The decision itself was defensible on its face -- that is what makes this
 // class of failure durable. A lane doing careful, well-reasoned work deleted a
-// real owner requirement to satisfy a rule no person made, and nothing anywhere
-// recorded that a requirement had been deleted at all. Noticing by chance is
-// not a control.
+// real owner requirement to satisfy a rule he never made, and nothing anywhere
+// recorded that a requirement had been deleted at all. The owner found out by
+// noticing, which is not a control.
 //
 // WHAT THIS MODULE ENFORCES, and it is the non-obvious half:
 //
-//   A descope is not merely LOGGED, it is CHECKED FOR THE BORROWED-AUTHORITY PATTERN.
+//   A descope is not merely LOGGED, it is CHECKED FOR THE TRADEMARK PATTERN.
 //   If the thing being dropped is an OWNER-AUTHORED requirement, and the reason
 //   invokes a constraint that is NOT owner-authored, the record is flagged
 //   `requiresOwnerReview: true` and the writer must surface it. That exact
-//   shape -- a person's requirement, an agent's constraint, the requirement
-//   loses -- is the $350 case, and it is now a named, detectable event rather than
+//   shape -- his requirement, an agent's constraint, his requirement loses --
+//   is the trademark case, and it is now a named, detectable event rather than
 //   a plausible paragraph in a report nobody re-reads.
 //
 // This module does NOT forbid descoping. Agents must be able to defer, narrow
@@ -149,7 +150,7 @@ function buildDescopeRecord(input, options = {}) {
   // The requirement in the owner's terms, not a summary of the agent's plan.
   const requirement = requireText(input.requirement, 'OWNER_DESCOPE_REQUIREMENT_REQUIRED',
     'requirement is required: state WHAT IS BEING DROPPED, in the owner\'s own terms. '
-    + '"Descoped some purchase lines" is not a record; "the $350 annual licence, 1 seat" is.');
+    + '"Descoped some purchase lines" is not a record; "the $350 USPTO trademark filing, 1 class" is.');
 
   const action = trimmedString(input.action);
   if (!DESCOPE_ACTIONS.includes(action)) {
@@ -181,8 +182,8 @@ function buildDescopeRecord(input, options = {}) {
   const requirementProvenance = provenanceClassOf(requestEntry);
   const requirementIsOwners = isOwnerAuthored(requirementProvenance);
 
-  // --- THE BORROWED-AUTHORITY CHECK ---------------------------------------
-  // An owner requirement, dropped for a constraint the owner did not set.
+  // --- THE TRADEMARK CHECK ------------------------------------------------
+  // His requirement, dropped for a constraint that is not his.
   const constraintIsOwners = citedConstraint ? isOwnerAuthored(citedConstraint.provenanceClass) : false;
   const requiresOwnerReview = Boolean(requirementIsOwners && citedConstraint && !constraintIsOwners);
 
@@ -209,9 +210,9 @@ function buildDescopeRecord(input, options = {}) {
     record.ownerReviewReason =
       `An OWNER-AUTHORED requirement was ${action} on the authority of `
       + `${JSON.stringify(citedConstraint.name)}, whose provenance is `
-      + `${JSON.stringify(citedConstraint.provenanceClass)} -- not the owner's. This is the `
-      + 'pattern where a person\'s requirement loses to a constraint nobody set. '
-      + 'It needs a person\'s decision.';
+      + `${JSON.stringify(citedConstraint.provenanceClass)} -- not the owner's. This is the shape of the `
+      + '2026-08-11 trademark defect: his requirement lost to a constraint he never set. '
+      + 'It needs his decision, not an agent\'s.';
   }
   return Object.freeze(record);
 }

@@ -9,8 +9,8 @@
 # It named two files that no longer exist in this repository --
 #   tests/telegram-reliability-observation.js
 #   tests/telegram-video-relay.js
-# -- both removed by an earlier commit ("Telegram is out: the connector, its
-# tools, its tables and its owner steps"). Measured at an earlier engine build: neither
+# -- both removed by commit 755dc912 ("Telegram is out: the connector, its
+# tools, its tables and its owner steps"). Measured at engine 5a39c4d8: neither
 # path is in `git ls-tree -r` (2680 tracked files), and `git log --all` for each
 # ends at that removal commit. A suite entry with no file is a dead path, not
 # coverage. The file itself is kept because config/payload-boundary.json names

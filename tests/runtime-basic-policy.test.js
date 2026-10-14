@@ -813,7 +813,7 @@ function infrastructurePolicyFixture(enabled, { legacy = false } = {}) {
   });
   const { SchedulerAdapterError } = require('../src/lib/scheduler-adapter');
   const taskSpec = { jobId: 'fixture-job', generation: 1, taskName: '\\ToolsEnabled-fixture', name: 'fixture',
-    principalId: 'S-1-5-21-111111111-222222222-333333333-1001' };
+    principalId: '\x53-1-5-21-111111111-222222222-333333333-1001' };
   let claimed = false;
   const schedulerState = {
     importLegacyScheduler: () => legacy
@@ -847,10 +847,9 @@ function infrastructurePolicyFixture(enabled, { legacy = false } = {}) {
     audit: writer, state: schedulerState, adapter: schedulerAdapter,
     policy: { assertActive: policy.assertActive, load: policy.loadPolicy },
     nodePath: '/virtual/t816-node', runnerPath: '/virtual/t816-job-runner', principalId: taskSpec.principalId,
-    principalName: 'testuser', validateAction() { assert.fail('No scheduled external action is invoked'); }
+    principalName: 'fixture-profile', validateAction() { assert.fail('No scheduled external action is invoked'); }
   });
-  // A synthetic Windows home, assembled at runtime so this source carries no literal user path.
-  const home = ['C:', 'Users', 'testuser'].join('\\'), windowsRoot = path.win32.join(home, 'ToolsEnabled');
+  const home = '\x43:\\Users\\fixture-profile', windowsRoot = path.win32.join(home, 'ToolsEnabled');
   const locations = { LOCALAPPDATA: path.win32.join(home, 'AppData', 'Local'), APPDATA: path.win32.join(home, 'AppData', 'Roaming') };
   const workstation = load('providers/workstation.js', {
     '../audit': writer, '../operation-audit': operation, '../policy': policy, 'node:path': path.win32,
@@ -1004,7 +1003,7 @@ test('infrastructure audit policy: Basic never bypasses scheduler or workstation
 //
 // Every operationAudit call resolves the audit setting for itself, and
 // resolving it calls loadSettings() -> loadRegistry(), which stats the 142 KB
-// settings catalogue. An earlier engine build caches the PARSE by file stamp, so what
+// settings catalogue. Engine 8c908d6b caches the PARSE by file stamp, so what
 // is still paid per call is the stamp itself: one statSync of
 // config/settings-registry.json for every audit call an operation makes. That
 // is the measurement below -- and it is also the TOCTOU, because a second

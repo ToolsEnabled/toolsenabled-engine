@@ -51,8 +51,8 @@
 // WHAT THIS GATE DOES NOT DO. It does not decide the licence. The position was
 // settled elsewhere and this file only enforces it:
 //
-//   - The decision of 2026-08-12: relicense both halves from
-//     AGPL-3.0-or-later to MIT, launching under MIT as the first priority.
+//   - The owner's directive of 2026-08-12: relicense both halves from
+//     AGPL-3.0-or-later to MIT ("lets launch MIT license priority first").
 //     This superseded the earlier ruling in
 //     docs/coordinator/R1162-MONETIZATION-FINAL-DECISION.md §2.1, which had set
 //     AGPL-3.0 plus a CLA. That document is left as the historical record of
@@ -192,13 +192,14 @@ const LICENCE_DOCS = [
 // purpose: it reproduces whole licence bodies, so identical Apache-2.0 blocks
 // repeat legitimately.
 const PROSE_DOCS = ['NOTICE', 'CONTRIBUTORS.md'];
-const STALE_CLAIM_DOCS = [...LICENCE_DOCS];
+const STALE_CLAIM_DOCS = ['TERMS-OF-SERVICE.md', ...LICENCE_DOCS];
 const MINIMUM_PARAGRAPH = 60;
 
 // Where the other half may be checked out on this machine. Explicit, not
-// discovered: a development folder can hold many transient app worktrees, and
-// sweeping them would compare against abandoned detached checkouts whose
-// staleness is not drift and cannot be fixed from here. Override with TOOLSENABLED_APP_HALF (path.delimiter-separated).
+// discovered: this repository sits on a Desktop holding ~150 transient app
+// worktrees, and sweeping them would compare against a hundred abandoned
+// detached checkouts whose staleness is not drift and cannot be fixed from
+// here. Override with TOOLSENABLED_APP_HALF (path.delimiter-separated).
 const COUNTERPART_CANDIDATES = [
   path.join(path.dirname(ROOT), 'desktop-app'),
   path.join(path.dirname(ROOT), 'mission-control')
@@ -231,7 +232,7 @@ function testEngineDeclaration() {
   check(
     pkg.license === SPDX,
     `package.json declares "license": ${JSON.stringify(pkg.license)}, expected ${JSON.stringify(SPDX)}.\n` +
-      '      Both halves were relicensed to MIT on 2026-08-12. A declaration of\n' +
+      '      The owner relicensed both halves to MIT on 2026-08-12. A declaration of\n' +
       '      "UNLICENSED" means all rights reserved -- nobody may legally use, copy or\n' +
       '      redistribute this half; a declaration of AGPL-3.0-or-later is the licence\n' +
       '      this project moved OFF, and either one contradicts the LICENSE file that\n' +
@@ -317,7 +318,7 @@ function testNoDuplicatedParagraphs() {
 
 function testNoStaleProprietaryClaim() {
   console.log('🧪 No document still calls this half proprietary...');
-  // Narrow and exact. A legal document used to tell readers -- correctly
+  // Narrow and exact. TERMS-OF-SERVICE.md §3 used to tell readers -- correctly
   // at the time -- that package.json declared UNLICENSED and that the software
   // was therefore all-rights-reserved. That sentence became false the moment
   // the licence landed, and a customer-facing legal document that denies its

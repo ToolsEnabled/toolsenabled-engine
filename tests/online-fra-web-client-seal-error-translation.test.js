@@ -3,7 +3,7 @@
  *
  * MEASURED against tests/online-fra-renewal.test.js (2026-09-07): section 3d's
  * "failed account observation must end browser authority" assertion is flaky
- * -- reproduced twice at several earlier revisions, with `actual` sometimes
+ * -- reproduced twice, at both b7149aeb and d9b44f96, with `actual` sometimes
  * a translated OnlineFraWebClientError and sometimes a RAW OnlineFraSessionError.
  * That second shape traces to one exact, untranslated code path in
  * src/lib/online-fra-web-client.mjs's request():

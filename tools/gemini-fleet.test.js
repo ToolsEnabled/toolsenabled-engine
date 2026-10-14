@@ -14,6 +14,8 @@ async function runFleetTest() {
   const originalExecFileSync = childProcess.execFileSync;
   const originalModuleLoad = Module._load;
   const originalAppData = process.env.APPDATA;
+  const originalNpmPrefix = process.env.npm_config_prefix;
+  const originalProvidersRoot = process.env.TOOLSENABLED_PROVIDERS_ROOT;
 
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-fleet-test-'));
   const fakeAppData = path.join(testDir, 'appdata');
@@ -23,6 +25,17 @@ async function runFleetTest() {
   fs.mkdirSync(fakeGeminiCliDir, { recursive: true });
   const fakeGeminiCliScript = path.join(fakeGeminiCliDir, 'gemini.js');
   fs.writeFileSync(fakeGeminiCliScript, '#!/usr/bin/env node\nconsole.log("mock gemini cli")');
+  // HERMETIC ON POSIX TOO. Since R1226 a Linux resolution inspects npm's
+  // global prefixes, including the one derived from the running node, so the
+  // host's own global install (or a ToolsEnabled-owned copy) used to decide
+  // this test's answer. Name a fixture prefix npm itself would report and an
+  // empty owned-copy root, and expect exactly the fixture's linked bin.
+  const fakeNpmPrefix = path.join(testDir, 'npm-prefix');
+  const fakeGeminiBin = path.join(fakeNpmPrefix, 'bin', 'gemini');
+  fs.mkdirSync(path.dirname(fakeGeminiBin), { recursive: true });
+  fs.writeFileSync(fakeGeminiBin, '#!/usr/bin/env node\nconsole.log("mock gemini cli")', { mode: 0o755 });
+  process.env.npm_config_prefix = fakeNpmPrefix;
+  process.env.TOOLSENABLED_PROVIDERS_ROOT = path.join(testDir, 'owned-providers');
 
   let spawnCall = null;
   let gitWorktreePath = null;
@@ -85,7 +98,7 @@ async function runFleetTest() {
       assert.strictEqual(spawnCall.cmd, process.execPath, `Expected command to be node executable, but got ${spawnCall.cmd}`);
       assert.deepStrictEqual(spawnCall.args.slice(0, 1), [fakeGeminiCliScript], 'Expected first arg to be script path');
     } else {
-      assert.strictEqual(spawnCall.cmd, 'gemini', `Expected command to be 'gemini', but got ${spawnCall.cmd}`);
+      assert.strictEqual(spawnCall.cmd, fakeGeminiBin, `Expected the configured npm prefix's gemini, but got ${spawnCall.cmd}`);
     }
     const promptFlagIndex = spawnCall.args.indexOf('--prompt');
     assert.notStrictEqual(promptFlagIndex, -1, 'Expected --prompt argument');
@@ -112,6 +125,10 @@ async function runFleetTest() {
     Module._load = originalModuleLoad;
     if (originalAppData === undefined) delete process.env.APPDATA;
     else process.env.APPDATA = originalAppData;
+    if (originalNpmPrefix === undefined) delete process.env.npm_config_prefix;
+    else process.env.npm_config_prefix = originalNpmPrefix;
+    if (originalProvidersRoot === undefined) delete process.env.TOOLSENABLED_PROVIDERS_ROOT;
+    else process.env.TOOLSENABLED_PROVIDERS_ROOT = originalProvidersRoot;
     if (gitWorktreePath) fs.rmSync(gitWorktreePath, { recursive: true, force: true });
     try {
       fs.rmSync(testDir, { recursive: true, force: true });

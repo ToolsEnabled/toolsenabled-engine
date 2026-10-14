@@ -11,9 +11,6 @@ const { once } = require('node:events');
 const api = require('../src/lib/agent-resource-control');
 const { startAgentLane, laneChildEnvironment } = require('../src/lib/mission-bridge/agent-lane-dispatch');
 const GB = 1024 ** 3;
-// The synthetic Windows profile of the isolated test environment, assembled at
-// runtime so the source carries no literal user path.
-const TEST_PROFILE = ['C:', 'Users', 'testuser'].join('\\');
 const turn = () => new Promise(resolve => setImmediate(resolve));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 function fixture(mode = 'mechanical') {
@@ -42,10 +39,10 @@ function fixture(mode = 'mechanical') {
 async function service(t, f, { grantDelay = 0, rootCheckDelay = 0, requestMs = 3000, beforeGrant = null } = {}) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'resource-service-child-'));
   const canonical = fs.realpathSync(scratch);
-  assert.ok(canonical.startsWith(`${TEST_PROFILE}\\`) || process.platform !== 'win32');
+  assert.ok(canonical.startsWith('\x43:\\Users\\fixture-profile\\') || process.platform !== 'win32');
   const child = spawn(process.execPath, [path.join(__dirname, 'fixtures/resource-channel-child.js'), String(requestMs)], {
     cwd: scratch, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: { SystemRoot: process.env.SystemRoot, USERPROFILE: TEST_PROFILE, TEMP: scratch, TMP: scratch,
+    env: { SystemRoot: process.env.SystemRoot, USERPROFILE: '\x43:\\Users\\fixture-profile', TEMP: scratch, TMP: scratch,
       APPDATA: path.join(scratch, 'app-data'), LOCALAPPDATA: path.join(scratch, 'local-app-data'), TOOLSENABLED_STATE_ROOT: path.join(scratch, 'engine-state') },
   });
   let stdout = ''; let stderr = ''; let next = 0;
@@ -342,7 +339,7 @@ test('the actual app-owned service CLI refuses a missing inherited channel befor
   const child = spawn(process.execPath, [path.join(__dirname, '../tools/mission-bridge.js'),
     '--origin', 'http://127.0.0.1:4603', '--root', `main=${scratch}`, '--resource-channel', 'inherited'], {
     cwd: scratch, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
-    env: { SystemRoot: process.env.SystemRoot, USERPROFILE: TEST_PROFILE, TEMP: scratch, TMP: scratch,
+    env: { SystemRoot: process.env.SystemRoot, USERPROFILE: '\x43:\\Users\\fixture-profile', TEMP: scratch, TMP: scratch,
       APPDATA: path.join(scratch, 'app-data'), LOCALAPPDATA: path.join(scratch, 'local-app-data'), TOOLSENABLED_STATE_ROOT: stateRoot },
   });
   let stdout = ''; let stderr = '';

@@ -611,7 +611,7 @@ try {
     assert.throws(() => provider.artifactRead({ handle: { ...listed.handle, ...changed }, name: 'shot.png' }),
       e => /LEASE|OPERATION/.test(e.code), 'unowned or stale lease must refuse image reads');
   }
-  for (const name of ['../shot.png', '/shot.png', 'artifacts/shot.png', 'shot.svg', 'C:\\shot.png']) {
+  for (const name of ['../shot.png', '/shot.png', 'artifacts/shot.png', 'shot.svg', '\x43:\\shot.png']) {
     assert.throws(() => provider.artifactRead({ handle: listed.handle, name }), e => e.code === 'SANDBOX_INPUT_INVALID');
   }
   for (const bad of [Buffer.from('not png'), makePng(4097), makePng(1, Buffer.alloc(100)), Buffer.concat([validPng, Buffer.from([0])])]) {

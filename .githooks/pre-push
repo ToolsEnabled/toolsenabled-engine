@@ -22,7 +22,7 @@
 # a check deliberately -- they replace it with something they can see, and the
 # replacement silently degrades.
 #
-# WHY PRE-PUSH AND NOT POST-COMMIT. Measured, not assumed:
+# WHY PRE-PUSH AND NOT POST-COMMIT. Measured on this machine, not assumed:
 # `node tools/check-single-copy-work.js` takes 20.7 SECONDS offline, because it
 # sweeps every worktree and every local branch. Twenty seconds on every commit
 # is a hook that the first person in a hurry deletes, and a deleted check is
@@ -61,18 +61,19 @@
 # ===========================================================================
 # 0. PUSH DESTINATION. THE FENCE THAT KEEPS THIS REPOSITORY PRIVATE.
 #
-# WHY IT EXISTS. This repository's private origin holds private source and must
-# remain private. Measured 2026-08-13: this hook ran on every push, looked at four
-# unrelated questions, and exited 0 without ever asking where the push was going.
-# This section is the destination check that makes the private-source rule an
+# WHY IT EXISTS. ToolsEnabled/engine is private source and must remain private.
+# Measured 2026-08-13: this hook ran on every push, looked at four unrelated
+# questions, and exited 0 without ever asking where the push was going. This
+# section is the destination check that makes the private-source rule an
 # enforced property rather than an operator memory.
 #
-# WHAT IS AT STAKE, precisely. A push publishes HISTORY, not the tip. Every file
-# an ancestor commit ever carried travels with the push, including files a later
-# commit deleted -- in a private history that can include an earlier revision of
-# the paid licensing module (src/lib/providers/license.js). So one `git push` to
-# a public destination publishes whatever that history holds, and there is no
-# undo: public source is cloned, cached and indexed beyond recall within minutes.
+# WHAT IS AT STAKE, precisely. A push publishes HISTORY, not the tip.
+# 94a9d22:src/lib/providers/license.js is 12,622 readable bytes containing
+# LICENSE_VAULT_KEY and a self-minting ed25519 keygen path, and that commit is
+# an ancestor of origin/main. Deleting the file in a later commit did not remove
+# it. So one `git push` to a public destination publishes the paid licensing
+# module, and there is no undo: public source is cloned, cached and indexed
+# beyond recall within minutes.
 #
 # WHY IT RUNS FIRST, ABOVE EVEN THE repo_root AND node PROBES. Both of those
 # probes bail out with `exit 0` when they cannot answer -- correct for advisory
@@ -111,14 +112,8 @@
 # AND ITS ENTIRE HISTORY MAY LIVE THERE. There is no public-source export route.
 # The manifest's `open` classification describes customer-distributable,
 # open-licensed source; it does not authorize a public repository or push.
-#
-# The entry below is a PLACEHOLDER identity: example-org stands in for the real
-# owner and names no repository of this project. A private installation replaces
-# it with its own origin's normalised host/owner/repo, in a commit someone can
-# review. Until then a push to the real origin is refused, which is the
-# fail-closed direction.
 private_push_destinations='
-github.com/example-org/engine
+github.com/toolsenabled/engine
 '
 # <<< DECLARED PRIVATE DESTINATIONS -----------------------------------------
 
@@ -203,13 +198,13 @@ refuse_push_destination() {
   printf '  Reason:       %s\n' "$2"
   printf '\n'
   printf '  A push publishes HISTORY, not just the current files. The history of\n'
-  printf '  this repository can hold the PAID LICENSING MODULE: a private commit\n'
-  printf '  carrying an earlier src/lib/providers/license.js and its\n'
-  printf '  LICENSE_VAULT_KEY handling. Deleting a file in a later commit does not\n'
-  printf '  remove it from history -- anyone who clones gets it. One push to a\n'
-  printf '  public destination hands out whatever that history holds, and it\n'
-  printf '  cannot be taken back: public source is cloned, cached and indexed\n'
-  printf '  within minutes.\n'
+  printf '  this repository contains the PAID LICENSING MODULE: commit 94a9d22,\n'
+  printf '  src/lib/providers/license.js, 12,622 readable bytes including\n'
+  printf '  LICENSE_VAULT_KEY and a self-minting key generator. That commit is an\n'
+  printf '  ancestor of origin/main. The file was deleted later, which does not\n'
+  printf '  remove it -- anyone who clones gets it. One push to a public\n'
+  printf '  destination hands out the paid module, and it cannot be taken back:\n'
+  printf '  public source is cloned, cached and indexed within minutes.\n'
   printf '\n'
   printf '  THERE IS NO SUPPORTED PUBLIC-SOURCE EXPORT OR PUSH ROUTE. The engine\n'
   printf '  and app repositories remain private. The boundary manifest marks\n'
@@ -282,13 +277,13 @@ fi
 # that means "the changes this push is about to publish". Preferring it is not a
 # refinement, it is a correctness fix, and it was measured rather than reasoned:
 #
-#   base=origin/HEAD (which resolves to origin/main here) reported hundreds of
-#   changed paths outside territory, in the canonical tree and in a sibling worktree
-#   -- on correct work. origin/main sits hundreds of commits behind these branches, so
+#   base=origin/HEAD (which resolves to origin/main here) reported 479 changed
+#   paths outside territory in the canonical tree and 438 in wt-r1197-visibility
+#   -- on correct work. origin/main sits ~425 commits behind these branches, so
 #   the merge-base fork point is far enough back that essentially the entire
 #   program reads as a violation.
 #
-# A gate that reports hundreds of false violations is muted inside a day, and then the
+# A gate that reports 479 false violations is muted inside a day, and then the
 # real violations it would have caught go unseen too -- the same trap that forced
 # .githooks/post-commit to be re-thresholded. origin/HEAD and the upstream are
 # kept only as a fallback for a branch the remote has never seen.
@@ -457,10 +452,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# The owner's request system keeps exactly one tripwire (product design:
-# /Request, /RequestSession, /RequestTree, /RequestThread file the owner's
-# words; the rest is in the owner's hands). tools/r-ledger-check.js names any
-# /Request* turn the owner typed that reached the ingress spool but NO ledger -- the command's
+# The owner's request system keeps exactly one tripwire (owner design
+# 2026-08-15: /Request, /RequestSession, /RequestTree, /RequestThread file his
+# words; the rest is in his hands). tools/r-ledger-check.js names any /Request*
+# turn he typed that reached the ingress spool but NO ledger -- the command's
 # filing step did not land. Exit 5 on a miss, 0 clean; advisory like the
 # blocks above, and for the same reason.
 # ---------------------------------------------------------------------------

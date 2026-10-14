@@ -1,6 +1,6 @@
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // THE AUDIT DOOR FOR T (TASK) AND A (ASK) LEDGER TOOLS. What must hold: audit
 // intent is required and durable before any write; every refusal is a typed
@@ -347,7 +347,7 @@ test('T773 existing synchronous ledger audit doors still refuse before any mutat
   assert.deepEqual(writes, []);
 });
 
-/* MANY IDS, ONE LEDGER READ (measured 2026-09-24). A controller that
+/* MANY IDS, ONE LEDGER READ (2026-09-24, Controller 1). A controller that
  * needed 206 task records had only a one-id read, so it started 206
  * ledger.read calls at once from one Codex code-mode script. Codex 0.156's
  * code-mode host stops dispatching above about 130 calls in flight and that

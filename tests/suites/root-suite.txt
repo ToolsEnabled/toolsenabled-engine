@@ -24,12 +24,12 @@ tests/vault-live-acl.test.js
 tests/vault-shipped-acl.test.js
 tests/vault-spawn-cost.test.js
 tests/vault-atomic-sharing.test.js
+tests/vault-read-reliability.test.js
 tests/linux-vault-access-log-rotation.test.js
 tests/vault-dispatch-principals.test.js
 tests/vault-principal-crosses-process.test.js
 tests/fra-credential-surface-parity.test.js
 tests/credential-fan-out-revocation.test.js
-tests/credential-refresh-broker.test.js
 tests/agent-coord-attest-reader.test.js
 tests/fra-peer-key-pinning.test.js
 tests/fra-relay-challenge-oracle.test.js
@@ -88,6 +88,9 @@ tests/providers.web/searxng-partial-failure.test.js
 tests/model-picker.js
 tests/model-provider.js
 tests/customer-model-provider.test.js
+tests/customer-model-openai-contract.test.js
+tests/model-local-timeout-is-a-timeout.test.js
+tests/local-node-reasoning-content-field.test.js
 tests/customer-payload-privacy.test.js
 tests/cloud-mirror-boundary-truth.test.js
 tests/research-strong.js
@@ -143,15 +146,16 @@ tests/mission-bridge-spawn-coordinator.test.js
 tests/error-taxonomy-bridge-actor-refused.test.js
 tests/mcp-public-message-boundary.test.js
 tests/vault-setter-error-boundary.test.js
-tests/failover-setting-error-boundary.test.js
 tests/audit-admission-error-boundary.test.js
 tests/mission-bridge-seat-pool.test.js
 tests/mission-bridge-tier-table.test.js
 tests/mission-bridge.test.js
 tests/mission-bridge-api-contract.test.js
 tests/mission-bridge-queue-open.test.js
+tests/mission-bridge-queue-lock-release.test.js
 tests/mission-bridge-agent-lane.test.js
 tests/mission-role-binding-hostile.test.js
+tests/mission-bridge-agent-api-mode-dispatch.test.js
 tests/mission-bridge-claude-mcp-config.test.js
 tests/capability-features.test.js
 tests/entitlement-activation-audit.test.js
@@ -217,6 +221,10 @@ tests/docker-drive-catalogue.test.js
 # being run turned out to be different things.
 tests/cloud-batch-harvest-findings.test.js
 tests/cloud-account-registration.test.js
+tests/legacy-signin-cleanup.test.js
+tests/provider-session-isolation-claude-auth.test.js
+tests/account-choice-correctness.test.js
+tests/claude-default-home.test.js
 tests/multi-account-registry-write.test.js
 tests/multi-account-registry-remove.test.js
 tests/host-exec-timeout-tree.test.js
@@ -232,6 +240,10 @@ tests/settings-selection.test.js
 tests/linux-keyring-fixture-root.test.js
 tests/key-custody-dispatch.test.js
 tests/vault-host-retirement.test.js
+tests/confined-empty-path-argument.test.js
+tests/linux-vault-access-log-rotation-marker.test.js
+tests/mission-bridge-host-header.test.js
+tests/tool-allowlist-composition.test.js
 tests/tool-dispatch-scheduler.test.js
 tests/mcp-line-dispatcher.test.js
 tests/audit-boundary-race.test.js
@@ -239,6 +251,8 @@ tests/audit-rebuild-seeds-parse-memo.test.js
 tests/coordinator-audit-write-async.test.js
 tests/agent-engine/local-node-adapter.test.js
 tests/agent-engine/local-node-tools.test.js
+tests/agent-engine/local-node-activity-timer.test.js
+tests/agent-engine/codex-reconnect-window.test.js
 tests/agent-resource-admission.test.js
 tests/agent-resource-host.test.js
 tests/agent-resource-registry.test.js
@@ -248,6 +262,7 @@ tests/mission-bridge-owner-tier-refresh.test.js
 # Settings integration regressions run through the normal root suite.
 tests/agent-api-mode-compatibility.test.js
 tests/agent-engine/editor-fork.test.js
+tests/agent-engine/stop-resume-native-home.test.js
 tests/agent-resource-settings.test.js
 tests/audit-identity-maintenance.test.js
 tests/owner-host-tool-mode.test.js
@@ -324,4 +339,45 @@ tests/agent-comms/broker-spool-checked-once.test.js
 # wrote only while the file holds exactly that text; another writer's change or
 # a hand edit is read in full and never written over.
 tests/owner-request-store-write-parse-once.test.js
+# The Ledger's .bak is the previous file taken by link, not a second full-size
+# write, and outside a write in progress it is never the live Ledger's inode:
+# a failed rename leaves a separate copy, and .bak is never written through the
+# Ledger (release-wave F1).
+tests/owner-request-store-bak-link.test.js
 tests/claude-cli-halt-interrupted.test.js
+
+# A tree circle whose agent did not start (B38, the 1.0.48 soak): the
+# application's MC_TREE_COMMAND_START_FAILED / _VIEW_DESTROYED are a named
+# retry with the application's reason, never "an internal error".
+tests/b38-tree-start-failed-retryable.test.js
+
+# 1.0.50 review L1: the new service-account key file is made under the
+# private state root, removed before the vault write, and crash leftovers are
+# swept.
+tests/gcp-key-staging-private.test.js
+
+# 1.0.50 review L3: host.read_file / host.list_dir refuse the relocated
+# capability/state directory, the live state directory wherever it is, and
+# the generated agent-tools tree.
+tests/host-control-state-root-fence.test.js
+
+# 1.0.50 review L4: agent_comms.send_local refuses a caller the owner host
+# did not bind (TREE_SENDER_UNBOUND) instead of sending as a live circle.
+tests/providers/agent-comms-local-unbound-sender.test.js
+
+# 1.0.50 review L5: search.query and search.status honour the session's
+# narrowed workspace ceiling (context.workspaceRoots) through executeTool.
+tests/search-session-workspace-ceiling.test.js
+
+# 1.0.50 review L6: the audit.tail tool shows free-form command lines only as
+# their length; audit.tail() for in-process readers is unchanged.
+tests/audit-tail-command-withheld.test.js
+
+# 1.0.50 platform E3: every git started in a project or lane worktree (fleet
+# worktree/review/lane runner, Luna, Gemini agentic, roster scoreboard, cloud
+# lane) is started by absolute path; a git committed in the project never runs.
+tests/git-bare-command-sites.test.js
+
+# 1.0.50 platform E2: host.exec with shell cmd hands cmd.exe the command as
+# written (`/d /s /c "<command>"`, verbatim through the job wrapper).
+tests/host-exec-cmd-verbatim.test.js

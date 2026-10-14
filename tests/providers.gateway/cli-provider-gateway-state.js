@@ -15,7 +15,7 @@ const {
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-state-distinction-'));
 try {
   const missing = new CliProviderGateway({ stateFile: path.join(root, 'missing.json') });
-  // Four controls since an earlier change (2026-09-10) added the grok provider descriptor
+  // Four controls since a57cd698 (2026-09-10) added the grok provider descriptor
   // (cli-provider-gateway.js:85). The point of this line is that an ABSENT state
   // file yields every control disabled, which is unchanged -- grok defaults false
   // like the other three, and the shape stays exact so a new provider that
@@ -30,7 +30,7 @@ try {
 
   // THE UPGRADE. A file written before a provider existed names only the ids of
   // its day, and that is an older file, not a corrupt one. This regressed for
-  // real: an earlier change added 'grok' to SUBSCRIPTION_PROVIDER_IDS and readState()
+  // real: a57cd698 added 'grok' to SUBSCRIPTION_PROVIDER_IDS and readState()
   // required every current id to be present, so every 1.0.44 install that had
   // ever turned a provider on read PROVIDER_STATE_INVALID after upgrading.
   const upgraded = path.join(root, 'written-by-1044.json');
@@ -52,16 +52,13 @@ try {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// A synthetic Windows home, assembled at runtime so this source carries no literal user path.
-const FIXTURE_HOME = ['C:', 'Users', 'fixture'].join('\\');
-
 // A busy or failing filesystem cannot establish that the bundled executable
 // is absent. Only ENOENT retains the old, definite "not in this layout" value.
 for (const code of ['EMFILE', 'EAGAIN', 'EIO', 'EBUSY', 'ETIMEDOUT']) {
   assert.throws(
     () => vscodeCodexExecutable({
       platform: 'win32',
-      homeDirectory: FIXTURE_HOME,
+      homeDirectory: '\x43:\\Users\\fixture',
       fsImpl: { readdirSync() { throw Object.assign(new Error(code), { code }); } }
     }),
     error => error?.code === 'PROVIDER_EXECUTABLE_LOOKUP_UNAVAILABLE'
@@ -71,7 +68,7 @@ for (const code of ['EMFILE', 'EAGAIN', 'EIO', 'EBUSY', 'ETIMEDOUT']) {
   assert.throws(
     () => vscodeCodexExecutable({
       platform: 'win32',
-      homeDirectory: FIXTURE_HOME,
+      homeDirectory: '\x43:\\Users\\fixture',
       fsImpl: {
         readdirSync() {
           return [{ name: 'openai.chatgpt-1.2.3-win32-x64', isDirectory: () => true }];
@@ -85,7 +82,7 @@ for (const code of ['EMFILE', 'EAGAIN', 'EIO', 'EBUSY', 'ETIMEDOUT']) {
 }
 assert.equal(vscodeCodexExecutable({
   platform: 'win32',
-  homeDirectory: FIXTURE_HOME,
+  homeDirectory: '\x43:\\Users\\fixture',
   fsImpl: { readdirSync() { throw Object.assign(new Error('missing'), { code: 'ENOENT' }); } }
 }), null);
 

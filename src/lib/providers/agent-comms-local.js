@@ -34,6 +34,7 @@ const { composeRuntimeRoster, createLocalAgentCommsRuntime, normalizeAgentId } =
 const { createTreeNodeDirectory } = require('../agent-comms/tree-node-directory');
 
 const MAX_BODY_LENGTH = 4000;
+const REFUSAL_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,95}$/;
 
 class LocalAgentMessageError extends Error {
   constructor(code, message, details = {}) {
@@ -59,6 +60,14 @@ function stoppedBacklogNote(name, relation) {
   return `${name} is not running, so nothing is reading the messages already waiting for it, and this one was not queued. Nothing was lost. ${who}`;
 }
 
+function normalizeRefusalCode(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !REFUSAL_CODE_PATTERN.test(value)) {
+    fail('AGENT_TREE_HANDOFF_REFUSED', 'The recipient handoff refusal code is invalid.');
+  }
+  return value;
+}
+
 function localBrokerFile() {
   return statePath('state', 'agent-comms', 'local-broker.json');
 }
@@ -68,7 +77,8 @@ function createLocalAgentMessageProvider({
   runtimeFactory = createLocalAgentCommsRuntime,
   brokerFile = null,
   now = Date.now,
-  readDelegationPolicy = require('../agent-delegation-policy').readAgentDelegationPolicy
+  readDelegationPolicy = require('../agent-delegation-policy').readAgentDelegationPolicy,
+  requireBoundSender = false
 } = {}) {
   const tree = directory || createTreeNodeDirectory({ now });
 
@@ -147,7 +157,7 @@ function createLocalAgentMessageProvider({
   /* HOW LONG A BATCHED READ MAY BLOCK THE MAIN THREAD WAITING FOR THE SPOOL LOCK.
    *
    * CHOSEN ON MEASUREMENT, not taste. Seeded from the real 2.6 MB live spool at
-   * an earlier change, one uncontended rebuild costs 160-235 ms while HOLDING this lock,
+   * 80f08ecb, one uncontended rebuild costs 160-235 ms while HOLDING this lock,
    * so a round arriving behind a single holder needs roughly a quarter second
    * to get through. This budget of 1,000 ms therefore absorbs about four
    * consecutive holders before it gives up, while bounding the worst
@@ -248,6 +258,24 @@ function createLocalAgentMessageProvider({
       fail('AGENT_MESSAGE_BODY_TOO_LONG', `A message may be at most ${MAX_BODY_LENGTH} characters.`);
     }
     const senderSessionId = callerSessionId(context);
+    /* A SENDER NOBODY VOUCHED FOR IS NOT A CIRCLE (1.0.50 review L4).
+     *
+     * Every circle on this computer's tree is a session the app started, and
+     * the owner host binds it before it may call anything. A caller with no
+     * binding -- the direct stdio broker, a detached lane -- has no row of its
+     * own, so the only rows it could resolve to by name belong to other
+     * circles: an anonymous caller could send as "Controller" to a worker.
+     * The tool surface's provider refuses that send here. The directory's
+     * name-only lookup is unchanged for the roster and for directories built
+     * by other callers. */
+    if (requireBoundSender && senderSessionId === null) {
+      return Object.freeze({
+        accepted: false,
+        code: 'TREE_SENDER_UNBOUND',
+        reason: 'Only an agent the app started on this computer\'s tree can send here, and this caller is not one, so nothing was sent.',
+        reachable: []
+      });
+    }
     const resolved = tree.resolveDelivery({ from: input.from, to: input.to, senderSessionId });
     if (resolved.ok !== true) {
       return Object.freeze({
@@ -407,7 +435,7 @@ function createLocalAgentMessageProvider({
    * The app calls this for every session it is running; the cursor it passes is
    * the last sequence it has already put on screen, so a message is shown once
    * and a window that reopens does not replay the conversation. */
-  async function inbox({ agentId, cursor = 0, limit = 25 } = {}) {
+  async function inbox({ agentId, cursor = 0, limit = 25, includeReadPosition = false } = {}) {
     const runtime = runtimeFor([agentId]);
     const agent = runtime.identity(agentId);
     const failures = readDeliveryFailures(runtime, [agentId]);
@@ -417,7 +445,7 @@ function createLocalAgentMessageProvider({
       cursor,
       limit
     });
-    return Object.freeze({ agentId, page: withDeliveryReceipts(page, agentId, failures) });
+    return Object.freeze({ agentId, page: withDeliveryReceipts(await withReadPosition(runtime, agent, page, includeReadPosition), agentId, failures) });
   }
 
   /* THE DOOR A DURABLE CURSOR NEEDS (T201).
@@ -476,6 +504,15 @@ function createLocalAgentMessageProvider({
     return runtime.fabric.deliveryFailures({ agents: agentIds.map(id => runtime.identity(id)) });
   }
 
+  async function withReadPosition(runtime, agent, page, requested) {
+    // Only new predecessor readers need this extra durable lookup. Missing
+    // support stays distinguishable from cursor zero; a failed read propagates
+    // so the caller retains its position and retries the omitted page.
+    if (requested !== true || typeof runtime.fabric.position !== 'function') return page;
+    const position = await runtime.fabric.position({ agent, audience: { type: 'direct', agent } });
+    return Object.freeze({ ...page, durableReadCursor: position?.cursor });
+  }
+
   function withDeliveryReceipts(page, agentId, failures) {
     if (failures === null) return page;
     const recipientReceipts = failures.filter(row => row.recipientAgentId === agentId);
@@ -496,8 +533,8 @@ function createLocalAgentMessageProvider({
     });
   }
 
-  async function discard({ agentId, message } = {}) {
-    return transitionDelivery('discardDelivery', agentId, message);
+  async function discard({ agentId, message, refusalCode } = {}) {
+    return transitionDelivery('discardDelivery', agentId, message, normalizeRefusalCode(refusalCode));
   }
 
   async function defer({ agentId, message } = {}) {
@@ -546,22 +583,93 @@ function createLocalAgentMessageProvider({
       fail('AGENT_READ_RECEIPT_INVALID', 'A read receipt needs the position the message was read at.');
     }
     const agent = runtime.identity(agentId);
-    return runtime.fabric.markRead({
+    const audience = { type: 'direct', agent };
+    const receipt = () => runtime.fabric.markRead({
       agent,
-      audience: { type: 'direct', agent },
+      audience,
       evidence: evidence || { handedToModel: true },
       messageId: message.id,
       sequence
     });
+    const answer = await receipt();
+    if (answer?.accepted === true || answer?.code !== 'FABRIC_READ_OUT_OF_ORDER') return answer;
+    return await settleTerminalRecordsBefore(runtime, agent, audience, agentId, sequence) ? receipt() : answer;
   }
 
-  function transitionDelivery(verb, agentId, message) {
+  /* A RECEIPT MUST NOT WAIT FOREVER BEHIND A RECORD THAT IS ALREADY SETTLED.
+   *
+   * markRead is strictly in order, so one record that never gets a receipt
+   * refuses every later one (FABRIC_READ_OUT_OF_ORDER), the recipient's
+   * durable cursor stops, and -- because the recipient is the stream's
+   * declared reader -- retention can evict nothing after it. The courier
+   * never sends a receipt for two kinds of record, both on purpose: one it
+   * dead-lettered after the model refused the turn, and one the broker already
+   * reports as dead-lettered or model-handoff-confirmed. MEASURED on 419fcca:
+   * after one dead-lettered message every later receipt was refused, and the
+   * 44th later send threw FABRIC_RECIPIENT_BACKLOG_FULL for an agent that had
+   * read every message it was sent.
+   *
+   * Those records are settled already: a dead letter is kept, with its payload,
+   * in the broker's own store and its sender has been told; a confirmed
+   * handoff reached the model. So when a receipt is refused only because such
+   * records stand ahead of it, they are acknowledged first, in order, naming
+   * the broker's disposition as their evidence. A record ahead that is NOT
+   * settled still refuses the receipt, and nothing is acknowledged unless the
+   * whole run ahead is settled -- the guarantee that a receipt never skips a
+   * record nobody was shown is unchanged.
+   *
+   * ONE PATH FOR EACH KIND OF SETTLED RECORD. A dead letter the courier set
+   * aside (RECIPIENT_QUEUE_DISCARDED) is passed by the fabric itself, without
+   * recording a read, when it is set aside and whenever a receipt reaches it
+   * (settleLeadingTerminalDeadLetters, T1750). So this catch-up acknowledges
+   * only what the fabric does not pass on its own: a confirmed handoff, which
+   * the model did receive, and a dead letter whose recipient was not in the
+   * directory. When the fabric passes a dead letter in the middle of this run,
+   * its answer names a bookmark already at or past that record, and the run
+   * goes on instead of giving up on a receipt that is now in order. */
+  const SETTLED_DISPOSITIONS = Object.freeze(['BROKER_MESSAGE_DEAD_LETTERED', 'BROKER_MODEL_HANDOFF_CONFIRMED']);
+
+  async function settleTerminalRecordsBefore(runtime, agent, audience, agentId, sequence) {
+    if (typeof runtime.fabric.position !== 'function' || typeof runtime.fabric.read !== 'function') return false;
+    const failures = readDeliveryFailures(runtime, [agentId]);
+    if (failures === null) return false;
+    const settled = new Map(failures
+      .filter(row => row.recipientAgentId === agentId && SETTLED_DISPOSITIONS.includes(row.code))
+      .map(row => [row.messageId, row.code]));
+    const position = runtime.fabric.position({ agent, audience });
+    if (position.status === 'TRUNCATED' || !Number.isSafeInteger(position.cursor) || position.cursor >= sequence - 1) return false;
+    // A receipt for a position the stream has not reached has nothing ahead of
+    // it to settle; its answer is the fabric's own refusal and bookmark.
+    if (!Number.isSafeInteger(position.headSequence) || sequence > position.headSequence) return false;
+    const page = await runtime.fabric.read({ agent, audience, cursor: position.cursor, limit: sequence - 1 - position.cursor });
+    const ahead = (page.records || []).filter(record => record.sequence < sequence);
+    if (ahead.length !== sequence - 1 - position.cursor
+      || !ahead.every(record => settled.has(record.message && record.message.id))) return false;
+    for (const record of ahead) {
+      const passed = await runtime.fabric.markRead({
+        agent,
+        audience,
+        evidence: { source: 'agent_comms.local_inbox', settled: settled.get(record.message.id) },
+        messageId: record.message.id,
+        sequence: record.sequence
+      });
+      if (passed?.accepted === true) continue;
+      if (passed?.code === 'FABRIC_READ_OUT_OF_ORDER' && Number.isSafeInteger(passed.cursor)
+        && passed.cursor >= record.sequence) continue;
+      return false;
+    }
+    return true;
+  }
+
+  function transitionDelivery(verb, agentId, message, refusalCode = undefined) {
     normalizeAgentId(agentId);
     const runtime = runtimeFor([agentId]);
     if (typeof runtime.fabric[verb] !== 'function') {
       fail('AGENT_DELIVERY_RECEIPTS_UNAVAILABLE', 'This runtime cannot retain recipient handoff state.');
     }
-    return runtime.fabric[verb]({ agent: runtime.identity(agentId), message });
+    const input = { agent: runtime.identity(agentId), message };
+    if (verb === 'discardDelivery' && refusalCode !== undefined) input.refusalCode = refusalCode;
+    return runtime.fabric[verb](input);
   }
 
   /* WHAT ARRIVED FOR EVERY CIRCLE ON THIS COMPUTER, ASKED ONCE.
@@ -598,7 +706,8 @@ function createLocalAgentMessageProvider({
       .map(request => Object.freeze({
         agentId: request.agentId,
         cursor: Number.isFinite(request.cursor) ? request.cursor : 0,
-        limit: Number.isSafeInteger(request.limit) ? request.limit : 25
+        limit: Number.isSafeInteger(request.limit) ? request.limit : 25,
+        includeReadPosition: request.includeReadPosition === true
       }))
       /* A NAME THE FABRIC COULD NEVER ADDRESS DROPS OUT HERE, BEFORE THE BUILD.
          runtimeFor() hands every requested id to the roster, and the roster
@@ -618,8 +727,8 @@ function createLocalAgentMessageProvider({
      * DEFAULT_LOCK_TIMEOUT_MS that is up to ten seconds during which this
      * process renders nothing and answers nothing.
      *
-     * MEASURED at an earlier revision, seeded from the real 2.6 MB live spool
-     * (two measurement scripts): an
+     * MEASURED at 80f08ecb, seeded from the real 2.6 MB live spool
+     * (builds\w14-measure-inbox-sync.cjs, builds\w14-probe-round.cjs): an
      * uncontended rebuild costs 160-235 ms of synchronous pre-await time, and
      * ONE other process holding the lock turned this round into a 9,072 ms
      * main-thread block. Live's worst tree-courier:read-dispatch span is
@@ -661,7 +770,7 @@ function createLocalAgentMessageProvider({
           limit: request.limit
         });
         answered.push(Object.freeze({ agentId: request.agentId,
-          page: withDeliveryReceipts(page, request.agentId, failures) }));
+          page: withDeliveryReceipts(await withReadPosition(runtime, agent, page, request.includeReadPosition), request.agentId, failures) }));
       } catch {
         /* Omitted on purpose -- see the paragraph above. */
       }
@@ -709,7 +818,13 @@ function createLocalAgentMessageProvider({
       if (attempt === 3) return Object.freeze({ ok: false, reason: 'the retained message window changed during the read; try again' });
       readCursor = next;
     }
-    const known = new Map(tree.listNodes().map(node => [node.agentId, node.nodeName]));
+    /* EVERY ROW, INCLUDING A REPLACED SESSION'S. A session that continued in a
+       successor keeps its row marked supersededBy, and listNodes() hides such
+       rows unless asked -- which turned every message to or from it into a
+       bare `tree-<hash>` on this page. runtimeFor() asks the same way. The
+       saved circle (nodeKey) rides along so the paired app can tell two
+       same-named circles in different trees apart (its T1513 labels). */
+    const known = new Map(tree.listNodes({ includeSuperseded: true }).map(node => [node.agentId, node]));
     /* The projection nests its rows under `journal`, and reading `page.records`
        from the top level answered an empty array on a fabric with a full
        journal -- an empty conversation is exactly what this feature looks like
@@ -769,10 +884,12 @@ function createLocalAgentMessageProvider({
         const recipientId = message.audience?.type === 'direct' ? message.audience.agent?.agentId : null;
         return Object.freeze({
           id: String(message.id || `sequence-${record.sequence}`),
-          sender: known.get(senderId) || senderId || 'an agent',
+          sender: known.get(senderId)?.nodeName || senderId || 'an agent',
           senderId: senderId || null,
-          recipient: recipientId ? known.get(recipientId) || recipientId : null,
+          senderNodeKey: known.get(senderId)?.nodeKey || null,
+          recipient: recipientId ? known.get(recipientId)?.nodeName || recipientId : null,
           recipientId: recipientId || null,
+          recipientNodeKey: recipientId ? known.get(recipientId)?.nodeKey || null : null,
           kind: message.kind || 'notice',
           causalParent: message.causalParent || null,
           sequence: record.sequence,
@@ -789,7 +906,9 @@ function createLocalAgentMessageProvider({
   return Object.freeze({ acknowledge, acknowledgeDeferred, acknowledgeRead, defer, discard, inbox, inboxes, ownerJournal, roster, send, directory: tree });
 }
 
-const provider = createLocalAgentMessageProvider();
+// The tool surface's provider: agent_comms.send_local reaches this one, so a
+// send must come from a session the owner host bound (see send above).
+const provider = createLocalAgentMessageProvider({ requireBoundSender: true });
 
 module.exports = Object.freeze({
   LocalAgentMessageError,

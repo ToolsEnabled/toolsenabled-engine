@@ -3,21 +3,30 @@
 
 // WORDS THE OWNER SAID THAT NEVER REACHED THE LEDGER.
 //
-// The failure this catches: a request stated several times never reached the
-// ledger, so the projected cart was wrong and the R ledger looked broken.
+// The owner, 2026-08-11 (reports/OWNER-REQUEST-LEDGER.json R1233, verbatim):
+//   "Again - i think thats not the correct cart, I think maybe R is not working
+//    or something is going wrong because I have said a lot of times what I want"
 //
-// They were right, and the reason is mechanical rather than mysterious. Capture is
+// He was right, and the reason is mechanical rather than mysterious. Capture is
 // MANUAL: reports/OWNER-REQUEST-LEDGER.json only ever gains what some agent
-// remembered to run tools/owner-capture.js on. Everything they type mid-turn --
-// the corrections, the requests for the whole list, the scope changes -- lives in
+// remembered to run tools/owner-capture.js on. Everything he types mid-turn --
+// the corrections, the "I wanted the whole list", the scope changes -- lives in
 // the session transcript and dies with the session.
 //
-// Measured on the development machine, 2026-08-11, by exact substring probe
-// against the 535-entry canonical ledger: five owner turns from that day about
-// the purchase list and the cart (asking to bring the list up, to review the
-// whole list, to route it through mission control, to add items, and to verify
-// the cart was complete) were all ABSENT from it. The source was a Claude Code
-// session transcript (<claude-home>/projects/<project-slug>/<session-id>.jsonl).
+// Measured on this machine, 2026-08-11, by exact substring probe against the
+// 535-entry canonical ledger. Every one of these is ABSENT from it:
+//
+//   04:22  "bring up the purchase list. use more opus5 ultra as needed..."
+//   04:25  "I wanted the whole list. Go back and review what I had wanted on
+//           the purchase list, it should be in R"
+//   04:44  "It muyst be throuygh mission control the purchase list"
+//   08:05  "Ok add items that need to be purhcased to the purchase list..."
+//   14:34  "ok launch the cart but is it verfiied all i need? And did you get
+//           everything I needed? Trademark, licnsing, entity ioncorportation,
+//           all the toolsanebaled.ai .io .com ?"
+//   (source: the Claude Code session transcript for the legacy ToolsEnabled
+//    checkout -- <claude-home>/projects/<project-slug>/<session-id>.jsonl,
+//    lines 24159 / 24207 / 24547 / 27119 / 28941)
 //
 //   The path is described by SHAPE rather than spelled out on purpose. This
 //   comment ships: tools/ is staged into the capability payload, so a literal
@@ -25,15 +34,15 @@
 //   install. tools/pack-capability-layer.mjs's owner-data guard failed the
 //   whole ship chain on exactly these two lines, which is the guard working.
 //
-// The motivating case: an instruction said a list should already be in R. It was not
-// in R, because the sentence saying so was itself never put in R. The list could not
-// have been built from those words; no code path had them.
+// He told an agent the purchase list "should be in R". It was not in R, because
+// the sentence saying so was itself never put in R. The cart could not have been
+// built from his words; no code path had them.
 //
 // WHAT THIS TOOL IS. The detector half of capture-at-ingress: it diffs the
 // owner's real chat turns against the ledger's verbatim corpus and names what
 // is missing, with file and line, so it can be captured. It is read-only and it
 // never captures anything itself -- tools/owner-capture.js is the only writer,
-// and a tool that auto-filed paraphrases of their words would be manufacturing
+// and a tool that auto-filed paraphrases of his words would be manufacturing
 // the very provenance src/lib/owner-request-provenance.js exists to protect.
 //
 // CAPTURE-AT-INGRESS -- THE DESIGN THIS TOOL IS THE FIRST STEP OF.
@@ -52,7 +61,7 @@
 //   2. CLASSIFY, NEVER PARAPHRASE. A turn is promoted from spool to ledger by
 //      tools/owner-capture.js with the verbatim text intact and a provenance
 //      class from src/lib/owner-request-provenance.js. Classification is a
-//      judgement and stays one; what stops being a judgement is whether their
+//      judgement and stays one; what stops being a judgement is whether his
 //      words SURVIVE long enough to be classified.
 //   3. PUSH THE BACKLOG INTO THE PROMPT (composes with R1232). R1232 asks for
 //      status data to be pushed into agent prompts mechanically, as a setting,
@@ -111,7 +120,7 @@ function loadLedgerCorpus(ledgerFile) {
   const normalizedTexts = [];
   for (const entry of parsed.requests) {
     // Only VERBATIM counts as capture. An interpretation that happens to
-    // paraphrase them is precisely what R44 proved unsafe to treat as a record.
+    // paraphrase him is precisely what R44 proved unsafe to treat as a record.
     if (!entry || typeof entry.verbatim !== 'string' || !entry.verbatim.trim()) continue;
     const normalized = normalize(entry.verbatim);
     normalizedTexts.push(normalized);

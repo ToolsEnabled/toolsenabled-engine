@@ -1,18 +1,22 @@
 {
   "$comment": [
     "Reviewed retained core identity contract, not a minimum count and not a list derived from the current registry during a test.",
-    "The historical snapshot is the CORE_TOOLS declarations of an earlier engine revision, less identities retired from the public source. Tool packs are outside this required core set.",
+    "The historical snapshot is the literal CORE_TOOLS declarations at the exact source below. Tool packs are outside this required core set.",
     "The named retirements remove the retired engine-hosted service, not arbitrary missing capabilities. Additions are the reviewed resource, agent-lifecycle, build-queue and generic app/accessibility and Seedance video tools, bounded sandbox artifact reads, and durable ledger reads. This reconciliation also retains the two Page 2 screen-access tools.",
     "Changing core membership requires explicit identity reconciliation. Unrelated pack tools cannot replace a missing required core identity.",
-    "t_ledger.progress (2026-09-10) joins its three t_ledger siblings here: a bounded non-terminal progress or external-blocker checkpoint on an unfinished one-shot task, local-write and idempotent, terminal tasks stay terminal. It shipped in the registry without this reconciliation, which is what tests/tool-effect-classification.test.js reported. Nothing is removed.",
+    "t_ledger.progress (a7ee8f37, 2026-09-10) joins its three t_ledger siblings here: a bounded non-terminal progress or external-blocker checkpoint on an unfinished one-shot task, local-write and idempotent, terminal tasks stay terminal. It shipped in the registry without this reconciliation, which is what tests/tool-effect-classification.test.js reported. Nothing is removed.",
     "Explicitly reconcile capability.find (session-filtered metadata read) and five opt-in agent.set_* slot controls. This adds public identities only; permission, role and tree-ownership gates remain independent.",
     "T1138 adds t_ledger.review for explicit idempotent task reviews. Transport-bound actor, local-write permission and authoritative store review policy remain required; this addition retires no identity.",
-    "A later change adds t_ledger.assign: one existing task assigned to one host-verified live child through the private host authority, transport-bound actor, local-write and idempotent under a stable assignmentId. Filing is not assignment; this addition retires no identity."
+    "9bcdfc1f adds t_ledger.assign: one existing task assigned to one host-verified live child through the private host authority, transport-bound actor, local-write and idempotent under a stable assignmentId. Filing is not assignment; this addition retires no identity.",
+    "2026-09-27: the 1.0.48 de-institution work renamed one historical identity, the institutional sign-in tool, to duo.institution_login, in the registry and in historicalCoreNames alike. historicalSource.coreNamesSha256 is still the source's digest; the snapshot's is pinned in tests/tool-effect-classification.test.js. No identity was added or retired."
   ],
   "schemaVersion": 1,
   "historicalSource": {
+    "commit": "81b14e15cb0d4bc1ad78dcf08a9f4f458fffb316",
     "path": "src/lib/tool-registry.js",
-    "coreNamesSha256": "6dba27fac5a193cb3362eef5b95af18ed8eb6561efaf8e8dcf043855604c26d1"
+    "gitBlob": "9020bc291e89bc01c0fb10056a4267c098782d65",
+    "sha256": "9f11f88a3f3f8d1cb6d3d995e404b365164c1a59daae23d78fad483ce87f205c",
+    "coreNamesSha256": "de763c78b364c87a038df2e568775dafc70cb8d376cfe81dd74e4e7844c006c8"
   },
   "historicalCoreNames": [
     "agent.spawn",
@@ -57,6 +61,7 @@
     "drive.find",
     "drive.upload",
     "duo.desktop_status",
+    "duo.institution_login",
     "extension.package",
     "extension.validate",
     "firebase.account_login",

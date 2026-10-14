@@ -1,7 +1,7 @@
 'use strict';
 
-// A local model has to be read off disk before it can answer. Measured on a
-// development machine 2026-09-04 against Ollama 0.33.3: the 13.3 GB model
+// A local model has to be read off disk before it can answer. Measured on the
+// owner's machine 2026-09-04 against Ollama 0.33.3: the 13.3 GB model
 // "Qwen3-Coder-30B-A3B-Instruct q3_k_s" needed 48,875 ms to LOAD, generating
 // zero tokens, and the 6.1 GB "qwen3.5:9b" needed 19,361 ms cold and 483 ms
 // warm. A 30,000 ms bound covering load, prompt and generation therefore

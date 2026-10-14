@@ -4,7 +4,7 @@
     "toolsenabled": {
       "command": "node",
       "args": [
-        "C:\\path\\to\\your\\checkout\\tools\\mcp-owner-proxy.js"
+        "<checkout-root>-checkout\\tools\\mcp-owner-proxy.js"
       ],
       "env": {
         "TOOLSENABLED_AGENT_ACTOR": "claude",

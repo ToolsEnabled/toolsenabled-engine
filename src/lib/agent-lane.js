@@ -361,8 +361,8 @@ function buildPrompt(options, mailbox, deps = {}) {
     topic: `${options.directiveId || ''} ${options.lane}`.trim(),
     // The owner's R-ledger identity for this child (src/lib/r-ledger.js): the
     // child IS its own session and thread; its tree ancestors are the launching
-    // parent's ancestors plus the parent itself, oldest first -- a tree is every
-    // agent connected below that agent, so a rule filed at any ancestor
+    // parent's ancestors plus the parent itself, oldest first -- "tree is every
+    // agent connected below that agent", so a rule filed at any ancestor
     // reaches this child, and nothing flows upward or sideways.
     sessionId: lineage.sessionId,
     threadId: lineage.threadId,
@@ -768,19 +768,13 @@ function spawnChild(options, prompt, deps = {}) {
   try {
     child = spawnImpl(options.command, args, {
       cwd: options.worktree,
-      // NOT `...process.env`. This lane spawns a real Claude or Codex CLI, and
-      // Claude Code gives an ambient ANTHROPIC_API_KEY PRECEDENCE over the
-      // owner's subscription login -- the R1186 shape, where sweeps billed a
-      // drained API account for hours while reporting "logged in". Measured
-      // 2026-08-10 through this exact function with a real spawned child:
-      // ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, AWS_ACCESS_KEY_ID and
-      // OPENAI_API_KEY all arrived SET. safeLaunchEnvironment() is the one
-      // shared scrub (case-insensitive, because Windows is) plus the tripwire
-      // that refuses the launch rather than charging silently. The lane-local
-      // TOOLSENABLED_* keys below are set AFTER it, so the scrub cannot drop
-      // them and they cannot reintroduce a credential.
+      nativeClaudeCode: kind === 'claude',
+      // Native Claude Code receives the person's chosen authentication
+      // settings. Other lanes retain the shared credential scrub.
+      // The lane identity keys below are assigned after that preparation.
       env: {
-        ...safeLaunchEnvironment(process.env, { context: `agent lane ${kind}` }),
+        ...(kind === 'claude' ? { ...(deps.environment || process.env) }
+          : safeLaunchEnvironment(process.env, { context: `agent lane ${kind}` })),
         TOOLSENABLED_AGENT_ID: options.agentId,
         TOOLSENABLED_AGENT_ROLE: options.role,
         TOOLSENABLED_AGENT_TIER: options.tier,

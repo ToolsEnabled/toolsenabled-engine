@@ -193,6 +193,58 @@ function createAgentOrgStore({
     return agentOrg.normalizeOrg(document, { knownRoles: knownRoles(definitions), maxAgents });
   }
 
+  /* A PLUGIN'S ROLE IS PROJECTED, SO IT CAN GO AWAY; A SEAT THAT HELD ONE CANNOT.
+   *
+   * An activated plugin's roles are added to the vocabulary on every read and
+   * written nowhere (src/lib/plugin-role-projection.js). A seat given one of them,
+   * though, is saved here, and when the grant is withdrawn or the package changes
+   * by one byte the role is simply not there on the next start. Before this, that
+   * read exactly like a deleted custom role: the saved organisation stopped
+   * validating, the shipped default was shown in its place, the owner host could
+   * not verify the organisation, and every edit was refused as damaged -- found by
+   * driving the real app, 2026-09-27.
+   *
+   * So a write records which plugin roles its seats hold, and a read gives a seat
+   * whose recorded plugin role is gone the Worker role instead. That is the base
+   * every projected role is built on (custom-role-store's projectedDefinition()),
+   * so the seat keeps exactly the abilities it had and loses only the plugin's
+   * wording. Nothing is written by the read: if the plugin comes back before the
+   * next edit, so does the role. And ONLY a recorded plugin role is replaced -- a
+   * role of the person's own that disappears is still reported as damage. */
+  const WITHDRAWN_PLUGIN_ROLE_BASE = 'worker';
+
+  function suppliedRoleIds(org) {
+    if (!customRoles || typeof customRoles.suppliedBy !== 'function') return [];
+    return [...new Set(org.agents.map(agent => agent.role))]
+      .filter(role => customRoles.suppliedBy(role) !== null)
+      .sort();
+  }
+
+  function recordedPluginRoles(stored) {
+    const recorded = stored.pluginRoles;
+    if (!Array.isArray(recorded)) return new Set();
+    return new Set(recorded.filter(id => typeof id === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)));
+  }
+
+  function withoutWithdrawnPluginRoles(stored, definitions) {
+    const recorded = recordedPluginRoles(stored);
+    if (!recorded.size || !Array.isArray(stored.org.agents)) return { document: stored.org, withdrawn: [] };
+    const known = new Set([...agentOrg.ROLES, ...definitions.map(role => role.id)]);
+    const withdrawn = [];
+    const agents = stored.org.agents.map(agent => {
+      if (!plain(agent) || !recorded.has(agent.role) || known.has(agent.role)) return agent;
+      withdrawn.push(Object.freeze({
+        agentId: String(agent.id),
+        displayName: typeof agent.displayName === 'string' ? agent.displayName : String(agent.id),
+        role: agent.role
+      }));
+      const replaced = { ...agent, role: WITHDRAWN_PLUGIN_ROLE_BASE };
+      delete replaced.roleSelection;
+      return replaced;
+    });
+    return withdrawn.length ? { document: { ...stored.org, agents }, withdrawn } : { document: stored.org, withdrawn };
+  }
+
   function readBaseline(definitions = roleDefinitions()) {
     const baseline = readJson(baselineFile);
     if (!baseline.present) {
@@ -238,8 +290,9 @@ function createAgentOrgStore({
         });
       }
       let org;
+      const { document, withdrawn } = withoutWithdrawnPluginRoles(stored, definitions);
       try {
-        org = normalize(stored.org, definitions);
+        org = normalize(document, definitions);
       } catch (error) {
         // The saved org no longer validates. The commonest real cause is a
         // custom role that was deleted while agents still held it. Say that
@@ -266,7 +319,10 @@ function createAgentOrgStore({
           shippedNow: baseline.contentHash
         });
       }
-      return Object.freeze({ org, source: 'overlay', damaged: null, baselineDrift });
+      return Object.freeze({
+        org, source: 'overlay', damaged: null, baselineDrift,
+        ...(withdrawn.length ? { withdrawnPluginRoles: Object.freeze(withdrawn) } : {})
+      });
     },
 
     /** The shipped default, ignoring any local edit. */
@@ -303,6 +359,7 @@ function createAgentOrgStore({
       // overlay was seeded from. Refuse instead of persisting a null hash that
       // would make future drift checks silently inconclusive.
       const baselineHash = readBaseline(definitions).contentHash;
+      const pluginRoles = suppliedRoleIds(next);
       writeAtomic(fileSystem, overlayPath, {
         schemaVersion: SCHEMA_VERSION,
         // Recorded at the moment of the first write and carried forward, so
@@ -314,6 +371,9 @@ function createAgentOrgStore({
           return previous || baselineHash;
         })(),
         savedAt: new Date().toISOString(),
+        // Present only while a seat holds a plugin's role, so an organisation
+        // with no plugin role in it is saved exactly as it always was.
+        ...(pluginRoles.length ? { pluginRoles } : {}),
         org: mutableOrg(next)
       });
       return Object.freeze({ org: next, overlayFile: overlayPath });
@@ -433,8 +493,8 @@ function createAgentOrgStore({
      * circle in every tree binds to that one seat, so a start on another
      * provider is a SECOND conversation of the same actor, not a move. It used
      * to rewrite `provider`, and the owner host then revoked every live
-     * Controller on the old provider at its next line (per-line-recheck).
-     * Now the new provider joins the seat's
+     * Controller on the old provider at its next line (per-line-recheck of
+     * c46706be and a7c05c50, 2026-09-22). Now the new provider joins the seat's
      * `providers` and `provider` stays as it was, unless it was still "none".
      * Adopting "none" adds nothing. Any other seat keeps the replacement it
      * always had, since a tree node's seat carries only that node's own

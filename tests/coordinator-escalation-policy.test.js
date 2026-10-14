@@ -195,7 +195,7 @@ function suppress(state, candidate, atMs, expected) {
 
   const withoutConfig = policy.decide(DOWN, state, { now: nightMs });
   assert.equal(withoutConfig.decision, policy.DECISION.SEND,
-    'no quiet window is configured by default: an outage at 03:00 must still reach them');
+    'no quiet window is configured by default: an outage at 03:00 must still reach him');
 
   const quiet = { startHour: 22, endHour: 7 };
   const withConfig = policy.decide(DOWN, state, { now: nightMs, quietHours: quiet });

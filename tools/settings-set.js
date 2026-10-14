@@ -3,8 +3,8 @@
 
 // settings-set.js -- the only write path this product has for a user setting.
 //
-// Product requirement: users can change the setting in the app, and
-// anything that is a user setting has to be changeable in the software.
+// Owner, 2026-08-13: "make sure users can change the setting though in the app"
+// and "anything thats a user setting has to be changeable in the software".
 //
 // WHY THIS FILE EXISTS AT ALL. src/lib/settings.js exports loadSettings and
 // resolveValuesPath and nothing else -- there is no writer anywhere in the
@@ -402,6 +402,15 @@ function main(argv = process.argv.slice(2), env = process.env, streams = process
   // would be a second copy that can drift from the reader's.
   const valuesPath = resolveValuesPath({ env });
   const document = readDocument(valuesPath);
+  for (const storedId of Object.keys(document.provenance)) {
+    if (!registry.byId.has(storedId)) delete document.provenance[storedId];
+  }
+  for (const storedId of Object.keys(document.values)) {
+    if (!registry.byId.has(storedId)) {
+      delete document.values[storedId];
+      delete document.provenance[storedId];
+    }
+  }
   if (resetId) {
     // Remove both canonical and compatibility overrides so a stale alias cannot
     // resurrect a choice when restoring the declared default.

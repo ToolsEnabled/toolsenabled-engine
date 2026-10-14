@@ -264,7 +264,7 @@ function normalizeScopeActivation(input) {
 //   src/lib/agent-lane.js:172        dispatcher === 'owner' bypasses assertAgentId
 //   src/lib/agent-presence.js:381    dispatcher === 'owner' sets origin 'user'
 //   src/lib/agent-wake.js:200        same sentinel on a launch spec
-//   src/lib/owner-chat.js:564        'owner' is reserved for words THEY typed
+//   src/lib/owner-chat.js:564        'owner' is reserved for words HE typed
 //   src/chatbox-feed.js:103          NOT_AGENTS = ['owner', 'me', 'act']
 //
 // A custom role that could call itself `owner` would put an operator-authored
@@ -366,10 +366,10 @@ function roleMayAct(org, roleId) {
  * to that one seat, so a Claude Controller and a Codex Controller are the same
  * declared actor running on two programs. With one provider per seat, starting
  * the second one either rewrote the seat and revoked the first at its next MCP
- * line (the owner-host retirement log recorded per-line-recheck revocations
- * of two live Controllers), or, once that rewrite was refused, could not
- * start at all (a Claude Controller refused with
- * MC_AGENT_SEAT_PROVIDER_IN_USE).
+ * line (capability/logs/owner-host-retirements.jsonl, per-line-recheck of
+ * Controllers c46706be at 2026-09-22 21:35:42 and a7c05c50 at 22:02:07), or,
+ * once that rewrite was refused, could not start at all (the owner's Claude
+ * Controller at 2026-09-23 13:14, MC_AGENT_SEAT_PROVIDER_IN_USE).
  *
  * One stored shape, so the content hash is stable: listed in PROVIDERS order,
  * and a list holding only `provider` is not stored at all. Such a seat reads,

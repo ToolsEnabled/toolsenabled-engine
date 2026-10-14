@@ -440,7 +440,7 @@ function resetAdmissionQueueForTests() {
 
 /* THE SAME CONTRACT AS audit.requireRecord(), OFF THE CALLER'S THREAD.
  *
- * MEASURED 2026-09-04 on a live main process, four circles: 53
+ * MEASURED 2026-09-04 on the owner's Live main process, four circles: 53
  * main-thread stalls of 2 to 4 s in fifteen minutes, 46 of them containing a
  * host.exec.intent record, and the process spawning powershell (secrets.ps1
  * get, then set-monotonic-stdin: the vault anchor a REQUIRED record forces)

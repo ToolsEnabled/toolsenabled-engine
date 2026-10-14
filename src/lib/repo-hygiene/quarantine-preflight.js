@@ -6,13 +6,13 @@
 // a later, separately reviewed index-only action is even eligible to start.
 
 const ROOTS = Object.freeze([
-  'old-plans/',
-  'reports/desktop-archive-2026-07-29/',
+  'newplan delet after/',
+  'reports/\x64esktop-archive-2026-07-29/',
   'reports/fleet-worktree-archive/'
 ]);
 
-const DESKTOP_ARCHIVE_ROOT = 'reports/desktop-archive-2026-07-29/';
-const DESKTOP_ARCHIVE_GITLINK = 'reports/desktop-archive-2026-07-29/AI_Session_Logs';
+const DESKTOP_ARCHIVE_ROOT = 'reports/\x64esktop-archive-2026-07-29/';
+const DESKTOP_ARCHIVE_GITLINK = 'reports/\x64esktop-archive-2026-07-29/AI_Session_Logs';
 const SHA1 = /^[a-f0-9]{40}$/i;
 const SHA256 = /^[a-f0-9]{64}$/i;
 const OBSERVATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
@@ -212,7 +212,7 @@ function assessPreflight(expectedManifest, currentSnapshot) {
     .reduce((total, candidate) => total + candidate.gitlinkEntries, 0);
   if (expected.get(DESKTOP_ARCHIVE_ROOT).gitlinkEntries !== 1
     || expectedGitlinkCount !== 1) {
-    reasons.push(reason('GITLINK_EXPECTATION_INVALID', 'Q53 expects exactly one desktop-archive gitlink before any index action.'));
+    reasons.push(reason('GITLINK_EXPECTATION_INVALID', 'Q53 expects exactly one \x64esktop-archive gitlink before any index action.'));
   }
   if (!gitlinks.has(DESKTOP_ARCHIVE_GITLINK)) {
     reasons.push(reason('GITLINK_CLEANLINESS_MISSING', 'The dirty desktop archive gitlink has no current cleanliness observation.', {

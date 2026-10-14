@@ -50,10 +50,7 @@
 const fs = require('node:fs');
 
 const { CloudAgentError } = require('./errors');
-/* Both reused rather than restated. MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT is a
- * MEASURED number that lives in one place; a second copy here would drift, and
- * the looser of the two would quietly become the real one. */
-const { assertSealIntact, MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT } = require('./batch-target');
+const { assertSealIntact } = require('./batch-target');
 const journal = require('./batch-journal');
 
 const MILLISECONDS_PER_MINUTE = 60000;
@@ -62,6 +59,10 @@ const MILLISECONDS_PER_MINUTE = 60000;
  * `"code": undefined` tells whoever reads it nothing, and this repository's rule
  * is that a refusal names itself. */
 const UNCODED_DISPATCH = 'CLOUD_DISPATCH_THREW';
+const PUBLIC_REFUSAL_CODES = new Set([
+  UNCODED_DISPATCH, 'CLOUD_DISPATCH_CLI_ABSENT', 'CLOUD_DISPATCH_COMMAND_LINE_REJECTED',
+  'CLOUD_DISPATCH_COMMAND_LINE_TOO_LONG', 'CLOUD_DISPATCH_REFUSED', 'CODEX_QUOTA_EXHAUSTED',
+]);
 
 function fail(code, message, details) {
   throw new CloudAgentError(code, message, details);
@@ -76,7 +77,7 @@ function defaultSleep(ms) {
  * and before a provider is called, and every one names the thing to fix.
  * ------------------------------------------------------------------------- */
 
-function checkRunnerInputs({ admission, declaration, dispatch, accounts, sleep, now, journalFile, stateRoot }) {
+function checkRunnerInputs({ admission, declaration, dispatch, account, sleep, now, journalFile, stateRoot }) {
   if (!admission || admission.admitted !== true || typeof admission.admissionSha256 !== 'string') {
     fail('CLOUD_BATCH_RUNNER_MISCONFIGURED',
       'runBatch needs the admission record returned by admitBatch. Running from anything else would dispatch work no gate ever saw.');
@@ -89,10 +90,13 @@ function checkRunnerInputs({ admission, declaration, dispatch, accounts, sleep, 
     fail('CLOUD_BATCH_RUNNER_MISCONFIGURED',
       'dispatch must be a function ({ task, index, account }) -> { taskId }. It is injected rather than imported so that the ordering guarantees in this file can be tested without spending quota on tasks that cannot be cancelled.');
   }
-  if (!Array.isArray(accounts) || accounts.length === 0
-      || accounts.some((name) => typeof name !== 'string' || name.trim() === '')) {
+  if (typeof account !== 'string' || account.trim() === '') {
     fail('CLOUD_BATCH_RUNNER_MISCONFIGURED',
-      'accounts must be a non-empty array of account names to round-robin across. A batch with no account to launch under has nowhere to go.');
+      'account must name the account explicitly selected for this batch.');
+  }
+  if (admission.declaration && admission.declaration.provider && admission.declaration.provider.account !== account) {
+    fail('CLOUD_BATCH_RUNNER_MISCONFIGURED',
+      'account must match the account selected in the admitted provider declaration.');
   }
   for (const [value, name] of [[sleep, 'sleep'], [now, 'now']]) {
     if (typeof value !== 'function') {
@@ -105,38 +109,13 @@ function checkRunnerInputs({ admission, declaration, dispatch, accounts, sleep, 
   }
 }
 
-/* THE RATE THE ADMISSION APPROVED WAS APPROVED AGAINST A COUNT OF ACCOUNTS.
- * gateBounds admitted `launchesPerMinute` only because `bounds.accounts` could
- * carry it at the measured per-account ceiling. If the runner is then handed
- * fewer accounts than that, the admitted rate lands on fewer identities than it
- * was cleared for and the per-account ceiling is exceeded -- the bounds gate is
- * voided at run time without anybody editing it. Refused rather than clamped,
- * for the same reason admission refuses rather than clamps: a batch that quietly
- * serves less than it was asked for reports a rate nobody can reproduce. */
-function checkAccountsCanCarryRate(declaration, accounts) {
-  const declared = declaration.bounds.launchesPerMinute;
-  /* COUNT IDENTITIES, NOT NAMES. This counted `accounts.length`, so listing one
-   * account twice defeated the gate entirely: a 144/min batch handed
-   * ['only-one','only-one'] was admitted and ran every dispatch onto a single
-   * account, which is precisely the outcome this refusal exists to prevent. The
-   * round-robin that spreads load collapses the same way, silently. A duplicate
-   * voids the ceiling exactly as thoroughly as a short list does. */
-  const identities = new Set(accounts.map((name) => String(name).trim()));
-  const serveable = identities.size * MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT;
-  if (declared > serveable) {
-    fail('CLOUD_BATCH_RATE_UNSERVEABLE',
-      `the batch was admitted for ${declared} launches a minute across ${declaration.bounds.accounts} declared account(s), but this runner was handed ${accounts.length} name(s) covering ${identities.size} distinct account(s), which can carry at most ${serveable} (${MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT} per account, measured). `
-      + 'Refusing rather than running the admitted rate onto fewer accounts than it was cleared for: the retries from the resulting rate limit cost more than the headroom saved.');
-  }
-}
-
 /* THE JOURNAL MUST BELONG TO THIS ADMISSION. A journal addresses tasks by
  * INDEX, so resuming batch A from batch B's journal would read "index 4 already
  * launched" and skip a completely different task -- work silently never done,
  * with a journal that says it was. The two failing cases are kept apart on
  * purpose: a header naming another admission is "not this batch", and a journal
  * with no header at all is "could not tell", and those have different remedies. */
-function checkJournalIdentity(existing, admission, file) {
+function checkJournalIdentity(existing, admission, file, account) {
   if (!existing.header) {
     fail('CLOUD_BATCH_JOURNAL_UNIDENTIFIED',
       `${file} carries no admitted-record header, so which batch it belongs to cannot be established from here. `
@@ -146,6 +125,12 @@ function checkJournalIdentity(existing, admission, file) {
     fail('CLOUD_BATCH_JOURNAL_MISMATCH',
       `${file} was opened for admission ${String(existing.header.admissionSha256).slice(0, 16)} and this run carries ${admission.admissionSha256.slice(0, 16)}. `
       + 'A journal indexes tasks by position, so resuming one batch from another batch\'s journal skips work while reporting it done.');
+  }
+  const selectedAccount = existing.header.account || (existing.launched[0] && existing.launched[0].account);
+  if ((selectedAccount && selectedAccount !== account)
+      || existing.launched.some((launch) => launch.account !== account)) {
+    fail('CLOUD_BATCH_RUNNER_MISCONFIGURED',
+      'account must match the selected account recorded in this batch journal. Resume the batch under that account.');
   }
 }
 
@@ -186,7 +171,7 @@ async function runBatch({
   journalFile = null,
   stateRoot = null,
   dispatch,
-  accounts,
+  account,
   sleep = defaultSleep,
   now = Date.now,
   /* HOW MANY DISPATCHES MAY BE IN FLIGHT AT ONCE. Default 1, which is the
@@ -199,13 +184,12 @@ async function runBatch({
   concurrency = 1,
   fsImpl = fs
 } = {}) {
-  checkRunnerInputs({ admission, declaration, dispatch, accounts, sleep, now, journalFile, stateRoot });
+  checkRunnerInputs({ admission, declaration, dispatch, account, sleep, now, journalFile, stateRoot });
 
   /* Before anything is written: is this the declaration that was admitted? The
    * per-dispatch check below is the one that matters, but refusing here keeps a
    * journal from being opened for a batch that is already off the rails. */
   assertSealIntact(admission, declaration);
-  checkAccountsCanCarryRate(declaration, accounts);
 
   const file = journalFile || journal.journalPath(stateRoot, admission.batchId);
 
@@ -215,7 +199,7 @@ async function runBatch({
    * journal is missing" and "nothing was ever dispatched" are different answers,
    * and reading the first as the second risks dispatching the whole batch twice. */
   if (stateRoot && !fsImpl.existsSync(file)) {
-    journal.openBatch({ stateRoot, admission, at: now(), fsImpl });
+    journal.openBatch({ stateRoot, admission, account, at: now(), fsImpl });
   }
 
   /* ONE path for fresh runs and resumes alike. A newly opened journal holds only
@@ -223,7 +207,7 @@ async function runBatch({
    * resume case with nothing done yet. A second code path here would be a second
    * place for the double-billing rule to be got wrong. */
   const existing = journal.readJournal(file, { fsImpl });
-  checkJournalIdentity(existing, admission, file);
+  checkJournalIdentity(existing, admission, file, account);
   // Throws CLOUD_BATCH_UNRECONCILED while anything is unresolved. Nothing is
   // dispatched in that state, on purpose: this module cannot tell whether an
   // unresolved intent is running and billing, and it must not guess.
@@ -237,7 +221,6 @@ async function runBatch({
    * of work that is still safe to dispatch -- whatever happens next, including
    * this process dying before it can write an outcome. */
   let attempted = 0;
-  let ordinal = 0;
   let nextAllowedAt = now();
   let stopped = null;
 
@@ -287,8 +270,6 @@ async function runBatch({
       void at;
 
       const task = declaration.tasks[index];
-      const account = accounts[ordinal % accounts.length];
-      ordinal += 1;
 
       // (2) INTENT FIRST, FLUSHED, BEFORE THE PROVIDER IS CALLED. If this throw
       // fires, the dispatch below never happens -- which is the point: a
@@ -336,8 +317,8 @@ async function runBatch({
           journal.recordRefused({
             file,
             index,
-            code: (thrown && thrown.code) || UNCODED_DISPATCH,
-            reason: (thrown && thrown.message) || String(thrown),
+            code: PUBLIC_REFUSAL_CODES.has(thrown.code) ? thrown.code : UNCODED_DISPATCH,
+            reason: 'The provider declined this task. Check the selected account in the official CLI.',
             at: now(),
             fsImpl
           });

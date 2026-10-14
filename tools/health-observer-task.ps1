@@ -3,7 +3,7 @@
 
     WHY THIS TASK EXISTS: on 2026-07-29 the fleet supervisor was down for 45
     minutes and the only reason anyone found out was that the owner asked. A
-    monitor armed afterwards detected the same condition in under 60 seconds --
+    monitor armed at 05:20 detected the same condition in under 60 seconds --
     the signal was always available and simply unobserved. This task is what
     keeps something looking.
 
@@ -115,7 +115,7 @@ $repeating = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionDuration (New-TimeSpan -Days 9999)
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeating -OwnerUser ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -IncludeStartup -IncludeLogon
 
 $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Limited

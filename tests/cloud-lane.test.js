@@ -125,7 +125,7 @@ async function seedTaskRecord(stateRoot, expectation) {
   return lane.runSubmit({
     transport,
     env: 'env-main',
-    branch: 'feature/integration',
+    branch: 'r1177/integration',
     expectPath: expectation.path,
     expectSha256: expectation.sha256,
     outboundProofId: null,
@@ -142,9 +142,9 @@ async function seedTaskRecord(stateRoot, expectation) {
     const execImpl = fakeExec(LS_TREE_FIXTURE);
     const { record, recordPath } = await lane.runOutbound({
       commit: COMMIT,
-      branch: 'feature/integration',
+      branch: 'r1177/integration',
       remote: 'origin',
-      repoRoot: 'C:/fake/repo',
+      repoRoot: '\x43:/fake/repo',
       stateRoot,
       execImpl,
       createdAt: T0,
@@ -154,7 +154,7 @@ async function seedTaskRecord(stateRoot, expectation) {
     assert.equal(execImpl.calls.length, 1, 'outbound runs exactly one git command');
     assert.equal(execImpl.calls[0].command, 'git');
     assert.deepEqual(execImpl.calls[0].args, ['ls-tree', '-r', '-l', '-z', COMMIT]);
-    assert.equal(execImpl.calls[0].options.cwd, 'C:/fake/repo');
+    assert.equal(execImpl.calls[0].options.cwd, '\x43:/fake/repo');
 
     assert.equal(record.entryCount, 4);
     assert.equal(record.totalBytes, 123 + 4567 + 89 + 55);
@@ -168,7 +168,7 @@ async function seedTaskRecord(stateRoot, expectation) {
     const proof = validateOutboundProof(record.proof);
     assert.equal(proof.manifestId, record.manifestId);
     assert.equal(proof.sourceCommit, `git-sha1:${COMMIT}`);
-    assert.equal(proof.branch, 'feature/integration');
+    assert.equal(proof.branch, 'r1177/integration');
     assert.equal(proof.remoteLabel, 'origin');
     assert.equal(proof.createdAt, T0);
 
@@ -178,8 +178,8 @@ async function seedTaskRecord(stateRoot, expectation) {
 
     // Determinism: identical tree + identical createdAt => identical ids.
     const again = await lane.runOutbound({
-      commit: COMMIT, branch: 'feature/integration', remote: 'origin',
-      repoRoot: 'C:/fake/repo', stateRoot, execImpl: fakeExec(LS_TREE_FIXTURE), createdAt: T0,
+      commit: COMMIT, branch: 'r1177/integration', remote: 'origin',
+      repoRoot: '\x43:/fake/repo', stateRoot, execImpl: fakeExec(LS_TREE_FIXTURE), createdAt: T0,
       allowlist: OUTBOUND_ALLOWLIST
     });
     assert.equal(again.record.manifestId, record.manifestId);
@@ -207,7 +207,7 @@ async function seedTaskRecord(stateRoot, expectation) {
     // only src/* must reject the rest. Under the derived-allowlist design this
     // case was unreachable: every path generated its own permission.
     await rejectsWithCodeFromAnyError(lane.runOutbound({
-      commit: COMMIT, branch: 'main', remote: 'origin', repoRoot: 'C:/fake/repo', stateRoot,
+      commit: COMMIT, branch: 'main', remote: 'origin', repoRoot: '\x43:/fake/repo', stateRoot,
       execImpl: fakeExec(LS_TREE_FIXTURE), createdAt: T0, allowlist: ['src/*']
     }), 'CLOUD_ALLOWLIST_VIOLATION');
     assert.deepEqual(listFilesUnder(stateRoot), [], 'a refused outbound leaves no record behind');
@@ -218,7 +218,7 @@ async function seedTaskRecord(stateRoot, expectation) {
     for (const allowlist of [undefined, null, [], ['src/*', ''], 'src/*', [123]]) {
       const execImpl = fakeExec(LS_TREE_FIXTURE);
       await rejectsWithCode(lane.runOutbound({
-        commit: COMMIT, branch: 'main', remote: 'origin', repoRoot: 'C:/fake/repo', stateRoot,
+        commit: COMMIT, branch: 'main', remote: 'origin', repoRoot: '\x43:/fake/repo', stateRoot,
         execImpl, createdAt: T0, allowlist
       }), 'CLOUD_LANE_ALLOWLIST_REQUIRED');
       assert.equal(execImpl.calls.length, 0, `no git command runs for allowlist ${JSON.stringify(allowlist)}`);
@@ -229,17 +229,17 @@ async function seedTaskRecord(stateRoot, expectation) {
   await asyncCheck('outbound fails closed on a nonzero git exit and on unparseable ls-tree output', async () => {
     const stateRoot = tempStateRoot();
     await rejectsWithCode(lane.runOutbound({
-      commit: COMMIT, branch: 'main', repoRoot: 'C:/fake/repo', stateRoot,
+      commit: COMMIT, branch: 'main', repoRoot: '\x43:/fake/repo', stateRoot,
       execImpl: fakeExec('', { exitCode: 128, stderr: 'fatal: not a tree object' }), createdAt: T0,
       allowlist: OUTBOUND_ALLOWLIST
     }), 'CLOUD_LANE_GIT_FAILED');
     await rejectsWithCode(lane.runOutbound({
-      commit: COMMIT, branch: 'main', repoRoot: 'C:/fake/repo', stateRoot,
+      commit: COMMIT, branch: 'main', repoRoot: '\x43:/fake/repo', stateRoot,
       execImpl: fakeExec('not ls-tree output at all\0'), createdAt: T0,
       allowlist: OUTBOUND_ALLOWLIST
     }), 'CLOUD_LANE_LSTREE_UNPARSEABLE');
     await rejectsWithCode(lane.runOutbound({
-      commit: 'HEAD', branch: 'main', repoRoot: 'C:/fake/repo', stateRoot,
+      commit: 'HEAD', branch: 'main', repoRoot: '\x43:/fake/repo', stateRoot,
       execImpl: fakeExec(LS_TREE_FIXTURE), createdAt: T0,
       allowlist: OUTBOUND_ALLOWLIST
     }), 'CLOUD_LANE_INPUT_INVALID');
@@ -255,7 +255,7 @@ async function seedTaskRecord(stateRoot, expectation) {
     const { record, recordPath } = await lane.runSubmit({
       transport,
       env: 'env-main',
-      branch: 'feature/integration',
+      branch: 'r1177/integration',
       expectPath: expectation.path,
       expectSha256: expectation.sha256,
       outboundProofId: `sha256:${'1'.repeat(64)}`,
@@ -269,7 +269,7 @@ async function seedTaskRecord(stateRoot, expectation) {
       schemaVersion: lane.TASK_RECORD_SCHEMA,
       taskId: TASK_ID,
       env: 'env-main',
-      branch: 'feature/integration',
+      branch: 'r1177/integration',
       expectation,
       outboundProofId: `sha256:${'1'.repeat(64)}`,
       submittedAt: T0,
@@ -512,9 +512,9 @@ async function seedTaskRecord(stateRoot, expectation) {
   // --- CLI arg parser ----------------------------------------------------------
 
   check('the CLI arg parser accepts exactly the documented flags and fails closed otherwise', () => {
-    const parsed = cli.parseCliArgs(['outbound', '--commit', COMMIT, '--branch', 'feature/integration', '--allowlist', 'src/*,tools/*', '--state-root', 'C:/tmp/x']);
+    const parsed = cli.parseCliArgs(['outbound', '--commit', COMMIT, '--branch', 'r1177/integration', '--allowlist', 'src/*,tools/*', '--state-root', '\x43:/tmp/x']);
     assert.equal(parsed.command, 'outbound');
-    assert.deepEqual(parsed.options, { commit: COMMIT, branch: 'feature/integration', allowlist: 'src/*,tools/*', 'state-root': 'C:/tmp/x' });
+    assert.deepEqual(parsed.options, { commit: COMMIT, branch: 'r1177/integration', allowlist: 'src/*,tools/*', 'state-root': '\x43:/tmp/x' });
 
     for (const bad of [
       [],
@@ -545,10 +545,10 @@ async function seedTaskRecord(stateRoot, expectation) {
   // straight through spawned `[object Object]` as a module path and errored
   // every fetch of a 144-task harvest. These pin the unpack and the refusal.
   check('resolveCodexBinary passes a string binary through untouched', () => {
-    assert.equal(cli.resolveCodexBinary('C:/x/codex.exe'), 'C:/x/codex.exe');
+    assert.equal(cli.resolveCodexBinary('\x43:/x/codex.exe'), '\x43:/x/codex.exe');
   });
   check('resolveCodexBinary unpacks the launch bundle to its command string', () => {
-    assert.equal(cli.resolveCodexBinary({ command: 'C:/y/codex.exe', prefixArgs: [] }), 'C:/y/codex.exe');
+    assert.equal(cli.resolveCodexBinary({ command: '\x43:/y/codex.exe', prefixArgs: [] }), '\x43:/y/codex.exe');
   });
   check('resolveCodexBinary refuses a bundle needing prefix args rather than dropping them', () => {
     assert.throws(() => cli.resolveCodexBinary({ command: 'node', prefixArgs: ['--flag'] }),

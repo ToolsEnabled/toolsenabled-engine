@@ -21,7 +21,7 @@ function fixture(label, options = {}) {
 const runtime = Object.freeze({
   nodePath: process.execPath,
   runnerPath: path.resolve(__dirname, '..', '..', 'src', 'job-runner.js'),
-  principalId: 'S-1-5-21-111111111-222222222-333333333-1001'
+  principalId: '\x53-1-5-21-111111111-222222222-333333333-1001'
 });
 // FIXTURE ACTION CHANGED 2026-08-23: every job in this suite was built on
 // 'telegram.send', which left SUPPORTED_SCHEDULED_ACTIONS with the Telegram

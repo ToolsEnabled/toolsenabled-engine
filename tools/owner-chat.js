@@ -99,8 +99,8 @@ function usage() {
     '  node tools/owner-chat.js --ack   <id> --note "why"            [--actor name]',
     '',
     'A reply is SENT first and the directive is acknowledged only after the transport',
-    'accepts it, so a failure can never mark the owner as answered when they were not.',
-    '--ack is for machine-generated directives only; it refuses anything they sent.'
+    'accepts it, so a failure can never mark the owner as answered when he was not.',
+    '--ack is for machine-generated directives only; it refuses anything he sent.'
   ].join('\n');
 }
 
@@ -109,8 +109,8 @@ function stamp(ms) {
 }
 
 // The owner's words are reproduced VERBATIM. They are indented for readability
-// but not trimmed, rewrapped, or normalized -- every character they typed is on
-// screen, including the ones they would not have chosen.
+// but not trimmed, rewrapped, or normalized -- every character he typed is on
+// screen, including the ones he would not have chosen.
 function quote(text) {
   return String(text).split('\n').map(line => `    | ${line}`).join('\n');
 }
@@ -162,18 +162,18 @@ function renderPending(result) {
     }
   }
 
-  // Suggest the RIGHT verb per item: their own messages get answered, machine
+  // Suggest the RIGHT verb per item: his own messages get answered, machine
   // directives get filed with a reason. Offering --reply on a system-generated
-  // status record would send them a message about their own scheduled task,
+  // status record would send him a message about his own scheduled task,
   // which is noise, not a conversation.
   const fromOwner = result.items.filter(item => item.fromOwner);
   const machine = result.items.filter(item => !item.fromOwner);
   lines.push('');
   if (fromOwner.length) {
-    lines.push('ANSWER THEM (this SENDS to their phone, then acknowledges):');
+    lines.push('ANSWER HIM (this SENDS to his phone, then acknowledges):');
     lines.push(`  node tools/owner-chat.js --reply ${fromOwner[0].id} --text "..."`);
     if (fromOwner.length > 1) {
-      lines.push(`  ...answer all ${fromOwner.length} of their messages with one send by appending:`);
+      lines.push(`  ...answer all ${fromOwner.length} of his messages with one send by appending:`);
       for (const item of fromOwner.slice(1)) lines.push(`      --also ${item.id}`);
     }
   }

@@ -220,8 +220,8 @@ test('a Fable ceiling cannot block Opus, while shared and Opus ceilings still bi
 });
 
 test('claudeWindows: BOTH weekly ceilings are carried, and the slot that decides does not move', () => {
-  /* Product note: the Fable weekly limit was shown for Claude instead of
-     the all-models weekly limit, and both should be shown. The reply meters two
+  /* Owner, 2026-09-03: "i think fable weekly limit instead of all models weekly
+     limit is shown for claude we should include both". The reply meters two
      weeks at once; the `weekly` slot holds the active one, so a menu drawing
      that slot alone showed the Fable ceiling and gave a person no way to tell
      it from the all-models one. */
@@ -371,8 +371,8 @@ test('windowRecord refuses anything but a finite percentage in range', () => {
 });
 
 test('codexWindows: without a stated length, a reset days away is the weekly window (Codex Pro reports only that one)', () => {
-  /* Product note: Codex Pro accounts have no 5-hour window. Such an
-     account answers one window, called
+  /* Owner, 2026-09-02: "codex doesnt have 5 hour windows for some of my codex
+     accounts since they are pro". Such an account answers one window, called
      primary, with no length, resetting days out. It is the week; the 5-hour
      slot stays empty rather than wearing it. */
   const now = EPOCH_SECONDS * 1000 - 6 * 24 * 60 * 60 * 1000;
@@ -388,29 +388,4 @@ test('codexWindows: without a stated length, a reset days away is the weekly win
   /* A stated length still wins over the reset time. */
   assert.equal(codexWindows({ primary: { usedPercent: 2, windowMinutes: 300, resetsAt: EPOCH_SECONDS } }, { now }).hourly?.usedPercent, 2);
   assert.equal(SHORT_WINDOW_RESET_MAX_MS, 6 * 60 * 60 * 1000);
-});
-
-test('retry waits for every full window on an account, then picks the first account reset',()=>{
-  const {recoveryTiming}=require('../../src/lib/multi-account/usage-windows');
-  const now=Date.parse('2026-09-10T12:00:00Z'),thresholds={exhaustedAtPercent:99};
-  const attempts=[{account:'one',status:'exhausted',windows:{
-    hourly:{usedPercent:100,resetsAt:'2026-09-10T13:00:00Z'},weekly:{usedPercent:100,resetsAt:'2026-09-12T12:00:00Z'}}},
-    {account:'two',status:'exhausted',usedPercent:100,resetsAt:'2026-09-10T14:00:00Z'}];
-  const timing=recoveryTiming(attempts,thresholds,now);
-  assert.equal(timing.resetAt,'2026-09-10T14:00:00.000Z');assert.equal(timing.nextAttemptAt,'2026-09-10T14:00:01.000Z');
-  assert.equal(timing.reason,'observed-reset');assert.equal(timing.allQuotaExhausted,true);
-});
-test('unknown and stale resets get honest bounded rechecks, not fabricated provider timestamps',()=>{
-  const {recoveryTiming}=require('../../src/lib/multi-account/usage-windows');
-  const now=Date.parse('2026-09-10T12:00:00Z'),thresholds={exhaustedAtPercent:99};
-  const attempts=[{account:'one',status:'exhausted',windows:{hourly:{usedPercent:100,resetsAt:'2026-09-10T13:00:00Z'},weekly:{usedPercent:100,resetsAt:null}}},
-    {account:'two',status:'transient'}];
-  const timing=recoveryTiming(attempts,thresholds,now);
-  assert.equal(timing.resetAt,null);assert.equal(timing.nextAttemptAt,'2026-09-10T12:00:30.000Z');assert.equal(timing.allQuotaExhausted,false);
-  assert.equal(recoveryTiming(attempts,thresholds,now,{recheckAttempt:99}).nextAttemptAt,'2026-09-10T12:05:00.000Z');
-  const stale=recoveryTiming([{status:'exhausted',usedPercent:100,resetsAt:'2026-09-10T11:00:00Z'}],thresholds,now);
-  assert.equal(stale.resetAt,null);assert.equal(stale.nextAttemptAt,'2026-09-10T12:00:30.000Z');
-  assert.equal(recoveryTiming([{status:'exhausted',usedPercent:null}],thresholds,now).allQuotaExhausted,false,'billing or access refusal must not become confirmed empty quota');
-  assert.equal(recoveryTiming([{status:'exhausted',usedPercent:40,resetsAt:'2026-09-10T13:00:00Z'}],{exhaustedAtPercent:40},now).allQuotaExhausted,false,'an owner reserve is not proof of empty provider quota');
-  assert.equal(recoveryTiming([{status:'account_mismatch'},...attempts],thresholds,now).nextAttemptAt,null);
 });

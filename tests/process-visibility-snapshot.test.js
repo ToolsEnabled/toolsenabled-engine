@@ -22,15 +22,15 @@ function fixture(overrides = {}) {
     tasks: [{
       taskName: 'ToolsEnabled Health Observer',
       state: 'Running',
-      executable: 'C:\\Program Files\\nodejs\\node.exe',
-      argv: ['C:\\install-root\\tools\\health-observer.js', '--once'],
-      workingDirectory: 'C:\\install-root'
+      executable: '\x43:\\Program Files\\nodejs\\node.exe',
+      argv: ['\x43:\\ToolsEnabled\\tools\\health-observer.js', '--once'],
+      workingDirectory: '\x43:\\ToolsEnabled'
     }],
     processes: [{
       pid: 4812,
       imageName: 'node.exe',
       startedAtMs: 1785359900000,
-      argv: ['C:\\install-root\\tools\\health-observer.js', '--once']
+      argv: ['\x43:\\ToolsEnabled\\tools\\health-observer.js', '--once']
     }],
     ...overrides
   };
@@ -147,7 +147,7 @@ check('rejects unknown raw command-line fields, duplicate pids, and credential-b
   benignCredentialLabels.processes[0].argv.push(
     '--mode=client-credentialless',
     '--mode=client-credentials-helper',
-    '--credentials-dir=C:\\install-root\\auth'
+    '--credentials-dir=\x43:\\ToolsEnabled\\auth'
   );
   assert.doesNotThrow(() => snapshot.parseProcessVisibilitySnapshot(benignCredentialLabels));
 });

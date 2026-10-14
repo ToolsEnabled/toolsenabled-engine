@@ -4,11 +4,11 @@
 //
 // digestFileSet() is what verificationExternal() hashes the projection files
 // with, and record() reaches verificationExternal six times per event. It used
-// to readFileSync() each projection whole and hash the resulting Buffer; on a
-// development install that is a multi-megabyte allocation per projection per
-// audit record, twice per consequential tool call.
+// to readFileSync() each projection whole and hash the resulting Buffer; on the
+// owner's install that is an 11.0 MB and a 6.4 MB allocation per audit record,
+// twice per consequential tool call.
 //
-// MEASURED 2026-09-03 on a development machine over those two real files:
+// MEASURED 2026-09-03 on the owner's machine over those two real files:
 // readFileSync + sha256 of both is 73.7 ms, and the same digest taken through
 // one 256 KB buffer is 61.3 ms. The bytes hashed, their order, and the hash are
 // identical -- so every one of these cases asserts equality against a digest

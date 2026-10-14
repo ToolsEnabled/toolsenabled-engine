@@ -183,7 +183,7 @@ function isElevated() {
   try {
     const { execFileSync } = require('node:child_process');
     const out = execFileSync(
-      path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
       ['-NoProfile', '-NonInteractive', '-Command',
         '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'],
       { encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, shell: false });

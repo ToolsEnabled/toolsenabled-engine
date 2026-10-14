@@ -288,7 +288,7 @@ check('provider callers and the control plane use one identical launch scrub', (
 
 check('every observer child receives a scrubbed environment without loading providers at boot', () => {
   const ambientFixture = {
-    PATH: 'C:\\safe-bin',
+    PATH: '\x43:\\safe-bin',
     SAFE_SENTINEL: 'kept',
     OPENAI_API_KEY: 'fixture-must-not-reach-child',
     anthropic_api_key: 'fixture-must-not-reach-child'
@@ -314,7 +314,7 @@ check('every observer child receives a scrubbed environment without loading prov
   const listeners = listenerProbe.defaultProbe(3889, {
     platform: 'win32',
     environment: ambientFixture,
-    powershellPath: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    powershellPath: '\x43:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     execFileSync(file, args, options) {
       listenerOptions = { file, args, options };
       return JSON.stringify({ listeners: [] });

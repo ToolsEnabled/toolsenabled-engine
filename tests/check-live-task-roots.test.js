@@ -78,7 +78,7 @@ check('isWithinRoot is boundary-aware, not a raw prefix match', () => {
 
 check('a look-alike name that is not a source tree is not a violation', () => {
   const classified = checker.classifyPaths(
-    ['D:\\Backups\\source-mirror.git'],
+    ['\x44:\\ToolsEnabled-Backups\\engine-checkout-mirror.git'],
     [{ machineId: 'machine-a', root: DECLARED }]
   );
   assert.equal(classified[0].declared, false);
@@ -90,13 +90,13 @@ check('GREEN: every task inside a declared root exits 0', () => {
   const file = fixture('clean.json', [
     {
       TaskName: 'ToolsEnabled Coordinator Duty Host', TaskPath: '\\', State: 'Running',
-      Execute: 'C:\\Program Files\\nodejs\\node.exe',
+      Execute: '\x43:\\Program Files\\nodejs\\node.exe',
       Arguments: `"${DECLARED}\\tools\\coordinator-duty-host.js" --serve`,
       WorkingDirectory: DECLARED
     },
     {
       TaskName: 'Unrelated Vendor Task', TaskPath: '\\', State: 'Ready',
-      Execute: 'C:\\Program Files\\Vendor\\vendor.exe', Arguments: '', WorkingDirectory: ''
+      Execute: '\x43:\\Program Files\\Vendor\\vendor.exe', Arguments: '', WorkingDirectory: ''
     }
   ]);
   const res = runCli(['--tasks-from', file]);
@@ -109,7 +109,7 @@ check('RED: an enabled task in an undeclared root exits 1 and names it', () => {
   const file = fixture('dirty.json', [
     {
       TaskName: 'ToolsEnabled Coordinator Duty Host', TaskPath: '\\', State: 'Running',
-      Execute: 'C:\\Program Files\\nodejs\\node.exe',
+      Execute: '\x43:\\Program Files\\nodejs\\node.exe',
       Arguments: `"${DECLARED}\\tools\\coordinator-duty-host.js" --serve`,
       WorkingDirectory: DECLARED
     },
@@ -131,7 +131,7 @@ check('RED: an enabled task in an undeclared root exits 1 and names it', () => {
 check('a DISABLED task in an undeclared root warns, and fails only under --strict', () => {
   const file = fixture('disabled.json', [{
     TaskName: 'ToolsEnabled Telegram Bridge', TaskPath: '\\', State: 'Disabled',
-    Execute: 'C:\\Program Files\\nodejs\\node.exe',
+    Execute: '\x43:\\Program Files\\nodejs\\node.exe',
     Arguments: `"${UNDECLARED}\\tools\\telegram-bridge.js" --serve`,
     WorkingDirectory: UNDECLARED
   }]);
@@ -174,7 +174,7 @@ check('filesystem inspection failures refuse instead of becoming a non-tree', ()
   };
   try {
     assert.throws(
-      () => checker.nearestPackageRoot('D:\\example\\source\\tools\\worker.js'),
+      () => checker.nearestPackageRoot('\x44:\\ToolsEnabled\\engine-checkout\\tools\\worker.js'),
       error => error && error.code === 'FILESYSTEM_INSPECTION_FAILED'
     );
   } finally {

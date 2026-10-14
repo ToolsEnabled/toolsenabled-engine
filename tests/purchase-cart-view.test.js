@@ -39,7 +39,7 @@
 //   4. a total that has drifted from its lines is a THROW, not a rendered number.
 //
 // Fixtures below are the real shapes: the stamps are the literal strings
-// owner-prompts.js wireItem() prepends, and the amounts are illustrative.
+// owner-prompts.js wireItem() prepends, and the amounts are the live cart's.
 
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -65,7 +65,7 @@ function purchasePrompt(overrides = {}) {
     { id: 'hosting-backups-weekly', description: `${AGENT}Weekly automated backups`, amountCents: 480, currency: 'USD', merchant: 'Example Hosting', purpose: 'Carried over from the retired cart.' }
   ];
   return {
-    id: 'a1b2c3d4', kind: 'purchase_batch', title: 'ToolsEnabled launch - the whole list, from your words',
+    id: 'fd5807ed', kind: 'purchase_batch', title: 'ToolsEnabled launch - the whole list, from your words',
     message: 'This is the whole list.', createdAt: '2026-08-11T16:36:57.941Z',
     expiresAt: '2026-08-18T16:36:57.941Z', state: 'pending', defaultDecision: 'deny',
     items, currency: 'USD',
@@ -118,7 +118,7 @@ check('a purchase batch states that doing nothing DENIES every line', () => {
 
 check('a notice states acknowledgement, never denial -- the two outcomes are not interchangeable', () => {
   const notice = {
-    id: 'e5f6a7b8', kind: 'notice', title: '7 background tasks are disabled', message: 'Only you can do this.',
+    id: '0bbac106', kind: 'notice', title: '7 background tasks are disabled', message: 'Only you can do this.',
     createdAt: '2026-08-10T20:32:18.565Z', expiresAt: '2026-08-17T20:32:18.565Z', state: 'pending', defaultDecision: 'acknowledge'
   };
   const projected = view.viewPrompt(notice, NOW);
@@ -201,7 +201,7 @@ check("reading the STORED record uses the ownerRequestIds field, not a stamp tha
   // The store keeps the field and adds the stamp only on the way out. A reader
   // holding the file must not report the owner's own lines as unrecorded.
   const stored = purchasePrompt({ items: [
-    { id: 'annual-licence', description: 'Annual licence', amountCents: 35_000, currency: 'USD', merchant: 'Example Vendor', purpose: 'You asked for this by name.', ownerRequestIds: ['R1234'] },
+    { id: 'uspto-trademark-toolsenabled', description: 'USPTO federal trademark application', amountCents: 35_000, currency: 'USD', merchant: 'USPTO', purpose: 'You asked for this by name.', ownerRequestIds: ['R1234'] },
     { id: 'hosting-backups-weekly', description: 'Weekly automated backups', amountCents: 480, currency: 'USD', merchant: 'Example Hosting', purpose: 'Carried over.' }
   ] });
   const cart = view.cartView(snapshotOf([stored]), { now: NOW, provenanceSource: 'record' }).carts[0];
@@ -268,7 +268,7 @@ check('the live owner queue projects without throwing, and every cart in it has 
   // An empty queue used to fail here on `waitingCount > 0`. That is not a
   // product invariant: it asserts the owner currently has unanswered questions,
   // which is a property of one machine at one moment, and the healthy state --
-  // they answered everything -- made it fail. The file being ABSENT was already
+  // he answered everything -- made it fail. The file being ABSENT was already
   // handled above; the file being present and EMPTY is the same epistemic
   // situation and now gets the same honest treatment.
   //
@@ -289,15 +289,15 @@ check('the live owner queue projects without throwing, and every cart in it has 
     assert.match(cart.doNothing, /DENIED/);
   }
   console.log(`           (live: ${result.waitingCount} waiting, ${result.cartCount} carts, ${result.lineCount} lines, `
-    + `${result.carts.reduce((sum, cart) => sum + cart.ownerLineCount, 0)} traceable to their words)`);
+    + `${result.carts.reduce((sum, cart) => sum + cart.ownerLineCount, 0)} traceable to his words)`);
 });
 
 // ---------------------------------------------------------------------------
-// 8. WHAT IS WORTH AN ALARM. Product rule: a loud sound plays whenever a
-//    question that needs the owner's answer is posted. An alarm is only as
-//    good as its rule, and the two ways this rule can be wrong are opposite:
-//    beep at something the owner cannot answer, or stay silent on something
-//    the owner can. Both are checked.
+// 8. WHAT IS WORTH WAKING HIM FOR. The owner asked (2026-08-12 22:04Z) for a
+//    loud sound "whenever you post a question you need me to respond to". An
+//    alarm is only as good as its rule, and the two ways this rule can be wrong
+//    are opposite: beep at something he cannot answer, or stay silent on
+//    something he can. Both are checked.
 // ---------------------------------------------------------------------------
 
 function noticePrompt(overrides = {}) {
@@ -335,7 +335,7 @@ check('an expired question is not counted as waiting -- silence already answered
   assert.strictEqual(result.expiredCount, 1);
 });
 
-check('a live cart and a live confirmation are both questions they can still answer', () => {
+check('a live cart and a live confirmation are both questions he can still answer', () => {
   const result = view.cartView(snapshotOf([purchasePrompt(), confirmationPrompt(), noticePrompt()]), { now: NOW });
   assert.strictEqual(result.questionCount, 2, 'the cart and the confirmation, not the notice');
   assert.strictEqual(result.expiredCount, 0);
@@ -384,7 +384,7 @@ check('the alert plays the ramping alert -- the loud one -- when a question is w
   assert.deepStrictEqual(played, ['generic-ramp'], 'the progressively louder alert, not the default chime');
 });
 
-check('a speaker that fails does not take down the reading of their cart', () => {
+check('a speaker that fails does not take down the reading of his cart', () => {
   const result = view.cartView(snapshotOf([purchasePrompt()]), { now: NOW });
   const alert = cart.alertIfNeeded(result, { soundPlay: () => { throw new Error('no audio device'); } });
   assert.strictEqual(alert.played, false);

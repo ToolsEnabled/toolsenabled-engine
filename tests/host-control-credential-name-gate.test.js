@@ -8,7 +8,7 @@
 // DIRECTORIES and a few conventional basenames, not credential-shaped file
 // names sitting in an ordinary folder.
 //
-// Measured at the base revision before any edit, comparing the two sinks' name
+// Measured at base 80f08ecb before any edit, comparing the two sinks' name
 // patterns directly:
 //
 //   NAME                     EGRESS-blocks READGATE-blocks
@@ -20,7 +20,7 @@
 //   wallet.key               false         false
 //
 // So at THIS base private_key.pem is refused by neither sink. (The sibling
-// unmerged commit closes the egress half for these stems and says in
+// unmerged commit 92a70fcf closes the egress half for these stems and says in
 // its own message that it deliberately does not widen host-control's narrower
 // extension list -- which is where the read-vs-egress asymmetry comes from once
 // it lands. It is not on this base, so here the file is simply readable.)
@@ -29,8 +29,8 @@
 // in an ordinary folder inside the owner profile, never against a regex. A
 // better pattern spelling passes; only a readable credential-shaped file fails.
 //
-// R1191: the release cut must make sure the owner's private information never
-// gets out.
+// R1191: "The cut must carefully make sure my private info does not make it out
+// period."
 //
 // NO CREDENTIAL VALUE APPEARS HERE. Every fixture's CONTENT is the literal
 // string below; only the NAME is credential-shaped, because the name is the

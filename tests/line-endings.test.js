@@ -10,28 +10,28 @@ const ROOT = path.resolve(__dirname, '..');
 //
 // REMOVED 2026-08-13: `path.join(path.dirname(ROOT), 'Start-ToolsEnabled-Admin.cmd')`.
 //
-// That is a launcher in the folder ABOVE the checkout -- a file OUTSIDE
+// That is <profile-root>/owner\Desktop\Start-ToolsEnabled-Admin.cmd -- a file OUTSIDE
 // this repository, untracked by it, shipped by nothing here. It went red on
 // 2026-08-13 because it is LF, and no commit to this repo could ever turn it
 // green: `git check-ignore` on it does not say "ignored", it says "outside
 // repository". On every other machine, every fresh clone and every worktree the
 // file is simply absent and the entry silently vanished from the list. So the
 // check had exactly two possible outcomes -- skipped everywhere, or permanently
-// red on one machine for a reason no change here can fix. That is not a test.
+// red on one desktop for a reason no change here can fix. That is not a test.
 //
-// The same reasoning already retired the sibling-project block in
+// The same reasoning already retired the companion application block in
 // tests/terminal-suppression.test.js: "a different project's config file -- one
 // nothing here owns, writes, or can fix." This is that, again.
 //
-// That launcher's LF endings are a REAL defect and were reported to the
+// The Desktop launcher's LF endings are a REAL defect and were reported to the
 // owner as an owner action, not silently dropped. If that launcher should be
-// under test, the fix is to check it INTO this repo and deploy it from
-// here -- then it is ours and this suite covers it automatically.
+// under test, the fix is to check it INTO this repo and deploy it to the
+// Desktop from here -- then it is ours and this suite covers it automatically.
 //
 // ALSO CHANGED: the scan is no longer root-only. The previous version derived
 // the list from "every *.cmd directly under ROOT", explicitly excluding tools/.
 // Measured 2026-08-13: ROOT contains ZERO .cmd files. That scope was empty, so
-// the out-of-repo launcher entry was the ONLY thing keeping the "must validate
+// the out-of-repo Desktop entry was the ONLY thing keeping the "must validate
 // something" guard below from firing. Meanwhile the launchers this repo really
 // does ship -- including the Explorer-facing
 // packages/servercontrol/Launch Control Panel.cmd -- were never looked at.
@@ -105,7 +105,7 @@ function repoBatchFiles() {
 //     lines. The block is buffered and re-parsed, and LF-only input has been
 //     observed to mis-terminate it.
 //
-// Note what this still catches: the launcher removed above hits BOTH
+// Note what this still catches: the Desktop launcher removed above hits BOTH
 // (it wraps its failure path in `if not exist "%LAUNCHER%" ( ... )`). The rule
 // is not weaker where it matters; it just no longer reaches outside the repo.
 function isBatchComment(line) {

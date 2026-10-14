@@ -155,8 +155,8 @@ assert.equal(
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.2', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '203.0.113.1', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.2', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '203.0.113.1', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -367,14 +367,14 @@ try {
 
   // ---- B26: the network move, without a network move ----------------------
   // Same machine, same declared root, an entirely different subnet. The owner
-  // has said this will happen before testing and that the server will stay
-  // the same. Nothing may be renamed and nothing may be re-cut: the anchor
+  // has said this will happen before testing and that "the server will remain
+  // the same". Nothing may be renamed and nothing may be re-cut: the anchor
   // written on the old network must verify unchanged on the new one.
   const movedRegistry = {
     schemaVersion: 1,
     machines: {
-      'machine-a': { address: '203.0.113.41', root: 'C:\\example\\engine-checkout', role: 'development-host' },
-      'machine-b': { address: '203.0.113.42', root: 'C:\\elsewhere', role: 'disconnected-peer' }
+      'machine-a': { address: '203.0.113.41', root: '\x43:\\example\\engine-checkout', role: 'development-host' },
+      'machine-b': { address: '203.0.113.42', root: '\x43:\\elsewhere', role: 'disconnected-peer' }
     },
     services: {}
   };

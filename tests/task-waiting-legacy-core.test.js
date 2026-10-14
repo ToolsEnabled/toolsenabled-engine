@@ -5,7 +5,7 @@ const test = require('node:test');
 const { createMapLedgerFixture } = require('./lib/task-waiting-memory-fixture.cjs');
 const engine = process.env.T850_ENGINE_ROOT || path.resolve(__dirname, '..');
 const lib = process.env.T850_COMPOSITION_LIB || path.join(engine, 'src/lib');
-// Digests produced by the pre-wait store at an earlier revision.
+// Digests produced by the pre-wait store at e883b60a1cc0932790130ef41da137ec1f28dd74.
 const fixtures = [
   [
     {

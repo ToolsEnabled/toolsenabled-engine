@@ -10,7 +10,7 @@
 //
 // `events` is the LIVE window -- events[i] is sequence (boundary + i + 1) --
 // while `anchoredSequence` is absolute. Slicing by the raw sequence was correct
-// only while nothing had ever been archived. Measured on a live install
+// only while nothing had ever been archived. Measured on the owner's install
 // (boundary 981, anchor near 11069, 10,088 live rows) the old expression sliced
 // past the end and produced [], so `.some()` examined nothing and that alarm
 // could not fire on any install that had ever rolled. With the shipped default
@@ -49,7 +49,7 @@ check('after a roll, the suffix is still everything past the anchor', () => {
 });
 
 check('the shape that silently disabled the check returns events, not nothing', () => {
-  // A rolled install: boundary 981, 10,088 live rows, anchor near the head.
+  // The owner's install: boundary 981, 10,088 live rows, anchor near the head.
   const boundary = { archivedThroughSequence: 981 };
   const events = window(981, 10088);
   const anchoredSequence = 981 + 10088 - 3;          // three events past the anchor

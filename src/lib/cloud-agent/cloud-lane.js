@@ -30,7 +30,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const childProcess = require('node:child_process');
+const { spawnGitProcess } = require('../git-command');
 
 const { CloudAgentError } = require('./errors');
 const { mapStatus } = require('../providers/codex-cloud');
@@ -97,7 +97,9 @@ function defaultExecImpl(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = childProcess.spawn(command, args, {
+      // `git` is started by absolute path, never found in the repository it
+      // runs in (../git-command.js; platform review 1.0.50 E3).
+      child = spawnGitProcess(command, args, {
         cwd: options.cwd,
         shell: false,
         windowsHide: true,

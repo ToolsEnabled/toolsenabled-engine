@@ -7,7 +7,7 @@
  * the renderer side of the seam this file guards (src/views/computers.js
  * performRewind() never told the tree store's sibling, sessionThreadIds,
  * about the forked thread a rewind moves a session onto -- fixed on
- * an earlier review pass, tools/test/rewind-thread-persists.test.mjs). Inside THIS
+ * page2/tree-store, tools/test/rewind-thread-persists.test.mjs). Inside THIS
  * module -- register/unregister, liveAt, supersede, manager resolution,
  * sameTree -- three paths were traced hard enough to be worth a name and a
  * quote, and none of them turned up a behaviour that contradicts what this
@@ -23,7 +23,7 @@
  * circle joined the SAME TREE, anywhere in it. A child briefed with the old
  * name before that moment then addressed a manager this directory could no
  * longer find under that string -- TREE_MANAGER_UNREGISTERED for a manager
- * that never stopped running (fixed on an earlier review pass,
+ * that never stopped running (fixed on page2/tree-store,
  * tools/test/tree-edges-name-stability.test.mjs). PATH 4 below is what that
  * fix's safety rests on: THIS module's own answer when a live session
  * re-registers under a changed name, which is the mechanism the app fix

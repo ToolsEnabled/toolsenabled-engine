@@ -180,7 +180,7 @@ function releaseLock() {
 // then reported ETIMEDOUT. Observed here on 2026-08-03: the bridge was up and
 // serving while this script logged start_failed. Files have no EOF to wait for.
 function startBridge(address) {
-  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows';
+  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || '\x43:\\Windows';
   const powershell = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   fs.mkdirSync(path.dirname(START_OUT_FILE), { recursive: true });
   const outFd = fs.openSync(START_OUT_FILE, 'w');

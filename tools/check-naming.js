@@ -95,14 +95,8 @@ function trackedFiles() {
     .filter(file => !isVendoredDependency(file));
 }
 
-// Vendored third-party trees are OUR files by git's reckoning and NOT ours by any
-// other. `provider-runtimes/gemini-quota/node_modules` is committed on purpose -- 698
-// tracked files -- so `git ls-files` lists it, and `git ls-files` does not consult
-// .gitignore. (The comment above is true only of the --others --exclude-standard call.)
-// Measured at an earlier engine build: without this filter the ratchet reported 53 violations,
-// 53 of 53 inside that vendored tree and 0 in engine source, which would refuse every
-// cut for names upstream chose. We do not rename other people's packages, so they are
-// not candidates for this check at all.
+// Tracked third-party dependencies retain their upstream names. git ls-files
+// does not consult .gitignore, so exclude node_modules from this naming check.
 function isVendoredDependency(file) {
   return file.split('/').includes('node_modules');
 }

@@ -29,8 +29,8 @@ const fraTransportBinding = require('../src/lib/fra-transport-binding');
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.2', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '203.0.113.1', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.2', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '203.0.113.1', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };

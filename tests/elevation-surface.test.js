@@ -55,7 +55,7 @@ const STOCK = { EnableLUA: 1, ConsentPromptBehaviorAdmin: 5, ConsentPromptBehavi
 // --- the specific false negative, named ------------------------------------
 
 test('an administrator on a machine with the consent prompt turned off is told it will run without asking', () => {
-  // This is a measured posture from a development machine: UAC on, but
+  // This is the owner's measured posture on 2026-08-12: UAC on, but
   // ConsentPromptBehaviorAdmin 0 = "elevate without prompting".
   const machine = fakePosture({ values: { ...STOCK, ConsentPromptBehaviorAdmin: 0 } });
   const answer = posture.describeForOperation(machine, 'elevation-request');

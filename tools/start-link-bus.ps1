@@ -2,8 +2,9 @@
 # with stdout/stderr redirected to files -- never a flashing console window,
 # never an unredirected long-lived process (STANDING-ORDERS LOCAL-WORK #3 and
 # the coordinator's "always redirect" rule). Mirrors the established native
-# ProcessStartInfo pattern rather than Start-Process/npm, which can flash a
-# cmd.exe/npm wrapper window.
+# ProcessStartInfo pattern already used by
+# tools/start-agent-activity-visualizer.ps1 rather than Start-Process/npm,
+# which can flash a cmd.exe/npm wrapper window.
 [CmdletBinding()]
 param([string]$HostAddress)
 

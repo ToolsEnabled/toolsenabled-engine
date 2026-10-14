@@ -13,7 +13,12 @@ param(
   # Provider transports use the job root as the lifetime authority. A tool the
   # provider launched must not outlive that root merely because Windows
   # re-parented it before the Node owner could issue a PID-tree kill.
-  [Parameter(Mandatory = $false)][switch]$TerminateDescendantsOnRootExit
+  [Parameter(Mandatory = $false)][switch]$TerminateDescendantsOnRootExit,
+  # OPTIONAL. Node's windowsVerbatimArguments for the contained root: its
+  # arguments are joined with single spaces exactly as given, for a cmd.exe
+  # `/s /c "<command>"` line that C runtime quoting would break (platform
+  # review 1.0.50 E2). Absent, every argument is quoted as before.
+  [Parameter(Mandatory = $false)][switch]$VerbatimArguments
 )
 
 $ErrorActionPreference = 'Stop'
@@ -315,6 +320,8 @@ public static class ToolsEnabledWindowsJobWrapper
         return result.ToString();
     }
 
+    public static bool VerbatimArguments = false;
+
     private static StringBuilder CommandLine(string command, string[] arguments)
     {
         StringBuilder value = new StringBuilder(QuoteArgument(command));
@@ -323,7 +330,7 @@ public static class ToolsEnabledWindowsJobWrapper
             foreach (string argument in arguments)
             {
                 value.Append(' ');
-                value.Append(QuoteArgument(argument));
+                value.Append(VerbatimArguments ? (argument ?? String.Empty) : QuoteArgument(argument));
             }
         }
         return value;
@@ -881,6 +888,7 @@ try {
   $argumentJson = $utf8.GetString([Convert]::FromBase64String($ArgumentsBase64))
   $parsed = ConvertFrom-Json -InputObject $argumentJson
   [string[]]$childArguments = @($parsed | ForEach-Object { [string]$_ })
+  [ToolsEnabledWindowsJobWrapper]::VerbatimArguments = [bool]$VerbatimArguments
   $result = [ToolsEnabledWindowsJobWrapper]::Run(
     $PipeName,
     $Token,

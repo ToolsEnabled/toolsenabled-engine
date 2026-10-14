@@ -1,5 +1,5 @@
-// UNWIRED FROM test:orphans-wired-0823 ON 2026-08-26 (an earlier commit). NEVER
-// green since its first commit (3/8 fail), wired while red. PRODUCT defect on
+// UNWIRED FROM test:orphans-wired-0823 ON 2026-08-26 (commit f061ec5). NEVER
+// green since genesis e416f58 (3/8 fail), wired while red. PRODUCT defect on
 // the agent-comms delivery contract: a local same-tree send delivers
 // synchronously and reaches the inbox, but the send receipt reports the spool
 // state (broker.js:505 delivered:false) because nothing calls recordDelivery
@@ -342,8 +342,9 @@ test('each way a delivery cannot happen is refused with its own reason, never as
   // is a choice rather than a guess.
   /* The address rides beside the name. This expectation was missing `agentId`
      and had been failing at the engine landing tip before this branch existed:
-     an earlier commit added it to every roster row, and that commit is an
-     ancestor of this base. Asserted from stood.worker.agentId rather than a pasted
+     80e72603c ("Every roster row carries the address that tells two same-named
+     circles apart") added it to every roster row, and that commit is an ancestor
+     of this base. Asserted from stood.worker.agentId rather than a pasted
      literal, so it stays true when the harness mints a different id. */
   assert.deepEqual(notConnected.reachable, [{ nodeName: 'Builder', agentId: stood.worker.agentId,
     relation: 'reports-to-sender', treeKey: null, lastSeenAt: 1_900_000_000_000, transient: false }]);

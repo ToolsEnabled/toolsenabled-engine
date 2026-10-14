@@ -162,7 +162,7 @@ $repeating = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionDuration (New-TimeSpan -Days 9999)
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeating -OwnerUser $ownerUser -IncludeLogon
 $principal = New-ScheduledTaskPrincipal -UserId $ownerUser -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `

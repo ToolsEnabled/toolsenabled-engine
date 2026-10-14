@@ -19,6 +19,10 @@ tests/cloud-batch-plan.test.js
 tests/cloud-batch-runner.test.js
 tests/cloud-lane-batch-cli.test.js
 tests/codex-dispatcher.test.js
+# Codex cloud dispatch: the Windows command line measured as libuv quotes it,
+# and a timeout that ends the whole contained tree (release-wave S7).
+tests/codex-dispatcher-command-line.test.js
+tests/codex-dispatcher-timeout-containment.test.js
 tests/controller-launch-scope-adversarial.js
 tests/coordinator-backup-age-status-adversarial.test.js
 tests/coordinator-backup-observer-adversarial.test.js

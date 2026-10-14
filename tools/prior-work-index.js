@@ -5,11 +5,11 @@
 // ---------------
 // The GrepSaver card index maps *code*: seven hand-written system cards, each
 // requiring `system`/`source_path`/`fingerprint`/entry-points/PORTS. A finding
-// like "the registry search returned zero hits across nine query forms" has
+// like "USPTO returned zero hits for TOOLSENABLED across nine query forms" has
 // no representable shape in that schema, so it was never indexed, so the next
-// agent asked `grepsaver-orient.js "licensing"`, got **"No carded system
+// agent asked `grepsaver-orient.js "trademark"`, got **"No carded system
 // matched" at exit 0**, concluded nothing existed, and re-derived the research
-// from scratch — again.
+// from scratch — for the fourth night running.
 //
 // The corpus was never missing. `docs/**` and `reports/**` held it the whole
 // time. Only the index was missing.
@@ -67,7 +67,7 @@ const MAX_BYTES_PER_FILE = 96 * 1024;
 // This constant was 400-by-weight and that was a RECALL BUG, not a tuning
 // choice: body weight is 1-4 regardless of how rare a word is, so truncating
 // by weight preferentially discards the rare, discriminating terms and keeps
-// the common ones. Measured effect: `licensing` reached only 4 of its 6
+// the common ones. Measured effect: `trademark` reached only 4 of its 6
 // documents, and `delaware` 6 of 12, because the word sorted below 400 common
 // words in a 26 KB document. The index was quietly recreating the exact defect
 // it exists to fix.
@@ -167,7 +167,7 @@ function walk(dir, rootDir, acc, errors, depth = 0) {
     // Dotfiles are machine state, not knowledge — and one of them is THIS
     // tool's own cache. `.prior-work-cache.json` lives in context/ and matches
     // *.json, so without this the index indexed itself: every term in the
-    // corpus gained a phantom extra document, `licensing` reported 7 files when
+    // corpus gained a phantom extra document, `trademark` reported 7 files when
     // 6 exist, and the cache grew on every rebuild that read the last one.
     if (entry.name.startsWith('.')) continue;
     if (!INDEXABLE.test(entry.name)) continue;
@@ -275,10 +275,10 @@ function extractHeadings(text) {
 /**
  * Field weights. Identity beats prose, hard.
  *
- * A filename is a deliberate act of naming — `LICENSING.md` is a much
- * stronger claim to the topic "licensing" than a document that happens to
- * say "licence" once in a footnote. Ranking those equally is exactly how
- * search.query answered a licensing-cost question with a UI plugin's CSV about
+ * A filename is a deliberate act of naming — `LAUNCH-PURCHASES.md` is a much
+ * stronger claim to the topic "purchase list" than a document that happens to
+ * say "purchase" once in a footnote. Ranking those equally is exactly how
+ * search.query answered a trademark-cost question with a UI plugin's CSV about
  * alarm clocks.
  */
 const WEIGHT_PATH = 12;
@@ -551,7 +551,7 @@ function query(topic, options = {}) {
   const requiredTerms = terms.length >= 3 ? 2 : 1;
 
   // A term appearing in 40%+ of the corpus describes the corpus, not the topic.
-  // Matching only on such terms is how a licensing-cost question came back with
+  // Matching only on such terms is how a trademark-cost question came back with
   // a UI plugin's CSV about alarm clocks: every one of those files shared only
   // ambient vocabulary with the question. Requiring one genuinely discriminating
   // term rejects that class without also rejecting rare true hits.
@@ -580,7 +580,7 @@ function query(topic, options = {}) {
   // "nothing exists" — while context/agent-lanes.md sat on disk, because
   // "agent" and "lane" are ambient vocabulary here. A false MISS is the most
   // expensive answer this tool can give: it is precisely the message that sent
-  // an agent off to redo launch research it already had.
+  // an agent off to redo four nights of launch research.
   const qualifyingCount = entry => {
     const named = identityFiles.get(entry.fileIndex);
     return entry.matchedTerms.filter(term => isDiscriminating(term) || (named && named.has(term))).length;

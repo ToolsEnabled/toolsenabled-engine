@@ -1,9 +1,9 @@
 'use strict';
 /* STOPPING A TURN'S NATIVE WORK WITHOUT ENDING THE SESSION.
  *
- * MEASURED on the native build: the
+ * MEASURED on the native build (evidence grok-final-stop-report.json): the
  * provider Stop cancelled the model turn and the host.exec child it had asked
- * for -- an owned sixty-second command -- REMAINED ALIVE until
+ * for -- an owned sixty-second command, pid 874779 -- REMAINED ALIVE until
  * root killed that exact pid by hand. The engine's cancellation authority sits
  * on the connection, and the only verbs that reached it (revokeSession,
  * close) retire the binding, so the one way to cancel that command was to

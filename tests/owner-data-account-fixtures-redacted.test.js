@@ -9,7 +9,7 @@
 // rotation.js and tests/multi-account-rotation.test.js) plus two more test
 // files that repeated the alias (tests/account-handover.test.js,
 // tests/window-thresholds.test.js). Two more were the owner's real Windows
-// account name, hardcoded as a literal `<drive>:\Users\<name>\AppData\Local\Temp`
+// account name, hardcoded as a literal `<profile-root>/...\AppData\Local\Temp`
 // path used as a scratch-directory fence (tests/entry/
 // mcp-owner-proxy-lifecycle.js, tests/generic-role-authority-hostile.test.js)
 // -- portable machines break on it too, since it names one specific account.
@@ -129,7 +129,7 @@ check('the two temp-root fences no longer hardcode a Windows account name', () =
   // Positive check, not a search for the retired literal: the fix computes the
   // account's real temp root at runtime, so both files must call the same
   // realpath-of-os.tmpdir() idiom account-profile-boundary.js already uses,
-  // and neither may spell out a literal <drive>:\Users\<name>\... string anymore --
+  // and neither may spell out a literal <profile-root>/<name>\... string anymore --
   // the owner-data guard check above already proves that; this proves WHY it
   // passes, so a future edit that reintroduces a literal a different way (one
   // the guard's shape rule does not happen to catch) still fails here.

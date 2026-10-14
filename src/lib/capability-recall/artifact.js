@@ -13,7 +13,7 @@
 // numbers, and why the freshness check is a stat and not a digest, are on the
 // memo itself.
 //
-// The lock is the same shape a retrieval datastore uses for its vector-index
+// The lock is the same shape lean_rag/datastore/retrieve.py uses for its FAISS
 // handle, and for the same reason: two turns arriving in the same tick must not
 // both parse a 600 KB document.
 //

@@ -187,7 +187,7 @@ function buildVmCensus() {
 // deliberately refuses rather than passing when that checkout is absent.
 // 2026-09-01: the final 332 previously unwired candidates are now named by
 // tests/suites/orphans-wired-0901.txt and were exercised in twelve bounded
-// development-account batches. The three historical exceptions above are no
+// fixture-profile batches. The three historical exceptions above are no
 // longer a reason to tolerate any unreachable shipped test. The native-agent
 // hostile install regression added during final source review is wired into
 // the root suite rather than reopening the ceiling.
@@ -201,9 +201,10 @@ const MAXIMUM_ORPHANS = 0; // exact buildCensus() baseline on 2026-09-01
  *
  * What this list does instead is subtract EXACT NAMED PATHS from the count and
  * say out loud, in every run's output, that they are unwired and why. The four
- * below are the engine side of the Research page, landed 2026-09-20, and the
- * Research page was placed on hold on 2026-09-21: its work is not wired until
- * the hold is released. Wiring these four into an aggregate is exactly
+ * below are the engine side of the Research page, landed 2026-09-20 in
+ * 28173bbd ("committed as found"), and the owner placed the Research page on
+ * hold on 2026-09-21: no merging, editing, refining or wiring of Research work
+ * until the owner releases it. Wiring these four into an aggregate is exactly
  * the change the hold forbids, so the honest state is "unwired, on hold,
  * counted separately" rather than either a silently larger ceiling or a
  * quietly broken gate.
@@ -219,7 +220,7 @@ const MAXIMUM_ORPHANS = 0; // exact buildCensus() baseline on 2026-09-01
  */
 const OWNER_HELD_ORPHANS = Object.freeze({
   heldOn: '2026-09-21',
-  reason: 'Research page on hold: its work is not wired until the hold is released',
+  reason: 'owner hold on the Research page: no Research work may be wired until the owner releases it',
   files: Object.freeze([
     'tests/research-access-owner-host-transport.test.js',
     'tests/research-access-t605.test.js',

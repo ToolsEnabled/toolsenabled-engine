@@ -132,7 +132,7 @@ const attributionScalar = (value, limit = 200) =>
  * said nothing at all. The first version of this recorded exactly that, and the
  * injection case did not catch it because it passed a string -- a test that
  * exercises only the shape the author had in mind cannot see the shape the
- * callers actually send. Caught in review.
+ * callers actually send. Caught in review by reviewer.
  *
  * Rendered as its identifying fields, each flattened and bounded exactly like a
  * scalar, so an object cannot smuggle newlines in through a nested value either.

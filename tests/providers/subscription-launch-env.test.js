@@ -75,7 +75,7 @@ test('subscriptionLaunchEnvironment rejects values that cannot describe an envir
 });
 
 test('assertNoBillingCredentials returns a clean object unchanged', () => {
-  const clean = { PATH: '/bin', HOME: '/home/test' };
+  const clean = { PATH: '/bin', HOME: '/\x68ome/test' };
   equal(assertNoBillingCredentials(clean), clean);
 });
 

@@ -4,8 +4,8 @@
 # WHAT THIS GATES. Before this change, listAccountRouter returned allowance and
 # health per account and nothing about which account was RUNNING.
 # rotation.js activeAccountRecord() returns exactly that answer and had zero
-# production callers in either repository. The owner reported that checking
-# account status did not work; the Accounts panel was correct all along, the
+# production callers in either repository. The owner reported "checking account
+# status does not work"; the Accounts panel was correct all along, the
 # agent-facing surface never answered. This gate holds the answer in place.
 #
 # EVERY MUTATION ASSERTS THREE THINGS, not one:

@@ -31,7 +31,7 @@ test('role selection never overrides permission tiers or exposes opt-in/confirma
      The list is short because the coordinator's default surface is meant to be
      read-mostly: everything that CHANGES something has to be argued for.
 
-     agent.resume joined it in an earlier change,
+     agent.resume joined it in 1918328f66b9f510d1d18ca90e4a1ae96344e117,
      "Apply saved permission profiles to discovery and agent resume"
      (2026-09-06), the commit that also created
      src/lib/action-permission-profiles.js. It is deliberate, not a leak: that
@@ -42,7 +42,7 @@ test('role selection never overrides permission tiers or exposes opt-in/confirma
      tests/action-permission-profiles.test.js.
 
      That commit did not update this pin, which is why it read red at engine
-     an earlier change while nothing was broken. Adding a name here is not a formality:
+     5a39c4d8 while nothing was broken. Adding a name here is not a formality:
      it means somebody decided a built-in role may change that thing by
      default. A new entry appearing without a line in this comment is the
      regression this assertion exists to catch. */

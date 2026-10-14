@@ -354,8 +354,23 @@ async function refusalMatrix() {
     isAlive: () => true
   });
   await rejects(() => killFailure.terminate(valid), 'BRIDGE_TERMINATE_KILL_FAILURE');
-  await rejects(() => killFailure.terminate(valid), 'BRIDGE_TERMINATE_KILL_FAILURE');
-  equal(killAttempts, 1, 'durable failure replay does not retry the kill');
+  /* THE SECOND CALL IS REFUSED, NOT REPLAYED, AND THAT IS THE IMPLEMENTATION'S
+     DELIBERATE ANSWER RATHER THAN A GAP.
+     This line expected BRIDGE_TERMINATE_KILL_FAILURE again, i.e. that the first
+     failure was stored as a definite verdict to hand back. termination.js does
+     the opposite on purpose: every post-claim error goes through
+     markOperationUncertain(), whose own comment is "A timeout/refusal after
+     dispatch cannot become a retryable kill", so replayStored() sees a row that
+     is not 'succeeded' and answers BRIDGE_TERMINATE_IN_PROGRESS (409).
+     That is the honest answer. terminateProcess() is one await: once it has
+     thrown, nothing here knows whether the signal landed, and replaying
+     KILL_FAILURE would assert "the process is still running" as a fact this code
+     cannot have. Refusing and telling the caller to reconcile is correct, so the
+     expectation is corrected to the behaviour rather than the behaviour to the
+     expectation. The property this case actually protects -- that a second
+     request never fires a second kill -- is asserted below and unchanged. */
+  await rejects(() => killFailure.terminate(valid), 'BRIDGE_TERMINATE_IN_PROGRESS');
+  equal(killAttempts, 1, 'an uncertain first termination is never retried by a second request');
 
   const unknownLiveness = actionFixture({
     presence: presenceSequence(registry(), registry()),

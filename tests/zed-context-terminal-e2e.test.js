@@ -11,7 +11,7 @@ if (process.platform !== 'win32') {
   process.exit(0);
 }
 
-const node = 'C:\\Program Files\\nodejs\\node.exe';
+const node = '\x43:\\agent-apps\\node-v22.19.0\\node.exe';
 const wrapper = path.resolve(__dirname, '..', 'tools', 'zed-context-terminal.js');
 const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zed-context-e2e-'));
 const sessionRoot = path.join(fixtureRoot, 'sessions');
@@ -188,7 +188,7 @@ function launch({ sessionFile, sessionId, request, reply }) {
 }
 
 async function main() {
-  const firstId = '019f0000-0000-7000-8000-000000000001';
+  const firstId = '019fbaaf-3e2d-7960-9c78-820d7e67e4ad';
   const firstSessionFile = path.join(sessionRoot, 'first.jsonl');
   const first = await launch({
     sessionFile: firstSessionFile,
@@ -222,13 +222,13 @@ async function main() {
 
   const second = await launch({
     sessionFile: firstSessionFile,
-    sessionId: '39e1d3c5-7a9f-4b1d-8e3f-5a7c9e1b3d5f',
+    sessionId: '3603b824-9a1f-4ce4-af25-a2e2880df2c5',
     request: 'after simulated restart',
     reply: 'second durable reply'
   });
   assert.equal(second.code, 0, second.stderr);
   const resumed = JSON.parse(fs.readFileSync(resumeEvidence, 'utf8'));
-  assert.equal(resumed.placeholderSessionId, '39e1d3c5-7a9f-4b1d-8e3f-5a7c9e1b3d5f');
+  assert.equal(resumed.placeholderSessionId, '3603b824-9a1f-4ce4-af25-a2e2880df2c5');
   assert.equal(resumed.resumedSessionId, firstId);
   assert.equal(path.resolve(resumed.sessionFile), firstSessionFile);
   const secondPermanent = permanentTail(second.stdout);

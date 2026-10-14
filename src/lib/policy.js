@@ -142,21 +142,22 @@ function requiresApproval(action, effect, policy = loadPolicy(), { loadSettings:
    * REASON: one named action, opt-in, and beaten by an explicit required-action
    * rule (the `listed.includes` check runs first and always wins).
    *
-   * Why this one earned an exception. Codex Cloud work is often launched in
-   * batches -- many launches in one sitting -- and every one is
-   * `external-write`, so every one raised a sixty-second dialog. Product rule:
-   * a person may opt this one launch action out of per-call prompting.
+   * Why this one earned an exception. The owner drives Codex Cloud in waves --
+   * dozens of launches in a sitting -- and every one is `external-write`, so
+   * every one raised a sixty-second dialog. His instruction, 2026-08-27: "MY
+   * SETTINGS SHOULD BE LEVEL 0 NO ASKING FROM ME FOR ANYTHING JUST DO IT."
    * Standing authorizations cannot serve this: they match arguments with
    * isDeepStrictEqual, so a grant covers exactly one prompt string and nothing
    * else. The alternative was `externalWrites: false` or `enabled: false`, and
-   * both are far wider than what is needed.
+   * both are far wider than what he asked for.
    *
    * WHAT THIS DOES NOT TOUCH, and the distinction is the point. It exempts ONE
-   * action, cloud.task_launch, which spends the person's included Codex
-   * allowance. Every other external write still prompts, including anything
-   * that reaches a card, an account, or a payment processor. The rule that any
-   * spend of the person's money needs explicit per-item approval is untouched,
-   * because this is not that money and not that path.
+   * action, cloud.task_launch, which spends the owner's Codex allowance -- a
+   * budget he has said is lost if unused. Every other external write still
+   * prompts, including anything that reaches a card, an account, or a payment
+   * processor. His standing reservation that any spend of his money needs his
+   * word line by line is untouched, because this is not that money and not that
+   * path.
    *
    * Default is off. A policy that does not set it keeps the prompt. */
   if (action === 'cloud.task_launch' && approvals.autoApproveCloudLaunch === true) return false;

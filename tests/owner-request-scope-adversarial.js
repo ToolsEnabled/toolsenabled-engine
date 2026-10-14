@@ -317,11 +317,11 @@ const now = Date.parse('2026-08-01T08:00:00.000Z');
 // The migration helper operates only on a narrow, caller-projected legacy
 // request shape. It is pure: every legacy request remains visibly unresolved,
 // keeps its verbatim text, and requires a future owner-authored decision. In
-// particular, the R173 example cannot leak as a global restriction.
+// particular, the R173/Sol example cannot leak as a global restriction.
 {
   const legacy = [
-    { id: 'R173', verbatim: 'this applied only while working on one specific thread.' },
-    { id: 'R240', verbatim: 'use only the premium agent profile for this project.' }
+    { id: 'R173', verbatim: 'that was only while working on that specific thread.' },
+    { id: 'R240', verbatim: 'use only sol ultra agents for game development.' }
   ];
   const before = structuredClone(legacy);
   const triage = scope.triageUnscopedOwnerRequests(legacy);

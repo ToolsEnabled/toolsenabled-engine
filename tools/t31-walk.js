@@ -111,14 +111,14 @@ async function main() {
   console.log('     inbox: ' + JSON.stringify(bodies));
   expect('exactly one forwarded message arrived', bodies, ['Manager: Did the census finish?']);
 
-  // --- The naming half, as a tree's manager met it.
+  // --- The naming half, as the math tree's manager met it.
   say('A second tree appears, with its own Controller, and the person links the two trees.');
-  directory.registerNode({ sessionId: 'sess-ctrl-ours', nodeName: 'Controller (aaaa0001)', managerSessionId: 'sess-manager',
+  directory.registerNode({ sessionId: 'sess-ctrl-ours', nodeName: 'Controller (da02fefa)', managerSessionId: 'sess-manager',
     managerName: 'Manager', nodeKey: 'node-7-ours', treeKey: 'node-1-manager' });
-  directory.registerNode({ sessionId: 'sess-ctrl-theirs', nodeName: 'Controller (bbbb0002)', nodeKey: 'node-9-theirs', treeKey: 'node-9-theirs' });
+  directory.registerNode({ sessionId: 'sess-ctrl-theirs', nodeName: 'Controller (850c7379)', nodeKey: 'node-9-theirs', treeKey: 'node-9-theirs' });
   directory.setLink({ from: 'node-1-manager', to: 'node-9-theirs' });
 
-  say('The Manager reads its roster, the way a tree\'s manager did before it chose wrong.');
+  say('The Manager reads its roster, the way the math tree\'s manager did before it chose wrong.');
   const rosterAnswer = provider.roster({ from: 'Manager' }, managerContext);
   const roster = rosterAnswer.reachable;
   for (const row of roster) console.log(`     ${row.nodeName}  relation=${row.relation}  tree=${row.treeKey}  lastSeen=${row.lastSeenAt}  transient=${row.transient}`);
@@ -126,8 +126,8 @@ async function main() {
   expect('all live rows explicitly clear the transient flag', roster.every(row => row.transient === false), true);
   expect('the replacement appears once as reachable', roster.filter(row => row.nodeName === 'Worker 4').length, 1);
   expect('the predecessor is not also shown as stopped', rosterAnswer.unavailable.filter(row => row.nodeName === 'Worker 4').length, 0);
-  const ours = roster.find(row => row.nodeName === 'Controller (aaaa0001)');
-  const theirs = roster.find(row => row.nodeName === 'Controller (bbbb0002)');
+  const ours = roster.find(row => row.nodeName === 'Controller (da02fefa)');
+  const theirs = roster.find(row => row.nodeName === 'Controller (850c7379)');
   expect('own Controller is marked as a report', ours?.relation, 'reports-to-sender');
   expect('linked Controller is marked as linked', theirs?.relation, 'linked-agent');
   expect('the two Controllers show different trees', ours?.treeKey !== theirs?.treeKey, true);
@@ -136,19 +136,19 @@ async function main() {
   const ambiguous = await provider.send({ from: 'Manager', to: 'Controller', body: 'ping' }, managerContext);
   console.log('     answer: ' + JSON.stringify(ambiguous.reason || ambiguous.code || ambiguous));
   expect('refused rather than guessed', ambiguous.accepted, false);
-  expect('both choices are named', /Controller \(aaaa0001\)/.test(ambiguous.reason) && /Controller \(bbbb0002\)/.test(ambiguous.reason), true);
+  expect('both choices are named', /Controller \(da02fefa\)/.test(ambiguous.reason) && /Controller \(850c7379\)/.test(ambiguous.reason), true);
 
   say('The person removes the link; now only one Controller is reachable and the bare name should work.');
   directory.setLink({ from: 'node-1-manager', to: 'node-9-theirs', connected: false });
   const bare = await provider.send({ from: 'Manager', to: 'Controller', body: 'ping' }, managerContext);
   expect('a bare unique name resolves', bare.accepted, true);
-  expect('and lands on the only reachable Controller', bare.to, 'Controller (aaaa0001)');
+  expect('and lands on the only reachable Controller', bare.to, 'Controller (da02fefa)');
 
   say('A name that matches nothing.');
   const unknown = await provider.send({ from: 'Manager', to: 'Contoller', body: 'ping' }, managerContext);
   console.log('     answer: ' + JSON.stringify(unknown.reason || unknown.code || unknown));
   expect('refused', unknown.accepted, false);
-  expect('the reachable near-match is named', /Controller \(aaaa0001\)/.test(unknown.reason), true);
+  expect('the reachable near-match is named', /Controller \(da02fefa\)/.test(unknown.reason), true);
 
   say('A Controller starts six reports with cached manager labels and no manager session IDs.');
   const rootBefore = { sessionId: 'drift-controller-before', nodeName: 'Controller (continued)',

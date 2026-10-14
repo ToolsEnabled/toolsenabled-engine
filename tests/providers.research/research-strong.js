@@ -138,7 +138,7 @@ function fixture(overrides = {}) {
       { prompt: 'research', model: 'gpt-oss:120b' },
       { prompt: 'research', url: 'https://example.invalid' },
       { prompt: 'Authorization: Bearer fake-token' },
-      { prompt: 'read C:\\vault\\records' },
+      { prompt: 'read \x43:\\vault\\records' },
       { prompt: 'short', maxOutputTokens: 255 },
       { prompt: 'short', maxOutputTokens: 1537 }
     ]) {

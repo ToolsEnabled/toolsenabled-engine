@@ -1,33 +1,33 @@
 'use strict';
 // THE ONE PROJECTION BOTH CART SURFACES READ.
 //
-// Product rule: the purchase cart exists in the desktop software AND on the
-// website, and the two do not drift. The way two lists drift is that
+// The owner asked for his purchase cart to exist in the desktop software AND on
+// the website, and for the two not to drift. The way two lists drift is that
 // each surface computes its own answer to the same question. So neither surface
 // computes: this file answers, once, from the snapshot the engine already
 // serves at GET /v1/owner-prompts, and both surfaces render what it returns.
 //
 // WHAT IT ADDS TO THE SNAPSHOT, AND WHY EACH ONE IS THE OWNER'S ASK
 //
-//   expiry        The live carts expire 2026-08-18 and NOTHING TELLS THEM. The
+//   expiry        The live carts expire 2026-08-18 and NOTHING TELLS HIM. The
 //                 wire prompt has carried `expiresAt` since the beginning; the
 //                 renderer (app src/owner-popup.js) validates it and then never
 //                 draws it. So the field exists, is correct, and is invisible.
 //                 This file turns it into a countdown and a sentence.
 //
-//   doNothing     "what happens if they do nothing". Expiry is DENIAL -- see
+//   doNothing     "what happens if he does nothing". Expiry is DENIAL -- see
 //                 owner-prompts.js `live()`, which drops a record the moment
 //                 Date.parse(expiresAt) <= now, and `settle()`, which files it
 //                 with the default decision. Silence is not neutral here, and
 //                 the surface has to say so before the date, not after it.
 //
-//   needsAnswer   Product rule: a loud sound plays on the speakers whenever
-//                 a question that needs the owner's answer is posted. An
-//                 alarm needs to know which of these rows is a question the
-//                 owner can still answer -- a notice is not, and an
+//   needsAnswer   "Play a loud sound on the speakers whenever you post a
+//                 question you need me to respond to" (owner, 2026-08-12
+//                 22:04Z). An alarm needs to know which of these rows is a
+//                 question he can still answer -- a notice is not, and an
 //                 expired row is not. That test is answered ONCE, here, so the
 //                 desktop, the website and tools/purchase-cart.js cannot each
-//                 arrive at a different idea of what is worth waking them for.
+//                 arrive at a different idea of what is worth waking him for.
 //                 `questionCount` on the summary is the count of them.
 //
 //   provenance    `ownerRequestIds` does NOT survive onto the wire. wireItem()
@@ -92,7 +92,7 @@ function parseInstant(value, what) {
  * The stamp is prepended by owner-prompts.js wireItem() and is the ONLY carrier
  * of provenance left on the wire. A description that carries neither known stamp
  * is reported `unknown` -- not `agent`, because "we could not tell" and "we
- * checked and it is not theirs" are different claims and only one of them is true.
+ * checked and it is not his" are different claims and only one of them is true.
  */
 function readProvenance(description) {
   if (typeof description !== 'string') throw new Error('purchase item description is malformed');
@@ -254,18 +254,19 @@ function viewPrompt(prompt, nowMs, source = 'wire') {
     remainingDays: expiry.remainingDays,
     deadline: humanDeadline(expiry),
     doNothing: expiry.outcome,
-    // IS THIS ONE ACTUALLY WAITING ON THE PERSON TO SAY SOMETHING.
+    // IS THIS ONE ACTUALLY WAITING ON HIM TO SAY SOMETHING.
     //
-    // A question that needs the person's answer raises a sound, so a surface
-    // that raises an alarm has to know which records are questions. Two things disqualify a record and both are
+    // The owner asked for a loud sound "whenever you post a question you need
+    // me to respond to", so a surface that raises an alarm has to know which
+    // records are questions. Two things disqualify a record and both are
     // measured here rather than in the surface, because a second surface
     // computing its own rule is how the alarm ends up lying:
     //
-    //   a NOTICE needs no answer -- expiry marks it read, and beeping at them
-    //   for something that resolves itself teaches them to ignore the sound;
+    //   a NOTICE needs no answer -- expiry marks it read, and beeping at him
+    //   for something that resolves itself teaches him to ignore the sound;
     //
     //   an EXPIRED record has already been answered, by silence, with a deny.
-    //   Waking them for a decision they can no longer make is worse than silence.
+    //   Waking him for a decision he can no longer make is worse than silence.
     //
     // Note this reads the projection's own expiry, not `state`: this file is
     // also read by tools/purchase-cart.js, which holds the RAW store rather
@@ -365,7 +366,7 @@ function cartView(snapshot, options = {}) {
     lineCount: carts.reduce((sum, cart) => sum + cart.items.length, 0),
     waitingCount: prompts.length,
     // The number an alarm may act on, and it is NOT `waitingCount`. That counts
-    // rows; this counts questions they still have the power to answer. See
+    // rows; this counts questions he still has the power to answer. See
     // `needsAnswer`. `expiredCount` is beside it so a surface can name what it
     // dropped instead of quietly shrinking the total it prints.
     questionCount: prompts.filter(prompt => prompt.needsAnswer).length,
@@ -388,7 +389,7 @@ function cartView(snapshot, options = {}) {
       doNothing: soonest.doNothing
     }),
     // Restated at the top of both surfaces. Approving records a decision; the
-    // buying is a separate act the owner takes themselves. Nothing in this file, or
+    // buying is a separate act the owner takes himself. Nothing in this file, or
     // in either surface that renders it, can spend.
     spendNotice: 'Approving records your decision. It does not spend, does not enter a card, '
       + 'and does not contact a merchant.'

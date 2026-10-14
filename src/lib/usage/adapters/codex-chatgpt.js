@@ -8,7 +8,7 @@ const {
 const { selectCodexRateLimits, decodeCodexWindow } = require('../codex-rate-limits');
 
 // Retained for callers using the original fixture identity, not CLI admission.
-// Product requirement: do not pin Codex versions. Compatibility is
+// Owner request (2026-09-22): do not pin Codex versions. Compatibility is
 // established by initialization and the rate-limit response shape below.
 const CODEX_APP_SERVER_CLI_VERSION = 'codex-cli 0.146.0';
 

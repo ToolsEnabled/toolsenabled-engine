@@ -7,27 +7,17 @@ const { STATUS } = require('../../src/lib/multi-account/health.js');
 const {
   CLAUDE_USAGE_PROBE_TIMEOUT_MS,
   CODE,
-  DEFAULT_FAILOVER_MODE,
-  FAILOVER_MODES,
   STATE_LEAF,
   claudeProbeFactory,
   claudeStatusOf,
-  normalizeMode,
   resolveAccountForSession,
-  resolveThresholds,
   statePathFor
 } = require('../../src/lib/multi-account/rotation.js');
 
 const checks = [];
 function check(name, run) { checks.push([name, run]); }
 
-check('failover mode defaults safely to manual for absent and invalid values', () => {
-  assert.deepStrictEqual(FAILOVER_MODES, ['manual', 'auto']);
-  assert.strictEqual(DEFAULT_FAILOVER_MODE, 'manual');
-  assert.strictEqual(normalizeMode(), 'manual');
-  assert.strictEqual(normalizeMode('automatic'), 'manual');
-  assert.strictEqual(normalizeMode('auto'), 'auto');
-});
+
 
 check('the state filename is joined beneath the supplied services root', () => {
   assert.strictEqual(STATE_LEAF, 'multi-account-state.json');
@@ -110,7 +100,7 @@ check('an unsupported provider preserves the ordinary launch path', async () => 
  *
  * MUTATION AUDIT 2026-09-03: restoring the sequential shape in
  * src/lib/multi-account/rotation.js (`const observed = await askAuth(...)`
- * before the usage call, as it stood at an earlier revision) makes this check fail with
+ * before the usage call, as it stood at abbe37c) makes this check fail with
  * "the usage probe had not been entered while the auth probe was still running"
  * (5/7 -> reported below); the check passes again once the concurrent shape is
  * restored. */
@@ -321,7 +311,7 @@ check('a signed-out Claude home keeps its own reason even when its entry expects
  * WHAT WENT WRONG. The Accounts page carries a start cutoff. It exists to spread
  * AUTOMATIC starts across accounts. It was also applied to an exact resume --
  * and a resume is not a selection: the thread lives in one account's home and no
- * other account can continue it. MEASURED on a development machine: an hourly
+ * other account can continue it. MEASURED on the owner's machine: an hourly
  * cutoff of 25% classed every account past a quarter of its 5-hour window as
  * spent, and seventeen start refusals in one day were all this, none from a
  * provider. A saved Manager on an account with most of its WEEK left was
@@ -339,58 +329,12 @@ check('a signed-out Claude home keeps its own reason even when its entry expects
  * `providerLimitsOnly` -- the defect -- turns this RED on the first assertion;
  * restoring it is GREEN.
  */
-check('an exact resume is judged on the provider ceiling, not the configured cutoff', () => {
-  const registry = { exhaustedAtPercent: 90, exhaustedAtPercentHourly: 25, exhaustedAtPercentWeekly: 100 };
 
-  // AUTOMATIC selection keeps the person's own numbers. Nothing is relaxed.
-  const automatic = resolveThresholds(registry, false);
-  assert.strictEqual(automatic.exhaustedAtPercentHourly, 25,
-    'an automatic start must still honour the configured hourly cutoff');
-  assert.strictEqual(automatic.exhaustedAtPercent, 90);
 
-  // A RESUME is judged on what the provider itself would refuse.
-  const resume = resolveThresholds(registry, true);
-  assert.strictEqual(resume.exhaustedAtPercentHourly, 100,
-    'a saved conversation is being refused by a limit set on this computer');
-  assert.strictEqual(resume.exhaustedAtPercentWeekly, 100);
-  assert.strictEqual(resume.exhaustedAtPercent, 100);
 
-  // And the two answers must actually differ, or the gate proves nothing.
-  assert.notDeepStrictEqual(automatic, resume,
-    'the resume path and an automatic start are being judged identically');
-});
-
-check('the same measured account is spent for an automatic start and usable for a resume', () => {
-  const windows = require('../../src/lib/multi-account/usage-windows.js');
-  const registry = { exhaustedAtPercent: 90, exhaustedAtPercentHourly: 25, exhaustedAtPercentWeekly: 100 };
-  /* The owner's shape: past the configured quarter-hour cutoff, nowhere near
-     spending its week. */
-  const measured = {
-    hourly: windows.windowRecord({ kind: 'hourly', percent: 55 }),
-    weekly: windows.windowRecord({ kind: 'weekly', percent: 16 })
-  };
-
-  const forAutomatic = windows.spentWindow(measured, windows.windowLimits(resolveThresholds(registry, false)));
-  assert.ok(forAutomatic, 'the configured cutoff no longer classes this account spent for automatic starts');
-  assert.strictEqual(forAutomatic.kind, 'hourly');
-  assert.ok(forAutomatic.limit < 100, "a limit below 100 is a choice made on this computer, not by the provider");
-
-  const forResume = windows.spentWindow(measured, windows.windowLimits(resolveThresholds(registry, true)));
-  assert.strictEqual(forResume, null,
-    'a saved conversation on this account is still being turned away');
-
-  /* A genuinely spent account is still refused on the resume path, or the fix
-     would have become "resumes always start". */
-  const reallySpent = {
-    hourly: windows.windowRecord({ kind: 'hourly', percent: 100 }),
-    weekly: windows.windowRecord({ kind: 'weekly', percent: 100 })
-  };
-  assert.ok(windows.spentWindow(reallySpent, windows.windowLimits(resolveThresholds(registry, true))),
-    'an account with nothing left must still be refused for a resume');
-});
 
 (async () => {
-  assert.strictEqual(checks.length, 12, 'every behavior check must remain registered');
+  assert.strictEqual(checks.length, 9, 'every behavior check must remain registered');
   let failures = 0;
   for (const [name, run] of checks) {
     try {

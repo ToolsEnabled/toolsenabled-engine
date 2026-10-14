@@ -21,8 +21,8 @@ if (process.platform !== 'win32') {
 }
 
 const compilers = [
-  'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
-  'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
+  '\x43:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
+  '\x43:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
 ];
 const compiler = compilers.find(candidate => fs.existsSync(candidate));
 assert.ok(compiler, 'Windows C# compiler is required for the ConPTY relay test');
@@ -43,7 +43,7 @@ async function main() {
     '--cwd', fixtureRoot,
     '--cols', '100',
     '--rows', '30',
-    '--', process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe', '/d', '/q', '/k'
+    '--', process.env.ComSpec || '\x43:\\Windows\\System32\\cmd.exe', '/d', '/q', '/k'
   ], {
     cwd: fixtureRoot,
     stdio: ['pipe', 'pipe', 'pipe'],

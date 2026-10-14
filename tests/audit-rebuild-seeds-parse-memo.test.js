@@ -2,7 +2,7 @@
 
 // THE PROCESS THAT REBUILT A PROJECTION DOES NOT READ IT BACK.
 //
-// MEASURED 2026-09-04 on a live instance at the retention cap: every
+// MEASURED 2026-09-04 on the owner's Live instance at the retention cap: every
 // roll rewrote both projection files (11.5 MB + 6.7 MB) and the next admission
 // in the same process read and parsed them again -- ~50 MB of allocation a
 // minute in the audit worker, a 313 MB worker heap, Windows flagging the

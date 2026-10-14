@@ -23,8 +23,8 @@ const DEFINITIONS = Object.freeze({
   google_refresh_token: definition('Google OAuth refresh token'),
   google_client_id: definition('Google OAuth client ID'),
   google_client_secret: definition('Google OAuth client secret'),
-  // RELABELLED, NOT PURGED. Discord left the product on 2026-08-22
-  // (product decision). Nothing reads these two keys any more and neither is a
+  // RELABELLED, NOT PURGED. Discord left the product on 2026-08-22 (owner
+  // ruling, O4). Nothing reads these two keys any more and neither is a
   // diagnostic input below. They stay in the catalogue so an owner who stored
   // one still sees it listed, with a label that says what to do. Deleting
   // owner-supplied secret material on upgrade, without a decision, is not

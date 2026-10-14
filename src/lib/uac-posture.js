@@ -2,8 +2,9 @@
 
 // --- WHAT WILL ACTUALLY HAPPEN ON *THIS* COMPUTER (owner, R1536 tier 1) ------
 //
-// The owner's requirement: if their settings can be read, tell them and let
-// them change the settings right there; if not, direct them how to.
+// The owner: "if we can grab their settings then just tell them and let them
+// choose to change their settings right there or if we cant grab them then
+// direct them how to".
 //
 // So this module reads the Windows settings that decide whether an operation
 // needing administrator rights will run silently, ask, or be refused outright,
@@ -26,7 +27,7 @@
 // reachable and tier 2 is the exception rather than the rule.
 //
 // WHY THIS EXISTS AT ALL: R1529 concluded "no ToolsEnabled app setting requires
-// UAC elevation" after seeing no prompt on a development machine. Measured on
+// UAC elevation" after seeing no prompt on the owner's machine. Measured on
 // that machine 2026-08-12: EnableLUA=1 but ConsentPromptBehaviorAdmin=0, which
 // is "elevate without prompting" -- every elevation request from an
 // administrator's token is granted with no dialog at all. The absence of a
@@ -81,7 +82,7 @@ function parseRegQuery(output, valueName) {
 }
 
 function systemExecutable(name) {
-  const root = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
+  const root = process.env.SystemRoot || process.env.windir || '\x43:\\Windows';
   return path.join(root, 'System32', name);
 }
 
@@ -208,7 +209,7 @@ function readPosture({
  * designed a screen for:
  *
  *   'silent'      it will run, and Windows will not ask. The most dangerous
- *                 answer to leave unsaid, and the one a development machine gave.
+ *                 answer to leave unsaid, and the one the owner's machine gives.
  *   'consent'     Windows will show an approve/deny box.
  *   'credentials' Windows will ask for an administrator's name and password.
  *   'refused'     it cannot run, and Windows will not offer a way to allow it.
@@ -277,7 +278,7 @@ function describeForOperation(posture, need) {
       'You are an administrator, but this copy could not read whether Windows will ask you before allowing this. It will not guess which.');
   }
   if (admin === 0) {
-    // The measured state of a development machine, and the reason a whole
+    // The measured state of the owner's own machine, and the reason a whole
     // lane concluded this product needed no administrator rights at all.
     return frozenAnswer('silent', 1,
       'On your computer this will run without asking you anything. Windows is set to give administrator rights to programs that ask for them without showing you a prompt first. That is not the Windows default \u2014 normally you would see an approval box \u2014 and it means changes like this one happen on this computer without you seeing them.');
@@ -296,8 +297,8 @@ function frozenAnswer(outcome, tier, sentence) {
 
 // --- HOW OFTEN THIS ASKS YOU FOR SOMETHING (owner, R1536 tier 3) -------------
 //
-// The owner's requirement: label how often a user step is needed (typically,
-// sometimes, rarely) so people know.
+// "It should be labeled as typically requires a user step, rarely, sometimes
+// etc so they know".
 //
 // The label is a claim about MACHINES IN GENERAL at their default settings, and
 // it is derived from how commonly the condition that triggers the step is true

@@ -3,7 +3,7 @@
 
 // One command turning the owner's words into durable ledger state, built to
 // close the exact gap that caused R44's "dropped instruction" failure: a
-// paraphrase happened at CAPTURE time ("that we had published" quietly
+// paraphrase happened at CAPTURE time ("that i had submitted" quietly
 // disappeared while writing the summary), long before any agent decided
 // what to do with the request. STANDING-ORDERS.md RECORD rule 1a says
 // verbatim wins over interpretation -- this tool is the mechanical way that
@@ -61,7 +61,7 @@ const DEFAULT_LEDGER_FILE = statePath('reports', 'OWNER-REQUEST-LEDGER.json');
 // another (R3.1) can carry gates and evidence like any root.
 const ID_PATTERN = /^R(?:0\d|[1-9]\d{0,3})(?:\.[1-9]\d*)*$/;
 const THREAD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-// MEASURED 2026-09-03: the product rule is that the canonical ledger
+// MEASURED 2026-09-03: the owner ruled (2026-09-02) that the canonical ledger
 // carries four scope tiers -- global, session, tree, thread -- and every other
 // writer (src/lib/owner-request-store.js SCOPES, the app's /Request family)
 // already speaks all four. This tool was never updated past the two it had
@@ -359,7 +359,7 @@ function assertRuntimeGateEvidence(instruction, evidence, { required = false } =
 // concatenates -- but "structurally it cannot happen" is exactly what was true
 // of the verbatim path too, right up until it needed a checked invariant.
 //
-// The concrete shape this refuses is not hypothetical: a fleet lane shipped a
+// The concrete shape this refuses is not hypothetical: fleet lane s10 shipped a
 // `set-gate` command that would have let an agent self-certify its own egress
 // gate (GEMINI-LANE-DOCTRINE failure mode 5, "dangerous helpfulness"). It was
 // caught in review. This makes the next one fail here instead of depending on a
@@ -374,7 +374,7 @@ function assertGatesAppendOnly(id, existingGates, nextGates) {
     throw new OwnerCaptureError('OWNER_CAPTURE_GATES_NOT_APPEND_ONLY', `${message} `
       + 'STANDING-ORDERS.md class RECORD, order 2: "Never mark a request done without independent '
       + 'verification. Never soften a status." This writer is append-only by design and has no flag that '
-      + 'can satisfy a gate -- an agent may never certify its own precondition. A fleet lane shipped '
+      + 'can satisfy a gate -- an agent may never certify its own precondition. Fleet lane s10 shipped '
       + 'exactly that (a `set-gate` command) and it was caught only by review.');
   };
 
@@ -415,9 +415,9 @@ function assertGatesAppendOnly(id, existingGates, nextGates) {
 
 // --- entry construction --------------------------------------------------
 
-// EVERY NEW ENTRY CARRIES ITS PROVENANCE. Agent-made rules must never be
-// presented as the owner's. They could be because the ledger had no field in
-// which an agent's decision and the owner's instruction could differ.
+// EVERY NEW ENTRY CARRIES ITS PROVENANCE. The owner, 2026-08-11: "Why are agent
+// rules stille being pushed as mine". They could be because the ledger had no
+// field in which an agent's decision and his instruction could differ.
 //
 // The class is DERIVED from evidence this capture already had to produce, not
 // asked for as a free-text claim, so it cannot be inflated by a caller that
@@ -427,7 +427,7 @@ function assertGatesAppendOnly(id, existingGates, nextGates) {
 //     This is the strong form: the channel the words arrived on is named.
 //   - A privileged owner-ingress or ledger-custody actor with no citation. The
 //     role's assertion IS the evidence here -- that is the existing, tested
-//     contract from an earlier change, and narrowing it would stop their words being
+//     contract from f3ae016, and narrowing it would stop his words being
 //     recorded at all, which is a worse failure than the one being fixed. The
 //     synthesized source says exactly that and does not overclaim, so a reader
 //     can see it is a role assertion rather than a message id.
@@ -449,7 +449,7 @@ function deriveCaptureProvenance({ actor, source, declaredClass, proposal, times
       'OWNER_CAPTURE_PROVENANCE_INVALID',
       `--provenance must be "owner-stated" or "owner-ratified"; got ${JSON.stringify(klass)}. `
       + 'owner-capture records the OWNER\'S words; an agent\'s own decision does not belong here '
-      + 'under the person\'s name.'
+      + 'under his name.'
     );
   }
   try {

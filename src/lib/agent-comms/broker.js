@@ -93,10 +93,19 @@ const REQUIRED_SPOOL_ENTRY_KEYS = Object.freeze(new Set([
 const DEAD_LETTER_KEYS = Object.freeze(new Set([
   'deadLetteredAtMs', 'reason', 'entry'
 ]));
+const DEAD_LETTER_OPTIONAL_KEYS = Object.freeze(new Set(['refusalCode']));
 const DEAD_LETTER_REASONS = Object.freeze(new Set([
   'RECIPIENT_NOT_IN_DIRECTORY', 'RECIPIENT_QUEUE_DISCARDED'
 ]));
+// A queue-discarded packet is also retained as terminal custody until the
+// authenticated recipient advances past its history slot.  This is separate
+// from deadLetters because that collection is intentionally bounded diagnostic
+// history; trimming diagnostics must not erase the only evidence that lets a
+// durable stream pass a terminal transport disposition.
+const TERMINAL_MARKER_KEYS = DEAD_LETTER_KEYS;
+const TERMINAL_MARKER_OPTIONAL_KEYS = DEAD_LETTER_OPTIONAL_KEYS;
 const DEAD_LETTER_REQUEST_KEYS = Object.freeze(new Set(['message', 'reason']));
+const REFUSAL_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,95}$/;
 const DEFERRED_DELIVERY_KEYS = Object.freeze(new Set(['deferredAtMs', 'entry']));
 const WAITING_DELIVERY_KEYS = Object.freeze(new Set([...DEFERRED_DELIVERY_KEYS, 'waitingForModel']));
 const HANDOFF_REQUEST_KEYS = Object.freeze(new Set(['message']));
@@ -177,7 +186,7 @@ function validProcessStartIdentity(value) {
 function windowsProcessIdentity(pid) {
   const systemRoot = typeof process.env.SystemRoot === 'string' && path.isAbsolute(process.env.SystemRoot)
     ? process.env.SystemRoot
-    : 'C:\\Windows';
+    : '\x43:\\Windows';
   const powershell = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const command = WINDOWS_PROCESS_IDENTITY_SCRIPT.replace('__TARGET_PID__', String(pid));
   const encodedCommand = Buffer.from(command, 'utf16le').toString('base64');
@@ -455,6 +464,17 @@ function hasExactKeys(value, keys) {
   return actual.length === keys.size && actual.every(key => keys.has(key));
 }
 
+function hasRequiredKeys(value, required, optional) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value);
+  return [...required].every(key => actual.includes(key))
+    && actual.every(key => required.has(key) || optional.has(key));
+}
+
+function validRefusalCode(value) {
+  return typeof value === 'string' && REFUSAL_CODE_PATTERN.test(value);
+}
+
 function validStoredDeliveryClaim(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.hasOwn(value, 'holderProcessStartIdentity')
@@ -518,6 +538,7 @@ function emptyState() {
     spool: [],
     deliveries: [],
     deadLetters: [],
+    terminalMarkers: [],
     deferred: [],
     wakeCooldowns: []
   };
@@ -534,6 +555,17 @@ function validateStoredState(value) {
     && value.schemaVersion === SCHEMA_VERSION && value.deferred === undefined) {
     value.deferred = [];
   }
+  if (value && typeof value === 'object' && !Array.isArray(value)
+    && value.schemaVersion === SCHEMA_VERSION && value.terminalMarkers === undefined) {
+    // States written before terminal custody existed have only the bounded
+    // diagnostic list. Promote queue-discarded rows before createBroker trims
+    // that list so an unread predecessor cannot disappear at startup.
+    value.terminalMarkers = Array.isArray(value.deadLetters)
+      ? value.deadLetters
+        .filter(record => record && record.reason === 'RECIPIENT_QUEUE_DISCARDED')
+        .map(record => clone(record))
+      : [];
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || value.schemaVersion !== SCHEMA_VERSION
     || !Number.isSafeInteger(value.nextSequence)
@@ -541,6 +573,7 @@ function validateStoredState(value) {
     || !Array.isArray(value.spool)
     || !Array.isArray(value.deliveries)
     || !Array.isArray(value.deadLetters)
+    || !Array.isArray(value.terminalMarkers)
     || !Array.isArray(value.deferred)
     || !Array.isArray(value.wakeCooldowns)) {
     fail('BROKER_STATE_CORRUPT', 'broker state is invalid.');
@@ -637,12 +670,16 @@ function validateStoredState(value) {
     }
   }
 
+  const deadLetterMessageIds = new Set();
+  const deadLetterSequences = new Set();
+  const deadLettersByMessageId = new Map();
   for (const deadLetter of value.deadLetters) {
-    if (!hasExactKeys(deadLetter, DEAD_LETTER_KEYS)
+    if (!hasRequiredKeys(deadLetter, DEAD_LETTER_KEYS, DEAD_LETTER_OPTIONAL_KEYS)
       || !Number.isSafeInteger(deadLetter.deadLetteredAtMs)
       || deadLetter.deadLetteredAtMs < 0
       || typeof deadLetter.reason !== 'string'
-      || !DEAD_LETTER_REASONS.has(deadLetter.reason)) {
+      || !DEAD_LETTER_REASONS.has(deadLetter.reason)
+      || (Object.hasOwn(deadLetter, 'refusalCode') && !validRefusalCode(deadLetter.refusalCode))) {
       fail('BROKER_STATE_CORRUPT', 'stored dead letter is invalid.');
     }
     const entry = deadLetter.entry;
@@ -654,6 +691,49 @@ function validateStoredState(value) {
     }
     packetMessageIds.add(entry.messageId);
     sequences.add(entry.sequence);
+    deadLetterMessageIds.add(entry.messageId);
+    deadLetterSequences.add(entry.sequence);
+    deadLettersByMessageId.set(entry.messageId, deadLetter);
+  }
+
+  // Terminal markers deliberately share the packet envelope with the bounded
+  // diagnostic dead-letter row while it is retained there.  They are allowed
+  // to overlap that one collection, but must still be unique among markers
+  // and may not conflict with an in-flight packet, receipt, or deferred model
+  // handoff.  Once the diagnostic row is trimmed, the marker remains the
+  // authenticated custody record until the stream settles it.
+  const terminalMarkerMessageIds = new Set();
+  const terminalMarkerSequences = new Set();
+  for (const marker of value.terminalMarkers) {
+    if (!hasRequiredKeys(marker, TERMINAL_MARKER_KEYS, TERMINAL_MARKER_OPTIONAL_KEYS)
+      || !Number.isSafeInteger(marker.deadLetteredAtMs)
+      || marker.deadLetteredAtMs < 0
+      || typeof marker.reason !== 'string'
+      || marker.reason !== 'RECIPIENT_QUEUE_DISCARDED'
+      || (Object.hasOwn(marker, 'refusalCode') && !validRefusalCode(marker.refusalCode))) {
+      fail('BROKER_STATE_CORRUPT', 'stored terminal marker is invalid.');
+    }
+    const entry = marker.entry;
+    validateStoredPacketEntry(entry, value.nextSequence, 'stored terminal marker entry');
+    const diagnostic = deadLettersByMessageId.get(entry.messageId);
+    if (diagnostic && (diagnostic.entry.fingerprint !== entry.fingerprint
+      || diagnostic.entry.recipientAgentId !== entry.recipientAgentId
+      || (diagnostic.entry.recipientMachineId ?? null) !== (entry.recipientMachineId ?? null)
+      || diagnostic.entry.sequence !== entry.sequence
+      || diagnostic.reason !== marker.reason)) {
+      fail('BROKER_STATE_CORRUPT', 'stored terminal marker conflicts with its diagnostic dead letter.');
+    }
+    if (terminalMarkerMessageIds.has(entry.messageId)
+      || terminalMarkerSequences.has(entry.sequence)
+      || (packetMessageIds.has(entry.messageId) && !deadLetterMessageIds.has(entry.messageId))
+      || (sequences.has(entry.sequence) && !deadLetterSequences.has(entry.sequence))
+      || deliveryMessageIds.has(entry.messageId)) {
+      fail('BROKER_STATE_CORRUPT', 'stored terminal marker identity conflicts with another broker collection.');
+    }
+    terminalMarkerMessageIds.add(entry.messageId);
+    terminalMarkerSequences.add(entry.sequence);
+    if (!deadLetterMessageIds.has(entry.messageId)) packetMessageIds.add(entry.messageId);
+    if (!deadLetterSequences.has(entry.sequence)) sequences.add(entry.sequence);
   }
 
   // Deferred model handoffs are pending work, not historical receipts. Keep
@@ -763,13 +843,13 @@ function readState(stateFile) {
  *
  * MEASURED 2026-09-03: tree-node-directory.js's own state file was found this
  * way on this machine -- 22,346 bytes of pure NUL -- and fixed in
- * an earlier change by fsyncing before the rename. This
+ * 4b0a59d94566f307771d70fd67cbdecbfb2e1f96 by fsyncing before the rename. This
  * file is the broker's spool: every undelivered packet, dead letter and wake
  * cooldown for agent_comms.send_local lives only here between commits, and
  * unlike the tree directory (identity only) a torn write here destroys message
  * content with nothing left anywhere to reconstruct it from -- a message the
- * sender believes it sent, with no answer and no trace. Unclean power loss
- * happens on ordinary machines, so the window this closes is not
+ * sender believes it sent, with no answer and no trace. This machine has a
+ * recorded history of unclean power events, so the window this closes is not
  * theoretical here either.
  *
  * The handle is opened with 'wx' so a leftover temp from a dead process is
@@ -1210,7 +1290,8 @@ function createBroker({
 
   function enqueue(normalized, atMs) {
     return commit(next => {
-      const deadLetter = next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
+      const deadLetter = (next.terminalMarkers || []).find(item => item.entry.messageId === normalized.messageId)
+        || next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
       if (deadLetter) {
         if (deadLetter.reason === 'RECIPIENT_QUEUE_DISCARDED'
           && deadLetter.entry.fingerprint === normalized.fingerprint) {
@@ -1729,7 +1810,8 @@ function createBroker({
   // body or infers a discard merely because a session stopped.
   function deadLetter(input) {
     return serialize(() => {
-      if (!hasExactKeys(input, DEAD_LETTER_REQUEST_KEYS)) {
+      if (!hasRequiredKeys(input, DEAD_LETTER_REQUEST_KEYS, DEAD_LETTER_OPTIONAL_KEYS)
+        || (Object.hasOwn(input, 'refusalCode') && !validRefusalCode(input.refusalCode))) {
         return immutableResult({ accepted: false, code: 'BROKER_DEAD_LETTER_INVALID' });
       }
       if (input.reason !== 'RECIPIENT_QUEUE_DISCARDED') {
@@ -1745,11 +1827,16 @@ function createBroker({
       }
       const atMs = currentTime();
       return commit(next => {
-        const existing = next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
+        // Check non-evictable custody first: the ordinary dead-letter row may
+        // have been trimmed, but replaying the same terminal transition must
+        // still be idempotent and must never recreate a second packet.
+        const existing = (next.terminalMarkers || []).find(item => item.entry.messageId === normalized.messageId)
+          || next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
         if (existing) {
           return existing.entry.fingerprint === normalized.fingerprint && existing.reason === input.reason
             ? immutableResult({ accepted: true, code: 'BROKER_DEAD_LETTERED', messageId: normalized.messageId,
-              reason: existing.reason, replayed: true })
+              reason: existing.reason, replayed: true,
+              ...(existing.refusalCode === undefined ? {} : { refusalCode: existing.refusalCode }) })
             : immutableResult({ accepted: false, code: 'BROKER_MESSAGE_ID_CONFLICT' });
         }
         const index = next.deliveries.findIndex(item => item.messageId === normalized.messageId);
@@ -1768,9 +1855,10 @@ function createBroker({
         next.nextSequence += 1;
         if (index >= 0) next.deliveries.splice(index, 1);
         if (deferredIndex >= 0) next.deferred.splice(deferredIndex, 1);
-        next.deadLetters.push({
+        const terminal = {
           deadLetteredAtMs: atMs,
           reason: input.reason,
+          ...(input.refusalCode === undefined ? {} : { refusalCode: input.refusalCode }),
           entry: {
             sequence,
             messageId: normalized.messageId,
@@ -1780,10 +1868,58 @@ function createBroker({
             enqueuedAtMs: receipt.deliveredAtMs ?? receipt.enqueuedAtMs,
             message: clone(normalized.message)
           }
-        });
+        };
+        next.deadLetters.push(terminal);
+        // Only queue-discarded direct deliveries are terminal stream custody;
+        // the public method currently rejects every other reason. Keep this
+        // marker outside bounded diagnostics until the recipient settles it.
+        next.terminalMarkers.push(clone(terminal));
         trimOldest(next.deadLetters, deadLetterRetention);
         return immutableResult({ accepted: true, code: 'BROKER_DEAD_LETTERED', messageId: normalized.messageId,
-          reason: input.reason, replayed: false });
+          reason: input.reason, replayed: false,
+          ...(input.refusalCode === undefined ? {} : { refusalCode: input.refusalCode }) });
+      });
+    });
+  }
+
+  // Remove only the non-evictable custody marker after the authenticated
+  // history cursor has passed the corresponding terminal message.  The
+  // bounded diagnostic dead-letter remains independently subject to retention
+  // and is never used as the settlement authority.
+  function settleTerminalDelivery(input) {
+    return serialize(() => {
+      if (!hasExactKeys(input, HANDOFF_REQUEST_KEYS)) {
+        return immutableResult({ accepted: false, code: 'BROKER_HANDOFF_INVALID' });
+      }
+      let normalized;
+      try { normalized = normalizeMessage(input.message); }
+      catch (error) {
+        return immutableResult({ accepted: false,
+          code: error instanceof BrokerError ? error.code : 'BROKER_MESSAGE_INVALID' });
+      }
+      return commit(next => {
+        const markerIndex = (next.terminalMarkers || [])
+          .findIndex(item => item.entry.messageId === normalized.messageId);
+        const marker = markerIndex >= 0 ? next.terminalMarkers[markerIndex] : null;
+        const diagnostic = next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
+        const retained = marker || diagnostic;
+        if (!retained) {
+          return immutableResult({ accepted: false, code: 'BROKER_TERMINAL_NOT_RETAINED',
+            messageId: normalized.messageId });
+        }
+        if (retained.entry.fingerprint !== normalized.fingerprint
+          || retained.entry.recipientAgentId !== normalized.recipientAgentId
+          || (retained.entry.recipientMachineId ?? null) !== (normalized.recipientMachineId ?? null)
+          || retained.reason !== 'RECIPIENT_QUEUE_DISCARDED') {
+          return immutableResult({ accepted: false, code: 'BROKER_MESSAGE_ID_CONFLICT' });
+        }
+        if (markerIndex < 0) {
+          return immutableResult({ accepted: true, code: 'BROKER_TERMINAL_ALREADY_SETTLED',
+            messageId: normalized.messageId, replayed: true });
+        }
+        next.terminalMarkers.splice(markerIndex, 1);
+        return immutableResult({ accepted: true, code: 'BROKER_TERMINAL_SETTLED',
+          messageId: normalized.messageId, replayed: false });
       });
     });
   }
@@ -1801,7 +1937,8 @@ function createBroker({
       }
       const atMs = currentTime();
       return commit(next => {
-        const terminal = next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
+        const terminal = (next.terminalMarkers || []).find(item => item.entry.messageId === normalized.messageId)
+          || next.deadLetters.find(item => item.entry.messageId === normalized.messageId);
         if (terminal) return immutableResult({ accepted: false,
           code: terminal.entry.fingerprint === normalized.fingerprint
             ? 'BROKER_MESSAGE_DEAD_LETTERED' : 'BROKER_MESSAGE_ID_CONFLICT' });
@@ -1883,7 +2020,8 @@ function createBroker({
     getSpool,
     getState,
     getStateView,
-    send
+    send,
+    settleTerminalDelivery
   });
 }
 

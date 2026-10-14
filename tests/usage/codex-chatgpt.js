@@ -1,4 +1,4 @@
-// Product requirement: no pinned Codex version. New parseable
+// T1598, owner request (2026-09-22): no pinned Codex version. New parseable
 // versions must pass the same initialization and response-shape checks;
 // neither an unreadable version nor protocol drift may publish an allowance.
 

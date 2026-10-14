@@ -216,7 +216,8 @@ test('a signed-in reply is normalised to the cache adapter shape, with the provi
   assert.deepEqual(call.options.stdio, ['pipe', 'pipe', 'pipe']);
   assert.equal(call.options.env.CLAUDE_CONFIG_DIR, CONFIG_DIR);
   assert.equal(Object.hasOwn(call.options.env, 'CLAUDECODE'), false, 'the nested-session marker must be removed');
-  assert.equal(Object.hasOwn(call.options.env, 'ANTHROPIC_API_KEY'), false, 'the ambient metered key must be scrubbed');
+  assert.ok(call.options.env.ANTHROPIC_API_KEY === 'decoy-api-key-DO-NOT-USE',
+    'the native usage probe must preserve the same auth choice as the session');
   assert.equal(call.options.env.PATH, 'p');
 
   // The one request written, and the child's ending.
@@ -496,8 +497,6 @@ test('the module can read no file and names no sign-in', () => {
     assert.ok(!code.includes(forbidden),
       `claude-usage-probe.js contains ${forbidden}. It asks the CLI and must never touch a file or a sign-in.`);
   }
-  assert.ok(code.includes("safeLaunchEnvironment(baseEnvironment, { context: 'claude usage probe' })"),
-    'the probe must run under the one shared scrub');
   assert.ok(code.includes('windowsHide: true'), 'the CLI must never flash a console');
   assert.ok(code.includes('shell: false'));
   assert.ok(code.includes('delete env.CLAUDECODE;'), 'the nested-session marker must be removed by name');

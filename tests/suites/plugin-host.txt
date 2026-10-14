@@ -1,0 +1,20 @@
+# THE PLUGIN HOST (1.0.49).
+#
+# Five files, one per seam, and the reason they are a suite of their own rather
+# than lines appended to a dated batch: a plugin host is the one component whose
+# whole job is to refuse things, so the set of refusals has to be findable by
+# name when somebody asks "what does this stop?".
+#
+# Each file's header records the mutations run against the module it covers, the
+# count that went red, and -- in two cases -- a mutation that SURVIVED and why it
+# is kept anyway.
+tests/plugin-host-identity.test.js
+tests/plugin-host-manifest.test.js
+tests/plugin-host-grants.test.js
+tests/plugin-host-tools.test.js
+tests/plugin-host.test.js
+# Activation and the role projection: the two seams that connect the host to a
+# running engine. Both are ordering-sensitive and both have a test that asserts the
+# ordering rather than documenting it.
+tests/plugin-role-projection.test.js
+tests/plugin-activation.test.js

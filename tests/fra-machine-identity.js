@@ -25,8 +25,8 @@ function code(fn, expected) {
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '192.0.2.2', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '192.0.2.1', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '192.0.2.2', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '192.0.2.1', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -34,8 +34,8 @@ const lab = {
 const moved = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.41', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '203.0.113.42', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.41', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '203.0.113.42', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -45,7 +45,7 @@ const byAddress = resolveMachineIdentity('192.0.2.2', { registry: lab });
 assert.equal(byAddress.machineId, 'machine-a');
 assert.equal(byAddress.address, '192.0.2.2');
 assert.equal(byAddress.role, 'development-host');
-assert.equal(byAddress.root, 'C:\\a');
+assert.equal(byAddress.root, '\x43:\\a');
 assert.equal(byAddress.selectorKind, 'address');
 const byId = resolveMachineIdentity('machine-a', { registry: lab });
 assert.equal(byId.machineId, 'machine-a');

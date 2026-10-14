@@ -265,7 +265,7 @@ function Write-VaultAccessLog {
         # ROTATION GETS ITS OWN try SO A FAILED ROTATION CANNOT EAT THE ENTRY.
         # An earlier version of this put the append below inside the same try,
         # downstream of the Move. MEASURED on real Windows 10 / PowerShell
-        # 5.1: with a foreign FileShare.Read handle holding the log
+        # 5.1.19041.6456: with a foreign FileShare.Read handle holding the log
         # at the bound, File.Move throws ERROR_SHARING_VIOLATION, the append
         # never runs, and the entry is lost -- and because the file stays at the
         # bound, EVERY later call retries the same rotation and loses its entry
@@ -289,7 +289,7 @@ function Write-VaultAccessLog {
         # the 4 MiB of history. P2, whose size check passed before P1's Move,
         # never looks again -- it deletes that .1 and moves the fresh one-line
         # live log over it. MEASURED on real Windows 10 / PowerShell
-        # 5.1 by driving the two halves explicitly: 4,194,541 bytes
+        # 5.1.19041.6456 by driving the two halves explicitly: 4,194,541 bytes
         # of retained history reduced to one 95-byte line, and the same rig with
         # nothing interleaved keeps all 4,194,541. Every read verb -- 'get',
         # 'get-many', 'list', 'exists', 'present', 'verify' -- calls this
@@ -354,7 +354,7 @@ function Write-VaultAccessLog {
         # OUTSIDE Invoke-WithVaultLock, so nothing serializes these writers and
         # the collision needs no unusual timing: it needs two agents.
         #
-        # MEASURED on real Windows 10 / PowerShell 5.1: 188 of 2267
+        # MEASURED on real Windows 10 / PowerShell 5.1.19041.6456: 188 of 2267
         # concurrent 75-byte appends threw, and every one landed in the catch
         # below and was discarded. That is 8.3% of the audit trail lost, with
         # exit 0 and empty stderr, under exactly the concurrency a busy agent
@@ -392,9 +392,86 @@ function Assert-Key {
     }
 }
 
+# THE WRITE HALF OF $VaultOracleDenylist (1.0.50 security M2).
+#
+# 'get', 'get-many', 'list' and 'get-or-create-stdin' refuse these records, and
+# the generic WRITERS did not. Every node caller of setSecret, setSecretPair or
+# setSecretTriple reaches 'set-stdin', 'set-pair-stdin' or 'set-triple-stdin'
+# with whatever key it was handed, so a tool that let an agent name the key --
+# gcloud.service_account_key_to_vault did -- could replace the owner's card or
+# legal identity with bytes of its own choosing. The Linux custody helper
+# (src/linux-vault.py, DENIED) already refuses every generic write to both.
+#
+# NOTHING LEGITIMATE IS REFUSED (checked 2026-10-13 across the engine and the
+# app). The card record is written by this script's own owner flows -- the
+# 'prompt-payment-card' dialog and 'scrub-payment-card-cvc' -- which write the
+# vault directly and never pass through the verbs that call this, and no caller
+# writes the legal-identity record through a generic verb at all. The only
+# set-stdin writers of the card were test fixtures, which now plant it without
+# this verb. 'set-monotonic-stdin' is covered too, as on Linux. The interactive
+# 'set' verb is not: it needs a console and a person at the hidden prompt.
+#
+# Refused before the vault is opened and, where the key is an argument, before
+# stdin is read, so the refusal reveals nothing about whether a record exists.
+# Every key of the refused request gets a denied access-log line, because the
+# whole request was refused and none of it was written. The comparison is
+# PowerShell's case-insensitive -contains, matching the case-insensitive
+# hashtable the vault is read into.
+function Assert-VaultWriteAllowed {
+    param(
+        [Parameter(Mandatory = $true)][string]$WriteAction,
+        [Parameter(Mandatory = $true)][string[]]$WriteKeys
+    )
+    $refused = @($WriteKeys | Where-Object { $VaultOracleDenylist -contains $_ })
+    if ($refused.Count -eq 0) { return }
+    foreach ($writeKey in $WriteKeys) {
+        Write-VaultAccessLog -Action $WriteAction -Key $writeKey -Denied
+    }
+    throw "ACCESS_DENIED_ORACLE_SCOPE: '$($refused[0])' is never written through the generic vault '$WriteAction' action under the built-in vault policy. Only its own owner capture dialog writes this record."
+}
+
+# Read-only I/O can be repeated after a transient Windows sharing conflict.
+# Never retry a mutation or turn a permanent access/format failure into absence.
+function Invoke-VaultRead {
+    param([Parameter(Mandatory = $true)][scriptblock]$Operation)
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        while ($true) {
+            try { return (& $Operation) }
+            catch {
+                $failure = $_.Exception
+                while ($null -ne $failure.InnerException) { $failure = $failure.InnerException }
+                $nativeCode = $failure.HResult -band 0xffff
+                if ($failure -isnot [IO.IOException] -or $nativeCode -notin @(32, 33) -or $clock.ElapsedMilliseconds -ge 2000) { throw }
+                Start-Sleep -Milliseconds 25
+            }
+        }
+    } finally { $clock.Stop() }
+}
+
 function Read-Vault {
-    if (-not (Test-Path -LiteralPath $VaultFile)) { return @{} }
-    $raw = Get-Content -LiteralPath $VaultFile -Raw -Encoding UTF8
+    try {
+        $raw = Invoke-VaultRead {
+            $stream = $null
+            $reader = $null
+            try {
+                # Permit atomic replacement while this reader retains its
+                # complete generation; do not create a writer-sharing outage.
+                $stream = [IO.File]::Open($VaultFile, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+                    ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+                $reader = [IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($true, $true), $false)
+                return $reader.ReadToEnd()
+            } finally {
+                if ($null -ne $reader) { $reader.Dispose() }
+                elseif ($null -ne $stream) { $stream.Dispose() }
+            }
+        }
+    } catch {
+        $failure = $_.Exception
+        while ($null -ne $failure.InnerException) { $failure = $failure.InnerException }
+        if ($failure -is [IO.FileNotFoundException] -or $failure -is [IO.DirectoryNotFoundException]) { return @{} }
+        throw
+    }
     if ([string]::IsNullOrWhiteSpace($raw)) { throw 'The existing encrypted vault is empty or malformed; no record was changed.' }
     $object = $raw | ConvertFrom-Json
     if ($null -eq $object -or $object -isnot [System.Management.Automation.PSCustomObject]) {
@@ -1160,7 +1237,7 @@ function Get-OwnerLegalIdentityForPaymentPrompt {
 # owner-prompt-theme.ps1 is not a palette file that costs a Test-Path. At
 # script scope it loads System.Windows.Forms and System.Drawing, compiles a
 # SetProcessDPIAware P/Invoke with `Add-Type -MemberDefinition`, and calls it.
-# MEASURED 2026-09-03 on a development machine, dot-sourcing it: 258.9 / 283.6 /
+# MEASURED 2026-09-03 on the owner's machine, dot-sourcing it: 258.9 / 283.6 /
 # 292.3 ms, of which the WinForms assembly load is 69.8 / 74.8 / 87.8 ms and
 # most of the rest is the C# compiler.
 #
@@ -1232,7 +1309,7 @@ function Invoke-PaymentCardPrompt {
         # virtualizes this process: it reports a window larger than the form
         # actually paints, so the dialog sits letterboxed in its own frame while
         # every fixed-width label clips its text mid-word. Both were visible on
-        # a display at 125% scaling. With awareness declared, layout units are
+        # this machine at 125% scaling. With awareness declared, layout units are
         # real pixels and AutoScaleMode::Dpi scales the layout from the 96dpi
         # baseline it is written against.
         if ($null -eq ('ToolsEnabled.DpiAwareness' -as [type])) {
@@ -1619,6 +1696,7 @@ switch ($Action) {
         # was overwritten rather than what a later reader could guess. The
         # value on stdin is never touched, measured, hashed or described here.
         Assert-Key $Key
+        Assert-VaultWriteAllowed -WriteAction 'set-stdin' -WriteKeys @($Key)
         $plain = Read-RequiredStdin
         Invoke-WithVaultLock {
             $data = Read-Vault
@@ -1646,6 +1724,7 @@ switch ($Action) {
         if ($firstKey -eq $secondKey -or [string]::IsNullOrEmpty($firstValue) -or [string]::IsNullOrEmpty($secondValue)) {
             throw 'Secret pair keys must be distinct and values must not be empty.'
         }
+        Assert-VaultWriteAllowed -WriteAction 'set-pair-stdin' -WriteKeys @($firstKey, $secondKey)
         Invoke-WithVaultLock {
             $data = Read-Vault
             # One line per KEY, not one per action: the pair is atomic in the
@@ -1680,6 +1759,7 @@ switch ($Action) {
         if ($firstKey -eq $secondKey -or $firstKey -eq $thirdKey -or $secondKey -eq $thirdKey -or [string]::IsNullOrEmpty($firstValue) -or [string]::IsNullOrEmpty($secondValue) -or [string]::IsNullOrEmpty($thirdValue)) {
             throw 'Secret triple keys must be distinct and values must not be empty.'
         }
+        Assert-VaultWriteAllowed -WriteAction 'set-triple-stdin' -WriteKeys @($firstKey, $secondKey, $thirdKey)
         Invoke-WithVaultLock {
             $data = Read-Vault
             foreach ($tripleKey in @($firstKey, $secondKey, $thirdKey)) {
@@ -1739,6 +1819,7 @@ switch ($Action) {
     }
     'set-monotonic-stdin' {
         Assert-Key $Key
+        Assert-VaultWriteAllowed -WriteAction 'set-monotonic-stdin' -WriteKeys @($Key)
         if ($Sequence -lt 0) { throw 'Sequence must be a non-negative integer.' }
         $plain = Read-RequiredStdin
         $embeddedSequence = Read-EmbeddedSequence $plain
@@ -2015,8 +2096,8 @@ switch ($Action) {
         # report". That promise is about CONTENT. It was never a promise that
         # the product may not know whether the owner has a card on file -- and
         # reading it that way produced a real defect: payment_method.card_status
-        # routed through the denied 'get', so the product told the owner they had
-        # no card while their card sat in the vault. A product that cannot see its
+        # routed through the denied 'get', so the product told the owner he had
+        # no card while his card sat in the vault. A product that cannot see its
         # own payment method is not more secure, it is wrong.
         #
         # This action therefore answers ONE BIT, through the exit code, with no
@@ -2035,7 +2116,7 @@ switch ($Action) {
         #   5  this computer has no vault store at all
         # 4 is the one that matters. An unreadable vault reported as "absent"
         # renders on the owner's screen as "no card on file", which is a false
-        # statement about their money made out of a permissions error.
+        # statement about his money made out of a permissions error.
         Assert-Key $Key
         if (-not (Test-Path -LiteralPath $VaultFile)) {
             Write-VaultAccessLog -Action 'present' -Key $Key -Present $false

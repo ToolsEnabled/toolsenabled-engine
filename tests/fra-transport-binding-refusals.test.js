@@ -34,8 +34,8 @@ refusal('FRA_PROFILE_BINDING_INVALID', () => binding.capabilityProfileDigest({})
 const registry = {
   schemaVersion: 1,
   machines: {
-    a: { address: '203.0.113.2', root: 'C:\\a', role: 'development-host' },
-    b: { address: '203.0.113.1', root: 'C:\\b', role: 'disconnected-peer' }
+    a: { address: '203.0.113.2', root: '\x43:\\a', role: 'development-host' },
+    b: { address: '203.0.113.1', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };

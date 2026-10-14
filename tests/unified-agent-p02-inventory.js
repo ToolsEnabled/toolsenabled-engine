@@ -16,10 +16,10 @@ const {
 // deliberately removed from the product, by two separate commits:
 //
 //   artifacts/toolsenabled-capability-inventory.json
-//     untracked by an earlier change ("Stop versioning generated output; the tree is the
+//     untracked by 6e64093 ("Stop versioning generated output; the tree is the
 //     product now"), which gitignored all of artifacts/.
 //   docs/shelved-sidecar/TOOLSENABLED-REUSE-MATRIX.md
-//     DELETED by an earlier change ("Remove the shelved side projects from ToolsEnabled
+//     DELETED by 5fac0f9 ("Remove the shelved side projects from ToolsEnabled
 //     -- by dependency, not by name"). The whole shelved docs tree is gone.
 //
 // So this is not a fixture that went missing by accident; it is a test whose
@@ -44,8 +44,8 @@ const inventoryPath = path.join(ROOT, 'artifacts', 'toolsenabled-capability-inve
 const reuseMatrixPath = path.join(ROOT, 'docs', 'shelved-sidecar', 'TOOLSENABLED-REUSE-MATRIX.md');
 
 const REQUIRED_INPUTS = [
-  { relative: 'artifacts/toolsenabled-capability-inventory.json', absolute: inventoryPath, removedBy: 'an earlier change (untracked; artifacts/ is gitignored)' },
-  { relative: 'docs/shelved-sidecar/TOOLSENABLED-REUSE-MATRIX.md', absolute: reuseMatrixPath, removedBy: 'an earlier change (deleted with the shelved side projects)' }
+  { relative: 'artifacts/toolsenabled-capability-inventory.json', absolute: inventoryPath, removedBy: '6e64093 (untracked; artifacts/ is gitignored)' },
+  { relative: 'docs/shelved-sidecar/TOOLSENABLED-REUSE-MATRIX.md', absolute: reuseMatrixPath, removedBy: '5fac0f9 (deleted with the shelved side projects)' }
 ];
 
 function jsonAllowlist(profile) {

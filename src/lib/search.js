@@ -338,15 +338,37 @@ async function indexPath(args = {}) {
   };
 }
 
-function currentlyAllowedSearchRows(rows) {
+/* THE SESSION'S OWN WORKSPACE CEILING (1.0.50 review L5).
+ *
+ * usableRoots() is every root recorded for this computer. The owner host
+ * narrows a confined session to its own workspace roots and hands them to the
+ * call as `workspaceRoots`; without them here, a circle bound to one client
+ * folder read 400-character snippets and absolute paths from every other
+ * indexed root. When a session ceiling is supplied, an indexed row must be
+ * inside it as well as inside the usable roots. A stale session root narrows
+ * nothing, and a session whose roots all fail to resolve sees nothing. Callers
+ * with no ceiling (the owner, unconfined tiers) are unchanged. */
+function sessionRootsFrom(options) {
+  if (!options || !Array.isArray(options.workspaceRoots)) return null;
+  const roots = [];
+  for (const candidate of options.workspaceRoots) {
+    try { roots.push(...workspaceBoundary.resolveRoots([candidate], { label: 'a session workspace root' })); }
+    catch { /* stale or unreadable: grants nothing */ }
+  }
+  return roots;
+}
+
+function currentlyAllowedSearchRows(rows, sessionRoots = null) {
   let roots;
   try { roots = usableRoots(); } catch { return []; }
+  if (sessionRoots !== null && sessionRoots.length === 0) return [];
   const checked = new Map();
   const allowed = candidate => {
     if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return false;
     if (!checked.has(candidate)) {
       try {
         workspaceBoundary.assertInsideRoots(candidate, roots, { label: 'indexed path' });
+        if (sessionRoots !== null) workspaceBoundary.assertInsideRoots(candidate, sessionRoots, { label: 'indexed path' });
         checked.set(candidate, true);
       } catch { checked.set(candidate, false); }
     }
@@ -355,7 +377,7 @@ function currentlyAllowedSearchRows(rows) {
   return rows.filter(row => allowed(row.root) && (row.path === undefined || allowed(row.path)));
 }
 
-async function query(args = {}) {
+async function query(args = {}, options = {}) {
   const q = String(args.query || '');
   if (!q.trim()) throw new Error('query must be a non-empty string.');
   const k = Math.min(Math.max(Number.isFinite(args.k) ? Math.trunc(args.k) : 8, 1), 50);
@@ -370,13 +392,18 @@ async function query(args = {}) {
     audit.record('search.query_root_outside_root_refused', rootFilter, { arg: 'root' });
     throw rootOutsideRootError(rootFilter);
   }
+  const sessionRoots = sessionRootsFrom(options);
+  if (rootFilter && sessionRoots !== null && currentlyAllowedSearchRows([{ root: rootFilter }], sessionRoots).length === 0) {
+    audit.record('search.query_root_outside_root_refused', rootFilter, { arg: 'root' });
+    throw rootOutsideRootError(rootFilter);
+  }
   const database = getDb();
   // Cached index content does not retain a workspace grant. Choose an
   // embedder only from currently allowed roots, including unscoped queries.
   const anchors = rootFilter
     ? database.prepare('SELECT DISTINCT root, embedder, dim FROM chunks WHERE root = ? LIMIT ?').all(rootFilter, MAX_QUERY_CHUNKS)
     : database.prepare('SELECT DISTINCT root, embedder, dim FROM chunks LIMIT ?').all(MAX_QUERY_CHUNKS);
-  const anchor = currentlyAllowedSearchRows(anchors)[0];
+  const anchor = currentlyAllowedSearchRows(anchors, sessionRoots)[0];
   if (!anchor) return { query: q, matches: [], note: 'index is empty for that scope; run search.index first.' };
   const embedderName = anchor.embedder;
   let queryVector;
@@ -388,7 +415,7 @@ async function query(args = {}) {
     : database.prepare('SELECT root, path, chunkIndex, text, vector, dim FROM chunks WHERE embedder = ? LIMIT ?').all(embedderName, MAX_QUERY_CHUNKS);
   // Embedding may await a local service. Re-read grants afterwards, and check
   // each stored file as well as its root before scoring or exposing snippets.
-  const rows = currentlyAllowedSearchRows(candidates);
+  const rows = currentlyAllowedSearchRows(candidates, sessionRootsFrom(options));
   const scored = rows.map(r => ({ path: r.path, chunkIndex: r.chunkIndex, score: dot(queryVector, fromBlob(r.vector, r.dim)), text: r.text }));
   scored.sort((a, b) => b.score - a.score);
   const matches = scored.slice(0, k).map(m => ({ path: m.path, chunkIndex: m.chunkIndex, score: Math.round(m.score * 1000) / 1000, snippet: m.text.slice(0, 400) }));
@@ -401,8 +428,25 @@ async function query(args = {}) {
   return { query: q, embedder: embedderName, candidatesScored: rows.length, matches };
 }
 
-async function status() {
+async function status(options = {}) {
   const database = getDb();
+  const sessionRoots = sessionRootsFrom(options);
+  if (sessionRoots !== null) {
+    // A confined session is told only about the indexed roots it may query.
+    const visible = currentlyAllowedSearchRows(database.prepare(
+      'SELECT root, embedder, COUNT(*) AS files, SUM(chunkCount) AS chunks FROM files GROUP BY root, embedder').all(), sessionRoots);
+    const tally = (key) => [...visible.reduce((map, row) => map.set(row[key], (map.get(row[key]) || 0) + row.files), new Map())]
+      .map(([value, files]) => ({ [key]: value, files }))
+      .sort((left, right) => right.files - left.files);
+    return {
+      dbPath: DB_PATH,
+      files: visible.reduce((sum, row) => sum + row.files, 0),
+      chunks: visible.reduce((sum, row) => sum + (row.chunks || 0), 0),
+      embedders: tally('embedder'),
+      roots: tally('root').slice(0, 20),
+      ollama: { model: DEFAULT_MODEL, ...await ollamaAvailability(DEFAULT_MODEL) }
+    };
+  }
   const files = database.prepare('SELECT COUNT(*) AS c FROM files').get().c;
   const chunks = database.prepare('SELECT COUNT(*) AS c FROM chunks').get().c;
   const embedders = database.prepare('SELECT embedder, COUNT(*) AS files FROM files GROUP BY embedder').all();

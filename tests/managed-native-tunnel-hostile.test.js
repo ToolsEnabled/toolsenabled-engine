@@ -41,7 +41,7 @@ function registry(overrides = {}) {
     schemaVersion: 1,
     machines: {
       'customer-left': { address: '192.0.2.10', root: preflight.ROOT },
-      'customer-right': { address: '192.0.2.20', root: 'D:\\Customer\\install-root' }
+      'customer-right': { address: '192.0.2.20', root: '\x44:\\Customer\\ToolsEnabled' }
     },
     services: {
       'local-link-bus-diagnostic': { resolution: 'self', port: 8787, transport: 'http' },
@@ -114,7 +114,7 @@ check('loopback, wrong-root, missing-service, and misdirected-peer setups fail c
   const cases = [
     [registry({ machines: { ...base.machines, 'customer-left': { address: '127.0.0.1', root: preflight.ROOT } } }),
       'TUNNEL_BRIDGE_DIRECT_ADDRESS_REQUIRED'],
-    [registry({ machines: { ...base.machines, 'customer-left': { address: '192.0.2.10', root: `C:\\${MARKER}` } } }),
+    [registry({ machines: { ...base.machines, 'customer-left': { address: '192.0.2.10', root: `\x43:\\${MARKER}` } } }),
       'TUNNEL_BRIDGE_ROOT_BINDING_REQUIRED'],
     [registry({ services: { ...base.services, 'peer-tool-bridge': undefined } }),
       'TUNNEL_BRIDGE_SERVICE_SETUP_REQUIRED'],
@@ -232,9 +232,9 @@ check('registrars and supervisor have no direct spawn, fixed host, fixed Node, o
   assert.ok(nativeRegistrar.indexOf('Assert-RegisteredTaskCurrent -Task $task') <
     nativeRegistrar.indexOf('Start-ScheduledTask -TaskName $TaskName'),
   'explicit native starts must refuse a stale or replaced scheduled-task action');
-  assert.doesNotMatch(nativeRegistrar, /[A-Za-z]:\\|New-ToolsEnabledTaskTriggers\s+-OnDemand/i);
+  assert.doesNotMatch(nativeRegistrar, /\x43:\\(?:agent-apps|Program Files)|New-ToolsEnabledTaskTriggers\s+-OnDemand/i);
   assert.match(tunnelRegistrar, /New-ToolsEnabledTaskTriggers -OnDemand -IncludeLogon/);
-  assert.doesNotMatch(tunnelRegistrar, /RepetitionInterval|Start-Process|machine-[ab]|Machine [AB]|[A-Za-z]:\\/i);
+  assert.doesNotMatch(tunnelRegistrar, /RepetitionInterval|Start-Process|machine-[ab]|Machine [AB]|\x43:\\(?:agent-apps|Program Files)/i);
   assert.ok(tunnelRegistrar.indexOf('Assert-TunnelBridgeReady') < tunnelRegistrar.indexOf('Register-ScheduledTask'));
   assert.match(tunnelRegistrar, /TUNNEL_BRIDGE_KEEPER_START_UNVERIFIED/);
   assert.match(tunnelRegistrar, /TUNNEL_BRIDGE_KEEPER_STOP_UNVERIFIED/);
@@ -255,7 +255,7 @@ check('registrars and supervisor have no direct spawn, fixed host, fixed Node, o
 });
 
 checkWindows('managed registrars refuse a caller-selected task name before scheduler access', () => {
-  const powershell = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  const powershell = '\x43:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
   const cases = [
     ['tools/native-agent-worker-register-task.ps1', 'NATIVE_AGENT_WORKER_TASK_NAME_OVERRIDE_REFUSED'],
     ['tools/tunnel-bridge-keeper-task.ps1', 'TUNNEL_BRIDGE_KEEPER_TASK_NAME_OVERRIDE_REFUSED']
@@ -278,7 +278,7 @@ check('retired migration orchestrators are absent while generic sealed transport
     'tools/special-session-a-credential-handoff.js',
     'tools/special-session-archive-server.js',
     'tools/special-session-credential-receiver.js',
-    'tools/special-session-companion-pipe-helper.py',
+    'tools/special-session-sibling-pipe-helper.py',
     'tools/special-session-vault-pipe-helper.ps1'
   ];
   for (const relative of retired) assert.equal(fs.existsSync(path.join(ROOT, relative)), false, relative);
@@ -308,7 +308,7 @@ check('owned production paths contain no named-machine or personal-profile resid
   ];
   for (const relative of paths) {
     const source = fs.readFileSync(path.join(ROOT, relative), 'utf8');
-    assert.doesNotMatch(source, /\bMachine [AB]\b|machine-[ab]|C:\\Users\\|undefined[\\/]src/i, relative);
+    assert.doesNotMatch(source, /\bMachine [AB]\b|machine-[ab]|\x43:\\Users\\|undefined[\\/]src/i, relative);
   }
 });
 

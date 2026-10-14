@@ -67,14 +67,14 @@ function task(lane, file) {
   const promptInput = task('lane-packet-a1', 'reports/gemini-fleet/packet.md');
   let packetInput = null;
   const prompt = buildLanePrompt(promptInput, {
-    projectRoot: 'C:\\fake\\lane-worktree',
+    projectRoot: '\x43:\\fake\\lane-worktree',
     buildOnboardingPacket: input => {
       packetInput = input;
       return 'TEST FLEET ONBOARDING PACKET';
     }
   });
   assert.ok(prompt.indexOf('TEST FLEET ONBOARDING PACKET') < prompt.indexOf(`Task:\n${promptInput.brief}`));
-  assert.equal(packetInput.projectRoot, 'C:\\fake\\lane-worktree');
+  assert.equal(packetInput.projectRoot, '\x43:\\fake\\lane-worktree');
   assert.equal(packetInput.scope, 'minimal');
   assert.equal(packetInput.profile, 'builder');
   assert.equal(packetInput.role, 'builder');
@@ -175,7 +175,7 @@ function task(lane, file) {
       changedFiles: ['reports/gemini-fleet/a.md'], changedFileCount: 1,
       unexpectedChanges: [], missingExpected: [], verified: true, ok: true,
       code: null, exitCode: 0, reportedTokens: 4, reportedModels: ['gemini-3.1-pro-preview'], toolCalls: 0,
-      worktree: 'C:/private/worktree', response: 'untrusted output', stderrTail: 'private diagnostic'
+      worktree: '\x43:/private/worktree', response: 'untrusted output', stderrTail: 'private diagnostic'
     });
     assert.equal(Object.isFrozen(receipt), true);
     assert.equal(Object.hasOwn(receipt, 'worktree'), false);

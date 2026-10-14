@@ -13,7 +13,10 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync, spawn, spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
+// git is started by absolute path, never found in the worktree it acts on
+// (../git-command.js; platform review 1.0.50 E3).
+const { execGitFileSync, spawnGitProcessSync } = require('../git-command');
 
 const audit = require('../audit.js');
 const { deleteEnvMatching, deleteEnvNames } = require('../env-scrub.js');
@@ -304,7 +307,7 @@ function safeErrorCode(error, fallback = 'UNKNOWN') {
 }
 
 function defaultGitRun(args, cwd) {
-  const result = spawnSync('git', args, {
+  const result = spawnGitProcessSync('git', args, {
     cwd,
     env: safeLaunchEnvironment(),
     encoding: 'utf8',
@@ -322,7 +325,7 @@ function defaultGitRun(args, cwd) {
 }
 
 function defaultGitExec(command, args, options) {
-  return execFileSync(command, args, {
+  return execGitFileSync(command, args, {
     ...options,
     env: safeLaunchEnvironment(options && options.env),
     shell: false,

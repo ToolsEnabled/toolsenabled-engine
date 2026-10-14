@@ -749,7 +749,7 @@ const ASYNC_OPERATIONS = new Set(['screenCapture', 'screenCaptureRegion', 'scree
  * mcp-server.js's `structured()` -- literally
  * `Object.fromEntries(Object.entries(value))` -- can never publish raw pixels
  * into structuredContent or ordinary JSON logging. That held while the call
- * ran on the main thread. Since an earlier change every capture runs on a
+ * ran on the main thread. Since 46189b9b every capture runs on a
  * worker_threads worker, and the structured-clone algorithm postMessage uses
  * carries only enumerable own properties: the attachment was silently gone by
  * the time toolResult() looked for it, so screen.read_capture succeeded,
@@ -757,7 +757,7 @@ const ASYNC_OPERATIONS = new Set(['screenCapture', 'screenCaptureRegion', 'scree
  *
  * The bytes therefore cross as WORKER_IMAGE_FIELD, an ordinary base64 string,
  * and the receiving side converts it back to exactly the non-enumerable Buffer
- * the pre-fix code produced and DELETES the named field. The protection
+ * the pre-46189b9b code produced and DELETES the named field. The protection
  * the original design bought is kept -- by an explicit strip instead of by a
  * visibility flag a clone does not respect -- and every consumer downstream of
  * this boundary is unchanged. */

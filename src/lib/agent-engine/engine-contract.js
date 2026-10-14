@@ -3,6 +3,8 @@
 // The engine contract deliberately owns validation only.  Engine adapters own
 // transport, engine-specific protocol mapping, and process lifecycle.
 
+const { validateNativeModelId } = require('../model-dispatch-tiers');
+
 const CONTRACT_VERSION = 1;
 
 const ENGINE_METHODS = Object.freeze([
@@ -24,8 +26,8 @@ const EVENT_TYPES = Object.freeze([
   'approval_request',
   'usage',
   'turn_completed',
-  /* THE TWO ADDED 2026-09-03, product rule: more event types are fine, and the
-     user should be shown when the model is thinking. Neither carries
+  /* THE TWO ADDED 2026-09-03, owner: "more event types are fine we should be
+     showing the user when the model is thinking anyway." Neither carries
      assistant speech, so admitting them widens what a surface may SHOW,
      never what it may print as words the agent said.
 
@@ -106,8 +108,12 @@ function validateThreadOptions(value = {}) {
     'developerInstructions', 'personality', 'ephemeral', 'lastTurnId', 'effort'
   ]);
   const output = {};
-  for (const key of ['cwd', 'model', 'serviceTier', 'baseInstructions', 'developerInstructions', 'lastTurnId']) {
+  for (const key of ['cwd', 'serviceTier', 'baseInstructions', 'developerInstructions', 'lastTurnId']) {
     if (Object.hasOwn(own, key)) output[key] = optionalString(own[key].value, `thread options.${key}`);
+  }
+  if (Object.hasOwn(own, 'model') && own.model.value !== undefined) {
+    try { output.model = validateNativeModelId(own.model.value); }
+    catch (error) { invalid(error.message); }
   }
   if (Object.hasOwn(own, 'effort')) {
     const effort = string(own.effort.value, 'thread options.effort');
@@ -177,10 +183,17 @@ function validateApprovalAnswer(value) {
 }
 
 function validateEngineEvent(value) {
-  const own = record(value, 'engine event', ['type', 'threadId', 'turnId', 'itemId', 'toolCallId', 'text', 'tool', 'payload', 'approval', 'usage', 'status'], ['type']);
+  /* parentToolCallId: the call (a Task/Agent subagent) whose work this tool
+     event is, so a surface can show a subagent's calls under the call that
+     started it instead of as the main agent's own. */
+  const own = record(value, 'engine event', ['type', 'threadId', 'turnId', 'itemId', 'toolCallId', 'parentToolCallId', 'text', 'tool', 'payload', 'approval', 'usage', 'status'], ['type']);
   const type = string(own.type.value, 'engine event.type', { max: 128 });
   if (!EVENT_TYPES.includes(type)) invalid(`engine event type ${type} is unsupported`);
   const output = { type };
+  if (Object.hasOwn(own, 'parentToolCallId')) {
+    if (type !== 'tool_call' && type !== 'tool_result') invalid('engine event.parentToolCallId belongs to a tool event');
+    output.parentToolCallId = string(own.parentToolCallId.value, 'engine event.parentToolCallId', { max: 1024 });
+  }
   for (const key of ['threadId', 'turnId', 'itemId', 'toolCallId', 'text', 'tool', 'status']) {
     if (Object.hasOwn(own, key)) output[key] = string(own[key].value, `engine event.${key}`, { allowEmpty: key === 'text', max: 1_000_000 });
   }

@@ -175,7 +175,7 @@ function terminalReceiptForRecord(record, events) {
     let receipt;
     try { receipt = terminalReceiptFromAuditEvent(candidate); }
     catch (error) {
-      /* BOTH SIDES ARE RIGHT, ON DIFFERENT ERRORS. The earlier sweep's point stands for the
+      /* BOTH SIDES ARE RIGHT, ON DIFFERENT ERRORS. w20's point stands for the
        * general case: an audit event that cannot be READ is unmeasurable and
        * must refuse rather than be scored as "no terminal receipt". But a
        * receipt that reads perfectly well and names ANOTHER launch is a

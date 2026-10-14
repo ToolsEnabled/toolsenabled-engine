@@ -55,8 +55,8 @@ const SLOW_SUITE_FLOORS = new Map([
   ['tests/check-single-copy-work.js', {
     timeoutMs: 1_200_000,
     // 21 checks passed in531.630s on native Windows, 2026-09-08. The final
-    // real-repository check alone took481.913s on a large development
-    // repository, all in the permitted account. Disposable cases completed in49.7s.
+    // real-repository check alone took481.913s:465 worktrees and333 branches,
+    // all in the permitted account. Disposable cases completed in49.7s.
     // Allow twice the measured healthy cost; individual Git deadlines stay.
     reason: 'real Git fixtures and complete registered-worktree/local-branch census; measured 531.630s on Windows against a 180s default'
   }],
@@ -99,6 +99,21 @@ const SLOW_SUITE_FLOORS = new Map([
     // canonical-verifier bound. Allow more than twice that healthy cost;
     // individual workload, output and cleanup guards are not changed here.
     reason: '39 native PowerShell/fake-Node scenarios plus concurrency controls; measured 257.345s healthy through the strict runner against a 180s default'
+  }],
+  ['tests/servercontrol-mechanical-connect.test.js', {
+    timeoutMs: 600_000,
+    // Measured 2026-09-07 at 0bcb522c with the pinned state root: the file
+    // exits 0 BY ITSELF in 217s (72 passed, 0 failed) and takes 204s through
+    // this runner, both over the 180s default. The cost is real work, not a
+    // hang: ~40 native PowerShell spawns, a 30s stop race on a live -Serve
+    // loop, a 10s bind deadline, a 2s slow-peer read and a 3s silent-peer
+    // budget. Under the default the runner killed a fully passing suite at
+    // 180s and reported "STRICT INCOMPLETE ... ETIMEDOUT", which reads exactly
+    // like a hang -- and that single false red is what kept the whole test:fra
+    // step in tools/check-chain-baseline.json. Twice the healthy runner cost,
+    // for the same reason as the two entries above: this suite waits on real
+    // processes, so its cost swings with machine load.
+    reason: 'native PowerShell serve-loop, slow-peer and silent-peer scenarios against real sockets; measured 217s standalone and 204s through this runner against a 180s default'
   }]
 ]);
 

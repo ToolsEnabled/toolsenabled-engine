@@ -7,8 +7,9 @@ mechanical claim in it was checked against the code at publication.
 
 This policy describes what happens to your data when you use **ToolsEnabled**
 — the local AI agent runtime, its optional hosted relay, and related desktop
-tooling. It does **not** cover other, separately named products, which have
-their own privacy policies. It also
+tooling described in `docs/design/MONETIZATION-DECISION-R1229.md`. It does
+**not** cover other, separately named products (for example, the "AI
+Calendar" Chrome extension), which have their own privacy policies. It also
 does not cover the internal tooling this company's own engineers and agents
 use to build ToolsEnabled — only the product a customer installs and runs.
 
@@ -478,7 +479,7 @@ against memory:
 - **if you sign in with Google:** the identifier Google issues for your
   account, so we can match you on your next sign-in. Nothing else from Google
   — no contacts, no mail, no profile beyond the address you already gave us.
-  `<<BUILD — paid lane, decided: Google sign-in ships at
+  `<<BUILD — paid lane, owner-ruled 2026-08-18: Google sign-in ships at
   launch. The store already has the column, the lookup and the link path
   (`account-store.js` byGoogle / linkGoogle / the CHECK constraint); the OAuth
   route that populates it is the remaining build. This bullet publishes as
@@ -660,7 +661,7 @@ Collected here so they are not lost inside the sections above:
 1. Whether the Vertex AI advisory path (§2.c) ever carries customer prompts
    or is purely an internal/operator tool.
 2. How the local-Ollama path (§2.b) is meant to be configured for a
-   customer's own machine, versus its current development-machine wiring.
+   customer's own machine, versus its current owner-specific wiring.
 3. Whether the packaged Electron desktop shell (built from a separate
    installer checkout not covered by this verification pass) adds any crash
    reporting or telemetry not present in the engine repository checked here.

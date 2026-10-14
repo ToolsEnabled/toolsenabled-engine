@@ -9,7 +9,10 @@ function laneDependencies() {
   if (process.platform !== 'win32') return Object.freeze({});
   return Object.freeze({
     spawnImpl(command, args, options) {
-      return windowsJob.spawnInJob(command, args, options, { safeLaunchEnvironment });
+      return windowsJob.spawnInJob(command, args, options, {
+        safeLaunchEnvironment: options.nativeClaudeCode
+          ? environment => ({ ...environment }) : safeLaunchEnvironment
+      });
     }
   });
 }

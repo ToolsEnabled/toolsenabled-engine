@@ -376,7 +376,7 @@ const orphanDependencies = {
     return helper(action, payload);
   }
 };
-expectCode(() => owner.start('https://example.edu/', orphanDependencies), 'BROWSER_OWNER_ORPHAN_UNCERTAIN');
+expectCode(() => owner.start('\x68ttps://example.edu/', orphanDependencies), 'BROWSER_OWNER_ORPHAN_UNCERTAIN');
 assert.equal(JSON.parse(fs.readFileSync(orphanFile, 'utf8')).state, 'orphan_uncertain');
 expectCode(() => owner.attach(orphanDependencies), 'BROWSER_OWNER_ORPHAN_UNCERTAIN');
 

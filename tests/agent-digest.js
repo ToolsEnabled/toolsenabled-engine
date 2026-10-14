@@ -496,7 +496,7 @@ check('collectDigestState reads the canonical projection and NEVER invents a tok
   assert.deepEqual(
     state.observed.meters.providers.map(meter => meter.provider),
     ['codex', 'claude', 'gemini', 'grok', 'local'],
-    /* Five since an earlier change (2026-09-10) added grok to PROVIDERS in
+    /* Five since a57cd698 (2026-09-10) added grok to PROVIDERS in
        src/lib/controller-projection.js:21, which METER_PROVIDERS is built from.
        Still the COMPLETE roster asserted exactly -- the honesty claim is that a
        provider with no durable meter is listed with a null figure rather than
@@ -1002,7 +1002,8 @@ check('the recipient resolves from the existing account registry and is never a 
   const sources = ['schedule.js', 'collect.js', 'render.js', 'render-image.js', 'service.js', 'index.js']
     .map(name => fs.readFileSync(path.join(ROOT, 'src', 'lib', 'agent-digest', name), 'utf8'))
     .concat(fs.readFileSync(path.join(ROOT, 'src', 'agent-digest.js'), 'utf8'))
-    .concat(fs.readFileSync(path.join(ROOT, 'src', 'lib', 'owner-delivery.js'), 'utf8'));
+    .concat(fs.readFileSync(path.join(ROOT, 'src', 'lib', 'owner-delivery.js'), 'utf8'))
+    .concat(fs.readFileSync(path.join(ROOT, 'src', 'lib', 'duo-owner-relay.js'), 'utf8'));
   for (const source of sources) {
     assert.ok(!/[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(source), 'no email address may be hard-coded in the digest');
   }

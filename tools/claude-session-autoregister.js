@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Fix note:
-// fix item 3 without interrupting current work. Item 3 was: the coordination layer is blind to
+// Owner fix directive (in-session, 2026-08-12, on the shadow cycle-1 report,
+// verbatim): "For 3 not good i dont understand but fix the issue without
+// interrrupting current workt". Item 3 was: the coordination layer is blind to
 // everything actually running -- live interactive Claude sessions never appear
 // in the presence registry, so `agent-roster --presence` reports an empty
 // house while sessions work the tree.
@@ -102,7 +103,7 @@ function deriveRegistration(sessionId) {
       '--tier', 'claude/interactive',
       '--lane', 'interactive-session',
       '--brief', 'Owner-launched interactive Claude session, auto-registered at SessionStart. Liveness record only: the observer role is a placeholder until the session takes a seat (roles are session-assigned; a seated session re-registers under its seat).',
-      '--provenance', 'SessionStart autoregister hook (fix note: coordination layer must see live sessions)',
+      '--provenance', 'SessionStart autoregister hook (owner fix directive 2026-08-12: coordination layer must see live sessions)',
       '--json'
     ]
   };

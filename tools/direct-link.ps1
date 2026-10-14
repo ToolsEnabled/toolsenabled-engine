@@ -25,9 +25,9 @@
 # without this script needing to be running.
 #
 # WHAT THIS DOES NOT DO. It does not make the link come back after a restart on
-# its own. That is governed by the startup.services_at_logon setting (product
-# rule: ToolsEnabled starts with the computer only if a user chooses that
-# setting), which is off by default and which this script never
+# its own. That is governed by the startup.services_at_logon setting (owner
+# directive 2026-08-13, "toolsenabled should startup on start if a user chooses
+# that setting. i dont."), which is off by default and which this script never
 # changes. With it off, press -On again after a restart. With it on, both tasks
 # carry a sign-in trigger and the link returns by itself. Between restarts the
 # link stays up through crashes and cable re-plugs, which is what the two
@@ -81,7 +81,7 @@ function Test-Elevated {
 # scheduled task runs with a different PATH than the owner's shell.
 function Resolve-Node {
   $minimum = [Version]'22.19.0'
-  foreach ($candidate in @('C:\Program Files\nodejs\node.exe')) {
+  foreach ($candidate in @('C:\agent-apps\node-v22.19.0\node.exe', 'C:\Program Files\nodejs\node.exe')) {
     if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
     try {
       $raw = [string]([Diagnostics.FileVersionInfo]::GetVersionInfo($candidate).ProductVersion)

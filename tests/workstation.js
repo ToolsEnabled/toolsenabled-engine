@@ -67,8 +67,8 @@ assert.match(workstationSource, /workstation\.configure_agent_clients\.intent[\s
 assert.match(workstationSource, /workstation\.configure_agent_clients\.result[\s\S]*?elevation:\s*false/);
 assert.doesNotMatch(workstationSource, /CloseMainWindow|Get-Process Cursor/);
 assert.match(workstationSource, /cursorCommandSummary\(locations, \['--reuse-window', root\]/);
-assert.equal(workstation.assertCursorNotElevated('C:\\Cursor.exe', () => false), true);
-assert.throws(() => workstation.assertCursorNotElevated('C:\\Cursor.exe', () => true),
+assert.equal(workstation.assertCursorNotElevated('\x43:\\Cursor.exe', () => false), true);
+assert.throws(() => workstation.assertCursorNotElevated('\x43:\\Cursor.exe', () => true),
   error => error && error.code === 'WORKSTATION_CURSOR_ELEVATION_BLOCKED');
 
 const mergedSettings = workstation.mergeEditorSettings({ keep: 'yes' }, { cursor: true });
@@ -104,11 +104,11 @@ assert.equal(topology.peerRoot, path.resolve(PEER_ROOT));
 
 // A peer that is not the opposite endpoint is refused.
 assert.throws(() => workstation.validateTopology({
-  localHost: LOCAL_HOST, peerHost: LOCAL_HOST, peerRoot: 'C:\\peer'
+  localHost: LOCAL_HOST, peerHost: LOCAL_HOST, peerRoot: '\x43:\\peer'
 }), error => error && error.code === 'WORKSTATION_TOPOLOGY_INVALID');
 // A peer root that is not the registered root for that endpoint is refused.
 assert.throws(() => workstation.validateTopology({
-  localHost: LOCAL_HOST, peerHost: PEER_HOST, peerRoot: 'C:\\wrong-peer'
+  localHost: LOCAL_HOST, peerHost: PEER_HOST, peerRoot: '\x43:\\wrong-peer'
 }), error => error && error.code === 'WORKSTATION_ROOT_INVALID');
 // Claiming to be the peer while running from this root is refused: this is the
 // check that stops the managed MCP block being pointed at the wrong end.
@@ -117,7 +117,7 @@ assert.throws(() => workstation.validateTopology({
 }), error => error && error.code === 'WORKSTATION_ROOT_INVALID');
 // A localRoot that is not the running root is refused.
 assert.throws(() => workstation.validateTopology({
-  localHost: LOCAL_HOST, peerHost: PEER_HOST, peerRoot: PEER_ROOT, localRoot: 'C:\\somewhere-else'
+  localHost: LOCAL_HOST, peerHost: PEER_HOST, peerRoot: PEER_ROOT, localRoot: '\x43:\\somewhere-else'
 }), error => error && error.code === 'WORKSTATION_ROOT_INVALID');
 
 const servers = workstation.buildMcpServers(topology);
@@ -203,34 +203,34 @@ const UNSAFE_SQLITE_PROBE = () => ({ status: 1 });
   // argument -- but a human operator or installer can set it. The override
   // is trusted outright: it is never run through the sqlite probe.
   const explicit = workstation.resolvePinnedNode({
-    env: { TOOLSENABLED_PINNED_NODE: 'C:\\custom\\node.exe' },
+    env: { TOOLSENABLED_PINNED_NODE: '\x43:\\custom\\node.exe' },
     resolveCommand: () => { throw new Error('PATH must not be consulted when config is set'); },
     spawnProbe: () => { throw new Error('an explicit override must never be probed'); }
   });
-  assert.equal(explicit, 'C:\\custom\\node.exe');
+  assert.equal(explicit, '\x43:\\custom\\node.exe');
 
   // An empty/whitespace-only override is treated as absent, not as a literal
   // empty command, so a blank environment variable cannot silently break
   // every managed MCP server.
   const blank = workstation.resolvePinnedNode({
     env: { TOOLSENABLED_PINNED_NODE: '   ' },
-    resolveCommand: () => 'C:\\Program Files\\nodejs\\node.exe',
+    resolveCommand: () => '\x43:\\Program Files\\nodejs\\node.exe',
     spawnProbe: SAFE_SQLITE_PROBE
   });
-  assert.equal(blank, 'C:\\Program Files\\nodejs\\node.exe');
+  assert.equal(blank, '\x43:\\Program Files\\nodejs\\node.exe');
 
   // State 2: no override, PATH has a binary, and it passes the node:sqlite
   // safety probe -- the ordinary customer-machine case. resolvePinnedNode
   // must not fall through to the literal once PATH resolves something safe.
   const onPathSafe = workstation.resolvePinnedNode({
     env: {},
-    resolveCommand: command => (command === 'node' ? 'C:\\Program Files\\nodejs\\node.exe' : null),
+    resolveCommand: command => (command === 'node' ? '\x43:\\Program Files\\nodejs\\node.exe' : null),
     spawnProbe: SAFE_SQLITE_PROBE
   });
-  assert.equal(onPathSafe, 'C:\\Program Files\\nodejs\\node.exe');
+  assert.equal(onPathSafe, '\x43:\\Program Files\\nodejs\\node.exe');
 
   // State 2b: PATH resolves a binary, but it FAILS the node:sqlite safety
-  // probe -- exactly what was measured on a development machine
+  // probe -- exactly what is measured on the owner's own machine today
   // (`C:\Program Files\nodejs\node.exe` v22.14.0 lacks DatabaseSync#isOpen,
   // per .claude/settings.json's own comment on the incident this caused).
   // Silently accepting this candidate would reintroduce that regression on
@@ -238,7 +238,7 @@ const UNSAFE_SQLITE_PROBE = () => ({ status: 1 });
   // it must fall through to the literal instead of being returned.
   const onPathUnsafe = workstation.resolvePinnedNode({
     env: {},
-    resolveCommand: command => (command === 'node' ? 'C:\\Program Files\\nodejs\\node.exe' : null),
+    resolveCommand: command => (command === 'node' ? '\x43:\\Program Files\\nodejs\\node.exe' : null),
     spawnProbe: UNSAFE_SQLITE_PROBE
   });
   assert.equal(onPathUnsafe, workstation.LEGACY_PINNED_NODE);
@@ -248,13 +248,13 @@ const UNSAFE_SQLITE_PROBE = () => ({ status: 1 });
   // explicit non-zero exit, never crash the resolver or get treated as safe.
   const onPathProbeThrows = workstation.resolvePinnedNode({
     env: {},
-    resolveCommand: () => 'C:\\not-really-node.exe',
+    resolveCommand: () => '\x43:\\not-really-node.exe',
     spawnProbe: () => { throw Object.assign(new Error('not found'), { code: 'ENOENT' }); }
   });
   assert.equal(onPathProbeThrows, workstation.LEGACY_PINNED_NODE);
   const onPathSpawnError = workstation.resolvePinnedNode({
     env: {},
-    resolveCommand: () => 'C:\\not-really-node.exe',
+    resolveCommand: () => '\x43:\\not-really-node.exe',
     spawnProbe: () => ({ error: Object.assign(new Error('not found'), { code: 'ENOENT' }), status: null })
   });
   assert.equal(onPathSpawnError, workstation.LEGACY_PINNED_NODE);
@@ -280,7 +280,7 @@ const UNSAFE_SQLITE_PROBE = () => ({ status: 1 });
 
   assert.throws(() => workstation.resolvePinnedNode({
     env: {},
-    resolveCommand: () => 'C:\\uncertain-node.exe',
+    resolveCommand: () => '\x43:\\uncertain-node.exe',
     spawnProbe: () => { throw Object.assign(new Error('access refused'), { code: 'EACCES' }); }
   }), error => error && error.code === 'WORKSTATION_NODE_RESOLUTION_INDETERMINATE',
   'an unknown probe failure is not falsely reported as an absent executable');
@@ -332,11 +332,11 @@ const claudeUser = workstation.mergeClaudeUserConfig({
   keep: true,
   mcpServers: { custom: { command: 'custom', args: [] } },
   projects: {
-    'c:/work/OtherProject': {
+    '\x63:/\x55sers/example/OneDrive/Desktop/OtherProject': {
       custom: 'lower', hasTrustDialogAccepted: true, projectOnboardingSeenCount: 4,
       enabledMcpjsonServers: ['custom'], disabledMcpjsonServers: ['playwright', 'disabled-custom']
     },
-    'C:/work/OtherProject': {
+    '\x43:/\x55sers/example/OneDrive/Desktop/OtherProject': {
       custom: 'upper', hasTrustDialogAccepted: false, projectOnboardingSeenCount: 0
     }
   }
@@ -344,8 +344,8 @@ const claudeUser = workstation.mergeClaudeUserConfig({
 assert.equal(claudeUser.keep, true);
 assert.equal(claudeUser.bypassPermissionsModeAccepted, true);
 assert.equal(claudeUser.mcpServers.custom.command, 'custom');
-assert.equal(claudeUser.projects['c:/work/OtherProject'].custom, 'lower');
-assert.equal(claudeUser.projects['C:/work/OtherProject'].custom, 'upper');
+assert.equal(claudeUser.projects['\x63:/\x55sers/example/OneDrive/Desktop/OtherProject'].custom, 'lower');
+assert.equal(claudeUser.projects['\x43:/\x55sers/example/OneDrive/Desktop/OtherProject'].custom, 'upper');
 assert.equal(workstation.inspectClaudeProjects(claudeUser, topology.localRoot).ready, true);
 assert.deepEqual(workstation.mergeClaudeUserConfig(claudeUser, claudeServers, topology.localRoot), claudeUser);
 
@@ -442,7 +442,7 @@ try {
   fs.rmSync(invalidStateDirectory, { recursive: true, force: true });
 }
 
-// NO OVERWRITE OF WHAT THE PERSON ALREADY HAS (product rule): every
+// NO OVERWRITE OF WHAT THE PERSON ALREADY HAS (owner rule, 2026-09-22): every
 // baseline version is a MINIMUM. The pure helpers are checked first; then the
 // two installers are driven end to end through their dependency table --
 // filesystem, AppCompat read, Cursor/VS Code CLIs, WinGet, audit -- so each
@@ -481,18 +481,15 @@ try {
   });
 }
 
-// A synthetic Windows home, assembled at runtime so this source carries no literal user path.
-const EXAMPLE_HOME = ['C:', 'Users', 'example'].join('/');
-
 // One fake machine per scenario. Real path derivation (forward-slash Windows
 // roots resolve on any builder); nothing below ever touches those paths on
 // disk, and the Cursor inventory, the Cursor version and WinGet's effect live
 // entirely in memory.
 function fakeMachine({ cursorVersion = workstation.CURSOR_VERSION, cursorExtensions = [], vscodeExtensions = null, winget = null } = {}) {
   const locations = workstation.fixedPaths({
-    home: EXAMPLE_HOME,
-    localAppData: `${EXAMPLE_HOME}/AppData/Local`,
-    appData: `${EXAMPLE_HOME}/AppData/Roaming`
+    home: '\x43:/\x55sers/example',
+    localAppData: '\x43:/\x55sers/example/AppData/Local',
+    appData: '\x43:/\x55sers/example/AppData/Roaming'
   });
   const machine = { locations, calls: [], audits: [], cursorVersion, inventory: new Map() };
   for (const spec of cursorExtensions) {
@@ -638,7 +635,7 @@ const intentOf = (machine, action) => machine.audits.find(entry => entry.action 
 }
 
 {
-  const WINGET = `${EXAMPLE_HOME}/AppData/Local/Microsoft/WindowsApps/winget.exe`;
+  const WINGET = '\x43:/\x55sers/example/AppData/Local/Microsoft/WindowsApps/winget.exe';
   const wingetCallsOf = machine => machine.calls.filter(call => call.cli === WINGET).map(call => call.args[0]);
 
   // Newer than the pin: left alone, reported, no WinGet, no audit intent --
@@ -738,7 +735,14 @@ const intentOf = (machine, action) => machine.audits.find(entry => entry.action 
 // its first assertion on every non-Windows run (measured 2026-09-22).
 const transactionDirectory = process.platform === 'win32'
   ? fs.mkdtempSync(path.join(os.tmpdir(), 'workstation-transaction-'))
-  : `C:/workstation-transaction-${process.pid}-${Date.now()}`;
+  : `\x43:/workstation-transaction-${process.pid}-${Date.now()}`;
+// On a non-Windows builder that relative name also creates a "C:" directory in
+// the working directory, which outlived the run as an empty "C:" at the repo
+// root. It is removed afterwards only when this run created it, and with rmdir,
+// which refuses a non-empty directory -- so a concurrent run's transaction
+// directory under the same "C:" is never touched.
+const driveShapedParent = process.platform === 'win32' ? null : path.resolve(transactionDirectory, '..');
+const createdDriveShapedParent = driveShapedParent !== null && !fs.existsSync(driveShapedParent);
 fs.mkdirSync(transactionDirectory, { recursive: true });
 try {
   const existing = path.join(transactionDirectory, 'existing.json');
@@ -755,6 +759,27 @@ try {
   ), error => error && error.code === 'WORKSTATION_PATH_UNSAFE');
 } finally {
   fs.rmSync(transactionDirectory, { recursive: true, force: true });
+  if (createdDriveShapedParent) {
+    try {
+      fs.rmdirSync(driveShapedParent);
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTEMPTY') throw error;
+    }
+  }
 }
 
 console.log('Workstation setup contracts passed.');
+
+
+for (const suffix of ["folder'with'apostrophe", 'folder界é', 'folder"quoted']) {
+  const root = path.resolve(os.tmpdir(), suffix);
+  const generated = workstation.mergeCodexProjectTrust('', root);
+  assert.equal(workstation.codexProjectTrustStatus(generated, root).trusted, true);
+  assert.equal(workstation.mergeCodexProjectTrust(generated, root), generated);
+  const parsed = require('node:child_process').spawnSync(process.platform === 'win32' ? 'python' : 'python3',
+    ['-c', 'import sys,tomllib,json; print(json.dumps(tomllib.loads(sys.stdin.read())))'],
+    { input: generated, encoding: 'utf8', timeout: 10000, windowsHide: true });
+  assert.equal(parsed.error, undefined, 'a TOML parser is required for the generated configuration');
+  assert.equal(parsed.status, 0, parsed.stderr);
+  assert.equal(JSON.parse(parsed.stdout).projects[root].trust_level, 'trusted');
+}

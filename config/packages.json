@@ -54,8 +54,11 @@
     {
       "id": "auth.duo",
       "files": [
+        "src/lib/providers/duo-desktop-approval.js",
         "src/lib/providers/duo-desktop.js",
-        "tools/uac-run.js"
+        "src/lib/institution-sso.js",
+        "tools/uac-run.js",
+        "tools/institution-login.js"
       ]
     },
     {
@@ -194,6 +197,7 @@
         "src/lib/agent-browser-operations.js",
         "src/lib/agent-browser-shell.js",
         "src/lib/browser-action-cursor.js",
+        "tools/canvas-session-preflight.js",
         "tools/playwright-call.js"
       ]
     },
@@ -353,7 +357,6 @@
         "src/lib/fleet-supervisor/worktree-lease.js",
         "src/lib/fleet-supervisor/worktree.js",
         "src/lib/multi-account/claude-allowance.js",
-        "src/lib/multi-account/failover-setting.js",
         "src/lib/multi-account/handover.js",
         "src/lib/multi-account/health.js",
         "src/lib/multi-account/launch.js",
@@ -540,6 +543,7 @@
         "src/lib/elevation-writability.js",
         "src/lib/env-scrub.js",
         "src/lib/error-taxonomy.js",
+        "src/lib/git-command.js",
         "src/lib/health-invariants.js",
         "src/lib/http.js",
         "src/lib/linux-process-control.js",
@@ -639,11 +643,9 @@
         "src/lib/usage/adapters/local-ledger.js",
         "src/lib/usage/adapters/provider-allowance.js",
         "src/lib/usage/adapters/vertex-credit.js",
-        "src/lib/usage/allowance-buckets.js",
         "src/lib/usage/claude-usage-source.js",
         "src/lib/usage/codex-rate-limits.js",
         "src/lib/usage/dispatch-readiness.js",
-        "src/lib/usage/gemini-quota.js",
         "src/lib/usage/index.js",
         "src/lib/usage/lifetime.js",
         "src/lib/usage/machine-load.js",
@@ -674,6 +676,7 @@
       "id": "owner.inbox",
       "files": [
         "src/lib/coordinator-status-observation.js",
+        "src/lib/duo-owner-relay.js",
         "src/lib/owner-authorization.js",
         "src/lib/owner-chat.js",
         "src/lib/owner-delivery.js",
@@ -766,9 +769,6 @@
         "src/lib/providers/cli-provider-gateway.js",
         "src/lib/providers/customer-model.js",
         "src/lib/providers/gemini-agentic.js",
-        "src/lib/providers/gemini-quota-probe.js",
-        "src/lib/providers/gemini-quota-protocol.js",
-        "src/lib/providers/gemini-quota-storage.js",
         "src/lib/providers/model.js",
         "src/lib/providers/vertex-gemini-seat.js",
         "src/lib/providers/vertex-gemini-strong.js",
@@ -992,7 +992,6 @@
         "src/lib/lane-scope.js",
         "src/lib/multi-account/registry-location.js",
         "src/lib/multi-account/registry.js",
-        "src/lib/multi-account/selection-modes.js",
         "src/lib/multi-account/usage-windows.js",
         "src/lib/outside-control.js",
         "src/lib/p13-setting.js",
@@ -1021,6 +1020,13 @@
         "src/lib/entitlement-report.js",
         "src/lib/mcp-handshake-probe.js",
         "src/lib/mcp-tool-surface.js",
+        "src/lib/plugin-activation.js",
+        "src/lib/plugin-host/grants.js",
+        "src/lib/plugin-host/identity.js",
+        "src/lib/plugin-host/index.js",
+        "src/lib/plugin-host/manifest.js",
+        "src/lib/plugin-host/tool-bridge.js",
+        "src/lib/plugin-role-projection.js",
         "src/lib/role-functions.js",
         "src/lib/scoped-approvals.js",
         "src/lib/settings.js",

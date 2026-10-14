@@ -237,7 +237,7 @@ const ok = message => { results.push(message); console.log(`OK: ${message}`); };
     const { tokenFile, token } = mintTestToken();
     const { pipeName, server } = startTestHelper({
       expectedToken: token,
-      runOperation: () => ({ ok: false, steps: [{ executable: 'C:\\Windows\\System32\\schtasks.exe', ok: false, exitCode: 1, error: 'ERROR: access denied' }] })
+      runOperation: () => ({ ok: false, steps: [{ executable: '\x43:\\Windows\\System32\\schtasks.exe', ok: false, exitCode: 1, error: 'ERROR: access denied' }] })
     });
     try {
       await once(server, 'listening');

@@ -28,7 +28,7 @@ not be met here because the Playwright Chromium executable is absent.
 
 RESTORED GREEN: the strengthened focused scratch run after exact source restore
 printed `ok captureReportPng refuses to produce nothing and reports a missing engine honestly`
-and `Owner delivery tests passed (N checks: one channel setting, one surviving channel, honest-unknown, truncation, failure surfacing).`
+and `Owner delivery tests passed (13 checks: one channel setting, one surviving channel, honest-unknown, truncation, failure surfacing, Duo relay credential discipline).`
 Full-file green precondition not met: Playwright's Chromium headless-shell is
 not installed. Node 20 was also insufficient (`ERR_UNKNOWN_BUILTIN_MODULE:
 node:sqlite`), so mutation runs used installed Node 22.22.2.
@@ -50,8 +50,8 @@ const realChromium = Object.freeze({
 });
 
 // Owner-facing delivery tests: the single surviving channel, retired-provider
-// refusal, provider-neutral delivery records, image rendering, and failure
-// surfacing. Plain `node tests/owner-delivery.js`.
+// refusal, provider-neutral delivery records, image rendering, the Duo relay,
+// and failure surfacing. Plain `node tests/owner-delivery.js`.
 //
 // NOTHING REAL IS TOUCHED. Email, owner-channel seams, the vault, the audit
 // ledger, the browser, and every state file are injected fakes or temp files.
@@ -67,6 +67,9 @@ const path = require('node:path');
 const delivery = require('../src/lib/owner-delivery');
 const imageRender = require('../src/lib/agent-digest/render-image');
 const { renderDigest, renderFallback, buildQuickMetrics } = require('../src/lib/agent-digest/render');
+const duoRelay = require('../src/lib/duo-owner-relay');
+const duoDesktop = require('../src/lib/providers/duo-desktop');
+const institutionSso = require('../src/lib/institution-sso');
 const { createAgentDigestService } = require('../src/lib/agent-digest');
 const { DigestSchedule, MemorySettingsStore } = require('../src/lib/agent-digest/schedule');
 
@@ -76,9 +79,10 @@ const { DigestSchedule, MemorySettingsStore } = require('../src/lib/agent-digest
 // aliases and addresses, and a file a fresh checkout does not have at all.
 // This suite must not depend on it, so the roster is replaced here by the
 // fixture account the rest of the tree already uses for exactly this
-// (tests/desktop.browser/playwright-gateway.js: studenta / studenta@example.com).
-// createAgentDigestService has no "accounts" dependency seam, so the module the
-// digest requires is the injection point.
+// (tests/desktop.browser/playwright-gateway.js: studenta / studenta@example.com),
+// the same substitution the Duo email check further down makes through
+// owner-delivery's own "accounts" dependency seam -- createAgentDigestService
+// has no such seam, so the module the digest requires is the injection point.
 // resolveRecipient's own behaviour still runs for real against this roster:
 // alias resolution, the registered-address lookup, and the refusal on an
 // account that is unknown or carries no address.
@@ -248,7 +252,7 @@ check('a config still naming a retired channel falls back to the default with a 
   // special-cased: each is an unrecognised value like any other, so the owner
   // gets the same typed fallback reason and nothing is delivered anywhere
   // surprising. Deliberately NOT aliased onto email -- silently rewriting a
-  // stored choice is how an owner ends up not knowing where their reports go.
+  // stored choice is how an owner ends up not knowing where his reports go.
   for (const retired of ['discord-text', 'telegram-image', 'telegram-image-full', 'telegram-text', 'telegram']) {
     assert.equal(delivery.normalizeChannel(retired), null, retired + ' must not normalize to a live channel');
     assert.equal(delivery.CHANNELS.includes(retired), false);
@@ -510,7 +514,7 @@ check('a hung render is abandoned on a bound and still closes its browser', asyn
   assert.deepEqual(closed, ['browser'], 'a timed-out render must not leave a stray browser process');
 });
 
-check('captureReportPng requests the large-phone class viewport (428x926pt) and @3x scale factor by default', async () => {
+check('captureReportPng requests the iPhone 13 Pro Max viewport and @3x scale factor by default', async () => {
   // Config-level check: confirms the values actually reach Playwright's
   // newContext(), not just that the exported constants have the right numbers.
   let capturedContextArgs = null;
@@ -531,7 +535,7 @@ check('captureReportPng requests the large-phone class viewport (428x926pt) and 
   };
   await imageRender.captureReportPng({ html: '<p>x</p>', chromium: fakeChromium });
   assert.deepEqual(capturedContextArgs.viewport, { width: 428, height: 926 },
-    'the requested viewport must be the large-phone class logical size (428x926pt), not the old generic 390x844');
+    'the requested viewport must be the iPhone 13 Pro Max logical size (428x926pt), not the old iPhone-generic 390x844');
   assert.equal(capturedContextArgs.deviceScaleFactor, 3,
     'the requested device scale factor must be @3x, not the old @2x');
 });
@@ -542,15 +546,16 @@ function pngDimensionsFromBuffer(buffer) {
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
-check('a REAL Playwright render produces the exact large-phone class physical pixel width -- not a trusted config value', async () => {
-  // The published display spec (verified rather than assumed): a large-phone
-  // class device is 428x926pt logical @3x -> 1284x2778 physical px. This launches a REAL
+check('a REAL Playwright render produces the exact iPhone 13 Pro Max physical pixel width -- not a trusted config value', async () => {
+  // Apple's published spec (verified against ios-resolution.com and
+  // support.apple.com/en-us/111870 rather than assumed): the iPhone 13 Pro Max
+  // is 428x926pt logical @3x -> 1284x2778 physical px. This launches a REAL
   // headless Chromium and inspects the REAL returned PNG bytes, because a
   // Playwright/Chromium config can silently cap deviceScaleFactor -- a test
   // that only checks the requested config value would not catch that.
-  assert.equal(imageRender.PHONE_WIDTH, 428, 'viewport width must be the large-phone class logical width');
-  assert.equal(imageRender.PHONE_HEIGHT, 926, 'viewport height must be the large-phone class logical height');
-  assert.equal(imageRender.DEVICE_SCALE, 3, 'device scale factor must be the large-phone class @3x, not the older @2x');
+  assert.equal(imageRender.PHONE_WIDTH, 428, 'viewport width must be the iPhone 13 Pro Max logical width');
+  assert.equal(imageRender.PHONE_HEIGHT, 926, 'viewport height must be the iPhone 13 Pro Max logical height');
+  assert.equal(imageRender.DEVICE_SCALE, 3, 'device scale factor must be the iPhone 13 Pro Max @3x, not the older @2x');
   assert.ok(fs.existsSync(realChromiumExecutable),
     'the real-render assertion requires an already-provisioned Playwright Chromium executable');
 
@@ -563,7 +568,7 @@ check('a REAL Playwright render produces the exact large-phone class physical pi
   const { width, height } = pngDimensionsFromBuffer(image);
   assert.equal(width, imageRender.PHONE_WIDTH * imageRender.DEVICE_SCALE,
     'rendered PNG width must be viewport width x device scale factor -- a mismatch means the scale factor was silently capped');
-  assert.equal(width, 1284, "must equal the published large-phone class physical width exactly");
+  assert.equal(width, 1284, "must equal Apple's published iPhone 13 Pro Max physical width exactly");
 
   // Height is deliberately content-defined (fullPage screenshot, "let content
   // define height" from the original build) so no fixed number is asserted --
@@ -576,9 +581,127 @@ check('a REAL Playwright render produces the exact large-phone class physical pi
     'a real card with fixture content must render taller than half a screen\'s worth of physical pixels');
 });
 
-check('owner delivery exports no retired Telegram surface', () => {
-  // A dead branch that references a deleted export would throw TypeError rather
-  // than fail closed if a future channel ever made isTelegramChannel true again.
+// ============================================================================
+// 7. Duo: what is honestly relayable, and no credential anywhere durable.
+// ============================================================================
+
+check('with no code on the page the message says approve it in Duo Desktop, and promises nothing else', () => {
+  const rendered = duoRelay.renderDuoMessage({ route: 'duo_desktop' });
+  assert.equal(rendered.relayed, 'notice');
+  assert.match(rendered.text, /Approve it in Duo Desktop on this PC/);
+  assert.match(rendered.text, /no code to relay/);
+  assert.doesNotMatch(rendered.text, /\bcode is\b|check your (email|messages)/i);
+});
+
+check('a real verified-push number is relayed; anything else is refused as a code', () => {
+  assert.equal(duoRelay.renderDuoMessage({ code: '37' }).relayed, 'code');
+  assert.match(duoRelay.renderDuoMessage({ code: '37' }).text, /Duo verification code: 37/);
+  for (const bogus of ['', '   ', 'abc', '<b>1</b>', '1234567890123', null, undefined, 42]) {
+    assert.equal(duoRelay.renderDuoMessage({ code: bogus }).relayed, 'notice',
+      `a non-code value (${JSON.stringify(bogus)}) must never be presented as his second factor`);
+  }
+});
+
+check('the Duo code never reaches the delivery record, the audit payload, or a log', async () => {
+  // THE CHANNEL CHANGED, THE SECRECY PROPERTY DID NOT. This ran on telegram-text
+  // until 2026-08-23; the relay now goes to email like everything else. What is
+  // asserted is unchanged and is the whole point of the case: the second factor
+  // reaches the owner and reaches nothing durable.
+  const bench = harness();
+  const gmailCalls = [];
+  const result = await duoRelay.notifyOwnerOfDuoPrompt(
+    { code: '451', route: 'duo_desktop' },
+    {
+      ...bench.dependencies,
+      channelOptions: { file: configFile('email'), env: {} },
+      accounts: { resolve: () => 'alias', load: () => ({ accounts: { alias: { email: 'owner@example.test' } } }) },
+      gmail: { gmailSend: async args => { gmailCalls.push(args); return { id: 'x' }; } }
+    });
+  assert.equal(result.delivered, true);
+  assert.equal(result.relayed, 'code');
+  // It reached the owner...
+  assert.match(gmailCalls[0].text, /451/);
+  // ...and nowhere durable.
+  const recordText = fs.readFileSync(bench.recordFile, 'utf8');
+  assert.doesNotMatch(recordText, /451/, 'the second factor must never be persisted');
+  assert.match(recordText, /"purpose": "duo-code"/, 'that a code was relayed is recorded; what it was is not');
+  assert.equal(JSON.stringify(bench.calls.audit).includes('451'), false,
+    'the second factor must never enter an audit payload');
+});
+
+check('the Duo step vocabulary records that a code was relayed but can never carry one', () => {
+  assert.ok(duoDesktop.ALLOWED_STEPS.has('duo-verification-code-relayed'));
+  for (const step of duoDesktop.ALLOWED_STEPS) {
+    assert.doesNotMatch(step, /\d{2,}/, 'a step name must not be able to look like a code');
+  }
+  // parseLoginResult only admits the fixed vocabulary, so a code cannot ride out in `steps`.
+  assert.throws(() => duoDesktop.parseLoginResult(JSON.stringify({ ok: true, steps: ['451'] })),
+    error => error.code === 'DUO_DESKTOP_LOGIN_RESULT_INVALID');
+});
+
+check('the page code reader accepts only short digit runs and names an unreadable page as indeterminate', async () => {
+  const page = text => ({
+    locator: () => ({ first: () => ({ isVisible: async () => true, textContent: async () => text }) })
+  });
+  assert.equal(await institutionSso.readDuoVerificationCode(page(' 37 ')), '37');
+  assert.equal(await institutionSso.readDuoVerificationCode(page('Duo Push')), null);
+  assert.equal(await institutionSso.readDuoVerificationCode(page('')), null);
+  const exploding = { locator: () => { throw new Error('detached'); } };
+  await assert.rejects(
+    () => institutionSso.readDuoVerificationCode(exploding),
+    error => error && error.code === 'DUO_VERIFICATION_CODE_READ_INDETERMINATE'
+  );
+});
+
+check('an indeterminate Duo relay never throws into the sign-in, and is recorded', async () => {
+  const bench = harness();
+  const result = await duoRelay.notifyOwnerOfDuoPrompt(
+    { route: 'duo_desktop' },
+    {
+      ...bench.dependencies,
+      channelOptions: { file: configFile('email'), env: {} },
+      accounts: { resolve: () => 'alias', load: () => ({ accounts: { alias: { email: 'owner@example.test' } } }) },
+      gmail: { gmailSend: async () => { const error = new Error('nope'); error.code = 'GMAIL_SEND_FAILED'; throw error; } }
+    });
+  /* delivered === FALSE, not null. w20 relaxed this to null/'unknown' reasoning
+   * that a provider exception may follow acceptance -- but this fixture throws
+   * from gmailSend BEFORE anything is accepted, so non-delivery here is
+   * MEASURED, not unknown. Reporting a definite failure as indeterminate is the
+   * could-not-collapse defect run backwards: it turns an answer the code
+   * actually has into a shrug, and a caller that retries on 'unknown' would
+   * resend a message that provably never went out. */
+  assert.equal(result.delivered, false);
+  assert.equal(result.failureCode, 'GMAIL_SEND_FAILED');
+  const record = JSON.parse(fs.readFileSync(bench.recordFile, 'utf8'));
+  assert.equal(record.lastFailure.purpose, 'duo-notice');
+});
+
+check('the Duo relay follows the same single setting as the digest', async () => {
+  const bench = harness();
+  const gmailCalls = [];
+  const result = await duoRelay.notifyOwnerOfDuoPrompt({ route: 'duo_desktop' }, {
+    ...bench.dependencies,
+    channelOptions: { file: configFile('email'), env: {} },
+    accounts: { resolve: () => 'alias', load: () => ({ accounts: { alias: { email: 'owner@example.test' } } }) },
+    gmail: { gmailSend: async args => { gmailCalls.push(args); return { id: 'x' }; } }
+  });
+  assert.equal(result.delivered, true);
+  assert.equal(result.channel, 'email');
+  assert.equal(gmailCalls.length, 1);
+});
+
+check('the Duo relay has no Telegram path left to take', () => {
+  // The case this replaces asserted "always text, even on the image channel".
+  // The rule it protected -- a second factor is never rendered as a picture --
+  // now has no image channel to be tempted by, so what is pinned instead is that
+  // the branch itself is gone from the source. A dead branch that references a
+  // deleted export would throw TypeError rather than fail closed if a future
+  // channel ever made isTelegramChannel true again.
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'duo-owner-relay.js'), 'utf8');
+  for (const gone of ['sendTelegramToOwner', 'escapeTelegramHtml', 'isTelegramChannel']) {
+    assert.equal(source.includes('delivery.' + gone), false,
+      'duo-owner-relay must not call delivery.' + gone + ' any more');
+  }
   for (const gone of [
     'TELEGRAM_BUDGET', 'TELEGRAM_CAPTION_BUDGET', 'TELEGRAM_CAPTION_MAX_CHARS',
     'TELEGRAM_MAX_CHARS', 'escapeTelegramHtml', 'isTelegramChannel'
@@ -597,7 +720,7 @@ check('owner delivery exports no retired Telegram surface', () => {
       process.stdout.write(`  ok ${label}\n`);
     }
     process.stdout.write(`Owner delivery tests passed (${checks} checks: one channel setting, one surviving channel, `
-      + `honest-unknown, truncation, failure surfacing).\n`);
+      + `honest-unknown, truncation, failure surfacing, Duo relay credential discipline).\n`);
   } catch (error) {
     process.stderr.write(`${error && error.stack ? error.stack : error}\n`);
     process.exitCode = 1;

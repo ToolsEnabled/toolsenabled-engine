@@ -16,7 +16,7 @@ const { createStateStore } = require('../../src/lib/state-store');
 const { SchedulerAdapterError } = require('../../src/lib/scheduler-adapter');
 const { createSchedulerProvider } = require('../../src/lib/providers/scheduler');
 
-function runtimePrincipal() { return 'S-1-5-21-111111111-222222222-333333333-1001'; }
+function runtimePrincipal() { return '\x53-1-5-21-111111111-222222222-333333333-1001'; }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'toolsenabled-scheduler-provider-'));
 let now = Date.UTC(2026, 6, 22, 12, 0, 0);
@@ -72,9 +72,9 @@ const provider = createSchedulerProvider({
   adapter,
   audit: fakeAudit,
   policy: { assertActive() {}, load: () => ({ limits: { maxScheduledJobs: 2 } }) },
-  nodePath: 'C:\\Program Files\\nodejs\\node.exe',
+  nodePath: '\x43:\\Program Files\\nodejs\\node.exe',
   runnerPath: path.join(root, 'job-runner.js'),
-  principalId: 'S-1-5-21-111111111-222222222-333333333-1001',
+  principalId: '\x53-1-5-21-111111111-222222222-333333333-1001',
   validateAction(action, args) {
     // FIXTURE ACTION CHANGED 2026-08-23: 'telegram.send' left
     // SUPPORTED_SCHEDULED_ACTIONS with the Telegram connector. 'gmail.send' is a
@@ -114,8 +114,8 @@ function reconciliationFixture({ operation, spec, adapter: claimAdapter, complet
     adapter: claimAdapter,
     audit: { redact: value => String(value), requireRecord: () => ({ durable: true }), record() {} },
     policy: { assertActive() {}, load: () => ({ limits: { maxScheduledJobs: 10 } }) },
-    nodePath: 'C:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
-    resolveCurrentPrincipalId: () => 'S-1-5-21-111111111-222222222-333333333-1001'
+    nodePath: '\x43:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
+    resolveCurrentPrincipalId: () => '\x53-1-5-21-111111111-222222222-333333333-1001'
   });
   return { provider: fakeProvider, stats };
 }
@@ -258,7 +258,7 @@ try {
   const legacyDeletionSpec = {
     version: 1, installationId: 'a'.repeat(32), jobId: 'scheduler-job-legacy-delete', generation: 1,
     taskName: '\\ToolsEnabled-v2-aaaaaaaaaaaa-bbbbbbbbbbbbbbbb-g1', ownershipMarker: 'c'.repeat(64),
-    nodePath: 'C:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
+    nodePath: '\x43:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
     principalId: 'DESKTOP\\legacy-user', schedule: 'hourly', intervalMinutes: null
   };
   let deletionAdapterSpec;
@@ -270,7 +270,7 @@ try {
     }
   });
   assert.equal(deletion.provider.reconcile({ limit: 1 }).succeeded, 1);
-  assert.equal(deletionAdapterSpec.principalId, 'S-1-5-21-111111111-222222222-333333333-1001');
+  assert.equal(deletionAdapterSpec.principalId, '\x53-1-5-21-111111111-222222222-333333333-1001');
   assert.equal(legacyDeletionSpec.principalId, 'DESKTOP\\legacy-user');
   assert.equal(legacyDeletionSpec.action, undefined);
 
@@ -327,7 +327,7 @@ try {
         record(event, target, details) { legacyAudit.push({ type: 'record', event, target, details }); }
       },
       policy: { assertActive() {}, load: () => ({ limits: { maxScheduledJobs: 10 } }) },
-      nodePath: 'C:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
+      nodePath: '\x43:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
       principalId: runtimePrincipal(), principalName: 'DESKTOP\\owner', validateAction() {}
     });
     const globalCleanup = legacyProvider.reconcile({ limit: 1 });
@@ -374,7 +374,7 @@ try {
       },
       audit: { redact: value => String(value), requireRecord() { throw new Error('must not mutate'); }, record() {} },
       policy: { assertActive() {}, load: () => ({ limits: { maxScheduledJobs: 10 } }) },
-      nodePath: 'C:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
+      nodePath: '\x43:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(root, 'mock-runner.js'),
       principalId: runtimePrincipal(), principalName: 'DESKTOP\\owner', validateAction() {}
     });
     const result = conflictProvider.reconcile({ limit: 1 });
@@ -419,7 +419,7 @@ try {
         adapter: { ensure() { throw new Error('list must not reconcile'); }, remove() {} },
         audit: fakeAudit,
         policy: { assertActive() {}, load: () => ({ limits: { maxScheduledJobs: 10 } }) },
-        nodePath: 'C:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(importRoot, 'runner.js'),
+        nodePath: '\x43:\\Program Files\\nodejs\\node.exe', runnerPath: path.join(importRoot, 'runner.js'),
         resolveCurrentPrincipalId() { resolvedSid += 1; return runtimePrincipal(); },
         validateAction(action, args) {
           validated += 1;

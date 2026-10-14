@@ -273,8 +273,8 @@ async function main() {
     const session = policy.session(dispatchSession.UNATTENDED_CEILING);
 
     // telegram.send and telegram.worker_run were removed here because the
-    // connector, its tools and its tables left the product in "Telegram is
-    // out". They are not registered any more, so the rows asserted a
+    // connector, its tools and its tables left the product in "Telegram is out"
+    // (755dc91). They are not registered any more, so the rows asserted a
     // capability that cannot exist; keeping them made this table fail for a
     // reason that had nothing to do with the ceiling it guards.
     const expected = {
@@ -320,7 +320,7 @@ async function main() {
     const seen = [];
     const started = {
       // SUBJECT CHANGED: this drove telegram.send, which left the product with
-      // the connector in an earlier change. gmail.send is a surviving SUPPORTED_SCHEDULED_
+      // the connector in 755dc91. gmail.send is a surviving SUPPORTED_SCHEDULED_
       // ACTION that the unattended ceiling admits, so the dispatch path is still
       // exercised against a real scheduled action rather than a removed one --
       // a stored action the runner no longer allowlists refuses before dispatch

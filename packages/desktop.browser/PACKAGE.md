@@ -9,7 +9,7 @@ bounded agent-browser ownership, operation, lifecycle/media, and shell plans.
 
 `src/lib/agent-browser-contract.js`, `src/lib/agent-browser-operations.js`,
 `src/lib/agent-browser-lifecycle.js`, `src/lib/agent-browser-shell.js`; tools:
-`tools/playwright-call.js`.
+`tools/canvas-session-preflight.js`, `tools/playwright-call.js`.
 
 ## Allowed dependencies
 

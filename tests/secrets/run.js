@@ -84,7 +84,7 @@ const result = spawnSync(process.execPath, [
   // store now leave it deleted; mutations still create it.
   'tests/secrets/vault-access-log-never-resurrects-store.js',
   // BOTH HALVES THAT WRITE THIS VAULT MUST SURVIVE A CRASH MID-WRITE. The
-  // 2026-09-02 crash-safety fix (an earlier commit) touched tools/secrets.ps1's
+  // 2026-09-02 crash-safety fix (commit 9a6c79c) touched tools/secrets.ps1's
   // Write-Vault only; tools/secrets-manager.ps1's Write-Vault -- every add,
   // replace, rotate, remove -- still wrote the vault's temp file with a bare
   // WriteAllText and no flush before the same atomic rename, so it could still

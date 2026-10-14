@@ -22,6 +22,19 @@
 // not a mock of the registry authorization being tested; its exact result is checked.
 // NOT-FOUND (5): the file has no skip or platform precondition guard.
 // NOT-FOUND (6): no expected value is computed by the implementation under test.
+//
+// CORRECTION, 2026-09-25 (security lane). The PRECONDITION-NOT-MET line above is
+// no longer the reason this suite was red, and it was never the whole reason.
+// The real one was that `agent.tool_approvals` defaults to false, so
+// requiresApproval() returned false for every action and none of the three
+// APPROVAL_REQUIRED assertions here had a gate to test. Measured: the first case
+// reached removeCredential's handler and failed inside vault-linux.js, which the
+// runner reported only as `actual: [Error]`. The suite now arms that setting in
+// its own isolated settings file and asserts the precondition before relying on
+// it; with that in place the first case rejects with APPROVAL_REQUIRED from
+// approvals.js, the positive control completes, and the whole file passes on
+// Linux. No claim is made here about the Windows audit signing key: it simply
+// was not what stopped this run.
 
 require('./lib/isolated-environment').activate('approval-boundary-bypasses');
 
@@ -32,6 +45,52 @@ const scopedApprovals = require('../src/lib/scoped-approvals');
 const registry = require('../src/lib/tool-registry');
 
 const OWNER_SESSION = Object.freeze({ origin: 'local', tier: 'full' });
+
+/* EVERY `APPROVAL_REQUIRED` ASSERTION IN THIS FILE WAS VACUOUS, AND NOTHING SAID SO.
+ *
+ * `agent.tool_approvals` has `"default": false` in config/settings-registry.json
+ * -- intended, documented ("Basic installs leave optional tool confirmations
+ * off"), and pinned by tests/runtime-basic-policy.test.js. policy.js
+ * requiresApproval() consults approvalsTurnedOffByOwner() BEFORE it looks at the
+ * policy's own required-action list, and that function treats the built-in
+ * default as a choice, so on a fresh isolated install it returns false for every
+ * action -- host.exec and system.credential_remove included.
+ *
+ * With no token path there is nothing for a forged scheduler context to bypass.
+ * MEASURED 2026-09-25 before this block existed: the first case reached
+ * removeCredential's handler and rejected with SECRET_HELPER_PROTOCOL_INVALID
+ * from vault-linux.js -- the approval gate never ran, and the suite reported
+ * only `actual: [Error]`. The same opaque failure would have been printed if the
+ * product HAD removed the credential without approval. A security test whose
+ * red and whose green both mean "we did not check" is worse than no test.
+ *
+ * So the precondition is armed here rather than assumed, in the isolated
+ * settings file this run already owns, and then asserted. If it cannot be armed,
+ * the assertion below names the setting instead of failing somewhere else.
+ */
+(function armApprovalsForThisRun() {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const settings = require('../src/lib/settings');
+  const { valuesPath } = settings.loadSettings();
+  assert.ok(typeof valuesPath === 'string' && valuesPath,
+    'the isolated settings file must be known before this suite can arm its own precondition');
+  fs.mkdirSync(path.dirname(valuesPath), { recursive: true });
+  fs.writeFileSync(valuesPath, JSON.stringify({
+    revision: 1,
+    values: { 'agent.tool_approvals': true },
+    /* 'user', not 'default': approvalsTurnedOffByOwner() only honours a false
+       value, but writing the provenance a real saved answer carries keeps this
+       fixture the shape the product actually produces. */
+    provenance: { 'agent.tool_approvals': { source: 'user', atMs: 1, directive: null } }
+  }), { mode: 0o600 });
+  const policy = require('../src/lib/policy');
+  for (const [action, effect] of [['system.credential_remove', 'local-write'], ['host.exec', 'local-write']]) {
+    assert.equal(policy.requiresApproval(action, effect), true,
+      `approvals are not in force for ${action}, so every APPROVAL_REQUIRED assertion in this file would pass `
+      + 'without testing anything; agent.tool_approvals could not be turned on for this run');
+  }
+})();
 
 function code(expected) {
   return error => Boolean(error && error.code === expected);
@@ -87,7 +146,7 @@ assert.ok(registry.registeredTools().some(tool => tool.name === 'host.exec'),
   const runtime = {
     nodePath: process.execPath,
     runnerPath: require('node:path').resolve(__dirname, '..', 'src', 'job-runner.js'),
-    principalId: 'S-1-5-21-111111111-222222222-333333333-1001'
+    principalId: '\x53-1-5-21-111111111-222222222-333333333-1001'
   };
   const store = getStateStore();
   const created = store.putSchedulerJob({

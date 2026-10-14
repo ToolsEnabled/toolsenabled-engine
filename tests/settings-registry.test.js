@@ -102,37 +102,38 @@ test('the registry has the required size and depth histogram after customer mode
   }, {});
 
   // R1221 adds worker reset to the document's 34 entries and 7/14/11/2 histogram,
-  // taking it to 35 entries at 7/15/11/2. Product rule (machine
-  // A / machine B questions must not surface; record them as user settings)
-  // adds three machines.* rows (mode at depth 2, transport and
+  // taking it to 35 entries at 7/15/11/2. Owner directive 2026-08-10 ("machine
+  // A and machine B questions should NOT be surfacing... pin them as user
+  // settings") adds three machines.* rows (mode at depth 2, transport and
   // peers at depth 3), taking it to 38 entries at 7/16/13/2. The same-day
-  // directive behind ide-session-consent.js (sessions that are not native are
-  // imported only when the person chooses to, never shown automatically)
+  // directive behind ide-session-consent.js ("they should have to choose to
+  // import the sessions if theyre not native rather than auto showing up")
   // adds ide.imported_surfaces (depth 2) and ide.available_surfaces (depth 3),
   // taking it to 40 entries at 7/17/14/2. R1228 then adds the four customer
   // model controls -- model.provider (depth 1), model.endpoint and model.name
   // (depth 2), model.api_key (depth 3) -- taking it to 44 at 8/19/15/2.
-  // Product rule, answering the two questions the two-path agent
-  // connection work escalated (each is a user setting; what an agent does when
-  // it needs to ask a question is a user preference),
+  // Owner directive 2026-08-10, answering the two questions the two-path agent
+  // connection work escalated ("might be a user setting otherwise explain more
+  // to me" / "An agent that needs to ask a question is a user preference"),
   // adds ide.attach_mode (depth 2, what happens to an editor session when it is
   // brought into the tree: watch / take over / branch), agent.blocked_question
   // (depth 1, what an agent does when it must ask: stop / other work / decide)
   // and agent.blocked_question_per_node (depth 3, whether a single node may
   // answer that differently), taking it to 47 at 9/20/16/2.
-  // Product rule (agents must read the owner's authorization
-  // clearly from settings: act under their authorized name, with only a short
-  // reserved list, such as accepting the purchase list and pressing post on a
-  // social post, left waiting on them) adds the two
+  // Owner directive 2026-08-11 ("this has to be read off from settings or
+  // something to agents clearly, my settings are do it under my authorized name
+  // - ive authorized you ... the only thing that should be waiting on me is
+  // accepting the purchase list and pressing post on instagram") adds the two
   // rows that make acting-as-the-user a setting instead of something agents
   // re-derive from conversation: outward.identity_authorization (depth 1,
   // whether assistants may act as you at all) and outward.reserved_from_agents
   // (depth 1, the list of things they must still hand back to you). Both are
   // depth 1 because they are the first thing a new user has to decide about
   // agents using their name, taking it to 49 at 11/20/16/2.
-  // R1232 (instead of relying on agents to check status such as usage and CPU,
-  // push it to them occasionally as data in a prompt, as an opt-in setting,
-  // possibly per node) adds agent.status_injection
+  // R1232 ("instead of relying on agents to check the status of things like
+  // usage and cpu ... we should just push it to them occassionally as like
+  // data into a prompt - this should be a setting - and i choose to use it"
+  // / "It might be a per node setting too") adds agent.status_injection
   // (depth 1, the owner-opt-in toggle, default off so absence is never
   // consent) and agent.status_injection_overrides (depth 3, the per-node
   // exception list), taking it to 51 at 12/20/17/2.
@@ -157,48 +158,49 @@ test('the registry has the required size and depth histogram after customer mode
   // reconstructed here rather than left as an unexplained jump: accounts.failover
   // (depth 2, what happens when an account stops answering) took it to 61 at
   // 14/27/18/2, which is the figure at HEAD; then startup.services_at_logon
-  // (depth 1, whether this product's services start with Windows -- product
-  // rule that it must not hijack a customer's machine beyond
-  // at most one pass at system start) took it to 62 at 15/27/18/2, and
+  // (depth 1, whether this product's services start with Windows -- owner
+  // directive 2026-08-17 that it must not hijack a customer's machine beyond
+  // "maybe one time at system start") took it to 62 at 15/27/18/2, and
   // agent.blocking_prompt_gate (depth 1, whether an agent may stop and block on
   // a question) took it to 63 at 16/27/18/2. Those last two and both rows below
   // are uncommitted in this shared checkout; see the note in
   // settings-enforcement-honesty.test.js about what that means for the pin.
-  // Product rule (the user decides, with a reasonable default:
-  // time or number of events, with forever available, and the system load of
-  // each choice stated clearly where it is set) adds audit.retention (depth 1: how
+  // Owner directive 2026-08-17 ("user decides. default something reasonable.
+  // give them the option of time vs number of events, with the option for
+  // forever ... Let them know the system load they are getting themselves into
+  // clearly when they set their settings") adds audit.retention (depth 1: how
   // much of the audit record stays in the live ledger, as a number of events or
   // a span of time, with forever available and the load of each choice stated
   // where it is chosen). Depth 1 because it is the cost of the product's own
   // record-keeping and every user pays it. Taking it to 64 at 17/27/18/2.
-  // Product rule (the setup and walkthrough belong in ToolsEnabled
-  // settings) adds machines.direct_link_setup (depth 3:
+  // Owner directive 2026-08-18 ("okay we need the setup and walk through to
+  // exist in toolsenabled settings") adds machines.direct_link_setup (depth 3:
   // preparing this computer for the cable to another of your own, carrying the
   // guided step for the parts that are physical -- the cable itself and the
   // fixed address on each end -- which no software can do for you). Depth 3 to
   // match machines.transport and machines.peers, the settings it sits between;
   // depth 4 is for settings that remove a safety property and this adds one.
   // Taking it to 65 at 17/27/19/2.
-  // Product rule (a really short standard file that shares exactly
-  // what exists, standard, with a setting that can disable it) adds
-  // agent.tool_summary at depth 1
+  // Owner directive 2026-08-19 ("we should have a really short standard file
+  // that just shares exactly what exists... We can give a specific setting to
+  // disable this but it should be standard") adds agent.tool_summary at depth 1
   // -- depth 1 because it is on by default for every agent this program starts,
   // not a sub-option of anything. Taking it to 62 at 15/27/18/2. The row is
   // enforced: src/lib/agent-tool-summary.js is its named enforcer and, since app
-  // an earlier commit declared it in the manifest, that module is actually IN the
+  // commit d45a9a0 declared it in the manifest, that module is actually IN the
   // shipped payload -- before then it was named here and absent from the bytes.
   //
   // FOUND RED 2026-08-22: the two pins above (65 at 17/27/19/2, then 62 at
   // 15/27/18/2) were each written against a different lane's working tree and
   // neither matched the catalogue as committed (66 at 18/27/19/2 before this
   // change; tests/settings-enforcement-honesty.test.js records the same
-  // finding). The O7 improvements (product rule: a user setting, default
-  // off, nested below its parent) add rules.ask_when_unsure
+  // finding). The O7 improvements (owner 2026-08-22, "this is more of a user
+  // setting. default no. nest it below in settings") add rules.ask_when_unsure
   // at depth 3 directly under rules.capture_spoken -- a sub-option of that one
   // switch, enforced by the same module -- taking it to 67 at 18/27/20/2.
   // That is the live count; the two stale pairs were folded into this one.
   //
-  // ADOPTING capability-recall (product decision to incorporate it)
+  // ADOPTING capability-recall (owner instruction 2026-08-22, "incorporate it")
   // adds agent.capability_recall at depth 1, directly after agent.tool_summary,
   // taking it to 68 at 19/27/20/2. Depth 1 and not a sub-option of the note
   // above it: the two are independent -- one is a session-start description of
@@ -211,8 +213,8 @@ test('the registry has the required size and depth histogram after customer mode
   // ask.away_channel (depth 2) and ask.agent_relay_fallback (depth 3) cannot
   // gate capabilities that no longer exist, taking the catalogue to 66.
   //
-  // THE AGENT API (product rule, B9: a setting that decides whether
-  // an agent may use its native tools or only ours, shipped on by default)
+  // THE AGENT API (owner directive 2026-08-24, B9: "a setting deciding whether
+  // an agent may use its native tools or only ours", shipped on by default)
   // adds agent.agent_api at depth 1, directly after agent.tool_summary, taking
   // it to 67 at 20/26/19/2. Depth 1 and not a sub-option of the note above it,
   // for the same reason capability_recall is not: the note DESCRIBES the
@@ -223,10 +225,10 @@ test('the registry has the required size and depth histogram after customer mode
   // src/lib/agent-api-policy.js, and tests/agent-api-policy.test.js drives both
   // sides of the switch through a real settings file.
   //
-  // TOOL APPROVALS AS A PERSON'S OWN CHOICE (product rule: a person may set
-  // their own settings to never ask and just proceed; tool approvals exist
-  // mostly for newer AI users and businesses)
-  // adds
+  // THE OWNER'S OWN ANSWER TO BEING ASKED (owner directive 2026-08-27, "MY
+  // SETTINGS SHOULD BE LEVEL 0 NO ASKING FROM ME FOR ANYTHING JUST DO IT", and
+  // 2026-08-29, "I personally did not build tool approvals for my self - they
+  // are actually mostly for neewer ai users or businesses") adds
   // agent.tool_approvals at depth 1, taking it to 68 at 21/26/19/2. Depth 1
   // because it decides whether this product interrupts its owner at all, which
   // is not a sub-option of anything above it. Until this row existed the only
@@ -241,31 +243,31 @@ test('the registry has the required size and depth histogram after customer mode
   // cannot ungate a customer's machine. Enforced by src/lib/policy.js
   // requiresApproval() through approvalsTurnedOffByOwner().
   //
-  // ONE LEDGER, APPROVED BEFORE IT COUNTS (product rule) adds
+  // ONE LEDGER, APPROVED BEFORE IT COUNTS (owner directive 2026-09-02) adds
   // rules.agent_filed_needs_approval at depth 3 directly after
   // rules.ask_when_unsure -- a second sub-option of the one filing switch --
   // taking it to 69 at 21/26/20/2. Default off with the same three-rule read
   // (only the person's own true turns it on); enforced by
   // src/lib/owner-request-store.js, which files an agent's rule as 'proposed'
   // when it is on, and tests/r-ledger-agent-gate.test.js drives both sides.
-  // RECOUNTED 2026-09-02 for OUTSIDE CONTROL (product rule: an
-  // agent may touch the app's buttons from the outside, as a setting rather
-  // than a standard): ONE depth-3 row, app.outside_control, shipped OFF and enforced
+  // RECOUNTED 2026-09-02 for OUTSIDE CONTROL (owner directive 2026-09-02: an
+  // agent may touch the app's buttons from the outside, "a setting not a
+  // standard"): ONE depth-3 row, app.outside_control, shipped OFF and enforced
   // by src/lib/outside-control.js outsideControlPolicy() under the same
   // provenance rule as agent.tool_approvals.
   // Both 2026-09-02 rows landed together: 70 rows at 21/26/21/2.
-  // RECOUNTED 2026-09-02 for THE SUBAGENT ROUTE (product rule:
-  // an assistant may start another through the ToolsEnabled API as a non-tree
-  // agent or as a full user-toggled agent, decided in settings): ONE depth-1 row,
+  // RECOUNTED 2026-09-02 for THE SUBAGENT ROUTE (owner directive 2026-09-02:
+  // an assistant may start another "via toolsenabled api as non tree agents or
+  // ... as full user toggled agents", decided in settings): ONE depth-1 row,
   // agent.subagent_route, enforced by src/lib/agent-subagent-route.js
   // subagentRoute(). It sits BESIDE agent.agent_api rather than under it: that
   // row decides whether an assistant also keeps its own built-in tool for this,
   // and turning it off does not stop agent.spawn, so a nested row would have
   // been greyed out while it still decided something.
   //
-  // Product rule (checks that slow agents down, such as the
-  // message credential check, become user settings with sliders and a
-  // reasonable default) adds
+  // Owner directive 2026-09-03 ("things that actually slow agents down
+  // additionally like the above message check for credentials -- should become
+  // user settings with sliders and a reasonable default") adds
   // agent.message_screening at depth 1: how strictly a message between two
   // agents is screened for credentials, at Refuse look-alikes / Allow code
   // names / Off, shipped at the middle. Depth 1 because it decides whether a
@@ -273,12 +275,13 @@ test('the registry has the required size and depth histogram after customer mode
   // measurement behind it is theirs: seven refusals in one day, every one a
   // message quoting this product's own error codes. Taking it to 72 at
   // 23/26/21/2.
-  // 73: tools.throughput added 2026-09-03 (product rule: tool calls must not slow
+  // 73: tools.throughput added 2026-09-03 (owner: tool calls must not slow
   // down with a thousand assistants; fast/strict as a setting).
   // Local agent/tool defaults and Ollama runtime controls add six rows.
-  // Product rule (any maximum must be user-configurable, with no
-  // hidden fixed ceiling such as 64; expose the setting and distinguish user
-  // choice from unavoidable provider/account limits) adds two rows at depth 4.
+  // Owner directive 2026-09-06 ("if a maximum must exist, it must be
+  // user-configurable ... do not impose a hidden fixed ceiling such as 64;
+  // expose the setting and clearly distinguish user choice from unavoidable
+  // provider/account limits") adds two rows at depth 4.
   // fleet.max_declared_agents (number, shipped 64) is the choice: how many
   // agents the declared organisation may LIST. It was a bare literal in
   // agent-org.js normalizeOrg with no constant, env var or config key, so the
@@ -295,25 +298,26 @@ test('the registry has the required size and depth histogram after customer mode
   // Optional activity summaries add one depth-1 choice; required audit remains enforced.
   // Agent message delivery adds two visible depth-1 controls.
   // Complete per-turn rules delivery adds one enforced depth-1 choice.
-  // "Who adds standing rules" (rules.filing_from, product rule: the ledger
-  // page only, the ledger page and /request, or agents as well, as today) adds
-  // one depth-2 choice beside the switch it
+  // "Who adds standing rules" (rules.filing_from, owner 2026-09-15: "either
+  // manually on the ledger page only, or ledger page and /request, or agent
+  // and such like now") adds one depth-2 choice beside the switch it
   // supersedes; the two nested sub-settings keep their depth. 94 at 29/34/26/5.
   // "Letting agents edit ToolsEnabled source in checkouts"
-  // (agent.product_source_writes: with tool sets on Only the host write fence
-  // blocked every agent's checkout edit, so this became a switch in settings) adds one enforced depth-2 toggle beside
+  // (agent.product_source_writes, owner 2026-09-19: with tool sets on Only the
+  // host write fence blocked every lane's checkout edit, "there needs to be a
+  // switch in settings for this") adds one enforced depth-2 toggle beside
   // Available tool sets. 95 at 29/35/26/5.
-  // an earlier change added two delegation controls. Basic setup adds two explicit
+  // f2a76134 added two delegation controls. Basic setup adds two explicit
   // runtime switches and one diagnostic retention choice. Pin their identities
   // and depths as well as the old population: unrelated rows cannot satisfy
   // this count or silently replace an accepted control.
-  // Task difficulty grading (each task carries one of three grades)
-  // adds one depth-1 toggle, off by default.
-  // Task-only delegation and the agent comms switch (agent comms ships
-  // with its own on/off setting)
+  // Task difficulty grading (owner T1138, 2026-09-22: "grade tasks simply as
+  // easy medium or hard") adds one depth-1 toggle, off by default.
+  // Task-only delegation and the agent comms switch (owner T1139, 2026-09-22:
+  // "Build it. Also build a setting for enabling and disabling agent comms")
   // add two depth-1 toggles: task-only off and comms on by default.
-  // Metrics history without the signed audit (kept behind its own
-  // setting, on by default) adds one depth-1 toggle, on.
+  // Metrics history without the signed audit (owner, 2026-09-23: "lets make
+  // that a setting ... and make that default") adds one depth-1 toggle, on.
   const additions = { 'fleet.tree_width': 4, 'fleet.tree_depth': 4,
     'audit.enabled': 2, 'ledger.verify_history': 2, 'diagnostics.retention': 1,
     'agent.task_difficulty_enabled': 1, 'agent.task_only_delegation': 1, 'agent.comms_enabled': 1,
@@ -323,10 +327,12 @@ test('the registry has the required size and depth histogram after customer mode
     assert.equal(entries.find(entry => entry.id === id).depth, depth, id);
   }
   const earlier = entries.filter(entry => !Object.hasOwn(additions, entry.id));
-  assert.equal(earlier.length, 95);
-  assert.deepEqual(earlier.reduce((counts, { depth }) => { counts[depth] = (counts[depth] || 0) + 1; return counts; }, {}), { 1: 29, 2: 35, 3: 26, 4: 5 });
-  assert.equal(entries.length, 104);
-  assert.deepEqual(histogram, { 1: 34, 2: 37, 3: 26, 4: 7 });
+  // 1.0.50 removes accounts.failover (depth 2) with automatic account switching: 95 -> 94, 104 -> 103.
+  assert.equal(entries.some(entry => entry.id === 'accounts.failover'), false);
+  assert.equal(earlier.length, 94);
+  assert.deepEqual(earlier.reduce((counts, { depth }) => { counts[depth] = (counts[depth] || 0) + 1; return counts; }, {}), { 1: 29, 2: 34, 3: 26, 4: 5 });
+  assert.equal(entries.length, 103);
+  assert.deepEqual(histogram, { 1: 34, 2: 36, 3: 26, 4: 7 });
 });
 
 test('loadRegistry rejects duplicate ids and invalid JSON', (t) => {

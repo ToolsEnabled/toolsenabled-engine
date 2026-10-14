@@ -2,7 +2,7 @@
 
 // HOW MUCH AUDIT HISTORY STAYS IN THE LIVE LEDGER, AND WHAT THAT COSTS.
 //
-// The audit ledger has never been bounded. Measured on a live install
+// The audit ledger has never been bounded. Measured on the owner's install
 // 2026-08-17: 1,527 events/day, ~34,900 events after 23 days, ~557,000
 // projected after a year. Every short-lived process verifies the whole thing
 // before it may read or write -- a keeper deciding "nothing to do" costs
@@ -14,11 +14,11 @@
 // storage (audit.js's rollArchiveOnce does the moving). Nothing here deletes
 // anything; it only answers "is the live window over its limit".
 //
-// It also computes what each choice costs, because the product rule is
-// explicit that the customer must be told, clearly and when they choose their
-// settings, what system load each choice brings.
+// It also computes what each choice costs, because the owner's directive was
+// explicit that the customer must be told: "Let them know the system load they
+// are getting themselves into clearly when they set their settings."
 
-// MEASURED, NOT ESTIMATED. Full verification of a 34,895-event development
+// MEASURED, NOT ESTIMATED. Full verification of the owner's 34,895-event
 // ledger took 3,900 ms end to end (Ed25519 ~2,970 ms + content binding ~839 ms
 // + row read ~125 ms), and the cost is linear in event count -- confirmed by
 // profiling rather than assumed. Recalibrate from a real measurement if the
@@ -45,8 +45,8 @@ const MINIMUM_TIME_WINDOW_MS = 60 * 60 * 1000;
 
 // ~6.5 days of history at the observed rate, ~1.1 s to verify, ~3.4% of one
 // core across the scheduled fleet. Chosen against the owner's constraint that
-// a customer machine must not be taxed beyond one minimal pass at system
-// start -- a larger window is available and disclosed, but should be
+// a customer machine must not be taxed beyond "one time at system start, and
+// that minimal" -- a larger window is available and disclosed, but should be
 // the customer's explicit choice rather than a default they never saw.
 // Archived events are NOT lost: they stay signed, chained and verifiable in
 // cold storage, so this trades live-query convenience, never evidence.
@@ -84,9 +84,9 @@ function resolveRetention(raw) {
 }
 
 // Is the live window over its limit? Answers for ONE event -- the oldest --
-// because the roll is deliberately one-out-one-in (owner directive: delete one
-// old event for each new event placed, never the whole record at once). A bulk
-// purge would reintroduce exactly the multi-second
+// because the roll is deliberately one-out-one-in (owner directive: "it only
+// ever deletes 1 old event and places in 1 new event, dont delet the whole
+// record at once"). A bulk purge would reintroduce exactly the multi-second
 // stall on a customer machine that this work exists to remove; amortising it
 // one event at a time keeps the per-append cost flat and invisible.
 // HOW FAR OVER AN EVENT WINDOW MAY GROW BEFORE IT ROLLS. One percent of the
@@ -99,7 +99,7 @@ function resolveRetention(raw) {
 //
 // A roll rewrites BOTH projection files for the whole live window (measured
 // 11.5 MB + 6.7 MB at 10,000 events) and invalidates every process's parse
-// memo of them. MEASURED 2026-09-04 on a live instance at the cap
+// memo of them. MEASURED 2026-09-04 on the owner's Live instance at the cap
 // with seventeen circles: at 1% slack (100 events) the audit worker rolled
 // every minute or two and then re-read and re-parsed ~18 MB per admission --
 // ~50 MB of allocation a minute, a 313 MB worker heap, and Windows flagging

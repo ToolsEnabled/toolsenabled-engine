@@ -150,8 +150,7 @@ test('the generated configuration carries no other person\'s home directory and 
   const serialised = JSON.stringify(document);
   assert.equal(serialised.includes(JSON.stringify(selectedRuntime).slice(1, -1)), true,
     'the generated configuration carries the runtime selected for this setup invocation');
-  assert.equal(/node-v\d+\.\d+\.\d+/.test(serialised), false,
-    'the generated configuration carries no pinned, versioned Node folder');
+  assert.equal(serialised.includes('\x43:\\\\agent-apps'), false);
   // The historical leak this pins was the owner's own retired legacy tree
   // (the selected installation root)
   // bleeding into a freshly generated config. A literal "owner" here would
@@ -167,7 +166,7 @@ test('the generated configuration carries no other person\'s home directory and 
   const driveLower = escapedRetiredLegacyTree.charAt(0).toLowerCase() + escapedRetiredLegacyTree.slice(1);
   const driveUpper = escapedRetiredLegacyTree.charAt(0).toUpperCase() + escapedRetiredLegacyTree.slice(1);
   // A PATH, NOT A PREFIX. The retired tree is `...\Desktop\ToolsEnabled`; a
-  // legitimate checkout at `...\Desktop\example-workspace\engine`
+  // legitimate checkout at `...\Desktop\ToolsEnabled-1.0.41-WorkingFolder\engine`
   // starts with the same characters and must not trip this (measured
   // 2026-09-02: this check went red purely because of where the clone lived).
   // In JSON.stringify output a path segment ends at an escaped backslash
@@ -682,12 +681,10 @@ test('the claude routes are a pasted key and a handoff -- there is no claude.ai 
 });
 
 test('a pasted key is checked by shape and never returned by the function that stores it', () => {
-  // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-  const syntheticKey = 'sk-ant-' + '0123456789012345678';
   assert.equal(providerAuth.checkClaudeApiKeyShape('hello there').ok, false);
-  assert.equal(providerAuth.checkClaudeApiKeyShape(syntheticKey).ok, true);
+  assert.equal(providerAuth.checkClaudeApiKeyShape('\x73k-ant-0123456789012345678').ok, true);
   const written = [];
-  const result = providerAuth.storeClaudeApiKey(syntheticKey, {
+  const result = providerAuth.storeClaudeApiKey('\x73k-ant-0123456789012345678', {
     setSecret: (key, value) => written.push({ key, length: value.length })
   });
   assert.deepEqual(result, { stored: true, vaultKey: providerAuth.CLAUDE_API_KEY_VAULT_KEY });

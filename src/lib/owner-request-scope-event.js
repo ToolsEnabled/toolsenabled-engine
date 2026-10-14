@@ -23,7 +23,7 @@ const EVENT_ID_RE = /^owner_scope_[a-z0-9][a-z0-9._:-]{1,127}$/;
 // This module previously carried `/^R[0-9]{1,4}$/`, which rejects the ledger's
 // sub-ids -- R25.1, R99.1, R133.1 and ten others, 13 real owner requests on
 // this tree. The effect was not cosmetic: the owner could not attach an
-// authenticated scope rule to any of those requests, because their own event
+// authenticated scope rule to any of those requests, because his own event
 // would be refused as malformed before it reached the store.
 //
 // The sibling module owner-request-scope.js already used `isRequestId`, which

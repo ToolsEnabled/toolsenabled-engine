@@ -20,14 +20,10 @@
 //
 // Every tier lives in the ONE canonical ledger (src/lib/owner-request-store.js,
 // reached here through the src/lib/r-ledger.js adapter); ids are R-numbered for
-// every scope. `edit` and `remove` are the PERSON's hand (product note: a
-// hand-edit tool for the user to open the ToolsEnabled ledger and edit or
-// delete entries by hand): edit rewrites the one entry's words and keeps the
-// words before in its history; remove marks the entry and its refinements
-// (R12.1...) deleted and keeps them on file. The new words arrive on STDIN,
-// never on the command line (the owner-spool-review rule: argv is logged,
-// quoted and truncated by shells; the person's words are none of those). No
-// agent tool reaches them.
+// every scope. edit and remove are person-only operations. Editing preserves
+// the previous words in history; removal tombstones the entry and refinements.
+// Replacement words arrive through STDIN to keep them out of process arguments.
+// These operations are unavailable through agent tools.
 //
 // `recover` and `adopt` are the person's hand too, for a ledger that refuses
 // every write with R_LEDGER_CHAIN_APPEND_UNCONFIRMED: a saved change names a
@@ -40,8 +36,7 @@
 // store directly; the adapter's export list is unchanged.
 //
 // Exit codes: 0 ok; 1 the request was refused (reason printed); 2 usage.
-// `show` reads git history of the ledger file so "what did R12 used to say"
-// is one command -- the lookup cost the owner named as the old system's pain.
+// show retrieves earlier ledger text from Git history.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -80,9 +75,7 @@ function refuse(error) {
 function gitHistory(file) {
   try {
     const relative = path.relative(ROOT, file).split(path.sep).join('/');
-    // windowsHide: this is the tool behind /Request, so it runs at the moment
-    // the owner is typing. LOCAL-WORK rule 3 (R193) forbids a
-    // console flash, and `git log` has no owner-facing interaction to justify one.
+    // History reads are background operations and must not flash a console.
     const out = execFileSync('git', ['log', '--follow', '--date=iso-strict', '--format=%h %ad %s', '--', relative], {
       cwd: ROOT, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
       // git needs none of this process's credentials, and a plain delete list

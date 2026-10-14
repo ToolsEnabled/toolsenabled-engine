@@ -91,7 +91,7 @@ if (process.platform !== 'win32') {
       'positive-control precondition failed: the inherited PSModulePath does not carry a PS7 WindowsApps entry, so this run cannot exercise the leak at all');
 
     test('RED (predicted): the real tools/secrets.ps1, run with the inherited PS7 PSModulePath, fails to autoload Microsoft.PowerShell.Security', () => {
-      const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'psmodulepath-scratch-base-'));
+      const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'w80-scratch-base-'));
       try {
         const result = runRealSecretsScript(pwshOwnPSModulePath, scratchRoot);
         assert.notEqual(result.status, 0, `expected the unfixed PS7 PSModulePath to break the real script; got status ${result.status}, stdout=${JSON.stringify(result.stdout)}`);
@@ -102,7 +102,7 @@ if (process.platform !== 'win32') {
     });
 
     test('GREEN (fixed): the same real tools/secrets.ps1, run with stripPowerShellSevenModulePathEntries applied, stores the value', () => {
-      const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'psmodulepath-scratch-fixed-'));
+      const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'w80-scratch-fixed-'));
       try {
         const scrubbed = stripPowerShellSevenModulePathEntries({ PSModulePath: pwshOwnPSModulePath }, {
           platform: 'win32', childExecutable: 'powershell.exe'

@@ -63,11 +63,11 @@ test('personal_calendar.capture: weekdays rejects a repeated day, accepts distin
   const schema = schemaOf('personal_calendar.capture');
   assert.equal(schema.properties.weekdays.uniqueItems, true);
   assert.deepEqual(
-    errorKeywords(schema, { text: 'dentist', recurrence: 'custom-weekdays', weekdays: [1, 1, 1] }),
+    errorKeywords(schema, { text: 'quiz', recurrence: 'custom-weekdays', weekdays: [1, 1, 1] }),
     ['uniqueItems']
   );
   assert.deepEqual(
-    errorKeywords(schema, { text: 'dentist', recurrence: 'custom-weekdays', weekdays: [1, 3, 5] }), []
+    errorKeywords(schema, { text: 'quiz', recurrence: 'custom-weekdays', weekdays: [1, 3, 5] }), []
   );
 });
 
@@ -75,11 +75,11 @@ test('personal_calendar.create: weekdays rejects a repeated day, accepts distinc
   const schema = schemaOf('personal_calendar.create');
   assert.equal(schema.properties.weekdays.uniqueItems, true);
   assert.deepEqual(
-    errorKeywords(schema, { title: 'dentist', recurrence: 'custom-weekdays', weekdays: [0, 0] }),
+    errorKeywords(schema, { title: 'quiz', recurrence: 'custom-weekdays', weekdays: [0, 0] }),
     ['uniqueItems']
   );
   assert.deepEqual(
-    errorKeywords(schema, { title: 'dentist', recurrence: 'custom-weekdays', weekdays: [0, 6] }), []
+    errorKeywords(schema, { title: 'quiz', recurrence: 'custom-weekdays', weekdays: [0, 6] }), []
   );
 });
 

@@ -264,7 +264,7 @@ function processGet(id, ledger, projectionOptions = {}) {
     ownerText: renderOwnerRequestText(request),
     // `ownerText` alone cannot say whether those words are the OWNER'S words --
     // any writer can put a string in `verbatim`. This is the field that says
-    // whether the record can show they said it. Callers rendering an entry as their
+    // whether the record can show he said it. Callers rendering an entry as his
     // requirement must check it, or call assertCitableAsOwnerRequirement.
     ownerAuthority: ownerAuthorityOf(request),
     gateCount: gates.length,
@@ -297,10 +297,10 @@ function renderOwnerRequestText(request) {
  * This was `gate.evidence !== undefined && gate.evidence !== null`, which answers
  * "is the field present" and calls that evidence. Gates in this ledger are written
  * with `evidence: ''` when there is nothing to show, so the field is essentially
- * always present: MEASURED against a development ledger, hasEvidence was `true`
- * for every gate. Not one gate could ever report false, so the field carried no
- * information while reading like an assurance. Under this rule only the gates
- * with written evidence report true.
+ * always present: MEASURED against reports/OWNER-REQUEST-LEDGER.json, hasEvidence
+ * was `true` for 1099 of 1099 gates. Not one gate could ever report false, so the
+ * field carried no information while reading like an assurance. Under this rule
+ * 143 of 1099 report true.
  *
  * The predicate is deliberately identical to src/lib/intent-fidelity.js:314, which
  * already had it right. Two spellings of one fact is the shape that produced this
@@ -389,16 +389,16 @@ function productionOwnershipObservation(options = {}) {
  *    whether a permission is in force, so this projection ignores it.
  * 2. LIFECYCLE CANNOT RETIRE IT. Completed, superseded, cooled, archived --
  *    none of them withdraw a permission, because none of them are the owner
- *    changing their mind. Only an explicit `revokes` naming this id does that.
+ *    changing his mind. Only an explicit `revokes` naming this id does that.
  * 3. AN UNDECLARED CLAUSE IS WORK, and the count of undeclared clauses is
- *    published. Nothing here guesses a grant out of prose: inferring "they
- *    probably allowed it" from wording is the same defect as inferring their
+ *    published. Nothing here guesses a grant out of prose: inferring "he
+ *    probably allowed it" from wording is the same defect as inferring his
  *    requirements from an agent's default, one step more dangerous. An empty
  *    grants list on a corpus that never declared any is reported as UNDECLARED,
- *    not as "they permitted nothing".
+ *    not as "he permitted nothing".
  * 4. IT CARRIES THE SAME AUTHORITY LABEL AS EVERY OTHER CLAUSE. A grant on an
  *    entry whose provenance is not owner-stated is shown, and shown as a claim
- *    rather than as their permission.
+ *    rather than as his permission.
  * ==========================================================================*/
 const CLAUSE_KINDS = Object.freeze(['work', 'grant', 'prohibition']);
 const AUTHORIZATION_CLAUSE_KINDS = Object.freeze(['grant', 'prohibition']);
@@ -515,7 +515,7 @@ function projectAuthorizations(ledger) {
       prohibitions: inForce.filter(record => record.kind === 'prohibition').length,
       revoked: frozen.filter(record => record.revokedBy.length > 0).length,
       // How much of the corpus has never said which kind of clause it is. A
-      // reader who sees `grants: 0` needs this number to tell "they have permitted
+      // reader who sees `grants: 0` needs this number to tell "he has permitted
       // nothing" from "nothing has ever been classified".
       undeclaredClauses,
       declaredWorkClauses,
@@ -593,18 +593,18 @@ function ruleKeyTargetsOwnRequest(ruleKey, request) {
 
 /* THE READ-PATH AUTHORITY BOUNDARY (2026-08-11).
  *
- * an earlier change gave every ledger entry a `provenance` field, but nothing that READS
+ * 65c3735 gave every ledger entry a `provenance` field, but nothing that READS
  * the ledger consulted it. So reports/OPEN-GATES.md -- the digest every agent
  * reads at SESSION-BOOT -- presented its gates uniformly under the heading
- * "Open owner-request gates" when only a small fraction of entries could show
- * that the owner said anything at all. A reader of that file could not tell
- * the owner's words from another agent's default, which is the mechanism by
- * which agent-made rules came to be presented as the owner's.
+ * "Open owner-request gates" when only 9 of 532 entries can show that the owner
+ * said anything at all. A reader of that file could not tell his words from
+ * another agent's default, which is the mechanism behind his 2026-08-11
+ * question: "Why are agent rules stille being pushed as mine".
  *
  * Every gate now carries the authority of the request it came from. The
  * instruction text is never hidden or summarized -- hiding it would lose real
  * requirements and break preservesEveryRequest. It is LABELLED, so citing one as
- * theirs is a choice made with the answer already on screen.
+ * his is a choice made with the answer already on screen.
  *
  * Authority is read from the REQUEST, not the gate: a gate is a sub-instruction
  * of its request and cannot have more authority than the request it decomposes.
@@ -906,7 +906,7 @@ function renderOpenGatesDigest(projection, meta = null) {
   ];
   // The attribution header. Everything below is a real, actionable gate; this
   // says which of them the record can show the OWNER asked for. Without it the
-  // title "Open owner-request gates" silently claims all of them are theirs.
+  // title "Open owner-request gates" silently claims all of them are his.
   const authority = projection.ownerAuthority;
   lines.push(
     digestContract.heading('authority'),
@@ -916,8 +916,8 @@ function renderOpenGatesDigest(projection, meta = null) {
     '',
     'Every gate carries an `Authority:` line. A gate that is not OWNER STATED or',
     'OWNER RATIFIED may still be worth doing, but it MUST NOT be described back to',
-    'them as their own requirement, and it must not be cited as the constraint that',
-    'descopes something they did ask for. Reclassify by establishing where the words',
+    'him as his own requirement, and it must not be cited as the constraint that',
+    'descopes something he did ask for. Reclassify by establishing where the words',
     'came from -- see `node tools/owner-descope.js` and src/lib/owner-request-provenance.js.',
     ''
   );

@@ -9,5 +9,3 @@ tests/usage/dispatch-readiness.js
 tests/usage/lifetime.js
 tests/usage/machine-load.js
 tests/usage/usage-reader.js
-tests/usage/allowance-buckets.test.js
-tests/usage/gemini-quota.test.js

@@ -35,12 +35,12 @@ test('the versioned binding hook checks only the exact selected account and neve
     assert.equal(subset.ok, true);
     assert.deepEqual(calls, ['c-two']);
     assert.deepEqual(subset.accounts.map(account => account.name), ['c-two']);
-    assert.deepEqual(subset.orders, []);
+    assert.equal(subset.orders, undefined); // since 1.0.50 a usage read ranks no accounts
     calls.length = 0;
     const full = await readAccountUsage({ homeDir: root, registryPath, probeFor });
     assert.equal(full.accounts.length, 3);
     assert.deepEqual(calls.sort(), ['c-one', 'c-two', 'g-one']);
-    assert.deepEqual(full.orders.map(order => order.provider), ['claude', 'grok']);
+    assert.equal(full.orders, undefined);
   });
 });
 
@@ -70,7 +70,7 @@ test('a stale binding cannot follow a reused label to a different provider home'
     assert.equal(result.ok, true);
     assert.equal(calls, 0);
     assert.deepEqual(result.accounts, []);
-    assert.deepEqual(result.orders, []);
+    assert.equal(result.orders, undefined);
   });
 });
 

@@ -87,7 +87,7 @@ const ACTOR_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const REQUEST_ID_RE = /\bR\d{1,4}(?:\.\d+)?\b/g;
 // A bracketed run of SHOUTING is an editorial banner an audit lane pasted into
-// many entries at once, not the owner restating themselves. Stripping it drops the
+// many entries at once, not the owner restating himself. Stripping it drops the
 // measured restatement pairs from 80 (R1249-R1256 at the top, all sharing one
 // banner) to 35 honest ones. See R-LIFECYCLE section 2.3.
 const EDITORIAL_BANNER_RE = /\[[^\]]*[A-Z]{3,}[^\]]*\]/g;
@@ -111,7 +111,7 @@ const COOLING_MIN_FAMILIES = 2;
 const COLD_EXPOSURE_QUORUM = 3;
 const SIGNAL_FAMILIES = Object.freeze(['mechanical', 'judged', 'owner']);
 // Reason codes name their own evidence class, so no reader can mistake
-// `unadjudicable` (we cannot tell what they asked) for `settled` (it was done).
+// `unadjudicable` (we cannot tell what he asked) for `settled` (it was done).
 // `absorbed` is accepted on read for a future producer; nothing here mints it.
 const REASON_CODES = Object.freeze(['settled', 'superseded', 'unadjudicable', 'absorbed', 'owner-confirmed']);
 // src/lib/owner-request-lifecycle-projection.js still only knows three codes.
@@ -651,7 +651,7 @@ function scoreTarget({ target, request, peers, superseded, state, precedentIds, 
       const supersedingIds = supersedingIdsOf(resolution);
       // M2 IS ONLY SUFFICIENT WHEN THE SUPERSEDING ENTRY IS ITSELF LIVE AND
       // NAMES THE ID IT REPLACES. ruleKeys are hand-assigned, so a reused key
-      // could otherwise retire a live requirement wearing their own later words
+      // could otherwise retire a live requirement wearing his own later words
       // as authority -- harder to spot than a false "done", because the record
       // looks impeccable. Short of both, it scores 1 and needs a second family.
       const witness = supersedingIds
@@ -704,7 +704,7 @@ function scoreTarget({ target, request, peers, superseded, state, precedentIds, 
   else vetoesChecked.push(checked('V4', false, 'not blocked-external'));
 
   const attestation = gatesCoverVerbatimAttestation(request);
-  if (attestation === false) veto('V5', 'gatesCoverVerbatim is attested false: the gates are known not to cover what they said');
+  if (attestation === false) veto('V5', 'gatesCoverVerbatim is attested false: the gates are known not to cover what he said');
   else vetoesChecked.push(checked('V5', false,
     attestation === null
       ? 'no gatesCoverVerbatim attestation on file; M1 alone therefore cannot satisfy the family span'
@@ -851,7 +851,7 @@ function archiveLedger(input, dependencies = {}) {
 
   // The lock is on the OVERLAY, not on the ledger. This tool no longer writes
   // the ledger, so it has no business blocking the ledger's own writer, and a
-  // lane can retire without touching their record at all.
+  // lane can retire without touching his record at all.
   let lock;
   try { lock = ownerCapture.acquireLedgerLock(overlayFile); }
   catch (error) { fail('LEDGER_ARCHIVE_LOCKED', 'The disposition overlay is busy; retirement refused rather than racing its writer.', { cause: error?.code || 'UNKNOWN' }); }

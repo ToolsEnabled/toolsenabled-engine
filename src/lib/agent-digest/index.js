@@ -131,7 +131,7 @@ function createAgentDigestService(overrides = {}) {
   const resolveDeliveryChannel = overrides.resolveChannel || (() => delivery.resolveChannel(channelOptions));
 
   // The banner the NEXT message carries when the previous one never arrived.
-  // A channel that is down cannot tell them it failed, so the next message does.
+  // A channel that is down cannot tell him it failed, so the next message does.
   const previousFailure = overrides.previousFailure !== undefined ? overrides.previousFailure : (() => {
     const status = delivery.deliveryStatus({ ...overrides.deliveryDependencies, channelOptions });
     if (!status.lastFailure || status.consecutiveFailures === 0) return null;
@@ -218,7 +218,7 @@ function createAgentDigestService(overrides = {}) {
     } catch (error) {
       // A failed delivery is RECORDED, never swallowed, and the delta baseline
       // deliberately does NOT advance -- so the next digest that does arrive
-      // still covers the window the owner never saw, instead of telling them
+      // still covers the window the owner never saw, instead of telling him
       // nothing moved.
       //
       // BRIDGE DOWN AT SLOT TIME -> SKIP WITH A RECORD. Not queued: a digest

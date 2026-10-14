@@ -2,18 +2,18 @@
 /* T31. AN ADDRESS THAT DIES WITH A SESSION, AND A REFUSAL THAT DENIES THE
  * AGENT EXISTS.
  *
- * MEASURED on a development install's live tree.
+ * MEASURED 2026-09-15 on this computer's live tree.
  *
  * (1) IDENTITY. agentIdForSession() is sha256(sessionId), so a circle that
  *     moves accounts or is restarted becomes a DIFFERENT agent to this
  *     subsystem and its old address is gone. The Controller's node was
- *     tree-aaaa0001… until one minute and tree-bbbb0002… from the next. Anything
+ *     tree-e60571a0… until 07:12Z and tree-4b31cd18… from 07:13Z. Anything
  *     addressed to the old id afterwards resolves to nothing, and a message
  *     already spooled under it can never be drained, because no live row will
  *     ever carry that id again.
  *
  *     The stable identity already exists: every one of the 19 live rows
- *     carries a nodeKey (node-7-aaaa0001-…), registerNode() already inherits
+ *     carries a nodeKey (node-7-da02fefa-…), registerNode() already inherits
  *     it across a replacement and already refuses a mismatch. What was missing
  *     was the trail from the retired address to the circle that continues it.
  *
@@ -22,12 +22,12 @@
  *     tombstone naming its successor, swept by the same retention a stopped
  *     row already gets.
  *
- * (2) NAMING. Two Controllers are registered here, "Controller (bbbb0002)" in
- *     another tree and "Controller (aaaa0001)" in ours, and neither is named
+ * (2) NAMING. Two Controllers are registered here, "Controller (850c7379)" in
+ *     the math tree and "Controller (da02fefa)" in ours, and neither is named
  *     plainly "Controller". Addressing "Controller" therefore matched no row
  *     and answered "No agent called "Controller" is registered on this
  *     computer's tree" -- false, and in the one situation where the person
- *     most needs it to be true. A tree's manager, reading its roster,
+ *     most needs it to be true. The math tree's manager, reading its roster,
  *     sent to the Controller in its OWN tree instead of the linked one.
  *
  *     So: a bare name that uniquely prefixes one reachable row resolves to it;
@@ -61,7 +61,7 @@ const MANAGER = { sessionId: 'session-manager-1', nodeName: 'Manager', nodeKey: 
 
 function suffixDrift(t, { addressed = false, now = () => 1_000 } = {}) {
   const dir = directory(t, { now });
-  const old = { sessionId: 'controller-before', nodeName: 'Controller (aaaa0001)', nodeKey: 'saved-controller', treeKey: 'root' };
+  const old = { sessionId: 'controller-before', nodeName: 'Controller (da02fefa)', nodeKey: 'saved-controller', treeKey: 'root' };
   const child = { sessionId: 'report', nodeName: 'Builder', nodeKey: 'saved-builder', treeKey: 'root',
     managerName: old.nodeName, ...(addressed ? { managerSessionId: old.sessionId } : {}) };
   dir.registerNode(old);
@@ -109,8 +109,8 @@ test('an explicit reparent is not undone when the old manager loses its suffix',
 
 test('a different stable circle using the bare manager name cannot adopt the reports', t => {
   const dir = directory(t);
-  dir.registerNode({ sessionId: 'old', nodeName: 'Controller (aaaa0001)', nodeKey: 'old-circle', treeKey: 'root' });
-  dir.registerNode({ sessionId: 'child', nodeName: 'Builder', managerName: 'Controller (aaaa0001)', treeKey: 'root' });
+  dir.registerNode({ sessionId: 'old', nodeName: 'Controller (da02fefa)', nodeKey: 'old-circle', treeKey: 'root' });
+  dir.registerNode({ sessionId: 'child', nodeName: 'Builder', managerName: 'Controller (da02fefa)', treeKey: 'root' });
   dir.unregisterNode({ sessionId: 'old' });
   dir.registerNode({ sessionId: 'other', nodeName: 'Controller', nodeKey: 'other-circle', treeKey: 'root' });
   assert.equal(dir.resolveDelivery({ from: 'Builder', to: 'Controller', senderSessionId: 'child' }).ok, false);
@@ -163,15 +163,15 @@ test('an expired legacy alias cannot establish a new manager binding on a read',
   assert.equal(dir.resolveDelivery({ from: child.nodeName, to: current.nodeName, senderSessionId: child.sessionId }).ok, false);
 });
 
-/* an earlier change (T839) folds a manager label to its other spelling ("Name (hex)" <-> "Name") when no
+/* 285156b0 (T839) folds a manager label to its other spelling ("Name (hex)" <-> "Name") when no
    row carries the exact one. The fold must not reopen what expiry closed: an unrelated circle
    that happens to carry the plain name gains no manager edge over reports whose expired alias
-   carried the suffix. At an earlier range both sends below were delivered as manager and
+   carried the suffix. At 285156b0..419fcca0 both sends below were delivered as manager and
    reports-to-sender. */
 test('an unrelated circle with the plain name gains no manager edge from an expired suffixed alias', t => {
   let at = 1_000;
   const dir = directory(t, { now: () => at });
-  const old = { sessionId: 'controller-before', nodeName: 'Controller (aaaa0001)', nodeKey: 'saved-controller', treeKey: 'root' };
+  const old = { sessionId: 'controller-before', nodeName: 'Controller (da02fefa)', nodeKey: 'saved-controller', treeKey: 'root' };
   const child = { sessionId: 'report', nodeName: 'Builder', nodeKey: 'saved-builder', treeKey: 'root', managerName: old.nodeName };
   dir.registerNode(old);
   dir.registerNode(child);
@@ -271,13 +271,13 @@ test('a circle that simply stopped is NOT given a successor, so a stop still rea
 test('a bare name that uniquely prefixes one reachable circle resolves to it', (t) => {
   const dir = directory(t);
   registerManager(dir);
-  dir.registerNode({ sessionId: 's-ctrl', nodeName: 'Controller (aaaa0001)', managerSessionId: MANAGER.sessionId,
+  dir.registerNode({ sessionId: 's-ctrl', nodeName: 'Controller (da02fefa)', managerSessionId: MANAGER.sessionId,
     managerName: 'Manager', nodeKey: 'node-7-controller' });
 
   const resolved = dir.resolveDelivery({ from: 'Manager', to: 'Controller', senderSessionId: MANAGER.sessionId });
   assert.equal(resolved.ok, true,
     `one reachable Controller and a bare "Controller" is not ambiguous; it must resolve: ${JSON.stringify(resolved)}`);
-  assert.equal(resolved.recipient.nodeName, 'Controller (aaaa0001)');
+  assert.equal(resolved.recipient.nodeName, 'Controller (da02fefa)');
 });
 
 test('two reachable circles sharing a base name are REFUSED, not guessed between', (t) => {

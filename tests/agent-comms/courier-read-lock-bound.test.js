@@ -2,8 +2,8 @@
 
 // THE COURIER'S ROUND, AND THE MACHINE-WIDE LOCK IT WAITED FOR ON THE MAIN THREAD.
 //
-// MEASURED at an earlier revision before this change (a measurement script and
-// a measurement script, both naming their build):
+// MEASURED at 80f08ecb before this change (builds\w14-measure-inbox-sync.cjs and
+// builds\w14-measure-contention.cjs, both naming their build):
 //
 //   inboxes() SYNCHRONOUS prefix -- the work before its first await, which the
 //   event loop cannot interrupt -- seeded from the real 2.6 MB live spool:
@@ -137,7 +137,7 @@ test('a contended spool lock omits the courier round instead of throwing it, and
     const answer = await promise;
 
     // THE HEADLINE, ASSERTED FIRST because it is the job: bound the
-    // synchronous work. Measured at an earlier revision this blocks for ~9,072 ms.
+    // synchronous work. Measured at 80f08ecb this blocks for ~9,072 ms.
     assert.ok(elapsed < BOUNDED_READ_MUST_BEAT_MS,
       `a read must not spend the patient ${DEFAULT_PATIENT_WAIT_MS} ms wait blocking the main thread; `
       + `this round blocked it for ${elapsed.toFixed(0)} ms`);

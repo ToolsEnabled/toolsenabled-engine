@@ -4,8 +4,9 @@
 // durability.newest and durability.current.codes exist because neither
 // audit.status() nor system.status() names WHICH code caused the most
 // recent non-durable write, or how the codes inside the currently-open
-// window break down -- only counts. Measured in an internal durability
-// review: a 12-breach AUDIT_SQLITE_ERROR burst and
+// window break down -- only counts. Measured this session (see
+// W4\REPORT-durability-warn-greenable.md, "LIVE STATUS UPDATE" and
+// "AMENDMENT REVIEW" sections): a 12-breach AUDIT_SQLITE_ERROR burst and
 // five required:true AUDIT_PROJECTION_DIVERGED refusals were both visible
 // only as bare counts in system.status()'s own JSON, never by name.
 //

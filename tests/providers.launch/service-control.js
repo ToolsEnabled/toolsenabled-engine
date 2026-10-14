@@ -3,8 +3,8 @@
 // Verified service-restart tests.
 //
 // The specific bug being pinned: on 2026-07-28 tools\dashboard-task.ps1 logged
-// "Health check OK: port 3889 is listening (PID <n>)" while that child had already
-// died of EADDRINUSE and an orphan was answering. Two deploys
+// "Health check OK: port 3889 is listening (PID 25836)" while 25836 had already
+// died of EADDRINUSE and an orphan from 17:41:57 was answering. Two deploys
 // shipped nothing. Every test below exists to make that failure mode impossible
 // to report as success.
 //
@@ -37,7 +37,7 @@ function listener(overrides = {}) {
     pid: 100,
     localAddress: '127.0.0.1',
     processName: 'node',
-    commandLine: 'node C:\\apps\\agent-dashboard\\server\\index.js --port 3889',
+    commandLine: 'node \x43:\\Users\\fixture-user\\Desktop\\AgentActivityVisualizer\\server\\index.js --port 3889',
     startTime: iso(Date.now() - 3_600_000),
     accessible: true,
     error: null,
@@ -99,14 +99,14 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
   //    it before. This must be a loud failure, never "healthy".
   // -------------------------------------------------------------------------
   {
-    const stale = listener({ pid: 4104 });
+    const stale = listener({ pid: 34064 });
     // The port appears free once (so the ladder proceeds) and then the same old
     // pid is what answers -- the exact shape of a false health check.
     const probe = scriptedProbe([[stale], [], [stale]]);
     const report = await control.restartService('dashboard', { ...fastDeps, probe, schtasks: recorder() });
     assert.equal(report.ok, false, 'a stale listener is NEVER success');
     assert.equal(report.failure.code, 'SERVICE_STALE_LISTENER');
-    assert.match(report.failure.message, /4104/);
+    assert.match(report.failure.message, /34064/);
     assert.match(report.failure.message, /ALREADY serving it before this restart/);
     assert.ok(report.rungs.find(rung => rung.rung === 'verify' && !rung.ok));
     ok('a port still served by the pre-restart pid is reported as SERVICE_STALE_LISTENER, not success');
@@ -144,10 +144,10 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
   //    and do NOT start the task on top of the orphan.
   // -------------------------------------------------------------------------
   {
-    const orphan = listener({ pid: 4104, accessible: false, commandLine: null, error: 'Access is denied' });
+    const orphan = listener({ pid: 34064, accessible: false, commandLine: null, error: 'Access is denied' });
     const probe = scriptedProbe([[orphan]]); // never releases
     const schtasks = recorder();
-    const reapLocal = () => ({ ok: false, exitCode: 1, detail: 'Reap failed: exact node PID 4104 did not release port 3889.' });
+    const reapLocal = () => ({ ok: false, exitCode: 1, detail: 'Reap failed: exact node PID 34064 did not release port 3889.' });
     const elevated = [];
     const report = await control.restartService('dashboard', {
       ...fastDeps, probe, schtasks, reapLocal, allowElevation: true,
@@ -157,7 +157,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
     assert.equal(report.ok, false);
     assert.equal(report.failure.code, 'SERVICE_PORT_STILL_HELD');
     assert.match(report.failure.message, /STILL HELD/);
-    assert.match(report.failure.message, /pid=4104/, 'the diagnosis names the holder');
+    assert.match(report.failure.message, /pid=34064/, 'the diagnosis names the holder');
     assert.match(report.failure.message, /openable=false/, 'the diagnosis states the holder is unreachable');
     assert.match(report.failure.message, /commandLine=unreadable/, 'the diagnosis states the identity gap');
     assert.match(report.failure.message, /NOTHING was reported as healthy/);
@@ -174,7 +174,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
   // 6. The kill switch blocks the elevated escalation.
   // -------------------------------------------------------------------------
   {
-    const orphan = listener({ pid: 4104 });
+    const orphan = listener({ pid: 34064 });
     const elevated = [];
     const report = await control.restartService('dashboard', {
       ...fastDeps, allowElevation: true,
@@ -198,7 +198,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
     const elevated = [];
     const report = await control.restartService('dashboard', {
       ...fastDeps, allowElevation: false,
-      probe: scriptedProbe([[listener({ pid: 4104 })]]),
+      probe: scriptedProbe([[listener({ pid: 34064 })]]),
       schtasks: recorder(),
       reapLocal: () => ({ ok: false, detail: 'access denied' }),
       delegationClient: { runOperation: async id => { elevated.push(id); return { ok: true }; } }
@@ -224,7 +224,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
     const elevated = [];
     const report = await control.restartService('dashboard', {
       ...fastDeps,
-      probe: scriptedProbe([[listener({ pid: 4104 })]]),
+      probe: scriptedProbe([[listener({ pid: 34064 })]]),
       schtasks: recorder(),
       reapLocal: () => ({ ok: false, detail: 'access denied' }),
       killSwitch: { status: () => ({ active: false }) },
@@ -249,7 +249,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
     const elevated = [];
     const report = await control.restartService('dashboard', {
       ...fastDeps, allowElevate: true, elevation: true, allowElevation: 'true',
-      probe: scriptedProbe([[listener({ pid: 4104 })]]),
+      probe: scriptedProbe([[listener({ pid: 34064 })]]),
       schtasks: recorder(),
       reapLocal: () => ({ ok: false, detail: 'access denied' }),
       killSwitch: { status: () => ({ active: false }) },
@@ -269,7 +269,7 @@ const fastDeps = { pollIntervalMs: 10, releaseTimeoutMs: 60, listenTimeoutMs: 60
     const schtasks = recorder();
     const report = await control.restartService('dashboard', {
       ...fastDeps, allowElevation: true,
-      probe: scriptedProbe([[listener({ pid: 4104 })]]),
+      probe: scriptedProbe([[listener({ pid: 34064 })]]),
       schtasks,
       reapLocal: () => ({ ok: false, detail: 'access denied' }),
       killSwitch: { status: () => ({ active: false }) },

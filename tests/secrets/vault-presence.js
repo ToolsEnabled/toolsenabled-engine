@@ -237,7 +237,7 @@ check('C3 an unreadable vault is present:null and readable:false, never present:
   const answer = freshPresence().vaultRecordPresence(CARD_KEY);
   assert.equal(answer.readable, false, 'the caller must be told the vault could not be read');
   assert.equal(answer.present, null, 'an unreadable vault must not answer the presence question at all');
-  assert.notEqual(answer.present, false, 'present:false here is the product claiming they have no card because of a read error');
+  assert.notEqual(answer.present, false, 'present:false here is the product claiming he has no card because of a read error');
 });
 
 check('C4 an unstartable check is unreadable, not absent', () => {

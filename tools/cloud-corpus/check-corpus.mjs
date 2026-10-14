@@ -73,6 +73,10 @@ function resolveConsumer(explicitPath) {
       candidates.push(path.join(root, 'engine', 'tools', 'cloud-batch-plan.js'));
       candidates.push(path.join(root, 'tools', 'cloud-batch-plan.js'));
     }
+    if (process.env.USERPROFILE) {
+      candidates.push(path.join(process.env.USERPROFILE, 'Desktop', 'toolsenabled', 'engine', 'tools', 'cloud-batch-plan.js'));
+      candidates.push(path.join(process.env.USERPROFILE, 'Desktop', '\x74oolsenabled-current', 'engine', 'tools', 'cloud-batch-plan.js'));
+    }
   }
   const selected = candidates.find((candidate) => {
     try { return fs.statSync(candidate).isFile(); } catch { return false; }

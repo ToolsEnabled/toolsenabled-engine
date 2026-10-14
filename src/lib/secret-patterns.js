@@ -33,12 +33,55 @@ function plaintextCredentialPattern(flags = 'i') {
  * not one of these ids are all still refused. */
 const GENERATED_IDENTIFIER_SOURCE = String.raw`(?<![A-Za-z0-9_.-])(?:direct\.[0-9a-f]{64}|tree-[0-9a-f]{24})(?![A-Za-z0-9_-])`;
 
-function plaintextCredentialOutsideGeneratedIds(text) {
-  if (typeof text !== 'string') return false;
+/* THE SAME EXCUSE, FOR THE IDS ENGINEERING TEXT IS ACTUALLY MADE OF.
+ *
+ * 2026-09-24: the one Ledger's words door refused checkpoints and filings on
+ * T1812, T1821, T1867, T1888 and T1766 -- five real results, lost -- because
+ * its `LONG_TOKEN_RUN` reads any unbroken run of forty or more
+ * `[A-Za-z0-9_-]` characters holding a letter and a digit as a key's shape.
+ * `-` is in that class, so a 40-character git object id (exactly 40), a
+ * `node-<uuid>` (41), a `gen-<uuid>` (40) and a `sess-<40 hex>` (45) are each
+ * one such run. Refusing them is refusing the only precise way to say WHICH
+ * commit, WHICH node or WHICH session a result belongs to.
+ *
+ * So this is the wider allowlist: the shapes this product and git MINT, which
+ * a person writes down on purpose. It is deliberately narrow, and narrowness
+ * is the whole safety argument:
+ *   - lower-case hex only, at EXACTLY the two object-id lengths (40 for
+ *     SHA-1, 64 for SHA-256) -- any other length of hex is not an id's shape
+ *     and stays refused, which is why 48 hex characters still read as a key;
+ *   - a uuid only in its exact 8-4-4-4-12 lower-case form;
+ *   - a prefixed id only from a closed list of the prefixes this product
+ *     mints, and only with a uuid or an object id after it;
+ *   - written exactly, with no letter, digit, `_`, `-` or `.` on either side,
+ *     so an id with anything glued to it is not the id.
+ * Nothing a provider issues fits inside that: every pattern above needs either
+ * a prefix (`sk-`, `ghp_`, `AIza`, ...) or a character class wider than
+ * lower-case hex. A match anywhere OUTSIDE one of these ids is judged exactly
+ * as before, so a credential beside an id, `Bearer <id>`, and a high-entropy
+ * run that is not one of these shapes are all still refused.
+ *
+ * This allowlist excuses ONLY the long-run heuristic at its one call site
+ * (src/lib/r-ledger-agent-gate.js looksSecretShaped). It never excuses the
+ * audit scrubber's judgement and never excuses a named `token:`/`password:`
+ * prefix; those still refuse on their own. */
+const OBJECT_ID_SOURCE = String.raw`(?:[0-9a-f]{40}|[0-9a-f]{64})`;
+const UUID_SOURCE = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
+// The prefixes this product mints an id under. A closed list on purpose: an
+// unknown prefix is not excused.
+const MINTED_ID_PREFIX_SOURCE = String.raw`(?:node|gen|sess|session|thread|agent|worker|controller|lane|run|job|task|build|repair|req|msg|tree|checkpoint)`;
+const SAFE_IDENTIFIER_SOURCE = String.raw`(?<![A-Za-z0-9_.-])(?:direct\.[0-9a-f]{64}|tree-[0-9a-f]{24}|${MINTED_ID_PREFIX_SOURCE}-(?:${UUID_SOURCE}|${OBJECT_ID_SOURCE})|${UUID_SOURCE}|${OBJECT_ID_SOURCE})(?![A-Za-z0-9_-])`;
+
+/* True when `pattern` matches `text` anywhere that is NOT wholly inside one of
+   `allowlistSource`'s ids. One definition of "wholly inside", shared by both
+   callers below, so neither can drift into a looser test than the other. */
+function matchedOutside(text, pattern, allowlistSource) {
+  if (typeof text !== 'string' || text === '') return false;
+  const scan = pattern.global ? pattern : new RegExp(pattern.source, `${pattern.flags}g`);
   let ids = null;
-  for (const match of text.matchAll(plaintextCredentialPattern('gi'))) {
+  for (const match of text.matchAll(scan)) {
     if (ids === null) {
-      ids = Array.from(text.matchAll(new RegExp(GENERATED_IDENTIFIER_SOURCE, 'g')),
+      ids = Array.from(text.matchAll(new RegExp(allowlistSource, 'g')),
         id => [id.index, id.index + id[0].length]);
     }
     const start = match.index;
@@ -48,11 +91,24 @@ function plaintextCredentialOutsideGeneratedIds(text) {
   return false;
 }
 
+function plaintextCredentialOutsideGeneratedIds(text) {
+  return matchedOutside(text, plaintextCredentialPattern('gi'), GENERATED_IDENTIFIER_SOURCE);
+}
+
+function matchedOutsideSafeIdentifiers(text, pattern) {
+  return matchedOutside(text, pattern, SAFE_IDENTIFIER_SOURCE);
+}
+
 module.exports = Object.freeze({
   GENERATED_IDENTIFIER_SOURCE,
   KNOWN_PROVIDER_CREDENTIAL_SOURCE,
+  MINTED_ID_PREFIX_SOURCE,
+  OBJECT_ID_SOURCE,
   PLAINTEXT_CREDENTIAL_SOURCE,
+  SAFE_IDENTIFIER_SOURCE,
+  UUID_SOURCE,
   knownProviderCredentialPattern,
+  matchedOutsideSafeIdentifiers,
   plaintextCredentialOutsideGeneratedIds,
   plaintextCredentialPattern
 });

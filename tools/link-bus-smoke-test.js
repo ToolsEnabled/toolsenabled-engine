@@ -24,7 +24,7 @@ const PORT = 8787;
 // authenticated read failed LINK_BUS_RESPONSE_TOO_LARGE and the smoke test
 // could no longer pass on a HEALTHY bus.
 //
-// an earlier change fixed that by taking the page size from transport-relay's
+// b0e07ba fixed that by taking the page size from transport-relay's
 // DEFAULT_PAGE_SIZE, which only MOVED the coupling instead of removing it. The
 // relay is a different subsystem with different callers and a different
 // envelope, so tuning it to 25 silently retuned this probe from 200 to 25 per

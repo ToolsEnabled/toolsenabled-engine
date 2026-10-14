@@ -1,6 +1,6 @@
 'use strict';
 
-// The accepted an earlier change v1 durable wire format, reconstructed inside a disposable
+// The accepted d606d88 v1 durable wire format, reconstructed inside a disposable
 // test database. This is not a product downgrade or an instruction to rewrite
 // real historical receipts. The newer implementation must preserve these exact
 // v1 JSON strings/checksums while recovering a genuinely materialized before or

@@ -26,8 +26,8 @@ const CONPTY_BIN = path.join(__dirname, 'zed-conpty-relay', 'bin');
 const CONPTY_SOURCE_ID = crypto.createHash('sha256').update(fs.readFileSync(CONPTY_SOURCE)).digest('hex').slice(0, 16);
 const CONPTY_EXE = path.join(CONPTY_BIN, `ZedConPtyRelay-${CONPTY_SOURCE_ID}.exe`);
 const CSC_CANDIDATES = [
-  'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
-  'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
+  '\x43:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
+  '\x43:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
 ];
 
 const USAGE = `Zed context-only terminal relay

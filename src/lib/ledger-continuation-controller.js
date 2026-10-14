@@ -20,8 +20,8 @@ const MAX_UNCHANGED_TURNS = 3;
  * persist()'s catch below announces "could not be updated".
  *
  * That sentence describes a write failure. Nothing failed to be written: the
- * hold is doing its job. The person stopped a Codex Terra circle, the
- * Controller resumed that node into a new session, and
+ * hold is doing its job. The person stopped Codex Terra circle
+ * node-8-0dbad425, the Controller resumed that node into a new session, and
  * the chat told them their saved continuation could not be updated. What it
  * should have told them is that their own Stop was still in force.
  *
@@ -68,7 +68,7 @@ const HELD_PAUSE = Object.freeze({
 /* WHAT A SESSION IS TOLD WHEN THE CIRCLE ABOVE IT HAS STOPPED (ledger T123).
  *
  * THE DEFECT, MEASURED 2026-09-15. A manager's session failed every turn from
- * one turn on. Five circles reporting to it each finished one item, sent the report
+ * 21:47Z. Five circles reporting to it each finished one item, sent the report
  * to a circle that could no longer read it, and then sat idle for over three
  * hours under a working policy whose entire point is that they do not. This
  * scheduler was already sending those sessions their next turn without asking
@@ -494,7 +494,7 @@ function createLedgerContinuation({ send, canSend, isLive = canSend, readSetting
          lost race and answered with state.stopped = true, permanently.
          Autonomous+ therefore died at the first poll after the first completed
          turn, silently: no send, no pause, no error, nothing written.
-         It was invisible until an earlier change, because until then the delay and the
+         It was invisible until b591f18d, because until then the delay and the
          poll interval were both 5000 and the first poll was always exactly due.
          A row that is merely early is not work yet, so skip it whole. */
       if (WAITING_STATUSES.includes(state.handle?.status) && state.handle.dueAtMs > now()) continue;

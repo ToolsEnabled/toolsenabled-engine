@@ -70,7 +70,7 @@ function minimalEnvironment() {
 }
 
 function powerShellPath() {
-  const windowsRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const windowsRoot = process.env.SystemRoot || process.env.WINDIR || '\x43:\\Windows';
   return path.join(
     windowsRoot,
     'System32',

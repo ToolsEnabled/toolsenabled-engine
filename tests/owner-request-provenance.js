@@ -28,11 +28,11 @@
 
 // Tests for the R-ledger provenance fix.
 //
-// Agent-made rules must never be presented as the owner's.
+// The owner, 2026-08-11: "Why are agent rules stille being pushed as mine".
 // These assert BEHAVIOUR at the boundaries that let that happen:
 //   - an owner-authority claim cannot be made without evidence;
-//   - an agent-inferred entry cannot be RENDERED as the owner's requirement;
-//   - dropping the owner's requirement for an agent's constraint is a detected event;
+//   - an agent-inferred entry cannot be RENDERED as his requirement;
+//   - dropping his requirement for an agent's constraint is a detected event;
 //   - the ledger's preservation guarantee is measured, not asserted.
 
 const assert = require('node:assert');
@@ -76,7 +76,7 @@ function check(name, fn) {
 
 // --- 1. the evidence fence ------------------------------------------------
 
-check('owner-stated CANNOT be claimed without citing where their words came from', () => {
+check('owner-stated CANNOT be claimed without citing where his words came from', () => {
   assert.throws(
     () => normalizeProvenance({ class: 'owner-stated', recordedBy: 'some-agent' }),
     error => error instanceof OwnerProvenanceError
@@ -84,7 +84,7 @@ check('owner-stated CANNOT be claimed without citing where their words came from
   );
 });
 
-check('owner-ratified CANNOT be claimed without recording what they were shown', () => {
+check('owner-ratified CANNOT be claimed without recording what he was shown', () => {
   assert.throws(
     () => normalizeProvenance({
       class: 'owner-ratified', recordedBy: 'agent', source: 'dashboard approval 2026-08-11'
@@ -96,7 +96,7 @@ check('owner-ratified CANNOT be claimed without recording what they were shown',
 
 check('a source that is a bare word is not provenance', () => {
   assert.throws(
-    () => normalizeProvenance({ class: 'owner-stated', recordedBy: 'agent', source: 'them' }),
+    () => normalizeProvenance({ class: 'owner-stated', recordedBy: 'agent', source: 'him' }),
     error => error.code === 'OWNER_PROVENANCE_SOURCE_REQUIRED'
   );
 });
@@ -139,13 +139,13 @@ check('an entry with NO provenance field defaults to not-citable, never to owner
   );
 });
 
-check('an OWNER-STATED entry is citable as their requirement', () => {
+check('an OWNER-STATED entry is citable as his requirement', () => {
   const entry = {
     id: 'R1230',
     provenance: {
       class: 'owner-stated',
       recordedBy: 'coordinator-opus5',
-      source: 'owner interactive session'
+      source: 'live owner interactive session 6f84bf9b, 2026-08-10'
     }
   };
   assert.equal(assertCitableAsOwnerRequirement(entry, 'a report'), 'owner-stated');
@@ -169,10 +169,10 @@ check('the renderer label names an agent decision as an agent decision', () => {
   assert.match(described.label, /AGENT DECISION/);
 });
 
-check('summarizeProvenance counts what may and may not be cited as theirs', () => {
+check('summarizeProvenance counts what may and may not be cited as his', () => {
   const summary = summarizeProvenance([
     { provenance: {
-      class: 'owner-stated', recordedBy: 'agent', source: 'owner session'
+      class: 'owner-stated', recordedBy: 'agent', source: 'owner session 2026-08-10'
     } },
     { provenance: { class: 'agent-inferred' } },
     { id: 'legacy' }
@@ -198,20 +198,20 @@ check('exactly the four documented classes exist', () => {
 });
 
 // --- 3. DESCOPING IS VISIBLE ---------------------------------------------
-// The worked example: a requested $350 purchase, dropped for a $100/day cap
-// that no person had set.
+// The worked example: the $350 trademark filing, dropped for a $100/day cap
+// the owner never set.
 
-check('THE $350 CASE: an owner requirement dropped for an agent constraint is flagged for owner review', () => {
+check('THE TRADEMARK CASE: his requirement dropped for an agent constraint is flagged for his review', () => {
   const ownerRequirement = {
     id: 'R1200',
     provenance: {
-      class: 'owner-stated', recordedBy: 'controller', source: 'owner session'
+      class: 'owner-stated', recordedBy: 'controller', source: 'owner session 2026-08-10'
     }
   };
   const record = buildDescopeRecord({
     descopeId: 'D1',
     requestId: 'R1200',
-    requirement: 'the $350 annual licence, 1 seat',
+    requirement: 'the $350 USPTO trademark filing, 1 class',
     action: 'dropped',
     reason: 'removed from the purchase list because $350 alone breaks the daily spend cap',
     decidedBy: 'purchase-list-lane',
@@ -219,7 +219,7 @@ check('THE $350 CASE: an owner requirement dropped for an agent constraint is fl
       name: 'config/toolsenabled.policy.json limits.defaultDailySpendUsd',
       value: '100',
       provenanceClass: 'agent-inferred',
-      source: 'an earlier commit, initial commit, Co-Authored-By an AI agent'
+      source: 'commit 02b27ac, initial commit, Co-Authored-By an AI agent'
     }
   }, { requestEntry: ownerRequirement });
 
@@ -229,13 +229,13 @@ check('THE $350 CASE: an owner requirement dropped for an agent constraint is fl
   assert.equal(pendingOwnerReview([record]).length, 1);
 });
 
-check('an owner requirement dropped for an OWNER-SET constraint does not demand owner review', () => {
+check('an owner requirement dropped for an OWNER-SET constraint does not demand his review', () => {
   const record = buildDescopeRecord({
     descopeId: 'D2',
     requestId: 'R1200',
-    requirement: 'the $350 annual licence',
+    requirement: 'the $350 USPTO trademark filing',
     action: 'deferred',
-    reason: 'the owner capped this month\'s spend below the licence fee',
+    reason: 'the owner himself capped this month\'s spend below the filing fee',
     decidedBy: 'purchase-list-lane',
     citedConstraint: {
       name: 'monthly spend ceiling', value: '50', provenanceClass: 'owner-stated',
@@ -260,7 +260,7 @@ check('a descope cannot be recorded without naming WHAT was dropped', () => {
 check('a descope cannot be recorded without naming WHO decided', () => {
   assert.throws(
     () => buildDescopeRecord({
-      descopeId: 'D4', requestId: 'R1', requirement: 'the annual licence', action: 'dropped',
+      descopeId: 'D4', requestId: 'R1', requirement: 'the trademark filing', action: 'dropped',
       reason: 'a sufficiently long and substantive reason'
     }),
     error => error.code === 'OWNER_DESCOPE_DECIDER_REQUIRED'
@@ -270,17 +270,17 @@ check('a descope cannot be recorded without naming WHO decided', () => {
 check('a one-word reason is refused; a descope must say why', () => {
   assert.throws(
     () => buildDescopeRecord({
-      descopeId: 'D5', requestId: 'R1', requirement: 'the annual licence',
+      descopeId: 'D5', requestId: 'R1', requirement: 'the trademark filing',
       action: 'dropped', reason: 'no', decidedBy: 'lane'
     }),
     error => error.code === 'OWNER_DESCOPE_REASON_REQUIRED'
   );
 });
 
-check('summarizeDescopes surfaces the count needing an owner decision', () => {
+check('summarizeDescopes surfaces the count needing his decision', () => {
   const owner = { id: 'R1', provenance: { class: 'owner-stated', recordedBy: 'c', source: 'owner session x' } };
   const flagged = buildDescopeRecord({
-    descopeId: 'D6', requestId: 'R1', requirement: 'a thing they asked for', action: 'dropped',
+    descopeId: 'D6', requestId: 'R1', requirement: 'a thing he asked for', action: 'dropped',
     reason: 'an agent policy said it was out of budget for today',
     decidedBy: 'lane', citedConstraint: { name: 'agent budget rule', provenanceClass: 'agent-inferred' }
   }, { requestEntry: owner });
@@ -290,7 +290,7 @@ check('summarizeDescopes surfaces the count needing an owner decision', () => {
 check('descope checks refuse when requirement provenance could not be established', () => {
   assert.throws(
     () => buildDescopeRecord({
-      descopeId: 'D7', requestId: 'R1', requirement: 'a thing they may have asked for',
+      descopeId: 'D7', requestId: 'R1', requirement: 'a thing he may have asked for',
       action: 'dropped', reason: 'an agent policy said it was out of budget for today',
       decidedBy: 'lane', citedConstraint: { name: 'agent budget rule' }
     }),
@@ -312,7 +312,7 @@ check('descope reports refuse unavailable or partly unreadable record sets', () 
 // --- 4. PRESERVE EVERY REQUEST -------------------------------------------
 
 check('the migration classifier does NOT infer owner authority from the capture actor', () => {
-  // The earlier lesson: the same actor captured both a genuine owner relay and
+  // The f3ae016 lesson: the same actor captured both a genuine owner relay and
   // an agent's own brief. A privileged-looking name must not promote an entry.
   const noSource = classify({
     id: 'R1', verbatim: 'some text', captureLog: [{ actor: 'controller', mode: 'new' }]
@@ -320,7 +320,7 @@ check('the migration classifier does NOT infer owner authority from the capture 
   assert.equal(noSource.class, 'unclassified');
 
   const withSource = classify({
-    id: 'R2', verbatim: 'their actual words',
+    id: 'R2', verbatim: 'his actual words',
     captureLog: [{ actor: 'codex', mode: 'new', source: 'telegram message 8891, 2026-08-04' }]
   }, '2026-08-11T00:00:00.000Z');
   assert.equal(withSource.class, 'owner-stated');
@@ -335,8 +335,8 @@ check('verifyPreservation DETECTS a dropped request', () => {
 });
 
 check('verifyPreservation DETECTS a modified pre-existing field', () => {
-  const before = [{ id: 'R1', verbatim: 'their words' }];
-  const after = [{ id: 'R1', verbatim: 'tidied up their words', provenance: {} }];
+  const before = [{ id: 'R1', verbatim: 'his words' }];
+  const after = [{ id: 'R1', verbatim: 'tidied up his words', provenance: {} }];
   const problems = verifyPreservation(before, after);
   assert.ok(problems.some(problem => /MODIFIED/.test(problem)),
     `expected a modification to be detected, got: ${JSON.stringify(problems)}`);

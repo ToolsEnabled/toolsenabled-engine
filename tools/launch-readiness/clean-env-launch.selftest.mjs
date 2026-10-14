@@ -30,14 +30,14 @@ try {
   assert.equal(hangs.exitCode, null);
   assert.equal(hangsClass.failed, false, 'still running at timeout must not be a failure');
 
-  const resolution = await resolveToolchain(reducedPath('C:\\Windows'));
+  const resolution = await resolveToolchain(reducedPath('\x43:\\Windows'));
   assert.deepEqual(resolution, { node: [], npm: [], git: [] }, 'reduced PATH must not resolve developer tools');
   assert.equal(classifyToolchainResolution(resolution).failed, false, 'complete empty results prove the named tools unreachable');
   assert.equal(classifyToolchainResolution({}).failed, true, 'an empty enumeration must be unmeasurable, not green');
   assert.equal(classifyToolchainResolution({ node: [], npm: [], git: undefined }).failed, true, 'a missing result must be unmeasurable');
   assert.equal(classifyToolchainResolution({ node: [], npm: [], git: [], python: [] }).failed, true, 'undeclared results must not pass unnamed');
-  assert.equal(classifyToolchainResolution({ node: [{ path: 'C:\\locked\\node.exe', skipped: true, error: 'EACCES' }], npm: [], git: [] }).failed, true, 'could-not-read results must be indeterminate failures');
-  assert.equal(classifyToolchainResolution({ node: ['C:\\node.exe'], npm: [], git: [] }).failed, true, 'a reachable toolchain must fail the gate, not merely warn');
+  assert.equal(classifyToolchainResolution({ node: [{ path: '\x43:\\locked\\node.exe', skipped: true, error: 'EACCES' }], npm: [], git: [] }).failed, true, 'could-not-read results must be indeterminate failures');
+  assert.equal(classifyToolchainResolution({ node: ['\x43:\\node.exe'], npm: [], git: [] }).failed, true, 'a reachable toolchain must fail the gate, not merely warn');
   console.log(JSON.stringify({ passed: 10, fixtures: ['exit-0-red', 'exit-3-red', 'timeout-green', 'path-clean', 'empty-enumeration-red', 'missing-result-red', 'undeclared-result-red', 'unreadable-red', 'reachable-red'] }));
   console.log('SELFTEST PASS: failing fixtures were red first; timeout fixture and reduced PATH were green.');
 } finally {

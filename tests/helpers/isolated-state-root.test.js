@@ -1,6 +1,6 @@
 'use strict';
 
-// FINDING 1 (the ledger-kinds review): a test that resolves
+// FINDING 1 (REPORT-ledger-kinds-tools-20260907.md): a test that resolves
 // owner-request-store.js's state root must never resolve it to the LIVE
 // capability root. What must hold: requiring the helper always redirects
 // TOOLSENABLED_STATE_ROOT to a fresh, non-live scratch directory, and its

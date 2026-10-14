@@ -6,7 +6,7 @@
   "ownershipDomain": "context",
   "ownershipMap": "../../ownership-map.json",
   "generator": "tools/generate-agent-activity-contracts.js",
-  "consumerOutput": "../../../../agent-dashboard/src/generated",
+  "consumerOutput": "../../../../AgentActivityVisualizer/src/generated",
   "sourcePolicies": {
     "identifiers": "../../platform/identifier-policy.json",
     "provenance": "../../platform/provenance-policy.json",

@@ -3,7 +3,7 @@
 
 // MIGRATE THE LEDGER TO CARRY PROVENANCE -- without inventing any.
 //
-// Every entry, zero provenance fields. This adds the field to every one of them
+// 532 entries, zero provenance fields. This adds the field to every one of them
 // and drops nothing. `preservesEveryRequest` is the ledger's headline guarantee
 // and this tool proves it rather than asserting it: it compares the id SET and
 // every pre-existing FIELD of every entry before and after, and refuses to write
@@ -13,10 +13,10 @@
 //
 // The tempting migration reads the capture actor and calls `controller` and
 // `owner` captures owner-stated. That would be FABRICATION, and it was measured
-// to be wrong: an earlier commit established that `codex` captured both a genuine
+// to be wrong: commit f3ae016 established that `codex` captured both a genuine
 // owner Telegram relay (R283) and an agent's self-authored brief (R1098). The
 // actor name cannot separate them. A migration that guessed would manufacture
-// exactly the false pedigree the $100/day cap acquired, across the whole ledger, and it
+// exactly the false pedigree the $100/day cap acquired, 532 times over, and it
 // would be unfalsifiable afterwards.
 //
 // So this applies RETROACTIVELY THE SAME EVIDENCE RULE new captures must meet:
@@ -29,7 +29,7 @@
 // That ratio is not a defect in the migration, it is the true state of the
 // record, and it is the first honest measurement of how much of R can actually
 // show the owner's authority. An `unclassified` entry is not deleted, not
-// distrusted, and not less important -- it simply may not be cited AS THEIRS until
+// distrusted, and not less important -- it simply may not be cited AS HIS until
 // someone establishes where it came from.
 //
 // Usage:

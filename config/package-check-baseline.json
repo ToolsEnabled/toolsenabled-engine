@@ -8,7 +8,7 @@
     "unmappedFiles": 0,
     "orphanedClaims": 0,
     "unmappedEdges": 0,
-    "layeringViolations": 358
+    "layeringViolations": 360
   },
   "findings": {
     "duplicateClaims": [],
@@ -1878,6 +1878,20 @@
         "fromPackage": "auth.duo",
         "to": "src/lib/uac-delegation-client.js",
         "toPackage": "delegation"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/institution-login.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/desktop.js",
+        "toPackage": "desktop.native"
+      },
+      {
+        "code": "SIDEWAYS_DOMAIN_IMPORT",
+        "from": "tools/institution-login.js",
+        "fromPackage": "auth.duo",
+        "to": "src/lib/duo-owner-relay.js",
+        "toPackage": "owner.inbox"
       },
       {
         "code": "SIDEWAYS_DOMAIN_IMPORT",

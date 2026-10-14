@@ -80,7 +80,7 @@ const FORMS = Object.freeze({
     // contract cannot describe this form to the owner more favourably than the
     // window does: WHO can decrypt the record afterwards, that nothing in the
     // product reads it yet, and that the card's security code is not asked for
-    // and never stored (product rule Q-O4; PCI DSS 3.2 -- see the record-shape
+    // and never stored (owner ruling Q-O4; PCI DSS 3.2 -- see the record-shape
     // comment above Invoke-PaymentCardPrompt in tools/secrets.ps1). The
     // acknowledgement hash covers formId, contractVersion and fieldIds only, so
     // wording can be corrected here without invalidating every caller's stored

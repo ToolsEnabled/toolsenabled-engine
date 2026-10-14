@@ -337,7 +337,7 @@ function chunk(array, size) {
 }
 
 // Windows worktree paths come back from git with forward slashes
-// (`<drive>:/Users/...`) regardless of the platform's native separator; normalize
+// (`<profile-root>/...`) regardless of the platform's native separator; normalize
 // both sides before comparing so "is this worktree entry the primary root"
 // does not depend on which separator style either string happens to use.
 function samePath(a, b) {

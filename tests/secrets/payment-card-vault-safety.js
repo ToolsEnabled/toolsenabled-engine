@@ -42,7 +42,7 @@ const TEST_PAN = '4242424242424242';
 // A version 3 record shaped exactly like the one tools/secrets.ps1's payment-
 // card dialog builds, so the leak hunts search for what the product really
 // stores. There is no security-code field: the code is never asked for and
-// never stored (product rule Q-O4; PCI DSS 3.2), and
+// never stored (owner ruling Q-O4; PCI DSS 3.2), and
 // tests/secrets/payment-card-security-code-never-stored.js is the fence that
 // keeps it out of the dialog, the payload and the vault.
 const CARD_RECORD = JSON.stringify({
@@ -144,11 +144,27 @@ function walkFiles(directory) {
 }
 
 // ---------------------------------------------------------------------------
-// Setup: store the synthetic card record the way the product stores one.
+// Setup: store the synthetic card record as the product's DPAPI ciphertext.
 // ---------------------------------------------------------------------------
 
-const stored = vault(['set-stdin', CARD_KEY], { input: CARD_RECORD });
+// set-stdin now REFUSES the card record (1.0.50 security M2: the oracle
+// denylist covers the generic writers as well as the readers), and the product
+// writes it only through the owner's card dialog, which a test cannot drive.
+// So the record is encrypted by set-stdin under an ordinary staging key and
+// then moved to the card's name in the scratch vault file -- the same direct
+// JSON edit check 3 below already makes. DPAPI ciphertext from
+// ConvertFrom-SecureString is not bound to the record name, so what sits under
+// the card key is exactly what a stored card looks like.
+const CARD_STAGING_KEY = 'payment_card_vault_safety_staging';
+const stored = vault(['set-stdin', CARD_STAGING_KEY], { input: CARD_RECORD });
 assert.equal(stored.status, 0, `setup: could not store the synthetic card record (${stored.stderr || stored.spawnError})`);
+{
+  const records = JSON.parse(fs.readFileSync(VAULT_FILE, 'utf8'));
+  assert.equal(typeof records[CARD_STAGING_KEY], 'string', 'setup: the staged card ciphertext is missing');
+  records[CARD_KEY] = records[CARD_STAGING_KEY];
+  delete records[CARD_STAGING_KEY];
+  fs.writeFileSync(VAULT_FILE, `${JSON.stringify(records, null, 2)}\n`);
+}
 vault(['set-stdin', DECOY_KEY], { input: CARD_RECORD });
 
 // ---------------------------------------------------------------------------
@@ -383,7 +399,7 @@ check('no tool in the registry can return the card record', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. THE WINDOW THE OWNER ACTUALLY READS BEFORE THEY TYPE A CARD NUMBER.
+// 6. THE WINDOW THE OWNER ACTUALLY READS BEFORE HE TYPES A CARD NUMBER.
 //
 // Two disclosures have to be ON THE WINDOW, not in a doc: who can decrypt the
 // record afterwards, and the fact that nothing in the product reads it yet. A
@@ -445,7 +461,7 @@ check('the live card dialog names who can decrypt the record', () => {
   assert.match(text, /Windows DPAPI/, 'the dialog no longer says how the record is sealed');
   assert.match(text, /stored only in the local vault file on this computer/, 'the dialog no longer says where the record lives');
   assert.match(text, /Any program running under your Windows sign-in can ask Windows to open it/,
-    'the dialog does not tell the owner who can decrypt their card');
+    'the dialog does not tell the owner who can decrypt his card');
   assert.match(text, /never returned to an agent, an MCP response, a log or a report/);
 });
 

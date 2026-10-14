@@ -1,7 +1,7 @@
 'use strict';
 
-// A local model's name is whatever the endpoint happens to be serving. On a
-// development machine that is "qwen3.5:9b" and two names of the form
+// A local model's name is whatever the endpoint happens to be serving. On the
+// owner's machine that is "qwen3.5:9b" and two names of the form
 // "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-gguf:Q3_K_M". No static array in
 // this registry can enumerate that, so the classes validated against
 // entry.options - seg and select - would refuse every model the person owns.
@@ -131,7 +131,7 @@ test('the write path accepts the chosen name too, not only the read path', () =>
 });
 
 test('the shipped model-name row carries no declared option list', () => {
-  // The paired app assertion, mirrored on this side of the fence: a `pick` row
+  // Worker 4-1's assertion 6, mirrored on this side of the fence: a `pick` row
   // that also carried `options` would be a select wearing another name, and
   // would refuse every model discovered at run time.
   const registry = require('../config/settings-registry.json');

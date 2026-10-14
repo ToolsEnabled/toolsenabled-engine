@@ -2,8 +2,8 @@
 
 /* A PASTED PICTURE HAS TO REACH THE MODEL.
  *
- * Reported 2026-09-15: pasted images appeared in chat but were not
- * sent to the agent, and caused an error. The app was never the problem -- it saves the
+ * The owner's report, 2026-09-15: "images paste into chat but DONT get sent to
+ * the agent and cause an error." The app was never the problem -- it saves the
  * file, allowlists it and hands the adapter a validated path. This adapter then
  * refused the whole turn:
  *
@@ -31,7 +31,7 @@ const path = require('node:path');
 
 const { ClaudeCliAdapter } = require('../../src/lib/agent-engine/claude-cli-adapter');
 
-const THREAD_ID = '72d4f6b8-0c2e-4a6c-9e0b-2d4f6a8c0e1f';
+const THREAD_ID = '7cf7c88e-6912-4388-a181-78aef262c494';
 
 /* A REAL FILE, not a fixture path that does not exist: the loader under test
  * opens what it is given, so a test that never wrote bytes would prove that a

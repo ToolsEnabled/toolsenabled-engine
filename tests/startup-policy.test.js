@@ -36,9 +36,9 @@
 //   registry values, and source patterns are independent constants.
 'use strict';
 // startup.services_at_logon -- the switch that decides whether ToolsEnabled
-// starts when the computer does (product rule: ToolsEnabled starts
-// with the computer only if a user chooses that setting, and it is a setting,
-// never hardcoded).
+// starts when the computer does (owner directive 2026-08-13: "toolsenabled
+// should startup on start if a user chooses that setting. i dont." and "dont
+// hardcode it its a setting").
 //
 // The regression this file exists to prevent is not subtle and it already
 // happened once: sixteen registrars each carried their own
@@ -62,7 +62,7 @@ const TOOLS = path.join(ROOT, 'tools');
 const HELPER = path.join(TOOLS, 'lib', 'StartupPolicy.ps1');
 const SETTING_ID = 'startup.services_at_logon';
 const POWERSHELL = path.join(
-  process.env.SystemRoot || 'C:\\Windows',
+  process.env.SystemRoot || '\x43:\\Windows',
   'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 let passed = 0;
@@ -285,9 +285,12 @@ check('the FRA keeper and the rendezvous both register as on-demand, with no cad
   assert.match(keeper, /-ExecutionTimeLimit \(\[TimeSpan\]::Zero\)/, 'a resident loop must not be killed by a time limit');
   assert.match(keeper, /--resident/, 'the task must drive the resident loop');
 
+  const engine = fs.readFileSync(path.join(ROOT, 'packages', 'servercontrol', 'Mechanical-Connect.ps1'), 'utf8');
+  assert.match(engine, /New-ToolsEnabledTaskTriggers -OnDemand -IncludeLogon/);
+
   // Both must omit -Trigger entirely when the set is empty, because
   // Register-ScheduledTask rejects an empty one.
-  for (const [name, text] of [['keeper', keeper]]) {
+  for (const [name, text] of [['keeper', keeper], ['rendezvous', engine]]) {
     assert.ok(/Count -gt 0/.test(text) && /\['Trigger'\]/.test(text),
       `${name} must omit -Trigger when the on-demand trigger set is empty`);
 

@@ -222,7 +222,7 @@ function validateRun(run, sourceLabel, maxAgeHours = null) {
     problems.push("the run measured ZERO test files; a green reading here means the suite vanished, not that it passed");
   }
   // `!== true`, deliberately not `=== false`. Found 2026-08-11 while ruling on
-  // a real record: state/test-runs/latest.json from that day carries NO `complete`
+  // a real record: state/test-runs/latest.json from 02:57Z carries NO `complete`
   // field at all (it predates the partial-snapshot fix in tools/test-run.js),
   // and `=== false` waved it straight through as a finished run. A record that
   // does not say whether it finished has not said it finished. Same shape as

@@ -33,6 +33,7 @@
     "own adapter/enrollment module by ordinary require, so none is listed here.",
     "Three more the desktop already loaded were added 2026-09-25: shell/agent-host.cjs loadLocalEngine() and shell/main.cjs require src/lib/agent-engine/local-node-process.js (PAYLOAD_LOCAL_ENGINE_MODULE), which reaches local-node-adapter, local-thread-store, local-node-tools and local-tool-discovery by ordinary require; shell/saved-data-maintenance.cjs requires continuation-prune.js (PAYLOAD_CONTINUATION_PRUNE_MODULE) for the person-only saved-data prune; shell/product-settings.cjs requires diagnostic-retention.js.",
     "The desktop shell/agent-host.cjs loads agent-ledger-continuation.js; shell/audit-identity-worker.cjs loads audit-identity-maintenance.js; shell/agent-command-surface.cjs loads ledger-category-reset.js for the person-only reset controls. Their internal dependency closures are ordinary require edges, not additional external roots.",
+    "The desktop shell/capability-layer.cjs startAppOwnedOwnerHost() requires PAYLOAD.json ownerHostModule (src/owner-host.js), creates the host and awaits host.listen(). The host requires legacy-signin-cleanup during listen(); that ordinary static require edge needs no separate root or registry exemption.",
     "The public",
     "Website vendors online-fra-web-client.mjs from an exact published engine",
     "commit and imports it for the signed-in browser relay path.",
@@ -60,8 +61,10 @@
     "npm:test:strict",
     "tests/linux-native.js",
     "install.ps1",
+    "packages/servercontrol/Launch Control Panel.vbs",
     "tools/mission-bridge.js",
     "src/mcp-server.js",
+    "src/owner-host.js",
     "src/lib/agent-engine/claude-cli-process.js",
     "src/lib/agent-engine/codex-process.js",
     "src/lib/agent-engine/acp-process.js",
@@ -115,6 +118,11 @@
       "reason": "invoke() places the HELPER constant after PowerShell -File and passes that argv to its process runner."
     },
     {
+      "from": "src/lib/providers/duo-desktop-approval.js",
+      "to": "tools/duo-desktop-approve.ps1",
+      "reason": "runApproval() passes the exact APPROVAL_SCRIPT constant after PowerShell -File during the reachable institutional Duo handoff."
+    },
+    {
       "from": "src/lib/providers/firebase.js",
       "to": "tools/firebase-login.ps1",
       "reason": "runInteractiveFirebaseLogin() builds this path and passes it after PowerShell -File to run()."
@@ -148,6 +156,11 @@
       "from": "src/lib/agent-wake.js",
       "to": "tools/lane-run.js",
       "reason": "spawnLaneWrapper() validates DEFAULT_LANE_RUN_FILE and passes laneRunFile as process.execPath argv zero."
+    },
+    {
+      "from": "src/lib/providers/duo-desktop.js",
+      "to": "tools/institution-login.js",
+      "reason": "runLoginProcess() passes the LOGIN_SCRIPT constant as process.execPath argv zero for the interactive login child."
     },
     {
       "from": "src/lib/secret-store/powershell.js",
@@ -346,6 +359,12 @@
       "seededAt": "2026-08-09",
       "reclassifiedAt": "2026-09-08"
     },
+    "tools/canvas-session-preflight.js": {
+      "status": "manual",
+      "reason": "An operator runs this before a Canvas/Duo submission to catch a lapsed SSO session ahead of time, deliberately reading only presence/domain/expiry and never a cookie value; there is no scheduled moment to check a session that has not been chosen for use yet.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
     "tools/codex-lane-dispatch.ps1": {
       "status": "manual",
       "reason": "Dispatches one bounded Codex build lane into an isolated worktree for the exact -Lane/-Model/-Brief a dispatcher supplies for that specific piece of work; each invocation names a lane nobody else has, so nothing standing could call it.",
@@ -376,7 +395,7 @@
     },
     "tools/fra-selfhost.js": {
       "status": "manual",
-      "reason": "Walks a person from a fresh install to a working direct-FRA pair. Its whole reason for existing is the one input nobody can guess -- the sha256 preimage of the current runtime-integrity anchor -- after which it adds the operator's own two machines to config/service-registry.json. Both are per-install acts a human performs once, on hardware only they can see.",
+      "reason": "Walks a person from a fresh install to a working direct-FRA pair. Its whole reason for existing is the one input nobody can guess -- the sha256 preimage of the current runtime-integrity anchor -- after which it adds the operator's own two machines to config/service-registry.json. Both are per-install acts a human performs once, on hardware only he can see.",
       "declaredAt": "2026-08-13"
     },
     "tools/gemini-agentic-run.js": {
@@ -416,6 +435,11 @@
       "seededAt": "2026-08-09",
       "reclassifiedAt": "2026-09-08"
     },
+    "tools/ledger-compact-verify.js": {
+      "status": "manual",
+      "reason": "Ledger compaction is run by hand, never by a release or runtime chain: a person compacts a copy first with the compaction tool this file loads (a dry run unless --apply), then runs this check against the before copy, the compacted document, the history chain and the sidecar to confirm that no record, hashed field or chain verdict moved and that the restore is byte exact. tests/ledger-compact.js covers both deterministically.",
+      "declaredAt": "2026-09-28"
+    },
     "tools/link-bus-bootstrap.js": {
       "status": "manual",
       "reason": "Owner-enabled bootstrap that mints and delivers a fresh relay token to one specific peer machine's enrollment window; the owner triggers this per peer, and no automatic process can decide that a new peer bootstrap is warranted.",
@@ -447,7 +471,7 @@
     },
     "tools/owner-descope.js": {
       "status": "manual",
-      "reason": "Records that something the owner asked for is being dropped, carrying the requirement in their words and the reason in the lane's. Both are inputs only the human deciding to descope holds; nothing can derive them. Automating this write would manufacture exactly the invisible descope the tool exists to make impossible.",
+      "reason": "Records that something the owner asked for is being dropped, carrying the requirement in his words and the reason in the lane's. Both are inputs only the human deciding to descope holds; nothing can derive them. Automating this write would manufacture exactly the invisible descope the tool exists to make impossible.",
       "declaredAt": "2026-08-13"
     },
     "tools/owner-spool-review.js": {
@@ -463,7 +487,7 @@
     },
     "tools/prior-work.js": {
       "status": "manual",
-      "reason": "The 'has this already been done?' query an agent runs BEFORE starting work, when the topic exists only in the prompt it was handed a moment earlier. There is no fixed topic for a chain to pass it. Its four-value exit contract exists because callers that could not tell MISS from UNKNOWN re-derived research the fleet already owned.",
+      "reason": "The 'has this already been done?' query an agent runs BEFORE starting work, when the topic exists only in the prompt it was handed a moment earlier. There is no fixed topic for a chain to pass it. Its four-value exit contract exists because callers that could not tell MISS from UNKNOWN re-derived four nights of research the fleet already owned.",
       "declaredAt": "2026-08-13"
     },
     "tools/prune-phrases.js": {
@@ -479,6 +503,12 @@
     "tools/process-visibility-snapshot-writer.js": {
       "status": "baseline",
       "seededAt": "2026-08-09"
+    },
+    "tools/promote-desktop-root.ps1": {
+      "status": "manual",
+      "reason": "Defaults to read-only and only performs its real filesystem junction/promotion action when a person passes -Execute after reading the preflight report; that is an irreversible-shaped filesystem change the owner approves per run.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
     },
     "tools/provision-research.ps1": {
       "status": "manual",
@@ -554,7 +584,7 @@
     },
     "tools/scope-node-firewall-rules.ps1": {
       "status": "manual",
-      "reason": "Rewrites Windows inbound firewall rules on this host, and needs administrator rights to do it. Which remote addresses are legitimate depends on the network the machine is actually on. A repository chain cannot know that answer and must not change a host firewall on its own.",
+      "reason": "Rewrites Windows inbound firewall rules on this host, and needs administrator rights to do it. Which remote addresses are legitimate depends on the network the machine is actually on, and the owner has said this machine moves to another computer and network before red-team testing. A repository chain cannot know that answer and must not change a host firewall on its own.",
       "declaredAt": "2026-08-13"
     },
     "tools/secret-doctor.js": {
@@ -566,6 +596,12 @@
     "tools/service-restart.js": {
       "status": "manual",
       "reason": "Restarts one named live OS-managed service on this host by name (per its own usage lines), verifying the socket actually closes before restart; the service name and the decision to restart are an operator's, not derivable state.",
+      "seededAt": "2026-08-09",
+      "reclassifiedAt": "2026-09-08"
+    },
+    "tools/start-agent-activity-visualizer.ps1": {
+      "status": "manual",
+      "reason": "Starts the desktop AgentActivityVisualizer process a person opens to watch live agent activity; it is a UI a human chooses to open, not a background service.",
       "seededAt": "2026-08-09",
       "reclassifiedAt": "2026-09-08"
     },
@@ -621,10 +657,6 @@
     "tests/linux-sandbox-sterile-live-smoke.js": {
       "status": "manual",
       "reason": "Its own header states this is explicit live-Docker acceptance, not a hermetic test or an installer proof, and requires the fixed product image already built without ever downloading or rebuilding it; an operator runs it by hand against a real prebuilt image, which a deterministic gate cannot assume exists.",
-      "seededAt": "2026-09-08"
-    },
-    "src/lib/session-workspace-ceiling.js": {
-      "status": "baseline",
       "seededAt": "2026-09-08"
     }
   }

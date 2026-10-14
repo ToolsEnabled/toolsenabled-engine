@@ -9,13 +9,13 @@ const registry = require('../../src/lib/tool-registry');
 const store = createStateStore({ file: ':memory:', ownerId: 'personal-calendar-test' });
 
 try {
-  const captured = reminders.capture({ text: 'Dentist on Wednesday', timezone: 'America/Los_Angeles' }, { state: store });
+  const captured = reminders.capture({ text: 'Quiz on Wednesday', timezone: 'America/Los_Angeles' }, { state: store });
   assert.equal(captured.needsConfirmation, true);
   assert.equal(captured.status, 'needs-confirmation');
   assert.equal(captured.contentTrust, 'untrusted');
   assert.match(captured.reminderId, /^reminder-[a-f0-9-]{36}$/);
 
-  const classCapture = reminders.capture({ text: 'I have standup every Monday–Thursday at 10am', timezone: 'America/Los_Angeles' }, { state: store });
+  const classCapture = reminders.capture({ text: 'I have class every Monday–Thursday at 10am', timezone: 'America/Los_Angeles' }, { state: store });
   assert.deepEqual(classCapture.parsedSchedule.weekdays, [1, 2, 3, 4]);
   assert.equal(classCapture.parsedSchedule.localTime, '10:00');
   assert.equal(classCapture.recurrence, 'custom-weekdays');
@@ -23,7 +23,7 @@ try {
 
   const dueAt = '2026-07-29T17:00:00-07:00';
   const confirmed = reminders.create({
-    title: 'Submit report', dueAt, timezone: 'America/Los_Angeles',
+    title: 'Submit quiz', dueAt, timezone: 'America/Los_Angeles',
     recurrence: 'none', note: 'Personal Calendar only.'
   }, { state: store });
   assert.equal(confirmed.status, 'active');
@@ -33,7 +33,7 @@ try {
   const listed = reminders.list({}, { state: store });
   assert.equal(listed.contentTrust, 'untrusted');
   assert.equal(listed.count, 3);
-  assert.equal(listed.reminders.some(item => item.title === 'Submit report'), true);
+  assert.equal(listed.reminders.some(item => item.title === 'Submit quiz'), true);
 
   const completed = reminders.complete({ reminderId: confirmed.reminderId, expectedRevision: confirmed.revision }, { state: store });
   assert.equal(completed.status, 'completed');

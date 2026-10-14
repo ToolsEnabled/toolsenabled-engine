@@ -223,7 +223,7 @@ if (counts[0] !== undefined && counts[1] !== undefined && counts[0] !== counts[1
 function granularRootAccessCode() {
   try {
     const output = execFileSync(
-      path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
       ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
         '-File', path.join(ROOT, 'tools', 'fra-root-access-probe.ps1')],
       {

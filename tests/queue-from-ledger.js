@@ -258,7 +258,7 @@ async function run() {
       ledger: liveLedger
     });
 
-    // 2026-08-12: the ledger was reset to zero, and auditQueueProvenance
+    // 2026-08-12: the owner reset the ledger to zero, and auditQueueProvenance
     // REFUSES to judge provenance against an empty corpus rather than returning
     // a clean report. That refusal is the correct behaviour and this check must
     // assert it, not route around it -- "no findings" computed from no requests
@@ -395,7 +395,7 @@ async function run() {
   /* ==========================================================================
    * AN EMPTY RECORD IS THE NORMAL STATE OF A NEW INSTALL.
    *
-   * MEASURED 2026-08-12, on a ledger that had just been reset to zero:
+   * MEASURED 2026-08-12, on the ledger the owner had just reset to zero:
    *   node tools/queue-from-ledger.js --check  ->  exit 4, 72 ms
    *   "contains no requests; refusing to project an empty queue from it."
    * The first command a new user could ever give this tool refused to run.

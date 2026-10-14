@@ -322,7 +322,7 @@ function write(input, dependencies = {}) {
 
 /* THE SAME EVENT, ADMITTED OFF THE CALLER'S THREAD.
  *
- * MEASURED 2026-09-04 in a live main process: the policy-decision
+ * MEASURED 2026-09-04 in the owner's Live main process: the policy-decision
  * event write() performs for every tool call -- thirty a minute with
  * seventeen circles -- ran the whole synchronous admission on the main thread
  * (writer-lock spin, projection digests, redaction, and for a required event

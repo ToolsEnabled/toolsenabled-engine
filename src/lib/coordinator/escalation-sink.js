@@ -43,7 +43,7 @@
 // ESCALATION_STATE_BUSY after the message had ALREADY been accepted, escalate()
 // threw, the dedupe stamp was never written, and duty-registry.js classifies
 // that code as TRANSIENT -- correctly, for a pre-send failure -- so the next
-// cycle sent the owner a message they had already received. Two things close it:
+// cycle sent the owner a message he had already received. Two things close it:
 // the resolve retries on its own budget instead of the default 5x25ms, and
 // escalate() never throws once the wire has been used. An outcome that still
 // cannot be written is held in RESOLUTIONS_OWED and folded into the very next
@@ -593,8 +593,8 @@ async function escalate(input = {}, dependencies = {}) {
 
   // 6. Machine-sourced directives this notice supersedes. Structurally safe:
   //    acknowledgeWithoutReply throws OWNER_CHAT_NEEDS_A_REPLY on anything the
-  //    owner themselves sent (src/lib/owner-chat.js:750), so this can never file
-  //    away a message they are waiting on.
+  //    owner himself sent (src/lib/owner-chat.js:750), so this can never file
+  //    away a message he is waiting on.
   const acknowledged = [];
   const ackRefusals = [];
   if (delivered) {
@@ -620,7 +620,7 @@ async function escalate(input = {}, dependencies = {}) {
     messageId,
     attemptId: reserved.attemptId,
     // Whether the OUTCOME reached the state file, which is a different question
-    // from whether the message reached them. A reader that conflates them gets
+    // from whether the message reached him. A reader that conflates them gets
     // the two failures the wrong way round.
     recorded,
     error: sendOutcomeUnknown

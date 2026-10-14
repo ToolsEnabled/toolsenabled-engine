@@ -25,7 +25,8 @@
 // Isolation model (reused, not invented): one complete Codex home directory per
 // account, selected with the CODEX_HOME environment variable. This is the
 // technique already proven by config/codex.json and
-// src/lib/mission-bridge/actions.js -- subfolders serving as the launchpad. Each home carries its own auth.json, config.toml and session
+// src/lib/mission-bridge/actions.js -- the owner called it "subfolders as the
+// launchpad". Each home carries its own auth.json, config.toml and session
 // state, so accounts coexist and nothing is ever swapped in place. The
 // alternative that this replaces is still visible on this machine as a
 // timestamped `~/.codex/auth.json.bak-<account>-<date>` file: a manual
@@ -41,9 +42,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { normalizeRankWindow, normalizeReservePercent, normalizeSelectionMode } = require('./selection-modes.js');
 
-const DEFAULT_EXHAUSTED_AT_PERCENT = 99;
+const DEFAULT_EXHAUSTED_AT_PERCENT = 100;
 
 // What each provider calls its home, and the file whose PRESENCE means somebody
 // has signed in there at least once. That is a provisioning check and nothing
@@ -119,51 +119,6 @@ function parseRegistry(raw, { source }) {
       `The account registry at ${source} has no "accounts" array.`, { source });
   }
 
-  const exhaustedAtPercent = Number.isSafeInteger(parsed.exhaustedAtPercent)
-    && parsed.exhaustedAtPercent > 0 && parsed.exhaustedAtPercent <= 100
-    ? parsed.exhaustedAtPercent
-    : DEFAULT_EXHAUSTED_AT_PERCENT;
-
-  /* WHICH ACCOUNT GOES FIRST, KEPT BESIDE THE ACCOUNTS IT ORDERS.
-   *
-   * The alternative was a second file, and a second file is a second answer:
-   * the rotation would read one and the screen that lists these accounts would
-   * write the other, and the day they disagreed nothing would say which was in
-   * force. Both fields are OPTIONAL and both fall back to the cautious value --
-   * ./selection-modes.js normalises anything it does not recognise to `manual`,
-   * which never moves between accounts on its own. A registry written before
-   * these fields existed therefore behaves exactly as it always did.
-   *
-   * ABSENT IS `null`, NOT `manual`, AND THAT DISTINCTION IS LOAD-BEARING. The
-   * caller layers this over an older setting (rotation.js states the order of
-   * precedence), and normalising an absent field to `manual` would make "this
-   * file predates the dropdown" indistinguishable from "the person chose to be
-   * asked" -- the second of which must win over the older setting and the first
-   * of which must not. */
-  const selectionMode = parsed.selectionMode === undefined || parsed.selectionMode === null
-    ? null
-    : normalizeSelectionMode(parsed.selectionMode);
-  const reservePercent = parsed.reservePercent === undefined || parsed.reservePercent === null
-    ? null
-    : normalizeReservePercent(parsed.reservePercent);
-  const rankWindow = parsed.rankWindow === undefined || parsed.rankWindow === null
-    ? null
-    : normalizeRankWindow(parsed.rankWindow);
-  /* ONE RULE PER PROGRAM, when the person set one (product note: rules are
-     set per provider). `selectionByProvider` holds, per provider id, the same three
-     fields the record holds globally; a field left out inherits the global
-     one, and a program with no entry inherits everything. Absent stays null,
-     never an empty table, for the same reason the global fields do. */
-  const selectionByProvider = plainObject(parsed.selectionByProvider)
-    ? Object.freeze(Object.fromEntries(Object.entries(parsed.selectionByProvider)
-      .filter(([id, entry]) => Object.hasOwn(PROVIDERS, id) && plainObject(entry))
-      .map(([id, entry]) => [id, Object.freeze({
-        selectionMode: entry.selectionMode === undefined || entry.selectionMode === null ? null : normalizeSelectionMode(entry.selectionMode),
-        reservePercent: entry.reservePercent === undefined || entry.reservePercent === null ? null : normalizeReservePercent(entry.reservePercent),
-        rankWindow: entry.rankWindow === undefined || entry.rankWindow === null ? null : normalizeRankWindow(entry.rankWindow)
-      })])))
-    : null;
-
   const seenNames = new Set();
   const seenDirs = new Set();
   let antigravityRegistered = false;
@@ -217,14 +172,11 @@ function parseRegistry(raw, { source }) {
     }
     if (role !== null) seenNames.add(`${spec.id}:role:${role}`);
 
-    const priority = Number.isSafeInteger(entry.priority) && entry.priority > 0
-      ? entry.priority
-      : index + 1;
-
     const home = entry[spec.dirField].trim();
     return Object.freeze({
       name,
       role,
+      previousNames: Object.freeze(Array.isArray(entry.previousNames) ? [...entry.previousNames] : []),
       provider: spec.id,
       ...(entry.client ? { client: entry.client } : {}),
       // The provider's own word for its directory, echoed back so a caller that
@@ -236,14 +188,30 @@ function parseRegistry(raw, { source }) {
       // folder. Missing/false legacy rows remain person-owned for any provider
       // that writes provider configuration into the selected home.
       homeCreatedByApp: entry.homeCreatedByApp === true,
-      expectEmail: nonEmptyString(entry.expectEmail) ? entry.expectEmail.trim().toLowerCase() : null,
-      priority
+      expectEmail: nonEmptyString(entry.expectEmail) ? entry.expectEmail.trim().toLowerCase() : null
     });
   });
 
   if (accounts.length === 0) {
     throw new MultiAccountError('ACCOUNTS_REGISTRY_EMPTY',
       `The account registry at ${source} lists no accounts.`, { source });
+  }
+
+  // Old labels remain bound to this entry's home. Never allow another entry
+  // to reuse one: a saved conversation must not acquire a different owner.
+  const labelOwners = new Map();
+  for (const [index, account] of accounts.entries()) {
+    const aliases = parsed.accounts[index].previousNames;
+    if (aliases != null && (!Array.isArray(aliases) || aliases.length > 64
+        || aliases.some(name => !nonEmptyString(name) || name.length > 120))) {
+      throw new MultiAccountError('ACCOUNTS_ALIASES_INVALID', 'The saved account labels are invalid. Check the account list before starting.');
+    }
+    for (const label of [account.name, ...account.previousNames]) {
+      const key = `${account.provider}:${label.trim().toLowerCase()}`;
+      if (labelOwners.has(key) && labelOwners.get(key) !== account) throw new MultiAccountError('ACCOUNTS_ALIAS_CONFLICT',
+        'A saved account label names more than one account. Check the account list before starting.');
+      labelOwners.set(key, account);
+    }
   }
 
   for (const account of accounts) {
@@ -261,15 +229,7 @@ function parseRegistry(raw, { source }) {
     seenDirs.add(key);
   }
 
-  accounts.sort((a, b) => (a.priority - b.priority)
-    || a.provider.localeCompare(b.provider)
-    || a.name.localeCompare(b.name));
-  /* One limit per window, each optional. Absent means "use the single
-     number", which is what every registry written before this said. */
-  const percentOrNull = value => (Number.isSafeInteger(value) && value > 0 && value <= 100 ? value : null);
-  const exhaustedAtPercentHourly = percentOrNull(parsed.exhaustedAtPercentHourly);
-  const exhaustedAtPercentWeekly = percentOrNull(parsed.exhaustedAtPercentWeekly);
-  return Object.freeze({ exhaustedAtPercent, exhaustedAtPercentHourly, exhaustedAtPercentWeekly, selectionMode, reservePercent, rankWindow, selectionByProvider, accounts: Object.freeze(accounts), source });
+  return Object.freeze({ accounts: Object.freeze(accounts), source });
 }
 
 function loadRegistry({ configPath, fsImpl = fs } = {}) {
@@ -398,7 +358,7 @@ function profileProvisioned(account, { homeDir, fsImpl = fs } = {}) {
   }
 }
 
-// The accounts of ONE provider, in priority order. Selection is always made
+// The accounts of one provider. Selection uses an explicit chosen account;
 // within a provider: a Claude session cannot fail over onto a Codex account, and
 // offering it one would be a category error wearing a routing decision.
 function accountsFor(registry, provider) {
@@ -440,12 +400,7 @@ function requireAccount(registry, selector, { provider = null } = {}) {
  * are five places that pass them down. Spreading one call is the difference
  * between adding a field here and remembering five call sites. */
 function exhaustionThresholds(source) {
-  const from = source && typeof source === 'object' ? source : {};
-  return {
-    exhaustedAtPercent: from.exhaustedAtPercent,
-    exhaustedAtPercentHourly: from.exhaustedAtPercentHourly === undefined ? null : from.exhaustedAtPercentHourly,
-    exhaustedAtPercentWeekly: from.exhaustedAtPercentWeekly === undefined ? null : from.exhaustedAtPercentWeekly
-  };
+  return { exhaustedAtPercent: 100, exhaustedAtPercentHourly: 100, exhaustedAtPercentWeekly: 100 };
 }
 
 module.exports = Object.freeze({

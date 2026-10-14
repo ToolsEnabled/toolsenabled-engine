@@ -23,7 +23,7 @@ assert.deepEqual(manifest.systems.map(system => system.id), [
 ]);
 assert.doesNotMatch(JSON.stringify(manifest), /discord/i, 'the manifest must not name a provider the product no longer has');
 
-const valid = run('--identifier', 'agent-comms', '--branch', 'feature/agentcomms-naming', '--label', 'Agent Comms');
+const valid = run('--identifier', 'agent-comms', '--branch', 'r1162/agentcomms-naming', '--label', 'Agent Comms');
 assert.equal(valid.status, 0, valid.stderr);
 
 // COLLISION SUBJECT CHANGED 2026-08-23. This probe used 'internal-telegram',
@@ -36,13 +36,13 @@ const injectedCollision = run('--identifier', 'internal-instagram');
 assert.equal(injectedCollision.status, 1, 'deliberately injected reserved-name collision must refuse');
 assert.match(injectedCollision.stderr, /reserved provider namespace 'instagram'/);
 
-const historical = run('--historical', '--branch', 'archive/internal-instagram');
+const historical = run('--historical', '--branch', 'r1162/internal-instagram');
 assert.equal(historical.status, 0, historical.stderr);
 assert.match(historical.stdout, /historical-or-archived/);
 const monetizationDoc = run('--doc', 'docs/coordinator/R1162-MONETIZATION-FABLE-1.md');
 assert.equal(monetizationDoc.status, 0, monetizationDoc.stderr);
 
-// Discord left the product on 2026-08-22 (product decision). It is not a
+// Discord left the product on 2026-08-22 (owner ruling, O4). It is not a
 // retired-but-reserved namespace any more: the policy does not declare it,
 // the guard has no special case for it, the doctor report does not mention
 // it, and its tools are simply unknown rather than switched off.
@@ -55,8 +55,8 @@ assert.equal(Object.hasOwn(report.credentialReadiness, 'discordSend'), false);
 assert.equal(Object.hasOwn(report.credentialReadiness, 'discordOwnerDelivery'), false);
 assert.doesNotMatch(JSON.stringify(report), /discord/i, 'the doctor report must not name Discord anywhere');
 
-// Telegram left the product on 2026-08-23 (product decision: Telegram may be
-// removed, because the product now ships its own mobile app). It is held to
+// Telegram left the product on 2026-08-23 (owner ruling: "you can rip out
+// telegram", because the product now ships its own mobile app). It is held to
 // exactly the same standard Discord was one day earlier: not a
 // retired-but-reserved namespace, not a switched-off provider, simply not a
 // thing this product has.

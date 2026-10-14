@@ -2,11 +2,12 @@
 
 /* SWARM SIZES ARE A SHORT LIST, NOT A DIAL.
  *
- * THE PRODUCT DECISION THIS ENCODES, from the owner: the product largely
- * controls planners, workers and dispatchers, accepting model input. This part
- * of the product is more closed and aims at a good experience rather than
- * fine-grained control: it is designed around swarm sizes of 5, 10, 25, 50,
- * 100 and 150 agents and optimized for those sizes.
+ * THE PRODUCT DECISION THIS ENCODES, from the owner: "planners, workers, and
+ * dispatchers should be largely controlled by us but we accept model input ...
+ * This is a bit of a more closed product and we should try to deliver a good
+ * experience as opposed to a fine grained control ... we design it around
+ * intervals like 5, 10, 25, 50, 100, 150 agent swarms and we optimize it around
+ * those sizes."
  *
  * So a person picks a SIZE. They do not pick a concurrency, a launch rate, a
  * number of planners, or a harvest fan-out -- because those are not preferences,
@@ -45,7 +46,6 @@
  */
 
 const { CloudAgentError } = require('./errors');
-const { MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT } = require('./batch-target');
 
 /* MEASURED, not chosen. Dispatch throughput per machine, from the runs above.
  * Concurrency past this buys almost nothing and costs memory, so the presets
@@ -75,8 +75,8 @@ const TOKENS_PER_TASK_HIGH = 100_000;
  * harvests cost 28 apply-and-test cycles at about nine minutes each. A swarm
  * that dispatches faster than it harvests just moves the queue somewhere less
  * visible. */
-/* THERE IS NO PLANNER SEAT, AND THAT IS A DECISION, NOT AN OMISSION (product
- * rule: planning is left to the coordinator and dispatch).
+/* THERE IS NO PLANNER SEAT, AND THAT IS A DECISION, NOT AN OMISSION (owner,
+ * 2026-08-24: "or we leave the [planning] to coordinator/dispatch?" -- yes).
  * Measured basis: across 150 mechanically derived briefs the admission
  * validator found ZERO brief faults, and every planning act that needed
  * judgement was the coordinator's. Planning is the coordinator declaring
@@ -153,50 +153,34 @@ function presetFor(size) {
 }
 
 /**
- * What a swarm of this size is expected to cost, and whether the accounts can
- * carry it.
+ * What a swarm of this size is expected to cost on the selected account.
  *
- * `accounts` is the shape cloud.account_list returns: each with a usedPercent,
- * or null when it could not be established.
+ * `account` is the selected cloud.account_list reading, with a usedPercent
+ * or null when its allowance could not be established.
  *
  * THE WARNING IS THE POINT. A swarm that runs a person out of quota halfway
  * through leaves a batch half-dispatched, and the half that went out cannot be
  * cancelled or refunded. Telling them BEFORE is the only moment the information
  * is worth anything.
  */
-function forecast(size, { accounts = [], exhaustedAtPercent = 99 } = {}) {
+function forecast(size, { account = null, exhaustedAtPercent = 99 } = {}) {
   const preset = presetFor(size);
   const low = preset.size * TOKENS_PER_TASK_LOW;
   const high = preset.size * TOKENS_PER_TASK_HIGH;
 
   const dispatchSeconds = Math.ceil((preset.size / preset.launchesPerMinute) * 60);
 
-  /* UNKNOWN ALLOWANCE IS NOT A FULL ONE. An account whose remaining allowance
-   * could not be read is reported as unknown and EXCLUDED from the headroom
-   * sum, and its presence downgrades the verdict -- because the alternative is
-   * to treat "we could not ask" as "there is plenty", which is how a batch runs
-   * a person dry on an account nobody checked. */
-  let headroomPercent = 0;
-  const unknown = [];
-  for (const account of accounts) {
-    /* NaN and infinities are numbers to `typeof`, but they are not allowance
-     * measurements. Treating them as measurements used to let NaN poison the
-     * reported total (or let an infinity become definite zero/infinite
-     * headroom) while omitting the account from the unknown list. */
-    const used = account && Number.isFinite(account.usedPercent) ? account.usedPercent : null;
-    if (used === null) { unknown.push(account && account.name); continue; }
-    headroomPercent += Math.max(0, exhaustedAtPercent - used);
-  }
+  // Unknown and non-finite readings carry no definite allowance.
+  const used = account && Number.isFinite(account.usedPercent) ? account.usedPercent : null;
+  const headroomPercent = used === null ? null : Math.max(0, exhaustedAtPercent - used);
+  const unknown = account && used === null ? [account.name] : [];
 
   const warnings = [];
   if (unknown.length) {
     warnings.push(`the remaining allowance could not be read for ${unknown.join(', ')}, so this forecast counts none of it. A swarm may still run out on an account nobody could ask about.`);
   }
-  if (accounts.length && accounts.length < preset.machines) {
-    warnings.push(`this size is tuned for ${preset.machines} machine(s) and ${preset.machines} account(s); with ${accounts.length} it will dispatch at roughly ${MEASURED_LAUNCHES_PER_MINUTE_PER_MACHINE} launches a minute rather than ${preset.launchesPerMinute}, so expect about ${Math.ceil((preset.size / MEASURED_LAUNCHES_PER_MINUTE_PER_MACHINE) * 60)}s of dispatch instead of ${dispatchSeconds}s.`);
-  }
-  if (headroomPercent > 0 && headroomPercent < 20) {
-    warnings.push(`only about ${Math.round(headroomPercent)}% of combined allowance remains. A swarm of ${preset.size} may not finish, and the part that dispatched cannot be cancelled or refunded.`);
+  if (headroomPercent !== null && headroomPercent < 20) {
+    warnings.push(`only about ${Math.round(headroomPercent)}% of the selected account's allowance remains. A swarm of ${preset.size} may not finish, and the part that dispatched cannot be cancelled or refunded.`);
   }
 
   return Object.freeze({
@@ -205,45 +189,16 @@ function forecast(size, { accounts = [], exhaustedAtPercent = 99 } = {}) {
     dispatchSeconds,
     /* Stated as a BAND and labelled rough, everywhere it is shown. A single
        number here would be planned against. */
-    summary: `about ${(low / 1000).toFixed(0)}k-${(high / 1000).toFixed(0)}k output tokens, dispatched in roughly ${dispatchSeconds}s across ${preset.machines} machine(s). These are rough bands, not a quote.`,
-    headroomPercent: accounts.length ? headroomPercent : null,
+    summary: `about ${(low / 1000).toFixed(0)}k-${(high / 1000).toFixed(0)}k output tokens, dispatched in roughly ${dispatchSeconds}s at ${preset.launchesPerMinute} launches a minute. These are rough bands, not a quote.`,
+    headroomPercent,
     unknownAllowanceFor: Object.freeze(unknown),
     warnings: Object.freeze(warnings),
   });
 }
 
-/**
- * The bounds a preset produces for a batch declaration.
- *
- * Refuses rather than clamping if the accounts on hand cannot carry the
- * preset's rate at the per-account ceiling -- the same rule admission applies,
- * for the same reason: a batch that quietly serves less than it declared
- * reports a rate nobody can reproduce.
- */
-function boundsFor(size, accountCount) {
-  const preset = presetFor(size);
-  const count = Number(accountCount);
-  if (!Number.isInteger(count) || count < 1) {
-    fail('SWARM_ACCOUNTS_INVALID', 'accountCount must be a positive whole number.');
-  }
-  /* CHECKED AGAINST THE PRESET'S OWN TUNED SHAPE, not only the raw per-account
-   * ceiling. The first draft checked `count * 72 >= rate`, and the 150 preset
-   * slipped through it with ONE account -- 63 < 72, legal on paper. But that
-   * preset's rate was measured across three machines and three accounts; one
-   * account serving 63/min is a configuration nobody has run, which is
-   * precisely what the six-size design exists to refuse. The preset's
-   * `machines` figure IS the tuned account count, so falling below it is not a
-   * degraded mode -- it is an untuned one. */
-  if (count < preset.machines) {
-    fail('SWARM_ACCOUNTS_INSUFFICIENT',
-      `the ${preset.size} preset was tuned for ${preset.machines} account(s)/machine(s) and this call offers ${count}. Its ${preset.launchesPerMinute}/min rate has never been measured on fewer, so serving it would promise a configuration nobody has run. Add an account or pick a smaller size.`);
-  }
-  const serveable = count * MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT;
-  if (preset.launchesPerMinute > serveable) {
-    fail('SWARM_ACCOUNTS_INSUFFICIENT',
-      `the ${preset.size} preset dispatches at ${preset.launchesPerMinute} launches a minute, which ${count} account(s) cannot carry (${serveable} at the measured ${MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT} per account). Add an account or pick a smaller size.`);
-  }
-  return Object.freeze({ launchesPerMinute: preset.launchesPerMinute, accounts: count });
+/** The rate bounds a preset produces for a batch on the chosen account. */
+function boundsFor(size) {
+  return Object.freeze({ launchesPerMinute: presetFor(size).launchesPerMinute });
 }
 
 module.exports = Object.freeze({

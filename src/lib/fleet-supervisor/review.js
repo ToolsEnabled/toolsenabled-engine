@@ -6,7 +6,7 @@
 // finding"): a Gemini lane's own test result is worthless. Batch 1 on
 // 2026-07-28 had four lanes all reporting their own tests green; independent
 // review that EXECUTED the modules against real on-disk data rejected two of
-// them (one fabricated PDF page counts and returned 0 with ok:true; the other read
+// them (s03 fabricated PDF page counts and returned 0 with ok:true; s09 read
 // `details.messageId`/`details.errorCode`, fields its producer never writes).
 // Both lanes had written code against an imagined schema and then written a
 // test that fabricated that same schema, so the test confirmed the imagination
@@ -29,7 +29,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+// git is started by absolute path, never found in the worktree it acts on
+// (../git-command.js; platform review 1.0.50 E3).
+const { execGitFileSync } = require('../git-command');
 const { safeLaunchEnvironment } = require('../providers/subscription-launch-env.js');
 const { spawnHidden } = require('../proc/hidden-spawn');
 
@@ -55,7 +57,7 @@ const DEFAULT_LANE_PROVIDER = 'gemini';
 // 172-636s. Crucially, duration did NOT move with local load -- 355s mean with
 // no other review running vs 348s with one, across 0-3 concurrent lanes. A
 // review is model-latency-bound, not machine-bound, so the old value of 2 was
-// leaving the machine (~630MB peak per reviewer, plenty of free cores and memory)
+// leaving the machine (16 logical cores, ~26GB free, ~630MB peak per reviewer)
 // almost entirely idle while the backlog grew.
 //
 // 6 is chosen to MATCH the lane tier's production of reviewable work rather
@@ -78,7 +80,7 @@ const DEFAULT_MAX_REVIEW_ATTEMPTS = 3;
 // A reclaim is NOT an attempt. When a supervisor dies mid-review the lane was
 // never judged, so charging it against the judgement budget spends the lane's
 // review chances on our own restarts. Observed live 2026-07-28: six supervisor
-// restarts pushed one lane to reviewAttempt 3 of 3 -- one more restart
+// restarts pushed q21-ms5cd6w1z8wd to reviewAttempt 3 of 3 -- one more restart
 // would have stalled a lane no reviewer had ever finished looking at. Reclaims
 // are counted and capped separately so a lane that genuinely kills its reviewer
 // still stops, loudly, instead of looping forever.
@@ -105,7 +107,7 @@ const UNREVIEWABLE_REFUND_CAP = 6;
 //   2. It poisons verdictsByModel(), the number that decides how the $300
 //      Vertex credit is spent (R58/R77).
 //
-// MEASURED 2026-07-29: of 42 verdicts recorded after the fleet
+// MEASURED 2026-07-29T20:30-21:22Z: of 42 verdicts recorded after the fleet
 // was unblocked, 42 began with this prefix and 0 were flagged unreviewable.
 // The scoreboard read "gemini-2.5-pro on vertex: 0 accepted, 42 rejected, mean
 // score 0" from reviews where no command ever executed, and 13 items parked at
@@ -154,7 +156,7 @@ function safeJoin(root, relative) {
   return resolved;
 }
 
-function git(args, cwd, exec = execFileSync, maxBuffer = 8 * 1024 * 1024) {
+function git(args, cwd, exec = execGitFileSync, maxBuffer = 8 * 1024 * 1024) {
   return String(exec('git', args, {
     cwd, encoding: 'utf8', windowsHide: true, shell: false, maxBuffer
   }));
@@ -163,7 +165,7 @@ function git(args, cwd, exec = execFileSync, maxBuffer = 8 * 1024 * 1024) {
 // Everything the LANE changed, measured against the materialized baseline tree
 // rather than HEAD (a lane worktree differs from HEAD by ~700 materialized
 // files before the lane has done anything -- see worktree.js).
-function laneChangedPaths(worktree, baselineTree, exec = execFileSync) {
+function laneChangedPaths(worktree, baselineTree, exec = execGitFileSync) {
   if (!baselineTree) return null;
   try {
     git(['add', '-A'], worktree, exec);
@@ -176,7 +178,7 @@ function laneChangedPaths(worktree, baselineTree, exec = execFileSync) {
   }
 }
 
-function laneDiffText(worktree, baselineTree, exec = execFileSync) {
+function laneDiffText(worktree, baselineTree, exec = execGitFileSync) {
   if (!baselineTree) return null;
   try {
     const out = git(['diff', '--cached', baselineTree], worktree, exec);
@@ -205,7 +207,7 @@ function capturePacket({
   laneModel = null,
   now = () => new Date(),
   fsImpl = fs,
-  exec = execFileSync
+  exec = execGitFileSync
 } = {}) {
   const result = {
     ok: false,
@@ -1171,7 +1173,7 @@ async function runReviewer({
 // model" -- and then the review stage never compared.
 //
 // WHY THIS HARD-BLOCKS ACCEPTANCE rather than merely annotating the verdict:
-// A model downgrade is a refusal, never a fallback (R58). The lane should
+// R58 says a model downgrade is "a REFUSAL, never a fallback". The lane should
 // not have run on that model at all. Letting the review tier accept its output
 // would launder a refused model into merge-eligible work through the one gate
 // that exists to stop exactly that kind of quiet substitution.
@@ -1204,7 +1206,7 @@ function belowFloorRefusal(claim) {
     backend,
     floor,
     reason: `below-floor: the provider served ${served.slice(0, 4).join(', ')} for a lane whose ${backend} floor is `
-      + `${floor.join(', ') || '(unknown)'}. R58 makes a model downgrade a refusal, never a fallback, so this `
+      + `${floor.join(', ') || '(unknown)'}. Owner order R58 makes a model downgrade a REFUSAL, never a fallback, so this `
       + 'output is not acceptable regardless of quality -- this is NOT a judgement of the work.'
   };
 }
@@ -1309,12 +1311,12 @@ async function reviewOneLane(stateFile, claim, {
     };
   }
 
-  // R127: intermediate agents that run during Gemini Vertex API calls are
-  // outside this product's control and may show up as the agent, so calls are
-  // made correctly, the served identity is not policed, and quality is what
-  // gets reviewed.
+  // OWNER ORDER R127, verbatim: "i think it was something that we cant control
+  // intermediate agents during gemini vertex api calls right and those might
+  // show as the agent. so lets just make sure we make our calls the right way,
+  // dont worry about what actually gets served, and just review quality".
   //
-  // That is right about the mechanism, and Q57's own write-up says the same
+  // He is right about the mechanism, and Q57's own write-up says the same
   // thing: Gemini runs calls we do not control for routing, summarization,
   // classification and context compaction, and they land in the CLI's
   // invocation-level `stats.models` aggregate next to the model that actually
@@ -1547,9 +1549,9 @@ async function reviewOneLane(stateFile, claim, {
 }
 
 // A second reviewer from a DIFFERENT VENDOR than both the lane and the first
-// reviewer. Cross-vendor is the point: two frontier judges on the same locked
-// rubric can disagree widely and straddle the threshold, so a same-vendor
-// confirmation buys correlated noise.
+// reviewer. Cross-vendor is the point: the owner's benchmark measured 0.178 mean
+// disagreement and 31% threshold-straddling between two frontier judges on the
+// same locked rubric, so a same-vendor confirmation buys correlated noise.
 //
 // Our pool is small ({codex, gemini} minus the lane's own provider), so for a
 // gemini lane there is usually NO third vendor. That is reported honestly as

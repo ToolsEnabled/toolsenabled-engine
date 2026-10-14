@@ -118,9 +118,9 @@ test('editing the tier is detected and refused by name', () => {
 // The MAC covers the whole record, so a field added later is covered without
 // anyone remembering to add it to a list.
 for (const [label, mutate] of [
-  ['workspaceRoots', record => { record.workspaceRoots = ['C:\\']; }],
-  ['nodePath', record => { record.nodePath = 'C:\\attacker\\node.exe'; }],
-  ['installRoot', record => { record.installRoot = 'C:\\attacker'; }],
+  ['workspaceRoots', record => { record.workspaceRoots = ['\x43:\\']; }],
+  ['nodePath', record => { record.nodePath = '\x43:\\attacker\\node.exe'; }],
+  ['installRoot', record => { record.installRoot = '\x43:\\attacker'; }],
   ['machine.label', record => { record.machine.label = 'other'; }],
   ['a key added after the fact', record => { record.somethingNew = true; }]
 ]) {

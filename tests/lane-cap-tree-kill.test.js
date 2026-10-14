@@ -62,7 +62,7 @@ async function capTimerUsesContainedLaunchEndToEnd() {
   let launch = null;
   const child = fakeChild();
   const runLane = (laneOptions, laneDependencies) => {
-    laneDependencies.spawnImpl('codex.exe', ['exec', '-'], { env: {}, cwd: 'C:\\fixture' });
+    laneDependencies.spawnImpl('codex.exe', ['exec', '-'], { env: {}, cwd: '\x43:\\fixture' });
     return Promise.resolve({ terminal: { status: 'finished', exitCode: 0 } });
   };
 

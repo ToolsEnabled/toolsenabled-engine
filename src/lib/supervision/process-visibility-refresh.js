@@ -28,7 +28,7 @@ const OPERATION_ID = 'collect-process-visibility';
 // finite and carries no helper-supplied text -- but changing a receipt that a
 // security test pins deliberately is a decision for whoever owns supervision,
 // not a side effect of an elevation audit. It is recorded in
-// the elevation audit's notes as a named recommendation instead.
+// Desktop/ELEVATION-SURFACE.md as a named recommendation instead.
 //
 // Nothing here is a user-facing elevation refusal: there is no person present
 // to read "what would enable it", which is why this was the right one to leave.

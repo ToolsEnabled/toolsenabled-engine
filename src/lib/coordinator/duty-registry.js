@@ -24,7 +24,7 @@
 // In particular: composing the reply text to an owner message is judgement.
 // This file never imports ownerChat.reply. The host detects
 // OWNER_WAITING_FOR_REPLY and escalates a NOTICE ABOUT the condition; it never
-// sends them an answer.
+// sends him an answer.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -193,7 +193,7 @@ async function escalateVia(ctx, candidate) {
     // "the owner was told" is the false-OK-from-a-suppressed-escalation failure
     // this port was written against, and it bites hardest on the one condition
     // R100 is about: the owner is left waiting, an unrelated subsystem alarm
-    // trips the global 60s send floor, their notice is suppressed, and the duty
+    // trips the global 60s send floor, his notice is suppressed, and the duty
     // still reports escalated:true. So `delivered` is taken from the sink's own
     // decision, never inferred from the absence of an exception.
     const delivered = result && result.delivered === true;
@@ -282,13 +282,13 @@ async function runOwnerInboxDetect(ctx) {
   };
 
   if (summary.condition === chat.CONDITIONS.UNAVAILABLE) {
-    return unavailable('the owner inbox could not be read; whether they are waiting is UNKNOWN', detail);
+    return unavailable('the owner inbox could not be read; whether he is waiting is UNKNOWN', detail);
   }
   return ok(detail, `owner inbox condition ${summary.condition}`);
 }
 
 // 2. ESCALATE OWNER_WAITING_FOR_REPLY -- the highest-priority state in this
-//    system. The notice is ABOUT the condition. It is NEVER a reply to them:
+//    system. The notice is ABOUT the condition. It is NEVER a reply to him:
 //    this function does not have access to ownerChat.reply and must not gain
 //    it.
 async function runOwnerWaitingEscalate(ctx) {
@@ -309,9 +309,9 @@ async function runOwnerWaitingEscalate(ctx) {
     state: 'OWNER_WAITING_FOR_REPLY',
     // Deliberately describes the CONDITION and names the human action. It
     // carries no owner message text: the heartbeat and the escalation are
-    // both machine surfaces and their words belong in the inbox, not here.
+    // both machine surfaces and his words belong in the inbox, not here.
     reason: `The owner has an unread message waiting ${waitingMinutes} minute(s) with no agent reply. `
-      + `No agent currently holds the coordinator role's reply duty. Run ${summary.drainCommand} and answer them.`
+      + `No agent currently holds the coordinator role's reply duty. Run ${summary.drainCommand} and answer him.`
   });
 
   if (!outcome.available) {
@@ -347,7 +347,7 @@ async function runOwnerWaitingEscalate(ctx) {
 //
 //    Structural backstop: ownerChat.acknowledgeWithoutReply throws
 //    OWNER_CHAT_NEEDS_A_REPLY on any owner-sourced item, so even a bug here
-//    cannot file one of their messages.
+//    cannot file one of his messages.
 async function runMachineDirectiveAck(ctx) {
   const chat = dep(ctx, 'ownerChat', ownerChat);
   const ids = Array.isArray(ctx.cycle.actionedDirectiveIds) ? ctx.cycle.actionedDirectiveIds : [];
@@ -574,7 +574,7 @@ async function runBoundedRestart(ctx) {
     // DURABILITY fact ("the OS cannot restart it") collapsed into the same word
     // as a LIVENESS fact ("it is not running"), which is breakage 3 of this port.
     //
-    // Measured, not inferred: with the duty host running healthily
+    // Measured, not inferred: with the duty host running healthily as pid 34848
     // and its heartbeat 5s old, the sweep reported coordinator-duty-host DOWN /
     // failedRung=registered, policy said action=correct, and preconditions
     // passed. Under --allow-restart this duty would have spawned a SECOND duty
@@ -929,7 +929,7 @@ const DUTIES = Object.freeze([
     kind: DUTY_KIND.MECHANICAL,
     intervalMs: 60_000,
     outward: true,
-    description: 'When an owner-sourced message has been unread past STALE_UNREAD_MS, send a notice ABOUT that condition. Never a reply to them.',
+    description: 'When an owner-sourced message has been unread past STALE_UNREAD_MS, send a notice ABOUT that condition. Never a reply to him.',
     run: runOwnerWaitingEscalate
   }),
   Object.freeze({
@@ -1054,7 +1054,7 @@ const DUTIES = Object.freeze([
     // The removed remote-owner ask did not outlive its provider. system.ask is
     // a local prompt and is untouched.
     description: 'Answering a system.ask prompt on the owner behalf.',
-    humanAction: 'the owner answers the prompt themselves'
+    humanAction: 'the owner answers the prompt himself'
   }),
   Object.freeze({
     id: 'weigh-escalation-urgency',

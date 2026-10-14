@@ -6,9 +6,9 @@
 // transcript-bound AES-GCM), peer introduction (who is my peer, what is their
 // key), device identity (my key, in the vault), and the lease route on the
 // account server. This is the thing that holds them in one hand and does the
-// one job the owner described: a user signs in on machine A and machine B,
-// connects them through our server, and can use either to operate the other --
-// getting exactly the app on the website today, working.
+// one job the owner described: "a user logs in to machine A and machine B and
+// connects via our server -- they can use either to operate the other", and
+// "they get exactly the app that is on the website right now, but working".
 //
 // WHAT ONE SESSION IS, end to end:
 //
@@ -77,21 +77,26 @@ const { createPeerIntroductionClient } = require('./online-fra-peer-introduction
 const PEER_KEY_PIN_VAULT_KEY = 'online-fra.peer-key-pin';
 
 function readPeerKeyPins(vault) {
-  let raw = null;
-  /* ANY read failure means "nothing recorded yet", not "refuse the
-     connection". This store is an ADDITIVE protection: a vault that has never
-     held a pin, one that reports absence with its own error shape, and one
-     that is briefly unreadable are all the same situation -- there is nothing
-     to compare against. Refusing here would turn a storage hiccup into a lost
-     connection, which costs more than the risk it would close. The mismatch
-     refusal below is what is unconditional, and it only needs a value that was
-     actually read. */
+  let raw;
   try { raw = vault.getSecret(PEER_KEY_PIN_VAULT_KEY); }
-  catch { return {}; }
+  catch (error) {
+    // Only the vault's definite absence answer permits first use. A read
+    // failure could hide an existing pin and must not let a changed key in.
+    if (error?.code === 'SECRET_NOT_CONFIGURED') return {};
+    fail('RELAY_SHELL_PEER_KEY_PIN_UNREADABLE',
+      'The other computer\'s recorded identity key could not be read from the vault. Try again after vault access is restored.');
+  }
+  let parsed;
   try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch { return {}; }
+    parsed = JSON.parse(raw);
+  } catch {
+    fail('RELAY_SHELL_PEER_KEY_PIN_INVALID', 'The recorded peer identity keys are unreadable. This connection was not started.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || Object.values(parsed).some(value => typeof value !== 'string' || !value)) {
+    fail('RELAY_SHELL_PEER_KEY_PIN_INVALID', 'The recorded peer identity keys are invalid. This connection was not started.');
+  }
+  return parsed;
 }
 const { createBrowserAuthority, BROWSER_DISPATCH_GUARD } = require('./online-fra-browser-authority');
 const MAX_PENDING_WEB_REQUESTS = 32;
@@ -339,10 +344,10 @@ function createRelayShell(options = {}) {
        The supervisor backs off and dials again, which is right: the person may
        be adding the connection on the account page right now. */
     if (!peer) fail('RELAY_SHELL_NO_PAIR', 'This computer is on the account but is not in any connection yet, so there is nothing to join. Add a connection on the account page.');
-    /* ONE COMPUTER IS A CONNECTION TOO. The owner's rule: when only one computer
-       is connected, the interface serves that one computer; when two are
-       connected, it serves both and both are controllable. A solo machine sits
-       in a relay pair BY ITSELF: the
+    /* ONE COMPUTER IS A CONNECTION TOO. The owner's rule: "If theres only one
+       computer connected we need to serve that one computer in the interface.
+       If there's two we need to serve both in the interface and both need to
+       be controllable." A solo machine sits in a relay pair BY ITSELF: the
        introduction names the pair and no peer (peerDeviceId null, no key), the
        lease names it machine-a, and the socket it opens carries exactly one
        leg -- the browser's. There is no hello to offer, no peer endpoint to
@@ -367,14 +372,13 @@ function createRelayShell(options = {}) {
           + 'remove the connection on the account page and add it again.');
       }
       if (pinned === null) {
-        /* First sight: record it. A vault that cannot be written leaves this
-           connection exactly as unprotected as it was before this check
-           existed, which is why it proceeds rather than refusing -- losing a
-           customer's working connection to a storage hiccup would cost more
-           than the introducer-substitution risk it would close. The mismatch
-           refusal above is unconditional. */
+        // Persist first use before asking for a relay lease. Otherwise a
+        // transient write failure silently removes protection on reconnect.
         try { vault.setSecret(PEER_KEY_PIN_VAULT_KEY, JSON.stringify({ ...pins, [pinKey]: offered })); }
-        catch { /* pin not persisted; the mismatch check simply has nothing to compare next time */ }
+        catch {
+          fail('RELAY_SHELL_PEER_KEY_PIN_WRITE_FAILED',
+            'The other computer\'s identity key could not be saved in the vault. This connection was not started.');
+        }
       }
     }
 

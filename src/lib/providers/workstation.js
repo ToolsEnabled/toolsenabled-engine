@@ -643,8 +643,8 @@ function mergeCodexProjectTrust(source, localRoot = ROOT) {
   }
   if (matches.length > 1) fail('WORKSTATION_CODEX_PROJECT_DUPLICATE', 'Codex has duplicate equivalent project trust sections.');
   if (matches.length === 0) {
-    const literal = path.resolve(localRoot).replaceAll("'", "''");
-    return `${String(source || '').trimEnd()}\n\n[projects.'${literal}']\ntrust_level = "trusted"\n`;
+    const literal = quoteToml(path.resolve(localRoot));
+    return `${String(source || '').trimEnd()}\n\n[projects.${literal}]\ntrust_level = "trusted"\n`;
   }
   const start = matches[0];
   let end = lines.length;

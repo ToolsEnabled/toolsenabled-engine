@@ -3,14 +3,15 @@
 
 // FIRST-RUN SETUP -- task T12 of docs/design/INSTALLER-EXPERIENCE.md section 7.
 //
-// THE PROBLEM THIS EXISTS TO REMOVE. Product rule: any trouble connecting,
-// signing in, creating a secure user account or setting anything up counts as
-// a failure until it is solved.
+// THE PROBLEM THIS EXISTS TO REMOVE, in the owner's words about the machine that
+// will test this product: "If they have any issues connecting to your system or
+// logging in or creating a secure user account or setting up anything then you
+// are failing until they do."
 //
 // Before this file, setting this product up on a computer that was not the
 // owner's meant hand-editing `.mcp.json` to correct five hardcoded absolute paths
-// to a Node runtime at a machine-specific pinned location and three more to a
-// checkout under one person's profile directory. There was no command to run. There was no
+// to a Node runtime at `C:\agent-apps\node-v22.19.0\node.exe` and three more to a
+// checkout at `<profile-root>/owner\...`. There was no command to run. There was no
 // question to answer. There was a JSON file and the expectation that a stranger
 // would guess what to put in it.
 //

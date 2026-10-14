@@ -13,9 +13,26 @@ tests/task-handoff-lifecycle.test.js
 tests/rules-turn-snapshot.test.js
 tests/ledger-category-reset.test.js
 tests/reset-delayed-consumers.test.js
-# 2026-09-07: the two audit-record tests added by two earlier changes. Both shipped
+# 2026-09-07: the two audit-record tests added by 09ce9a2 and e302fbc. Both shipped
 # without a suite entry, so tools/invocation-guard.js counted them unregistered with
 # no invocation path and failed -- taking the whole pretest chain, and every engine
 # qualification, down with them. Their modules were already mapped in
 # config/packages.json; only this list was missing them.
 tests/audit-admission-fallback-sink.test.js
+# 2026-09-24: the words door's allowlist for the ids engineering text is made of.
+# Wired here on the same lesson as the 09-07 entry above: a test file with no
+# suite entry is counted unregistered by tools/invocation-guard.js and fails the
+# whole pretest chain.
+tests/r-ledger-words-safe-ids.test.js
+# Ledger compaction (release-wave F2): a dry run writes nothing; an applied
+# compaction keeps every record, every hashed field and the chain verdict, and
+# a restore rebuilds the document byte for byte.
+tests/ledger-compact.js
+# Ledger compaction --apply writes like the store: under the store's write
+# lock, only over the Ledger it planned from, by rename, never over an
+# existing sidecar, and without leaving a sidecar for a compaction that failed.
+tests/ledger-compact-apply-safety.test.js
+# A review verdict filed as progress prose is caught (warned by default,
+# refused under the refuse switch), and a review with no reason is refused
+# (T1997, release-wave L4).
+tests/t-ledger-review-signal.test.js

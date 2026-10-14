@@ -3,97 +3,88 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { probeGeminiAccount, STATUS } = require('../../src/lib/multi-account/health');
-const { defaultProbeFor } = require('../../src/lib/multi-account/rotation');
-const { decodeGeminiQuota } = require('../../src/lib/usage/gemini-quota');
-const { withProbeLifecycle, probeLifecycleOf } = require('../../src/lib/multi-account/probe-lifecycle');
+const { defaultProbeFor, readAccountUsage } = require('../../src/lib/multi-account/rotation');
 
 const account = { name: 'lab', provider: 'gemini', home: path.resolve('synthetic-gemini-home'), expectEmail: null };
-const fsImpl = { statSync() { return { isFile: () => true }; } };
-const allowanceBuckets = decodeGeminiQuota({ buckets: [
-  { modelId: 'gemini-2.5-pro', tokenType: 'INPUT', remainingFraction: 0, remainingAmount: '90071992547409931234', resetTime: '2026-09-15T00:00:00Z' },
-  { modelId: 'gemini-2.5-flash', tokenType: 'OUTPUT', remainingFraction: 0.5 }
-] }, { observedAt: '2026-09-14T18:00:00Z', sourceVersion: '0.58.0' });
-const observation = withProbeLifecycle({ status: 'observed', email: 'fixture@example.test', allowanceBuckets }, 'closed');
-
-test('canonical Gemini factory reports precise independent buckets without pooled usage or rank windows', async () => {
-  let called = 0;
-  const probe = defaultProbeFor('gemini', { fsImpl, quotaProbe: async ({ home }) => { called++; assert.equal(home, account.home); return observation; } });
-  const row = await probe(account);
-  assert.equal(called, 1);
-  assert.equal(row.status, STATUS.HEALTHY);
-  assert.equal(row.canServe, true, 'one exhausted model decided service for every model');
-  assert.equal(row.usageStatus, 'measured');
-  assert.equal(row.allowanceBuckets, allowanceBuckets);
-  assert.equal(row.allowanceBuckets.buckets[0].remainingAmount, '90071992547409931234');
-  assert.equal(row.usedPercent, null);
-  assert.deepEqual(row.windows, { hourly: null, weekly: null, weeklyWindows: [] });
-  assert.equal(probeLifecycleOf(row), 'closed');
-  assert.equal(Object.keys(row).includes('probeLifecycle'), false);
-});
-
-for (const [mode, email, status] of [['match', 'fixture@example.test', STATUS.HEALTHY], ['mismatch', 'other@example.test', STATUS.ACCOUNT_MISMATCH], ['missing', null, STATUS.TRANSIENT]]) {
-  test(`fresh Gemini identity ${mode} enforces the registered expectation`, async () => {
-    const row = await probeGeminiAccount({ ...account, expectEmail: 'fixture@example.test' }, { fsImpl,
-      quotaProbe: async () => withProbeLifecycle({ ...observation, email }, 'closed') });
-    assert.equal(row.status, status);
-    assert.equal(row.canServe, mode === 'match');
-    assert.equal(row.allowanceBuckets, mode === 'match' ? allowanceBuckets : null);
-  });
+const noWindows = { hourly: null, weekly: null, weeklyWindows: [] };
+function metadataOnly(error = null) {
+  const observed = [];
+  const fsImpl = new Proxy({ statSync(file) {
+    observed.push(file);
+    if (error) throw Object.assign(Error('synthetic metadata failure'), { code: error });
+    return { isFile: () => true };
+  } }, { get(target, key) {
+    if (key in target) return target[key];
+    throw Error('Gemini account health attempted more than a metadata check');
+  } });
+  return { fsImpl, observed };
 }
 
-for (const code of ['GEMINI_CACHED_AUTH_UNAVAILABLE', 'GEMINI_SERVICE_UNAVAILABLE', 'GEMINI_AUTH_MODE_UNSUPPORTED']) {
-  // This is explicitly the case with NO independently verified userinfo.
-  // Separate worker/frame/health tests cover identity verified before quota
-  // failure; a generic unavailable result cannot erase that distinction.
-  test(`${code} without verified identity does not invent expiry, usage or identity`, async () => {
-    const options = { fsImpl, quotaProbe: async () => ({ status: 'unavailable', code }) };
-    const row = await probeGeminiAccount(account, options);
-    assert.equal(row.status, STATUS.HEALTHY);
+test('canonical Gemini account health checks presence without opening credentials or measuring allowance', async () => {
+  const { fsImpl, observed } = metadataOnly();
+  const row = await defaultProbeFor('gemini', { fsImpl })(account);
+  assert.deepEqual(observed, [path.join(account.home, '.gemini', 'oauth_creds.json')]);
+  assert.equal(row.status, STATUS.HEALTHY);
+  assert.equal(row.canServe, true);
+  assert.equal(row.email, null);
+  assert.equal(row.usedPercent, null);
+  assert.equal(row.resetsAt, null);
+  assert.equal(row.readAt, null);
+  assert.equal(row.allowanceBuckets, null);
+  assert.deepEqual(row.windows, noWindows);
+  assert.equal(row.usageStatus, 'not_reported');
+  assert.equal(row.usageSource, null);
+  assert.match(row.usageReason, /allowance is unknown/i);
+});
+
+test('a pinned Gemini identity remains unverified by file presence', async () => {
+  const row = await probeGeminiAccount({ ...account, expectEmail: 'fixture@example.test' }, metadataOnly());
+  assert.equal(row.status, STATUS.TRANSIENT);
+  assert.equal(row.canServe, false);
+  assert.equal(row.email, null);
+  assert.equal(row.allowanceBuckets, null);
+  assert.match(row.reason, /could not be confirmed/i);
+});
+
+for (const error of ['ENOENT', 'ENOTDIR', 'EACCES', 'EIO']) {
+  test(`Gemini metadata failure ${error} distinguishes absent sign-in from an unreadable check`, async () => {
+    const row = await probeGeminiAccount(account, metadataOnly(error));
+    assert.equal(row.status, ['ENOENT', 'ENOTDIR'].includes(error) ? STATUS.SIGNED_OUT : STATUS.TRANSIENT);
+    assert.equal(row.canServe, false);
     assert.equal(row.allowanceBuckets, null);
     assert.equal(row.usedPercent, null);
-    assert.equal(row.usageStatus, code === 'GEMINI_AUTH_MODE_UNSUPPORTED' ? 'unsupported' : 'unavailable');
-    assert.equal(probeLifecycleOf(row), null);
-    const pinned = await probeGeminiAccount({ ...account, expectEmail: 'fixture@example.test' }, options);
-    assert.equal(pinned.status, STATUS.TRANSIENT);
-    assert.equal(pinned.canServe, false);
+    assert.deepEqual(row.windows, noWindows);
+    assert.match(row.usageReason, /unknown/i);
   });
 }
 
-test('no sign-in file does not invoke the SDK worker', async () => {
-  let calls = 0;
-  const row = await probeGeminiAccount(account, { fsImpl: { statSync() { throw Object.assign(Error(), { code: 'ENOENT' }); } }, quotaProbe: async () => { calls++; } });
-  assert.equal(row.status, STATUS.SIGNED_OUT);
-  assert.equal(calls, 0);
+test('a cancelled Gemini health check does no filesystem work', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { fsImpl, observed } = metadataOnly();
+  await assert.rejects(probeGeminiAccount(account, { fsImpl, signal: controller.signal }), { name: 'AbortError' });
+  assert.deepEqual(observed, []);
 });
 
-test('rotation preserves buckets and does not label a failed canonical probe as unsupported', async t => {
+test('rotation returns unknown Gemini allowance through the canonical reader', async t => {
   const fs = require('node:fs'), os = require('node:os');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-account-row-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const registryPath = path.join(root, 'accounts.json');
-  fs.writeFileSync(registryPath, JSON.stringify({ accounts: [{ name: 'lab', provider: 'gemini', homeDir: '.gemini-lab', priority: 1 }] }));
-  const { readAccountUsage } = require('../../src/lib/multi-account/rotation');
-  const options = { registryPath, homeDir: root, providers: ['gemini'] };
-  const measured = await readAccountUsage({ ...options, probeFor: () => async () => ({ status: 'healthy', canServe: true, allowanceBuckets, usageStatus: 'measured' }) });
-  assert.equal(measured.accounts.length, 1);
-  assert.equal(measured.accounts[0].allowanceBuckets, allowanceBuckets);
+  fs.writeFileSync(registryPath, JSON.stringify({ accounts: [{ name: 'lab', provider: 'gemini', homeDir: '.gemini-lab' }] }));
+  const { fsImpl, observed } = metadataOnly();
+  const options = { registryPath, homeDir: root, providers: ['gemini'], probeFor: id => defaultProbeFor(id, { homeDir: root, fsImpl }) };
+  const reply = await readAccountUsage(options);
+  assert.equal(reply.accounts.length, 1);
+  const row = reply.accounts[0];
+  assert.equal(row.status, STATUS.HEALTHY);
+  assert.equal(row.canServe, true);
+  assert.equal(row.usageStatus, 'not_reported');
+  assert.equal(row.allowanceBuckets, null);
+  assert.equal(row.reportedUsage, null);
+  assert.deepEqual(row.windows, noWindows);
+  assert.equal(observed.length, 1);
   const failed = await readAccountUsage({ ...options, probeFor: () => async () => { throw Error('synthetic failure'); } });
   assert.equal(failed.accounts[0].usageStatus, 'unavailable');
-  assert.equal(failed.accounts[0].usageCode, 'GEMINI_USAGE_UNAVAILABLE');
   assert.equal(failed.accounts[0].allowanceBuckets, null);
-});
-
-test('worker core rejects malformed top-level quota but preserves a legitimate empty object', async () => {
-  const { readGeminiQuota } = await import('../../src/lib/providers/gemini-quota-worker-core.mjs');
-  for (const quota of [null, undefined, [], '', false, 3, {}]) {
-    const sdk = { Config: class {}, AuthType: { LOGIN_WITH_GOOGLE: 'oauth-personal' },
-      getOauthClient: async () => ({ request: async () => ({ data: { email: 'fixture@example.test' } }) }),
-      CodeAssistServer: class {
-        async loadCodeAssist() { return { currentTier: { id: 'free-tier' }, cloudaicompanionProject: 'fixture-project' }; }
-        async retrieveUserQuota() { return quota; }
-      } };
-    const result = await readGeminiQuota(sdk, { cwd: '.', id: 'fixture' });
-    if (quota && !Array.isArray(quota) && typeof quota === 'object') assert.deepEqual(result.quota, { buckets: [] });
-    else assert.equal(result.code, 'GEMINI_USAGE_MALFORMED');
-  }
 });

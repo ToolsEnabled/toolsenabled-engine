@@ -37,7 +37,7 @@ function normalizedAbsolute(value, label) {
 
 function childEnvironment(stateDir, { serviceRegistryOptions = {} } = {}) {
   const resolvedState = normalizedAbsolute(stateDir, 'stateDir');
-  const windowsRoot = 'C:\\Windows';
+  const windowsRoot = '\x43:\\Windows';
   return Object.freeze({
     SystemRoot: windowsRoot,
     WINDIR: windowsRoot,

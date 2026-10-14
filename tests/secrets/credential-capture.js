@@ -195,9 +195,7 @@ try {
 
   // An unexpected internal failure still must not leak its detail. Only the
   // queue's own typed vocabulary is re-surfaced; anything else stays generic.
-  // The synthetic profile path is assembled at runtime so this source carries no literal user path.
-  const syntheticProfile = ['C:', 'Users', 'example'].join('\\');
-  const internalFailure = new Error(`Cannot find module '${syntheticProfile}\\secret-path\\owner-prompt-queue'`);
+  const internalFailure = new Error("Cannot find module '\x43:\\Users\\example\\secret-path\\owner-prompt-queue'");
   internalFailure.code = 'MODULE_NOT_FOUND';
   queueFailure = internalFailure;
   assert.throws(
@@ -210,7 +208,7 @@ try {
 
   // A queue error whose prose is not plain bounded text is not re-surfaced
   // either, even when its code is one the queue owns.
-  const unsafeProse = new Error(`Blocked by ${syntheticProfile}\\Desktop\\state\\owner-prompt-queue.json`);
+  const unsafeProse = new Error('Blocked by \x43:\\Users\\example\\Desktop\\state\\owner-prompt-queue.json');
   unsafeProse.code = 'OWNER_PROMPT_QUEUE_UNAVAILABLE';
   queueFailure = unsafeProse;
   assert.throws(

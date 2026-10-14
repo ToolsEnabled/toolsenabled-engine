@@ -9,13 +9,12 @@
  *   1. WHERE THE MODEL IS AND WHICH ONE. resolveLocalTarget() reads the
  *      person's own settings first -- model.provider "Ollama", model.endpoint,
  *      model.name, the same three rows src/lib/providers/customer-model.js
- *      reads -- and proves them against the running runtime through
- *      local-node-runtime.js's probeRuntime() before a session exists. With
- *      nothing configured it falls back to that module's detect() and
- *      preferredModel(), so a person who installed Ollama and pulled one model
- *      and configured nothing still gets a session. A model it cannot prove is
- *      refused BY NAME with the runtime module's own codes and install
- *      commands; nothing is guessed and nothing is silently substituted.
+ *      reads -- and checks runtime availability through
+ *      local-node-runtime.js's probeRuntime() before a session exists.
+ *      Explicit model IDs are sent exactly as supplied; the runtime decides
+ *      whether it can serve them. With nothing configured it falls back to
+ *      detect() and preferredModel(), so an installed model can provide the
+ *      default. Provider refusals retain their named errors.
  *
  *   2. THE STREAMING HTTP REQUEST. createLocalNodeTransport() speaks Ollama's
  *      POST /api/chat with stream:true over node:http, frames the newline-
@@ -60,7 +59,6 @@ const DEFAULT_IDLE_TIMEOUT_MS = 180_000;
    per-line framing multiplies that by a small constant. Well clear of both. */
 const MAX_STREAM_CHARS = 4 * 1024 * 1024;
 const MAX_ERROR_BODY_CHARS = 64 * 1024;
-const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,127}$/;
 const CHAT_PATH = '/api/chat';
 
 function fail(code, message, details = {}, cause = null) {
@@ -75,16 +73,10 @@ function settingsValues(dependencies = {}) {
   return localOptions.readSettings(dependencies);
 }
 
-/* The model a tier names, or null for "whatever the person set / is
-   installed". The tiers are `local/auto` today; `local/<id>` names a model
-   outright, and a bare id is passed through as one. An id the runtime module
-   would refuse is refused here too, before any request. */
+/* Explicit IDs are native bytes. local/auto retains the default-selection
+   descriptor; every other ID is validated and passed to the runtime. */
 function explicitModelOf(model) {
-  if (typeof model !== 'string' || model.length === 0) return null;
-  const named = model.startsWith('local/') ? model.slice('local/'.length) : model;
-  if (named === 'auto' || named.length === 0) return null;
-  if (!MODEL_ID_RE.test(named)) throw fail('LOCAL_NODE_INPUT_INVALID', 'The requested local model name is not a model identifier.', { model: named.slice(0, 160) });
-  return named;
+  return localOptions.explicitModel(model);
 }
 
 /* A PLAIN http ROOT ADDRESS OR NOTHING. The runtime module probes http on a
@@ -93,12 +85,6 @@ function explicitModelOf(model) {
    proved, so each is refused rather than trimmed. */
 function parseEndpoint(endpoint) {
   return localOptions.parseOllamaEndpoint(endpoint);
-}
-
-/* A model name the runtime lists, allowing the `:latest` tag Ollama appends
-   to an untagged pull; anything else must match exactly. */
-function installedName(model, models) {
-  return localOptions.installedModel(model, models);
 }
 
 function target(probe, model, runtimeOptions) {
@@ -146,7 +132,7 @@ async function resolveLocalTarget({ threadOptions = {}, settings = null, depende
         `${probe.displayName} is running on ${probe.host}:${probe.port} but has no models installed. Pull one with: ${probe.installCommand}`,
         { runtime: probe.runtime, installCommand: probe.installCommand });
     }
-    const model = wanted ? installedName(wanted, probe.models) : runtime.preferredModel(probe.models);
+    const model = wanted || runtime.preferredModel(probe.models);
     if (!model) {
       throw fail('LOCAL_NODE_MODEL_NOT_INSTALLED',
         `${probe.displayName} does not have ${wanted}. Install it with: ${RUNTIMES.ollama.pullCommand(wanted)}`,
@@ -174,12 +160,13 @@ async function resolveLocalTarget({ threadOptions = {}, settings = null, depende
       }
     };
   const detected = await runtime.detect({ timeoutMs }, detectDependencies);
-  if (!detected.ready) {
+  const selected = detected.selected || ((explicit || configuredName)
+    ? detected.runtimes.find(entry => entry.listening && entry.runtime === 'ollama') : null);
+  if (!selected) {
     throw fail('LOCAL_NODE_RUNTIME_UNAVAILABLE', `${detected.reason} Install one with: ${detected.nextCommand}`, {
       reason: detected.reason, installCommand: detected.nextCommand
     });
   }
-  const selected = detected.selected;
   if (selected.runtime !== 'ollama') {
     throw fail('LOCAL_NODE_RUNTIME_UNSUPPORTED',
       `${selected.displayName} is running on ${selected.host}:${selected.port}, but a live conversation needs Ollama's chat route, which it does not serve. Install Ollama with: ${runtime.installHint(RUNTIMES.ollama)}`,
@@ -187,7 +174,7 @@ async function resolveLocalTarget({ threadOptions = {}, settings = null, depende
   }
   const probe = Object.keys(ports).length === 0 ? selected : { ...selected, port: ports.ollama || selected.port };
   const wanted = explicit || configuredName;
-  const model = wanted ? installedName(wanted, selected.models) : runtime.preferredModel(selected.models);
+  const model = wanted || runtime.preferredModel(selected.models);
   if (!model) {
     throw fail('LOCAL_NODE_MODEL_NOT_INSTALLED',
       `${selected.displayName} does not have ${wanted}. Install it with: ${RUNTIMES.ollama.pullCommand(wanted)}`,
@@ -536,7 +523,7 @@ async function resumeLocalSession({
   const threadStore = dependencies.threadStore === undefined ? createLocalThreadStore() : dependencies.threadStore;
   const recovered = savedThread(threadId, threadStore);
   if (!recovered) throw fail('LOCAL_NODE_THREAD_UNKNOWN', 'The local conversation could not be found in saved recovery history.');
-  if (!explicitModelOf(threadOptions.model)) threadOptions = { ...threadOptions, model: `local/${recovered.model}` };
+  if (!explicitModelOf(threadOptions.model)) threadOptions = { ...threadOptions, model: recovered.model };
   const resolved = await resolveLocalTarget({ threadOptions, settings, dependencies });
   const transport = createLocalNodeTransport(resolved, dependencies);
   let tools = null;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// A confirmed-fix review: the independently reproduced
+// REPORT-confirmedfix-src-remote-agent-bridge-js: the independently reproduced
 // idle-shutdown trace concerns startHelper() in uac-delegation-helper.js. This
 // module neither defines nor calls that helper, and its socket lifecycle uses a
 // per-connection idle timeout instead of the helper's server-idle timer. A safe
@@ -45,9 +45,12 @@ const { spawn } = require('node:child_process');
 const roleFunctions = require('./lib/role-functions');
 const { getSecret, vaultFingerprint: runtimeVaultFingerprint } = require('./lib/runtime');
 const { safeLaunchEnvironment } = require('./lib/providers/subscription-launch-env');
+// The broker is required ABOVE the tool registry: src/mcp-server.js activates
+// plugins at load, and src/lib/plugin-activation.js refuses once the registry is
+// built, which made this module throw on require. Same order as the entrypoints.
+const { processLine, recordMcpSurface } = require('./mcp-server');
 const { TOOL_REGISTRY, listTools } = require('./lib/tool-registry');
 const permissionTierPolicy = require('./lib/permission-tier-policy');
-const { processLine, recordMcpSurface } = require('./mcp-server');
 const fileToolContext = require('./lib/file-tool-context');
 const {
   assertSanctionedMachineAddress,
@@ -139,8 +142,8 @@ function assertAdvertisedSurfaceWithinTier({
  * "are none of a customer's business", so shipping their names would be "the
  * same category of lie as shipping the builder's". A default that only resolves
  * on the machine it was written on is precisely what the owner's ruling forbids:
- * this is production code, nothing machine-specific may be hardcoded, and it
- * has to work with users' different machines and setups.
+ * "this is PRODUCTION code... You cant hardcode things. You need to work with
+ * users different machines and setups."
  *
  * THE SECOND IS WORSE, AND IS WHY THIS MATTERED. The lookup ran at MODULE SCOPE,
  * so the throw happened on `require`, not on use -- and src/lib/tool-registry.js
@@ -167,8 +170,8 @@ const DEFAULT_MACHINE = (() => {
        `machineId === 'machine-a'` as a compatibility fallback so a builder
        checkout would resolve exactly as before. That is still a builder's
        machine name hardcoded into production code, which is the very thing
-       this change exists to remove -- nothing machine-specific may be
-       hardcoded; it has to work with users' different machines and setups.
+       this change exists to remove -- "You cant hardcode things. You need to
+       work with users different machines and setups."
        A registry with several machines and no declared installation-host is
        genuinely AMBIGUOUS, and guessing which one is this machine would be a
        silent wrong answer on somebody's real network. It resolves to null, and

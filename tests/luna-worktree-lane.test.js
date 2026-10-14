@@ -35,10 +35,10 @@ const policyRecorder = require('../tools/record-luna-worktree-policy');
 
 const RUNNER_SOURCE = path.resolve(__dirname, '..', 'tools', 'run-luna-worktree-lane.ps1');
 const POLICY_RECORDER_SOURCE = path.resolve(__dirname, '..', 'tools', 'record-luna-worktree-policy.js');
-const POWER_SHELL = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const POWER_SHELL = path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const OUTER_WORKTREE = path.resolve(__dirname, '..');
-// Keep high-churn process/worktree fixtures out of the repository checkout: a
-// synced or indexed folder can retain directory handles after child termination and turn an
+// Keep high-churn process/worktree fixtures out of the OneDrive-backed repo.
+// OneDrive can retain directory handles after child termination and turn an
 // otherwise clean test into an EBUSY cleanup failure.
 const TEST_TEMP_PARENT = path.join(os.tmpdir(), 'toolsenabled-q66-luna-worktree-lane-tests');
 // This machine routinely runs several agent sessions concurrently, and any

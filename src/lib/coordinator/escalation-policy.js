@@ -23,7 +23,7 @@
 // state CHANGE is never swallowed by a timing coincidence.
 //
 // THE THREE SUPPRESSIONS ARE NOT THE SAME THING and are counted separately,
-// because "we already told them" (fine), "the channel budget is spent" (a
+// because "we already told him" (fine), "the channel budget is spent" (a
 // backlog) and "it is 3am" (deferred) demand different reactions from a reader.
 // A suppression is never a silent drop: every one is recorded as an event with
 // a timestamp so escalation-sink.js#suppressedSince and the duty-host heartbeat
@@ -205,7 +205,7 @@ function attemptsWithin(state, nowMs, windowMs) {
  * Quiet hours are OFF unless a caller explicitly configures them. The owner
  * never asked for a do-not-disturb window, and inventing one would mean an
  * outage discovered at 02:00 sits unreported until morning -- a decision no
- * agent gets to make on their behalf. The mechanism exists (the contract names
+ * agent gets to make on his behalf. The mechanism exists (the contract names
  * SUPPRESS_QUIET_HOURS) and is fully tested; the DEFAULT is that nothing is
  * ever suppressed for being late.
  *
@@ -236,7 +236,7 @@ function inQuietHours(nowMs, quietHours) {
  * The whole decision, in one pure call.
  *
  * ORDER IS DELIBERATE: duplicate, then quiet hours, then rate limit.
- *   * Duplicate first because it is the most specific fact -- "they already know
+ *   * Duplicate first because it is the most specific fact -- "he already knows
  *     about exactly this" -- and because charging a duplicate against the hourly
  *     budget would let one stuck subsystem starve every other subsystem's
  *     ability to be reported.
@@ -285,7 +285,7 @@ function decide(candidate = {}, state = emptyPolicyState(), options = {}) {
     }
   };
 
-  // 1. Already told them about exactly this, recently enough.
+  // 1. Already told him about exactly this, recently enough.
   //    NOTE: only a DELIVERED send sets lastSentAtMs. A failed attempt must
   //    never dedupe a later one, or a broken channel would permanently silence
   //    the very condition it failed to report.

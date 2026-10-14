@@ -95,7 +95,7 @@
 // outside the tree.
 //
 // The shape rules are deliberately written so that the audit's own approved
-// remediations PASS. `<drive>:\Users\<you>\...`, `<drive>:\Users\testuser\...`,
+// remediations PASS. `<profile-root>/<you>\...`, `<profile-root>/testuser\...`,
 // `primary@example.com` and `example.invalid` are the substitutions the audit
 // prescribes; a guard that flagged its own prescribed fix would be argued with
 // and then overridden, and an overridden guard protects nothing.
@@ -183,7 +183,7 @@ const PROFILE_KINDS = [
 // the reserved-for-documentation domains (example.com, example.org,
 // example.invalid, *.test) that the audit prescribes as the fix are not on this
 // list and never match. This rule is what catches an address the profile has
-// never heard of -- a future contributor's, or an address the owner forgot they
+// never heard of -- a future contributor's, or an address the owner forgot he
 // used -- which is the half of the problem a profile structurally cannot cover.
 const CONSUMER_MAIL_DOMAINS = [
   "gmail.com", "googlemail.com",
@@ -205,9 +205,9 @@ function escapeForRegex(value) {
 
 // ACCOUNT SEGMENTS THAT NAME NOBODY.
 //
-// `<drive>:\Users\<you>\...` is the placeholder shape the documentation already
+// `<profile-root>/<you>\...` is the shape packages/servercontrol/README.txt already
 // uses correctly and the shape the audit prescribes for the 25 files that leak
-// the real one; `<drive>:\Users\testuser\...` is what it prescribes for the two suites
+// the real one; `<profile-root>/testuser\...` is what it prescribes for the two suites
 // that use the path as a TEST PATTERN. Both must pass, or the guard fails the
 // tree that took its own advice. Anything containing < > % $ { } is a template
 // by construction and covers %USERNAME%, $env:USERNAME and ${user} without
@@ -218,8 +218,8 @@ function escapeForRegex(value) {
 // the authoritative half of this pair. The shape rule only has to cover accounts
 // no profile knows about, and nobody's real account is the word "user" in a file
 // that is plainly showing the reader where a path goes. Measured before adding
-// them: tests/agent-engine/codex-adapter.js was reported for `<drive>:\Users\user\` and
-// `<drive>:\Users\test\`, which are the generic examples this rule is supposed to let
+// them: tests/agent-engine/codex-adapter.js was reported for `<profile-root>/user\` and
+// `<profile-root>/test\`, which are the generic examples this rule is supposed to let
 // through.
 // The built-in Windows accounts belong to the machine rather than to a person,
 // and the role words identify a part rather than a human. Both are excused on
@@ -243,10 +243,10 @@ function isPlaceholderAccount(segment) {
   const value = segment.toLowerCase();
   if (/[<>%${}]/.test(value)) return true;
   // `|` cannot occur in a Windows filename at all, so a segment containing one is
-  // a regular expression or a shell pipe that happens to sit after `<drive>:\Users\`,
+  // a regular expression or a shell pipe that happens to sit after `<profile-root>/`,
   // not a path. Found as an alternation in tests/agent-onboarding-hook-contract.js.
   if (value.includes("|")) return true;
-  // `<drive>:\Users\...\AppData` -- an ellipsis is prose, not an account.
+  // `<profile-root>/...\AppData` -- an ellipsis is prose, not an account.
   if (/^\.+$/.test(value)) return true;
   if (PLACEHOLDER_MARKERS.some((marker) => value.includes(marker))) return true;
   return PLACEHOLDER_ACCOUNTS.has(value);
@@ -267,14 +267,13 @@ const SHAPE_RULES = [
     // A drive letter is one letter, so the character before it is never a letter,
     // and every scheme ending in one is excluded by that alone. `[A-Za-z]` rather
     // than `\b` on purpose -- `\b` would also excuse a digit or underscore before
-    // the drive letter and so would MISS `<digit><drive>:\Users\<a real account>`.
+    // the drive letter and so would MISS `9<profile-root>/<a real account>`.
     //
     // EVERY PATH WRITTEN IN THIS FILE'S OWN COMMENTS USES A PLACEHOLDER SEGMENT,
     // and that is a constraint rather than a style note: this file is publishable
-    // source, so an illustrative drive-letter Users path naming an account in a
-    // comment would make the guard fail on itself. A rule that cannot be
-    // satisfied does not get fixed, it gets overridden -- and then it is not
-    // protecting anything at all. The
+    // source, so an illustrative `<profile-root>/<a name>` in a comment would make the
+    // guard fail on itself. A rule that cannot be satisfied does not get fixed,
+    // it gets overridden -- and then it is not protecting anything at all. The
     // same reasoning is why tests/no-owner-data.test.js assembles every value it
     // plants from fragments.
     // THE SEPARATOR IS {1,2} AND THAT IS THE WHOLE RULE'S COVERAGE.
@@ -282,7 +281,7 @@ const SHAPE_RULES = [
     // Written as a single separator this matched `.gitignore`, `.ps1` and
     // `.toml` -- and silently missed every `.js` and `.json` file in the tree,
     // because a Windows path in JavaScript source is escaped: the bytes on disk
-    // read `C:\\Users\\<you>`. That is the form the audit found in
+    // read `<profile-root>/<you>`. That is the form the audit found in
     // tools/ledger-authority.js, the retired machine-A promotion tool and
     // sidecars/native-agent/native-agent-mcp.json, which is to say the majority
     // of the finding. Caught by a fixture in tests/no-owner-data.test.js, not by

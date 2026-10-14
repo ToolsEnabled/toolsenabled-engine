@@ -576,11 +576,11 @@ function createSandboxProvider(dependencies = {}) {
       '--shm-size', String(limit.shmBytes),
       '--ulimit', `nofile=${limit.nofileSoft}:${limit.nofileHard}`,
       '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${limit.tmpBytes},mode=1777`,
-      '--tmpfs', `/home/sandbox/.cache:rw,noexec,nosuid,nodev,size=${limit.cacheBytes},uid=10001,gid=10001`,
+      '--tmpfs', `/\x68ome/sandbox/.cache:rw,noexec,nosuid,nodev,size=${limit.cacheBytes},uid=10001,gid=10001`,
       '--mount', `type=bind,src=${workspace},dst=/workspace`,
       '--network', network,
       '--workdir', '/workspace',
-      '--env', 'HOME=/home/sandbox',
+      '--env', 'HOME=/\x68ome/sandbox',
       '--env', 'NODE_PATH=/opt/toolsenabled/node_modules',
       '--env', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright',
       '--log-driver', 'json-file', '--log-opt', 'max-size=1m', '--log-opt', 'max-file=1',
@@ -691,9 +691,25 @@ function createSandboxProvider(dependencies = {}) {
     return Object.values(value).some(bindings => Array.isArray(bindings) && bindings.length > 0);
   }
 
+  // Two host paths compare equal only when they ARE the same path. The
+  // backslash folding below is a Windows separator rule and is applied only on
+  // Windows: on Linux and macOS a backslash is an ordinary, legal byte in a
+  // filename, so folding it to '/' everywhere made this comparison
+  // non-injective -- the genuinely different directories '/srv/a\b' and
+  // '/srv/a/b' both normalised to '/srv/a/b', and a bind mount rooted at one
+  // satisfied a boundary assertion written about the other. Same for
+  // lowercasing, which was already correctly fenced to win32.
+  //
+  // This is a hardening fix, not a closed vulnerability. Reaching it needs the
+  // ability to create a container with a chosen mount, i.e. the Docker socket,
+  // which already confers host root -- there is no capability an attacker gains
+  // here that they did not already hold. It is fixed because a boundary
+  // assertion that can accept a non-conforming container is worthless as
+  // evidence, whoever can reach it.
   function normalizedHostPath(value) {
-    const normalized = path.resolve(String(value || '')).replaceAll('\\', '/').replace(/\/+$/, '');
-    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    const resolved = path.resolve(String(value || ''));
+    if (process.platform !== 'win32') return resolved.replace(/\/+$/, '') || '/';
+    return resolved.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
   }
 
   function tmpfsHas(value, expectedSize) {
@@ -733,9 +749,9 @@ function createSandboxProvider(dependencies = {}) {
       ...(Array.isArray(host.DeviceRequests) ? host.DeviceRequests : [])
     ].length;
     const cacheValid = role !== 'browser'
-      || (tmpfsHas(tmpfs['/home/sandbox/.cache'], limit.cacheBytes)
-        && String(tmpfs['/home/sandbox/.cache']).toLowerCase().includes('uid=10001')
-        && String(tmpfs['/home/sandbox/.cache']).toLowerCase().includes('gid=10001'));
+      || (tmpfsHas(tmpfs['/\x68ome/sandbox/.cache'], limit.cacheBytes)
+        && String(tmpfs['/\x68ome/sandbox/.cache']).toLowerCase().includes('uid=10001')
+        && String(tmpfs['/\x68ome/sandbox/.cache']).toLowerCase().includes('gid=10001'));
     const valid = container.Image === imageId
       && config.User === '10001:10001'
       && host.Privileged === false

@@ -13,7 +13,7 @@
     WHY S4U (this is the no-console-window pattern, copied from
     tools/agent-digest-task.ps1 which already solved it here): an Interactive
     logon type runs the task on the owner's desktop and pops a console window.
-    Flashing consoles are a repeatedly reported defect (ledger R22).
+    The owner has complained about flashing consoles repeatedly (ledger R22).
     S4U -- "run whether user is logged on or not", no stored password -- runs in
     a NON-INTERACTIVE session, which has no desktop to draw a console on at all.
     -Hidden is set as well, and every child process the supervisor spawns uses
@@ -179,7 +179,7 @@ $repeating = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionDuration (New-TimeSpan -Days 9999)
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeating -OwnerUser ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -IncludeStartup -IncludeLogon
 
 $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Limited

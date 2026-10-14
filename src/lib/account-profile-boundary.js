@@ -423,7 +423,7 @@ function assertAccountProfilePath(value, {
   }
   normalized = ownedSpelling;
 
-  // Remote ordinary UNC paths cannot resolve into this machine's C:\\Users
+  // Remote ordinary UNC paths cannot resolve into this machine's <profile-root>/
   // tree. Avoid contacting an offline share merely to validate an environment
   // value; local/admin and Users-shaped aliases were handled above.
   if (normalized.startsWith('\\\\')) {

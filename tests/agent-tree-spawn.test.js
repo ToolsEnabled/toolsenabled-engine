@@ -261,7 +261,7 @@ test('commandOnTree carries no single-flight guard: two commands from the same p
   assert.equal((await first).nodeId, 'node-1');
 });
 
-/* AUDIT (an earlier review pass, HUNT pass): the test above proves
+/* AUDIT (page2/lifecycle-status-engine, HUNT b477ed5): the test above proves
  * two DIFFERENT nodes never queue behind each other through commandOnTree.
  * It does not say anything about two verbs for the SAME node -- and neither
  * does anything else in this file, or in commandOnTree's own source. This is

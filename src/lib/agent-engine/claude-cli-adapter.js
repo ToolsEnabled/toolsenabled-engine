@@ -34,8 +34,8 @@
  *   result                                        -> usage, then turn_completed
  *
  * THINKING REACHES THE HOST AS ITS OWN TYPE, NEVER AS ASSISTANT SPEECH. The
- * product rule: more event types are fine, and the user should
- * be shown when the model is thinking. A thinking block arrives with
+ * owner's ruling, 2026-09-03: "more event types are fine we should be showing
+ * the user when the model is thinking anyway." A thinking block arrives with
  * a `signature` field and is not addressed to the reader, so forwarding it as
  * assistant_text would still put the model's private working into the
  * transcript as though the agent had said it -- that half of the old rule
@@ -99,6 +99,8 @@ class ClaudeCliError extends Error {
    activity refresh this timer so a productive long turn keeps its context.
    A silent child still cannot leave a promise pending for the life of the app. */
 const DEFAULT_TURN_TIMEOUT_MS = 30 * 60 * 1000;
+/* The CLI's sentence for a model it will not run (measured, Gate B C3 HP-42; see handleResult). */
+const MODEL_REFUSAL_RESULT = /^There(?:'|\u2019)s an issue with the selected model\b/;
 
 /* A parsed Claude packet may contain several accepted content blocks. They
    are offered one at a time: at most one event may be awaiting host durability
@@ -142,19 +144,16 @@ function permissionModeFor(threadOptions) {
   return SANDBOX_TO_PERMISSION_MODE[sandbox] || 'plan';
 }
 
-/* The model name this CLI takes, from the model the tier names.
- *
- * The product's tiers are `claude/fable`, `claude/sonnet`, `claude/opus`; the
- * CLI wants the bare alias. Splitting on the slash rather than keeping a second
- * lookup table means a tier added upstream needs no edit here, and an
- * unrecognised value is passed through for the CLI to reject BY NAME -- which
- * is a better failure than this module silently choosing a different model than
- * the person picked. Silently substituting a model is the exact defect the tier
- * menu was repaired for. */
+/* Translate only declared Claude aliases and pinned catalog models in the
+ * product namespace. Every other selected native identifier remains opaque,
+ * including custom Claude-prefixed IDs and cloud resource ARNs. */
 function cliModelFor(model) {
   if (typeof model !== 'string' || model.length === 0) return null;
-  const slash = model.indexOf('/');
-  return slash >= 0 ? model.slice(slash + 1) : model;
+  if (!model.startsWith('claude/')) return model;
+  const nativeModel = model.slice('claude/'.length);
+  const { CLAUDE_ALIAS_RESOLUTIONS, MODEL_DISPLAY_NAMES } = require('./claude-cli-install');
+  return Object.hasOwn(CLAUDE_ALIAS_RESOLUTIONS, nativeModel)
+    || Object.hasOwn(MODEL_DISPLAY_NAMES, nativeModel) ? nativeModel : model;
 }
 
 /* The product's tool surface, as argv. Absent means ABSENT: no flag at all,
@@ -225,6 +224,35 @@ function settingsArgs(settings) {
   return ['--settings', path.resolve(named)];
 }
 
+/* A CONFINED SESSION DOES NOT READ THE FOLDER'S OWN CLAUDE SETTINGS.
+ *
+ * Without `--setting-sources` the CLI merges the working folder's
+ * `.claude/settings.json` and `.claude/settings.local.json` into the session.
+ * Those files can declare hooks (SessionStart, PreToolUse) and helper commands
+ * that the CLI runs as this OS user, unsandboxed, before the agent calls any
+ * tool, plus `permissions.allow` rules and `env` keys that widen what the
+ * recorded level decided. `--print` never shows the workspace-trust prompt that
+ * guards them interactively, so a cloned repository -- or a file another agent
+ * planted in the folder -- would decide what a guided or standard session runs.
+ * (1.0.50 security review, M1.)
+ *
+ * `user` keeps the person's OWN settings -- their sign-in helpers and
+ * preferences, which is why 1.0.50 stopped passing `--setting-sources ''` --
+ * and the CLI always adds the `--settings` grant and managed policy on top of
+ * whatever sources are named, so the plan's tool grant is unchanged. What a
+ * confined session gives up is everything the CLI reads only from the project
+ * source: the folder's settings, CLAUDE.md, and its .claude/ skills, agents and
+ * commands (read from the 2.1.296 bundle: those loaders check the same
+ * `projectSettings` source the hooks loader does).
+ *
+ * The unrestricted level (`bypassPermissions`) is the person's own reach and
+ * keeps the folder's settings, as before. Every other launch mode -- including
+ * one this table does not recognise -- is confined: it fails closed. */
+const CONFINED_SETTING_SOURCES = 'user';
+function settingSourceArgs(permissionMode) {
+  return permissionMode === 'bypassPermissions' ? [] : ['--setting-sources', CONFINED_SETTING_SOURCES];
+}
+
 /* The CLI's permission rule that allows every tool one MCP server offers.
  * MEASURED off claude 2.1.186: with `{"permissions":{"allow":["mcp__<name>"]}}`
  * in the pointed home's settings.json, a --print session CALLS the server's
@@ -291,6 +319,9 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
       `Claude does not support the requested effort "${requestedEffort}".`
     );
   }
+  const launchMode = typeof permissionMode === 'string' && permissionMode.length > 0
+    ? permissionMode
+    : permissionModeFor(threadOptions);
   return [
     '--print',
     '--input-format', 'stream-json',
@@ -300,17 +331,16 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
     /* Token-by-token text. Without it a person watches nothing happen for a
        minute and then a wall of text appears at once. */
     '--include-partial-messages',
-    '--permission-mode', typeof permissionMode === 'string' && permissionMode.length > 0
-      ? permissionMode
-      : permissionModeFor(threadOptions),
+    '--permission-mode', launchMode,
     ...(model ? ['--model', model] : []),
     ...(effort ? ['--effort', effort] : []),
     ...(apiMode === 'Disabled'
       ? ['--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config']
       : mcpConfigArgs(mcpConfig)),
     ...settingsArgs(settings),
+    ...settingSourceArgs(launchMode),
     ...(roleFunctionsOnly
-      ? ['--tools', '', '--setting-sources', '', '--disable-slash-commands']
+      ? ['--tools', '', '--disable-slash-commands']
       : agentApiToolArgs(apiMode)),
     ...extraArgs
   ];
@@ -500,6 +530,19 @@ class ClaudeCliAdapter {
      throws must not stop the others or kill the turn, so each is called in its
      own try. */
   emit(event) {
+    const validated = this.admitEvent(event);
+    return validated ? this.eventBoundary.emit(validated) : undefined;
+  }
+
+  /* The one door every event passes before the boundary: the contract's
+     validation, then the turn's activity clock. BOTH emit paths use it --
+     emit() above and emitPacketEvents() below. The packet path used to hand
+     its events straight to the boundary's own emitSequence(), which neither
+     validates nor knows this adapter's timer, so every assistant/user packet
+     event (text, thinking, tool calls, tool results) skipped validation and
+     never counted as activity: a turn doing nothing but tool work was declared
+     silent after turnTimeoutMs and its session closed under it. */
+  admitEvent(event) {
     let validated;
     try {
       validated = validateEngineEvent(event);
@@ -509,7 +552,7 @@ class ClaudeCliAdapter {
          prevent -- but it must not be silent, or a whole event type could go
          missing with nothing to show for it. */
       this.emitDiagnostic(error);
-      return;
+      return null;
     }
     const turn = this.activeTurn;
     const textActivity = ['assistant_text_delta', 'assistant_text', 'thinking'].includes(validated.type)
@@ -521,7 +564,7 @@ class ClaudeCliAdapter {
       // a stalled model alive. Explicit close still clears this same timer.
       turn.timer.refresh();
     }
-    return this.eventBoundary.emit(validated);
+    return validated;
   }
 
   emitDiagnostic(error) {
@@ -546,10 +589,19 @@ class ClaudeCliAdapter {
      silently skipped; the line cap remains the malformed-input door. */
   emitPacketEvents(events) {
     if (!events || typeof events[Symbol.iterator] !== 'function') return undefined;
+    const adapter = this;
+    /* Admitted lazily, as the boundary asks for each next event, so the
+       activity clock moves when an event is actually delivered. */
+    function* admitted() {
+      for (const event of events) {
+        const validated = adapter.admitEvent(event);
+        if (validated) yield validated;
+      }
+    }
     let releaseHold = null;
     let result;
     try {
-      result = this.eventBoundary.emitSequence(events);
+      result = this.eventBoundary.emitSequence(admitted());
       if (!isThenable(result)) return result;
       // Hold the source for the entire packet. emitSequence advances its
       // iterator only after each accepted event settles; this extra hold
@@ -613,6 +665,20 @@ class ClaudeCliAdapter {
     const turnId = turn ? turn.turnId : undefined;
     const threadId = this.threadId || undefined;
     const base = { ...(threadId ? { threadId } : {}), ...(turnId ? { turnId } : {}) };
+
+    /* A SUBAGENT'S FRAMES ARE NOT THE MAIN AGENT SPEAKING. The CLI marks every
+       frame a Task/Agent subagent produced with parent_tool_use_id (the
+       tool_use that started it). Its tool work is real work on this turn and
+       stays visible, named by the call that started it; its words and thinking
+       are not this agent's reply, and a stream of its own would replace the
+       main message's block identity. A fork's transcript opens with an echo of
+       the parent's own Agent call and its "Fork started" result under that same
+       id: never a new call or result. */
+    if (typeof packet.parent_tool_use_id === 'string' && packet.parent_tool_use_id) {
+      if (packet.type === 'assistant') return this.handleAssistant(packet, base, { subagent: packet.parent_tool_use_id });
+      if (packet.type === 'user') return this.handleUser(packet, base, { subagent: packet.parent_tool_use_id });
+      return;
+    }
 
     switch (packet.type) {
       case 'system':
@@ -709,14 +775,15 @@ class ClaudeCliAdapter {
     this.emit({ type: 'assistant_text_delta', ...base, ...(itemId ? { itemId } : {}), text: delta.text });
   }
 
-  handleAssistant(packet, base) {
+  handleAssistant(packet, base, { subagent = null } = {}) {
     const content = packet.message && Array.isArray(packet.message.content) ? packet.message.content : [];
     const itemId = packet.message && typeof packet.message.id === 'string' ? packet.message.id : undefined;
     const turn = this.activeTurn;
     // Current Claude can put a refusal on assistant.error and send an empty
     // failed result afterward. Retain that structured failure only for this
-    // owned turn; ordinary assistant prose cannot acquire error authority.
-    if (turn && turn.turnId === base.turnId && base.threadId === this.threadId
+    // owned turn; ordinary assistant prose cannot acquire error authority,
+    // and neither can a subagent's frame.
+    if (!subagent && turn && turn.turnId === base.turnId && base.threadId === this.threadId
         && (packet.session_id === undefined || packet.session_id === this.threadId)
         && typeof packet.error === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(packet.error)) {
       let text = '';
@@ -727,6 +794,18 @@ class ClaudeCliAdapter {
       }
       turn.failure = { code: packet.error, text: text || null };
     }
+    /* AN API ERROR WEARING AN ASSISTANT MESSAGE IS NOT THE AGENT SPEAKING.
+       MEASURED on claude 2.1.281 (signed-out isolated home): the refusal
+       arrives as {"type":"assistant","message":{"model":"<synthetic>",
+       "content":[{"type":"text","text":"Not logged in · Please run /login"}]},
+       "error":"authentication_failed","is_api_error_message":true} and then a
+       failed result carrying the same sentence. Streamed as assistant_text it
+       became the agent's own words, and the app's turnCompletionWords() then
+       printed it twice -- once as speech, once as the failure line. Its words
+       reach the person through the failed completion (retained above), which
+       is the one place a refusal belongs. `error` is the CLI's public field;
+       `is_api_error_message` is its internal twin. */
+    if (typeof packet.error === 'string' || packet.is_api_error_message === true) return undefined;
     /* A FINAL NAMES THE BLOCK ITS STREAM NAMED (B20, found by hand on the 1.0.48 candidate). Claude
        2.1.283 sends each content block of one provider message as its own assistant packet under
        the same message id, so a packet's array position is not the provider block index the
@@ -735,7 +814,9 @@ class ClaudeCliAdapter {
        of its own type still waiting under this message id. A part nothing streamed (no partial
        messages, or a replayed packet whose blocks were already taken) keeps its position as
        before, so a replayed combined packet still names what it named the first time. */
-    const waiting = itemId ? this.streamedBlocks?.get(itemId) : null;
+    // A subagent's frame (a fork's echo reuses the main message id) never takes
+    // a block the main message streamed.
+    const waiting = itemId && !subagent ? this.streamedBlocks?.get(itemId) : null;
     const blockIndex = (part, position) => {
       const at = waiting && part && typeof part === 'object' ? waiting.findIndex(block => block.type === part.type) : -1;
       return at < 0 ? position : waiting.splice(at, 1)[0].index;
@@ -745,6 +826,7 @@ class ClaudeCliAdapter {
       for (const [position, part] of content.entries()) {
         const index = indexes[position];
         if (!part || typeof part !== 'object') continue;
+        if (subagent && (part.type !== 'tool_use' || part.id === subagent)) continue;
         if (part.type === 'text' && typeof part.text === 'string') {
           yield { type: 'assistant_text', ...base, ...(itemId ? { itemId: `text:${JSON.stringify([itemId, index])}` } : {}), text: part.text };
         } else if (part.type === 'tool_use') {
@@ -752,6 +834,7 @@ class ClaudeCliAdapter {
             type: 'tool_call',
             ...base,
             ...(typeof part.id === 'string' ? { toolCallId: part.id } : {}),
+            ...(subagent ? { parentToolCallId: subagent } : {}),
             ...(typeof part.name === 'string' ? { tool: part.name } : {}),
             ...(part.input === undefined ? {} : { payload: part.input })
           };
@@ -769,11 +852,12 @@ class ClaudeCliAdapter {
     return this.emitPacketEvents(acceptedEvents());
   }
 
-  handleUser(packet, base) {
+  handleUser(packet, base, { subagent = null } = {}) {
     const content = packet.message && Array.isArray(packet.message.content) ? packet.message.content : [];
     function* acceptedEvents() {
       for (const part of content) {
         if (!part || typeof part !== 'object' || part.type !== 'tool_result') continue;
+        if (subagent && part.tool_use_id === subagent) continue;
         /* The CLI returns tool output as a string OR as an array of blocks. Both
            are carried whole on `payload`; `text` gets the string form only when
            there is genuinely one, because a JSON blob rendered as an agent's
@@ -783,7 +867,10 @@ class ClaudeCliAdapter {
           type: 'tool_result',
           ...base,
           ...(typeof part.tool_use_id === 'string' ? { toolCallId: part.tool_use_id } : {}),
-          ...(typeof raw === 'string' ? { text: raw } : {}),
+          ...(subagent ? { parentToolCallId: subagent } : {}),
+          // Bounded to the contract's text limit so a huge result is not
+          // refused as a whole (its row would stay running); payload keeps it all.
+          ...(typeof raw === 'string' ? { text: raw.slice(0, 1_000_000) } : {}),
           ...(raw === undefined ? {} : { payload: raw }),
           status: part.is_error === true ? 'error' : 'ok'
         };
@@ -814,11 +901,15 @@ class ClaudeCliAdapter {
        is relabelled: a turn that finished before the stop landed keeps its own status. */
     const interrupted = packet.is_error === true && turn?.interruptRequested === true
       && turn.turnId === base.turnId;
+    /* A PROVIDER REFUSAL ENDS AS 'refusal' (stop_reason, the same field the research pipeline reads), the
+       status the ACP adapter already reports, so the host holds automatic follow-ups after it. */
     const status = interrupted
       ? 'interrupted'
-      : packet.is_error === true
-        ? 'error'
-        : (typeof packet.subtype === 'string' ? packet.subtype : 'success');
+      : packet.stop_reason === 'refusal'
+        ? 'refusal'
+        : packet.is_error === true
+          ? 'error'
+          : (typeof packet.subtype === 'string' ? packet.subtype : 'success');
     /* A FAILED TURN'S SENTENCE RIDES ITS COMPLETION, on the contract's own
        `text` field. MEASURED (walkthrough 2026-08-16, re-measured 2026-08-19
        on claude 2.1.186): a refused turn arrives as is_error:true with the one
@@ -834,8 +925,18 @@ class ClaudeCliAdapter {
       : packet.is_error === true && typeof packet.result === 'string' && packet.result.length > 0
         ? packet.result
         : retainedFailure?.text || null;
+    /* A MODEL THE PROVIDER REFUSED is marked as one (1.0.50 review CM-2), so the host holds queued and helper
+       sends on this session until a turn on it succeeds. Only the CLI's own measured sentence for it counts
+       ("There's an issue with the selected model (...)", Gate B C3 HP-42); no summary is added, so the saved
+       record is unchanged. */
+    const modelRefused = status === 'error' && typeof packet.result === 'string'
+      && MODEL_REFUSAL_RESULT.test(packet.result);
+    const payload = retainedFailure || modelRefused
+      ? { ...(retainedFailure ? { code: retainedFailure.code } : {}),
+        ...(modelRefused ? { failure: { provider: 'claude', source: 'turn', category: 'model-refused' } } : {}) }
+      : null;
     this.emit({ type: 'turn_completed', ...base, status, ...(failureText ? { text: failureText } : {}),
-      ...(retainedFailure ? { payload: { code: retainedFailure.code } } : {}) });
+      ...(payload ? { payload } : {}) });
 
     if (!turn || this.activeTurn !== turn) return;
     this.activeTurn = null;

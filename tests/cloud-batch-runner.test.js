@@ -1,34 +1,3 @@
-// EXECUTABLE CHANGE
-//
-// Discrimination report (testcanfail-tests-cloud-batch-runner-test-js):
-// - FOUND (empty collection): the round-robin journal/account assertion used
-//   `launches.every(...)` without proving that any launch rows existed. Mutation:
-//   batch-runner omitted `recordLaunched` only for the nine-task round-robin
-//   case. Before this change the complete file remained GREEN (exit 0):
-//   "cloud-batch-runner tests passed (122 checks: ... accounts rotated evenly ...)".
-//   With the non-vacuity check below, the same mutation is RED:
-//   "AssertionError [ERR_ASSERTION]: accounts: the journal records every dispatch
-//   under the account it really went out under, which is where anybody looks when
-//   a bill is queried (journal launches: 0, dispatches: 9)".
-// - FOUND (expected value computed by subject): the per-account ceiling check
-//   captured the exported value in `ceiling` and compared the export back to
-//   itself. Mutation: changed the product constant from 72 to 73. The strengthened
-//   independent expectation is RED:
-//   "AssertionError [ERR_ASSERTION]: accounts: the measured per-account ceiling
-//   remains 72 launches per minute (got 73)".
-// - NOT-FOUND (exit status/truthy return as sole process evidence): this test
-//   spawns no child process and makes no exit-status assertion.
-// - NOT-FOUND (swallowed subject failure): `raises` requires both a thrown value
-//   and its exact code; the explicit resume catch likewise asserts code and index.
-//   The final cleanup catch is not part of a subject assertion.
-// - NOT-FOUND (mock of the thing under test): dispatch, clock, sleep, and mirror
-//   are boundary fakes; runBatch, journal parsing, and admission are real subjects.
-// - NOT-FOUND (skip/platform guard): there is no skip or platform precondition.
-// - Preconditions unmet: none. After each mutation the product source was
-//   restored byte-for-byte (matching SHA-256), and the restored test is GREEN:
-//   "cloud-batch-runner tests passed (122 checks: ... journal that cannot be
-//   written stopping the run before the provider is called)."
-
 'use strict';
 
 // The batch runner: what happens to an admitted batch once nobody is steering.
@@ -44,8 +13,7 @@
 // asserted at all, because the real versions spend quota on work nobody can
 // recall.
 //
-// NOTHING HERE PINS A SPELLING. Round-robin is asserted as "even, and never the
-// same account twice running", not as a particular modulo. Pacing is asserted as
+// Account ownership is asserted through actual dispatches and journal records. Pacing is asserted as
 // elapsed time and spacing between dispatches, not as a sleep call count. Both
 // would still pass against a better implementation of the same behaviour.
 
@@ -102,12 +70,12 @@ function declaration({ taskCount = 5, batchId = 'wave-1', bounds = null } = {}) 
     batchId,
     project: 'engine',
     tasks: Array.from({ length: taskCount }, (unused, index) => task(index)),
-    bounds: bounds || { launchesPerMinute: 120, accounts: 2 }
+    bounds: bounds || { launchesPerMinute: 60 }
   };
 }
 
 const FRESH_MIRROR = { checkMirrorFreshness: async () => ({ fresh: true }) };
-const ACCOUNTS = ['account-one', 'account-two'];
+const ACCOUNT = 'account-one';
 
 async function admitted(decl) {
   return target.admitBatch(decl, { mirrorApi: FRESH_MIRROR });
@@ -154,7 +122,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ task: dispatchedTask, index, account }) => {
@@ -201,7 +169,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: dir,
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => {
@@ -238,7 +206,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         stateRoot: room(),
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         dispatch: async ({ index }) => {
@@ -266,8 +234,8 @@ function fsFailingOn(matcher) {
   // time came from sleeping. A spin would burn a core to achieve the same wait,
   // and against this clock it would never finish at all.
   // -------------------------------------------------------------------
-  for (const [launchesPerMinute, taskCount] of [[60, 6], [120, 8]]) {
-    const decl = declaration({ taskCount, bounds: { launchesPerMinute, accounts: 2 } });
+  for (const [launchesPerMinute, taskCount] of [[30, 6], [60, 8]]) {
+    const decl = declaration({ taskCount, bounds: { launchesPerMinute } });
     const admission = await admitted(decl);
     const clock = fakeClock();
     const startedAt = [];
@@ -275,7 +243,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => { startedAt.push(clock.now()); return { taskId: `provider-${index}` }; }
@@ -303,9 +271,9 @@ function fsFailingOn(matcher) {
     const dir = room();
     const file = journal.openBatch({ stateRoot: dir, admission, at: 1 });
     journal.recordIntent({ file, index: 0, target: decl.tasks[0].target, at: 2 });
-    journal.recordLaunched({ file, index: 0, taskId: 'provider-0', account: ACCOUNTS[0], at: 3 });
+    journal.recordLaunched({ file, index: 0, taskId: 'provider-0', account: ACCOUNT, at: 3 });
     journal.recordIntent({ file, index: 1, target: decl.tasks[1].target, at: 4 });
-    journal.recordLaunched({ file, index: 1, taskId: 'provider-1', account: ACCOUNTS[1], at: 5 });
+    journal.recordLaunched({ file, index: 1, taskId: 'provider-1', account: ACCOUNT, at: 5 });
     journal.recordIntent({ file, index: 2, target: decl.tasks[2].target, at: 6 });
     journal.recordRefused({ file, index: 2, code: 'CODEX_QUOTA_EXHAUSTED', reason: 'no quota', at: 7 });
 
@@ -315,7 +283,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       journalFile: file,
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => { dispatchedIndices.push(index); return { taskId: `provider-${index}` }; }
@@ -355,7 +323,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         journalFile: file,
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         dispatch: async () => { calls += 1; return { taskId: 'never' }; }
@@ -390,7 +358,7 @@ function fsFailingOn(matcher) {
         admission: myAdmission,
         declaration: mine,
         journalFile: theirFile,
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         dispatch: async () => { calls += 1; return { taskId: 'never' }; }
@@ -407,7 +375,7 @@ function fsFailingOn(matcher) {
         admission: myAdmission,
         declaration: mine,
         journalFile: headless,
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         dispatch: async () => { calls += 1; return { taskId: 'never' }; }
@@ -431,7 +399,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => {
@@ -460,7 +428,7 @@ function fsFailingOn(matcher) {
     const refusals = records.filter((r) => r.kind === 'refused');
     check(refusals.length === 1, 'refusal: the provider-answered refusal is on disk');
     const quota = refusals.find((r) => r.index === 1);
-    check(quota && quota.code === 'CODEX_QUOTA_EXHAUSTED' && /out of cloud quota/.test(quota.reason),
+    check(quota && quota.code === 'CODEX_QUOTA_EXHAUSTED' && /provider declined/.test(quota.reason),
       'refusal: a coded provider refusal keeps its own code and its reason, so a batch can be triaged without reading prose');
     const closed = records.find((r) => r.kind === 'closed');
     check(closed.launched === 4 && closed.refused === 1,
@@ -486,7 +454,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => {
@@ -534,7 +502,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => (index === 2 ? {} : { taskId: `provider-${index}` })
@@ -554,7 +522,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         journalFile: summary.journalFile,
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock2.now,
         sleep: clock2.sleep,
         dispatch: async () => { calls += 1; return { taskId: 'never' }; }
@@ -585,7 +553,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       // A number, exactly as a provider API hands one back.
@@ -630,7 +598,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => (index === 2 ? { taskId: true } : { taskId: `provider-${index}` })
@@ -654,126 +622,93 @@ function fsFailingOn(matcher) {
   }
 
   // -------------------------------------------------------------------
-  // ROUND-ROBIN across the accounts it was handed.
-  //
-  // Asserted as the property, not the arithmetic: even load, and never the same
-  // account twice in a row. Both hold for any correct rotation.
+  // A batch retains one explicitly selected account in every dispatch and journal row.
   // -------------------------------------------------------------------
   {
     const decl = declaration({ taskCount: 9 });
     const admission = await admitted(decl);
-    const three = ['account-a', 'account-b', 'account-c'];
     const clock = fakeClock();
     const used = [];
-    const summary = await runner.runBatch({
-      admission,
-      declaration: decl,
-      stateRoot: room(),
-      accounts: three,
-      now: clock.now,
-      sleep: clock.sleep,
-      dispatch: async ({ index, account }) => { used.push(account); return { taskId: `provider-${index}` }; }
+    const summary = await runner.runBatch({ admission, declaration: decl, stateRoot: room(),
+      account: 'account-selected', now: clock.now, sleep: clock.sleep,
+      dispatch: async ({ index, account }) => { used.push(account); return { taskId: 'provider-' + index }; }
     });
-
-    check(used.length === 9 && used.every((name) => three.includes(name)),
-      'accounts: every dispatch goes out under one of the accounts the runner was handed, and no other');
-    check(three.every((name) => used.filter((u) => u === name).length === 3),
-      `accounts: the load is spread evenly, so no single account is driven into its own per-account ceiling (got ${JSON.stringify(used)})`);
-    check(used.every((name, position) => position === 0 || name !== used[position - 1]),
-      'accounts: consecutive dispatches never reuse the same account, which is what rotating them is for');
-    const launches = readLines(summary.journalFile).filter((r) => r.kind === 'launched');
-    check(launches.length === used.length && launches.every((r) => r.account === used[r.index]),
-      `accounts: the journal records every dispatch under the account it really went out under, which is where anybody looks when a bill is queried (journal launches: ${launches.length}, dispatches: ${used.length})`);
+    check(used.length === 9 && used.every(name => name === 'account-selected'),
+      'accounts: every dispatch retains the single account explicitly selected for the batch');
+    const launches = readLines(summary.journalFile).filter(row => row.kind === 'launched');
+    check(launches.length === used.length && launches.every(row => row.account === used[row.index]),
+      'accounts: the journal records every actual launch under its selected account');
   }
 
-  // -------------------------------------------------------------------
-  // FEWER ACCOUNTS THAN THE RATE WAS ADMITTED FOR IS REFUSED.
-  //
-  // The bounds gate cleared 144/min only because two accounts could carry it at
-  // the measured per-account ceiling. Handing the runner one account puts the
-  // admitted rate onto half the identities it was cleared for, which voids that
-  // gate at run time without anybody editing it.
-  // -------------------------------------------------------------------
+  // The selected account must agree with the sealed provider coordinates.
   {
-    const ceiling = target.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT;
-    const decl = declaration({ bounds: { launchesPerMinute: ceiling * 2, accounts: 2 } });
+    const decl = declaration();
+    decl.provider = { account: 'account-selected', environment: 'a'.repeat(32) };
     const admission = await admitted(decl);
+    const stateRoot = room();
     let calls = 0;
-    const clock = fakeClock();
-    const error = await raises('CLOUD_BATCH_RATE_UNSERVEABLE',
-      () => runner.runBatch({
-        admission,
-        declaration: decl,
-        stateRoot: room(),
-        accounts: ['only-one'],
-        now: clock.now,
-        sleep: clock.sleep,
-        dispatch: async () => { calls += 1; return { taskId: 'never' }; }
-      }),
-      'accounts: a rate admitted for more accounts than the runner holds is refused rather than run into the rate limit');
-    check(calls === 0, 'accounts: the refusal happens before anything dispatches');
-    check(error.message.includes(String(ceiling * 2)) && error.message.includes(String(ceiling)),
-      `accounts: the refusal names the admitted rate and the measured per-account ceiling, so the fix is obvious (got: ${error.message.slice(0, 160)})`);
-    check(target.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT === 72,
-      `accounts: the measured per-account ceiling remains 72 launches per minute (got ${target.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT})`);
+    await raises('CLOUD_BATCH_RUNNER_MISCONFIGURED', () => runner.runBatch({
+      admission, declaration: decl, stateRoot, account: 'account-other',
+      dispatch: async () => { calls += 1; return { taskId: 'never' }; }
+    }), 'account: a runner cannot substitute another account for the admitted selection');
+    check(calls === 0 && fs.readdirSync(stateRoot).length === 0,
+      'account: a substituted account reaches neither the provider nor a new journal');
   }
 
-  // -------------------------------------------------------------------
-  // TWO NAMES FOR ONE ACCOUNT ARE ONE ACCOUNT.
-  //
-  // The same gate as above, defeated a different way. It counted NAMES, so a
-  // list with a duplicate in it read as two accounts: a batch admitted for
-  // twice the measured per-account ceiling was handed ['a','a'], passed, and
-  // then ran every dispatch onto a single account -- with the round-robin that
-  // spreads the load rotating between an account and itself. That is exactly
-  // the outcome the refusal exists to prevent, and a duplicate voided it as
-  // thoroughly as a short list did. The retries from the rate limit it walks
-  // into cost more than the headroom it appeared to buy.
-  // -------------------------------------------------------------------
-  {
-    const ceiling = target.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT;
-    const decl = declaration({ bounds: { launchesPerMinute: ceiling * 2, accounts: 2 } });
+  // A resume retains the selected account even without provider coordinates.
+  for (const withRecordedAccount of [true, false]) {
+    const decl = declaration();
     const admission = await admitted(decl);
-
-    for (const [names, why] of [
-      [['duplicated', 'duplicated'], 'the same account named twice'],
-      [['duplicated', '  duplicated  '], 'the same account named twice with stray whitespace']
-    ]) {
-      let calls = 0;
-      const clock = fakeClock();
-      const error = await raises('CLOUD_BATCH_RATE_UNSERVEABLE',
-        () => runner.runBatch({
-          admission,
-          declaration: decl,
-          stateRoot: room(),
-          accounts: names,
-          now: clock.now,
-          sleep: clock.sleep,
-          dispatch: async () => { calls += 1; return { taskId: 'never' }; }
-        }),
-        `duplicate accounts: ${why} cannot carry a rate admitted for two accounts, and is refused rather than run onto one`);
-      check(calls === 0,
-        `duplicate accounts: nothing is dispatched onto the single account behind ${why} (dispatches made: ${calls})`);
-      check(error.message.includes(String(ceiling)),
-        `duplicate accounts: the refusal names the measured per-account ceiling, so the fix is obvious (got: ${error.message.slice(0, 200)})`);
+    const file = journal.openBatch({ stateRoot: room(), admission,
+      ...(withRecordedAccount ? { account: ACCOUNT } : {}) });
+    if (!withRecordedAccount) {
+      journal.recordIntent({ file, index: 0, target: decl.tasks[0].target });
+      journal.recordLaunched({ file, index: 0, taskId: 'provider-0', account: ACCOUNT });
     }
+    const before = fs.readFileSync(file, 'utf8');
+    let calls = 0;
+    await raises('CLOUD_BATCH_RUNNER_MISCONFIGURED', () => runner.runBatch({
+      admission, declaration: decl, journalFile: file, account: 'account-other',
+      dispatch: async () => { calls += 1; return { taskId: 'never' }; }
+    }), 'resume account: a batch resumes under its original selected account');
+    check(calls === 0 && fs.readFileSync(file, 'utf8') === before,
+      'resume account: a substituted account neither dispatches nor changes the journal');
+  }
 
-    // And the other half of the property, or the gate could simply be "always
-    // refuse": the same admitted rate across two accounts that really are two
-    // runs, which is why it was admitted in the first place.
-    const clock = fakeClock();
-    let dispatched = 0;
-    const summary = await runner.runBatch({
-      admission,
-      declaration: decl,
-      stateRoot: room(),
-      accounts: ['distinct-one', 'distinct-two'],
-      now: clock.now,
-      sleep: clock.sleep,
-      dispatch: async ({ index }) => { dispatched += 1; return { taskId: `provider-${index}` }; }
-    });
-    check(dispatched === 5 && summary.launched === 5,
-      `duplicate accounts: two genuinely distinct accounts carry the rate they were admitted for (got ${JSON.stringify(summary)})`);
+  // Batch advice forecasts only the selected account's allowance.
+  {
+    const { forecast } = require('../src/lib/cloud-agent/swarm-presets');
+    const reading = forecast(25, { account: { name: ACCOUNT, usedPercent: 40 } });
+    check(reading.headroomPercent === 59 && reading.unknownAllowanceFor.length === 0,
+      'forecast: the selected account provides exactly its own remaining allowance');
+    const unknown = forecast(25, { account: { name: ACCOUNT, usedPercent: null } });
+    check(unknown.headroomPercent === null && unknown.unknownAllowanceFor.includes(ACCOUNT),
+      'forecast: an unreadable selected allowance is unknown rather than available');
+    check(unknown.warnings.some(reason => reason.includes(ACCOUNT) && reason.includes('could not be read')),
+      'forecast: an unreadable allowance names the selected account and reason');
+    const exhausted = forecast(25, { account: { name: ACCOUNT, usedPercent: 99 } });
+    check(exhausted.headroomPercent === 0 && exhausted.warnings.some(reason => reason.includes('cannot be cancelled or refunded')),
+      'forecast: the selected account running out names the cost before dispatch');
+    check(forecast(25).headroomPercent === null,
+      'forecast: an absent account reading does not invent available quota');
+    for (const usedPercent of [NaN, Infinity, -Infinity]) {
+      const nonfinite = forecast(25, { account: { name: ACCOUNT, usedPercent } });
+      check(nonfinite.headroomPercent === null && nonfinite.unknownAllowanceFor.includes(ACCOUNT),
+        'forecast: a non-finite allowance is unknown for the selected account');
+    }
+  }
+
+  // Admission keeps the measured rate ceiling for this selected account.
+  {
+    const atCeiling = declaration({ bounds: { launchesPerMinute: 72 } });
+    const admission = await admitted(atCeiling);
+    check(admission.bounds.launchesPerMinute === 72 && Object.keys(admission.bounds).length === 1,
+      'bounds: admission carries only the selected account launch rate');
+    const error = await raises('CLOUD_BATCH_REFUSED',
+      () => admitted(declaration({ bounds: { launchesPerMinute: 73 } })),
+      'bounds: a rate above 72 launches per minute refuses at admission');
+    check(error.details.findings.some(finding => finding.gate === 'bounds'),
+      'bounds: excessive rate is named as a bounds finding');
   }
 
   // -------------------------------------------------------------------
@@ -791,7 +726,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         stateRoot: room(),
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         fsImpl: fsFailingOn((line) => line.includes('"kind":"intent"')),
@@ -819,7 +754,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         stateRoot: dir,
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         fsImpl: fsFailingOn((line) => line.includes('"kind":"launched"')),
@@ -853,7 +788,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       concurrency: 2,
       now: clock.now,
       sleep: clock.sleep,
@@ -889,15 +824,17 @@ function fsFailingOn(matcher) {
     const base = {
       admission,
       declaration: decl,
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async () => { calls += 1; return { taskId: 'never' }; }
     };
     const cases = [
       [{ ...base, stateRoot: room(), dispatch: undefined }, 'a runner with no dispatcher injected'],
-      [{ ...base, stateRoot: room(), accounts: [] }, 'a runner with no account to launch under'],
-      [{ ...base, stateRoot: room(), accounts: ['ok', '   '] }, 'an account list carrying a blank name'],
+      [{ ...base, stateRoot: room(), account: undefined }, 'a runner with no account to launch under'],
+      [{ ...base, stateRoot: room(), account: '   ' }, 'a runner carrying a blank account name'],
+      [{ ...base, stateRoot: room(), account: ['account-one'] }, 'a runner carrying an array rather than the chosen account name'],
+      [{ ...base, stateRoot: room(), account: 1 }, 'a runner carrying a number rather than the chosen account name'],
       [{ ...base }, 'a runner told neither where to open a journal nor which one to resume'],
       [{ ...base, stateRoot: room(), sleep: null }, 'a runner with no sleep to pace with'],
       [{ ...base, stateRoot: room(), admission: { admitted: false } }, 'a run started from something that is not an admission']
@@ -924,7 +861,7 @@ function fsFailingOn(matcher) {
         admission,
         declaration: decl,
         journalFile: path.join(room(), 'nothing-here.jsonl'),
-        accounts: ACCOUNTS,
+        account: ACCOUNT,
         now: clock.now,
         sleep: clock.sleep,
         dispatch: async () => { calls += 1; return { taskId: 'never' }; }
@@ -954,7 +891,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       stateRoot: room(),
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock.now,
       sleep: clock.sleep,
       dispatch: async ({ index }) => ({ taskId: `provider-${index}` })
@@ -967,7 +904,7 @@ function fsFailingOn(matcher) {
       admission,
       declaration: decl,
       journalFile: first.journalFile,
-      accounts: ACCOUNTS,
+      account: ACCOUNT,
       now: clock2.now,
       sleep: clock2.sleep,
       dispatch: async () => { calls += 1; return { taskId: 'second-run' }; }
@@ -992,7 +929,7 @@ function fsFailingOn(matcher) {
   }
 
   try { fs.rmSync(TEMP, { recursive: true, force: true }); } catch { /* best effort */ }
-  console.log(`cloud-batch-runner tests passed (${checks} checks: the intent flushed before every provider call and no outcome before the answer, the seal re-checked before EVERY dispatch and a mid-run edit stopping the batch, the declared rate honoured by spacing on an injected clock without spinning, a resume dispatching only what remains and refusing entirely while anything is unresolved, a journal from another batch and a journal nobody can identify refused differently, a provider refusal recorded by name with the run continuing, an id-less answer held as unknown rather than failed, a numeric provider id kept as a launch and an unusable one recorded by name rather than dropped, accounts rotated evenly, a rate refused when too few accounts hold it AND when a duplicate name makes a list shorter than it looks, a re-run of a finished batch summarising the launches it really made rather than the zero the last run added, and a journal that cannot be written stopping the run before the provider is called).`);
+  console.log(`cloud-batch-runner tests passed (${checks} checks: the intent flushed before every provider call and no outcome before the answer, the seal re-checked before EVERY dispatch and a mid-run edit stopping the batch, the declared rate honoured by spacing on an injected clock without spinning, a resume dispatching only what remains and refusing entirely while anything is unresolved, a journal from another batch and a journal nobody can identify refused differently, a provider refusal recorded by name with the run continuing, an id-less answer held as unknown rather than failed, a numeric provider id kept as a launch and an unusable one recorded by name rather than dropped, one explicitly selected account retained across sealed provider coordinates and journal resumes, a rate above the selected account ceiling refused at admission, a re-run of a finished batch summarising the launches it really made rather than the zero the last run added, and a journal that cannot be written stopping the run before the provider is called).`);
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
   // This file is also invoked directly, outside a test harness. Terminate

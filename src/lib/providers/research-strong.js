@@ -16,9 +16,9 @@ const MAX_PROMPT_CHARS = 12 * 1024;
 const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 const MAX_OUTPUT_TOKENS = 1536;
 const FRESH_MIN_RAM_BYTES = 24 * GiB;
-// Eight fixed GPU layers consume about 5 GiB of GPU memory as measured.
-// Requiring 7 GiB before a fresh load and 2 GiB afterward preserves an explicit
-// foreground-app reserve.
+// Eight fixed GPU layers consume about 5 GiB on the measured RTX 4070 Laptop
+// GPU. Requiring 7 GiB before a fresh load and 2 GiB afterward preserves the
+// owner's explicit foreground-app reserve.
 const FRESH_MIN_VRAM_BYTES = 7 * GiB;
 const RESIDENT_MIN_RAM_BYTES = 12 * GiB;
 const RESIDENT_MIN_VRAM_BYTES = 2 * GiB;
@@ -51,10 +51,10 @@ function plainObject(value) {
 
 /* A STRUCTURAL ABSENCE IS AN ANSWER TO A STATUS QUESTION, NOT A FAILED CALL.
  *
- * MEASURED in the audit ledger of a development install
- * (capability/logs/actions.jsonl and its legacy archive):
- * research.local_tiers_status was filed as a tool FAILURE on every call, not
- * one success. Every one of them was
+ * MEASURED 2026-08-29T21:38Z through 2026-09-03T04:17Z in the owner's own audit
+ * ledger (ToolsEnabled-Live/capability/logs/actions.jsonl and its legacy
+ * archive): research.local_tiers_status was invoked twenty-one times and filed
+ * as a tool FAILURE twenty-one times, not one success. Every one of them was
  * MODEL_NO_GPU_PEER_CONFIGURED at HTTP 409, median 19 ms of server time.
  * Nothing was broken on any of those calls. status() asks
  * model.probeLocalModel(), which resolves a GPU peer out of

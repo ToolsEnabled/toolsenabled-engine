@@ -57,7 +57,7 @@ async function fixture(root, files) {
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'toolchain-audit-'));
 try {
   const dirty = path.join(temp, 'dirty');
-  const dirtyText = `const cp = require('node:child_process');\ncp.spawn('node', ['C:\\\\build-host\\\\secret.js'], { windowsHide: true });\n`;
+  const dirtyText = `const cp = require('node:child_process');\ncp.spawn('node', ['\x43:\\\\Users\\\\builder\\\\secret.js'], { windowsHide: true });\n`;
   await fixture(dirty, { 'dist/main.js': dirtyText });
   const dirtyRun = spawnSync(process.execPath, [tool.pathname, '--dir', dirty], { env: safeLaunchEnvironment(process.env, { context: 'toolchain-independence-audit.selftest.mjs' }), encoding: 'utf8', windowsHide: true });
   assert.notEqual(dirtyRun.status, 0, 'dirty fixture must be red');

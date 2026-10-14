@@ -5,9 +5,9 @@
 // WHY THIS MODULE EXISTS AT ALL: `tools/gemini-fleet.js` has a `makeWorktree()`
 // that FORCE-REMOVES whatever already sits at the target path before creating,
 // and a `removeWorktree()` that will `git worktree remove --force` any path it
-// is handed. Four worktrees holding real unmerged review work (named
-// `ToolsEnabled-lane-*`) were once live beside a development checkout. A
-// supervisor that reused those helpers is one bad lane
+// is handed. On 2026-07-28 four worktrees holding real unmerged review work
+// (ToolsEnabled-lane-s03-pdfinfo, -s05-fleet, -s09-gmail, -s10-ledger) were
+// live on this machine. A supervisor that reused those helpers is one bad lane
 // id away from destroying them. So the supervisor does NOT call into
 // gemini-fleet.js; it uses this module, which refuses to delete anything it
 // cannot prove it created.
@@ -27,7 +27,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+// git is started by absolute path, never found in the worktree it acts on
+// (../git-command.js; platform review 1.0.50 E3).
+const { execGitFileSync } = require('../git-command');
 
 const LANE_DIR_PREFIX = 'ToolsEnabled-fleet-lane-';
 const LANE_DIR_PATTERN = /^ToolsEnabled-fleet-lane-[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -57,7 +59,7 @@ class WorktreeIndeterminate extends Error {
   }
 }
 
-function git(args, cwd, exec = execFileSync) {
+function git(args, cwd, exec = execGitFileSync) {
   return String(exec('git', args, { cwd, encoding: 'utf8', windowsHide: true, shell: false })).trim();
 }
 
@@ -164,7 +166,7 @@ function createLaneWorktree(laneId, {
   supervisorId = null,
   itemId = null,
   ownerToken = OWNER_TOKEN,
-  exec = execFileSync,
+  exec = execGitFileSync,
   fsImpl = fs,
   now = () => new Date()
 } = {}) {
@@ -198,8 +200,8 @@ function createLaneWorktree(laneId, {
 // state (src/lib/owner-directive-inbox.js, tools/owner-capture.js,
 // config/standing-orders.json, docs/DASHBOARD-BRIDGE-PLAN.md ...). A lane
 // dropped into a HEAD snapshot therefore reads a repo that does not exist:
-// one lane correctly reported its briefed files "do not exist" and refused,
-// and another read a stale producer and wrote code against fields the current
+// lane s14 correctly reported its briefed files "do not exist" and refused,
+// and lane s09 read a stale producer and wrote code against fields the current
 // code never emits -- which then had to be thrown away in review.
 //
 // So every lane worktree is brought up to the CURRENT working state:
@@ -217,9 +219,10 @@ const MAX_UNTRACKED_FILES = 20_000;
 const MAX_UNTRACKED_BYTES = 256 * 1024 * 1024;
 const MAX_SINGLE_FILE_BYTES = 32 * 1024 * 1024;
 
-// Most untracked non-ignored bytes in a working checkout are `scratch/` and
-// `tmp/` -- transient working residue, not code a lane needs to read.
-// Copying it into every lane would move gigabytes and hundreds of thousands of
+// Measured on this repo 2026-07-28: 3231 untracked non-ignored files totalling
+// 161.8 MB, of which 151 MB is `scratch/` (109.8), `gptaddon/` (28.1) and
+// `tmp/` (13.3) -- transient working residue, not code a lane needs to read.
+// Copying it into 15 lanes would move ~2.4 GB and hundreds of thousands of
 // files for nothing. These prefixes are therefore skipped BY POLICY, which is
 // different from failing to copy something: a policy skip is recorded in the
 // report and does NOT mark the snapshot incomplete. If a phase's brief actually
@@ -237,7 +240,7 @@ const MAX_SINGLE_FILE_BYTES = 32 * 1024 * 1024;
 // real owner-facing reports live there, and a brief that names a specific file
 // under a skipped prefix can still pull it in via copyRepoFileIntoWorktree().
 const DEFAULT_SKIP_UNTRACKED_PREFIXES = [
-  'scratch/', 'tmp/', 'node_modules/', 'captures/',
+  'scratch/', 'tmp/', 'gptaddon/', 'node_modules/', 'captures/',
   'reports/luna-fleet/', 'reports/gemini-fleet/'
 ];
 
@@ -245,7 +248,7 @@ const DEFAULT_SKIP_UNTRACKED_PREFIXES = [
 // NEW path, and the old file would be left sitting in the lane worktree. Turning
 // detection off makes a rename appear as a delete plus an add, which is what we
 // need to reproduce faithfully.
-function changedTrackedPaths(cwd, exec = execFileSync) {
+function changedTrackedPaths(cwd, exec = execGitFileSync) {
   const out = git(['diff', 'HEAD', '--name-only', '--no-renames'], cwd, exec);
   return out ? out.split('\n').map(line => line.trim()).filter(Boolean) : [];
 }
@@ -260,7 +263,7 @@ function changedTrackedPaths(cwd, exec = execFileSync) {
 //
 // Returns { files, nestedRepositories } so the caller can report the skip
 // honestly instead of it looking like a materialization failure.
-function untrackedPaths(cwd, exec = execFileSync, fsImpl = fs) {
+function untrackedPaths(cwd, exec = execGitFileSync, fsImpl = fs) {
   const listing = entry => {
     const out = entry
       ? git(['ls-files', '--others', '--exclude-standard', '--', entry], cwd, exec)
@@ -288,7 +291,7 @@ function untrackedPaths(cwd, exec = execFileSync, fsImpl = fs) {
 // caller is expected to refuse to dispatch in that case.
 function materializeWorkingTree(dir, {
   repoRoot,
-  exec = execFileSync,
+  exec = execGitFileSync,
   fsImpl = fs,
   maxUntrackedFiles = MAX_UNTRACKED_FILES,
   maxUntrackedBytes = MAX_UNTRACKED_BYTES,
@@ -475,13 +478,13 @@ function materializeWorkingTree(dir, {
 // materialization (the worktree has its own index, so this touches nothing
 // else), and afterwards a diff against that tree names exactly what the LANE
 // changed. No commit and no ref is created.
-function captureBaselineTree(worktree, { exec = execFileSync } = {}) {
+function captureBaselineTree(worktree, { exec = execGitFileSync } = {}) {
   const dir = path.resolve(worktree);
   git(['add', '-A'], dir, exec);
   return git(['write-tree'], dir, exec);
 }
 
-function changedSinceBaseline(worktree, baselineTree, { exec = execFileSync } = {}) {
+function changedSinceBaseline(worktree, baselineTree, { exec = execGitFileSync } = {}) {
   if (!baselineTree) return null;
   const dir = path.resolve(worktree);
   try {
@@ -686,7 +689,7 @@ function listLaneWorktrees(repoRoot, fsImpl = fs) {
 // repo's ownership marker (including the protected ToolsEnabled-lane-*
 // namespace, which cannot even match the pattern) is structurally untouchable
 // and is reported as `refused`, never deleted.
-function pruneLaneWorktrees({ repoRoot, activeLaneIds = [], ownerToken = OWNER_TOKEN, exec = execFileSync, fsImpl = fs } = {}) {
+function pruneLaneWorktrees({ repoRoot, activeLaneIds = [], ownerToken = OWNER_TOKEN, exec = execGitFileSync, fsImpl = fs } = {}) {
   const active = new Set(activeLaneIds);
   const report = { kept: [], removed: [], refused: [] };
   const byItem = new Map();
@@ -720,7 +723,7 @@ function pruneLaneWorktrees({ repoRoot, activeLaneIds = [], ownerToken = OWNER_T
 }
 
 // Remove a lane worktree, but only after assertReapable passes.
-function removeLaneWorktree(target, { repoRoot, ownerToken = OWNER_TOKEN, exec = execFileSync, fsImpl = fs } = {}) {
+function removeLaneWorktree(target, { repoRoot, ownerToken = OWNER_TOKEN, exec = execGitFileSync, fsImpl = fs } = {}) {
   const { path: dir } = assertReapable(target, { repoRoot, ownerToken, fsImpl });
   try {
     git(['worktree', 'remove', dir, '--force'], path.resolve(repoRoot), exec);

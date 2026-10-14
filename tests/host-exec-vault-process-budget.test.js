@@ -37,10 +37,10 @@ const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
 
-// The scratch root and the scratch vault must both be inside the running
-// account's profile. tests/run-isolated.js derives its scratch root from TEMP,
-// so TEMP is set explicitly rather than inherited.
-const DEV_TEMP = path.join(os.homedir(), 'AppData', 'Local', 'Temp');
+// The scratch root and the scratch vault must both be inside the Dev profile.
+// tests/run-isolated.js derives its scratch root from TEMP, so TEMP is set
+// explicitly rather than inherited.
+const DEV_TEMP = path.join('C:', 'Users', 'fixture-profile', 'AppData', 'Local', 'Temp');
 const tempRoot = fs.existsSync(DEV_TEMP) ? DEV_TEMP : os.tmpdir();
 const scratch = fs.mkdtempSync(path.join(tempRoot, 'host-exec-vault-budget-'));
 process.env.TOOLSENABLED_STATE_ROOT = scratch;

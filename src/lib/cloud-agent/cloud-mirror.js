@@ -4,13 +4,16 @@
 // private cloud mirror, and refusing to dispatch against one that is not.
 //
 // ---------------------------------------------------------------------------
-// THE MEASUREMENT THIS EXISTS FOR: the app's cloud branch was hundreds of
-// commits behind local HEAD while the engine's was only a few.
+// THE MEASUREMENT THIS EXISTS FOR (2026-08-24, taken here, not reported).
+//
+//   app  origin/packaging/capability-layer   467 commits behind local HEAD
+//   app  origin/main                         756 commits behind local HEAD
+//   engine origin/main                         5 commits behind local HEAD
 //
 // A Codex Cloud environment is bound to a GitHub repository and clones a BRANCH
 // of it. So a cloud agent diffs against whatever that branch holds. The engine's
-// branch was only a few commits behind and its cloud harvests came back clean; the app's
-// was hundreds behind and its harvests produced empty applies, "fixes" already present
+// branch is 5 commits behind and its cloud harvests came back clean; the app's
+// is 467 behind and its harvests produced empty applies, "fixes" already present
 // in the tree, and citations pointing at unrelated code. The gap IS the defect.
 // Nothing about the prompt, the model, or the harvest was broken.
 //
@@ -2184,7 +2187,7 @@ async function publishMirror({
   if (chainParent) commitArgs.splice(2, 0, '-p', chainParent);
   const publicationCommit = String(runGitImpl(publicationScratch.root, [
     '-c', 'user.name=ToolsEnabled cloud mirror',
-    '-c', 'user.email=cloud-mirror@toolsenabled.ai',
+    '-c', 'user.email=person-2c9d6a5f@example.com',
     ...commitArgs
   ], { alternateObjects: publicationScratch.alternateObjects })).trim();
   if (!COMMIT_SHA.test(publicationCommit)) {

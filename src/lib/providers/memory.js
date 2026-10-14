@@ -39,7 +39,7 @@ function set(input, dependencies = {}) {
     replayed: output.replayed,
     occurredAtMs: output.updatedAtMs
   });
-  /* required: FALSE, and an earlier sweep's flip to true is reverted here. This audit
+  /* required: FALSE, and w20's flip to true is reverted here. This audit
    * write happens AFTER the durable local mutation has already committed, so
    * demanding a durable audit record cannot protect anything -- it can only
    * throw away a completed local write when a canonical audit store is

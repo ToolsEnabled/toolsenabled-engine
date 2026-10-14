@@ -2,8 +2,9 @@
 
 // Q27 step 1-2 (BUILD-QUEUE.md): the launch record.
 //
-// This is deliberately NOT capability-chaining enforcement. Design note: most
-// agents today follow most pinned instructions well. Build order is instruction-first: (1) pin the instruction that
+// This is deliberately NOT capability-chaining enforcement. The owner's
+// correction, 2026-07-28: "most agents today follow most pinned instructions
+// well." Build order is instruction-first: (1) pin the instruction that
 // spawns should go through the dashboard, (2) always keep an unattributed
 // counter so compliance is measured rather than assumed, (3) build a spawn
 // gate only if the counter later shows non-compliance. This module is (1)'s
@@ -21,6 +22,7 @@
 // -- and never bypasses -- src/lib/agent-org.js's own normalizeOrg()/
 // mayClaim() contract, which this module reuses rather than reimplements.
 
+const { validateNativeModelId } = require('./model-dispatch-tiers');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -107,6 +109,12 @@ function shortText(value, label, maxLength) {
     fail('LAUNCH_INVALID', `${label} is invalid.`, { field: label });
   }
   return value;
+}
+function modelId(value) {
+  try { validateNativeModelId(value); }
+  catch (error) { fail('LAUNCH_INVALID', error.message, { field: 'model' }); }
+  // Keep the launch record's existing confidentiality guard.
+  return shortText(value, 'model', 2048);
 }
 function integer(value, label, min, max) {
   if (!Number.isSafeInteger(value) || value < min || value > max) fail('LAUNCH_INVALID', `${label} must be an integer between ${min} and ${max}.`, { field: label });
@@ -253,7 +261,7 @@ function normalizeLaunchRequest(input) {
     requestingActor: agentIdField(input.requestingActor, 'requestingActor'),
     targetAgentId: agentIdField(input.targetAgentId, 'targetAgentId'),
     tier: enumValue(input.tier, TIERS, 'tier'),
-    model: shortText(input.model, 'model', 120),
+    model: modelId(input.model),
     effort: optionalReasoningEffort(input.effort),
     objectiveRef: objectiveRef(input.objectiveRef),
     cap: cap(input.cap),
@@ -503,7 +511,7 @@ function normalizeRecord(value) {
     targetAgentId,
     tier: enumValue(value.tier, TIERS, 'tier'),
     tierProposed: value.tierProposed,
-    model: shortText(value.model, 'model', 120),
+    model: modelId(value.model),
     objectiveRef: objectiveRef(value.objectiveRef),
     cap: cap(value.cap),
     parentLaunchId,

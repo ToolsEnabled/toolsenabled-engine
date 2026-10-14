@@ -276,7 +276,7 @@ function machineScheduledPromptsAreExcluded() {
 }
 
 // Harness notification wrappers arrive through UserPromptSubmit with no
-// source label (measured: many pending "owner turns" were
+// source label (measured 2026-08-12: 15 of 33 pending "owner turns" were
 // <task-notification> wrappers). Structural detection excludes them; a
 // genuine turn quoting a wrapper mid-text still spools.
 function harnessNotificationsAreExcluded() {
@@ -291,7 +291,7 @@ function harnessNotificationsAreExcluded() {
   check(spool.listPending(f.ledger).length === 0, 'harness notifications must never enter the owner spool');
   check(!fs.existsSync(f.fallback), 'harness notifications must not pollute the fallback journal');
 
-  const quoting = 'a turn that mentions <task-notification> in the middle is still a person talking';
+  const quoting = 'why did I get a <task-notification> in my spool, fix that';
   check(runCli(f, JSON.stringify(event(quoting))).status === 0, 'a quoting turn captures cleanly');
   const pending = spool.listPending(f.ledger);
   check(pending.length === 1, 'a mid-prompt wrapper mention is a genuine owner turn and must spool');

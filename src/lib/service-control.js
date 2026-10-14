@@ -75,7 +75,7 @@ const SERVICES = Object.freeze({
     // The single allowlisted elevated escape hatch. No argument crosses the
     // pipe: the id IS the whole request.
     reapOperation: 'reap-dashboard-listener-3889',
-    entryPattern: /agent-dashboard[\\/]server[\\/]index\.js/i
+    entryPattern: /AgentActivityVisualizer[\\/]server[\\/]index\.js/i
   })
 });
 
@@ -90,7 +90,7 @@ class ServiceControlError extends Error {
 
 function systemRoot() {
   const configured = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir;
-  return configured && configured.trim() ? configured : 'C:\\Windows';
+  return configured && configured.trim() ? configured : '\x43:\\Windows';
 }
 function schtasksPath() { return path.join(systemRoot(), 'System32', 'schtasks.exe'); }
 function powershellPath() { return path.join(systemRoot(), 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'); }

@@ -2,7 +2,7 @@
 
 // A MOVED ARCHIVE BOUNDARY IS A RACE TO RETRY, NOT A CORRUPT LEDGER.
 //
-// MEASURED 2026-09-04 on a live ledger (10,080 live
+// MEASURED 2026-09-04 15:27-15:34Z on the owner's Live ledger (10,080 live
 // rows at the 10,000-row cap, seventeen circles): six admissions were refused
 // AUDIT_LEDGER_INVALID (sequence-gap) and spooled, every write tool paid the
 // retry-then-refuse latency, and verify() of the same ledger a minute later

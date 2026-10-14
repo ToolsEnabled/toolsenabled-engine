@@ -1,14 +1,14 @@
 'use strict';
 
-/* THE FIX FOR AN INTERNAL REVIEW'S FINDING 1, standing since 2026-09-07:
- * every test run must set TOOLSENABLED_STATE_ROOT
+/* THE FIX FOR REPORT-ledger-kinds-tools-20260907.md's FINDING 1, standing per
+ * Controller 3 (2026-09-07): every test run must set TOOLSENABLED_STATE_ROOT
  * to a fresh scratch directory before node resolves anything against it, and
  * never run node --test with the live root in the environment.
  *
- * MEASURED: a developer's ambient shell can already carry
+ * MEASURED: this machine's ambient shell already carries
  * TOOLSENABLED_STATE_ROOT pointed at the live, real owner-request ledger
- * (%APPDATA%\ToolsEnabled-Live\capability). Two calls in newly written
- * tests silently read it, because owner-request-store.js's
+ * (<checkout-root>-Live\capability). Two calls in this
+ * lane's own new tests silently read it, because owner-request-store.js's
  * readAll() takes ONE merged options argument while every write function on
  * the same module takes (data, options) -- a call written in the write
  * shape drops its rootPath override with no error and falls through to
@@ -86,7 +86,7 @@ function assertNotLive(root, options = {}) {
 // Unconditional -- the fix does not wait to notice the live path before
 // acting, it always redirects first.
 // Canonical (long-name, link-resolved) from the start: under a cmd.exe-launched
-// runner %TEMP% is the 8.3 form (<drive>:\Users\SAMPLE~1\...), and production's
+// runner %TEMP% is the 8.3 form (<profile-root>/TOOLSE~1\...), and production's
 // account-fenced resolution canonicalises whatever it is handed, so a raw
 // mkdtemp path would compare unequal to resolveStateRoot().root below and the
 // self-check would fail on spelling alone (measured 2026-09-07: exit 1 under a

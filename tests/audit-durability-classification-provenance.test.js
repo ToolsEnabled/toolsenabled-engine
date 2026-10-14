@@ -31,7 +31,7 @@
 // it was the shape of a default. Every one of those entries had been written
 // by a long-lived process still running an audit.js from before the
 // classification fields existed (five mcp-server.js processes on this host had
-// been up since 2026-08-09; the fields landed 2026-08-10), so nothing
+// been up since 2026-08-09; the fields landed 2026-08-10 17:09), so nothing
 // had ever looked, and the sidecar could not answer the only question it
 // exists to answer: WHY writing went non-durable.
 //

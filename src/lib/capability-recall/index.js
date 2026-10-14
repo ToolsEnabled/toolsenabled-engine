@@ -20,7 +20,7 @@
 // arrangement as agent.tool_summary and src/lib/agent-tool-summary.js: the row,
 // the control and the enforcement, or the row does not get to exist.
 //
-// NO PROMPT TEXT IS EVER WRITTEN ANYWHERE. A research retriever logs every query string,
+// NO PROMPT TEXT IS EVER WRITTEN ANYWHERE. lean_rag logs every query string,
 // which is right for a research instrument over public documentation and wrong
 // here: the query IS the person's words. The optional observer below receives
 // term COUNTS, result ids, scores and timings -- never the prompt, never a

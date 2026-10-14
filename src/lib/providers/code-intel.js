@@ -3,7 +3,7 @@
 // Semantic code intelligence -- Language Server Protocol capability exposed as
 // ToolsEnabled MCP tools (owner request R47).
 //
-// The design rule: an agent should
+// The thesis, which belongs to the owner and is correct: an agent should
 // almost never navigate code by raw text when a semantic answer exists. The
 // lookup priority is LSP, then AST, then git history, then ripgrep, then full
 // file reads. `tools/grepsaver-orient.js` already implements that idea for

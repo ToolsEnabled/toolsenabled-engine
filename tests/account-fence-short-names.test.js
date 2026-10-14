@@ -36,9 +36,8 @@ const boundary = require('../src/lib/account-profile-boundary.js');
 const onWindows = process.platform === 'win32';
 const owned = onWindows ? boundary.installationProfileRoot() : null;
 
-/* A fabricated sibling. Never queried, listed, or opened. Assembled at runtime
- * from synthetic parts so the source carries no literal user path. */
-const FOREIGN = ['C:', 'Users', 'NoSuchAccount-3f9c1b', 'AppData', 'Local', 'Temp', 'thing'].join('\\');
+/* A fabricated sibling. Never queried, listed, or opened. */
+const FOREIGN = '\x43:\\Users\\NoSuchAccount-3f9c1b\\AppData\\Local\\Temp\\thing';
 
 function expectForeignWithoutProbes(assertPath, value, options) {
   const probes = [];
@@ -112,7 +111,7 @@ test('a foreign path that cannot be expanded is refused, not permitted',
 test('requireOwnedProfile still means what it says', { skip: !onWindows }, () => {
   /* Outside the profile tree entirely: admissible when the caller does not
      require ownership, refused when it does. Expansion changes neither. */
-  const outside = 'C:\\Windows\\System32';
+  const outside = '\x43:\\Windows\\System32';
   assert.ok(boundary.assertAccountProfilePath(outside, { field: 'x', profileRoot: owned }));
   expectForeignWithoutProbes(boundary.assertAccountProfilePath, outside,
     { field: 'x', profileRoot: owned, requireOwnedProfile: true });

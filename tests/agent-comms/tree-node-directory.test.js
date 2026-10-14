@@ -652,9 +652,9 @@ test('a heartbeat that goes silent without an explicit stop is reclaimed like a 
   );
 });
 
-/* T1791. MEASURED 2026-09-24: three Managers were resumed five minutes before
- * their Controller, whose row had been swept a day earlier
- * (STOPPED_RETENTION_MS). One Manager's roster answered "never-registered" and
+/* T1791. MEASURED 2026-09-24: Managers 2-4 were resumed five minutes before
+ * their manager, Controller 5, whose row had been swept a day earlier
+ * (STOPPED_RETENTION_MS). Manager 4's roster answered "never-registered" and
  * every send "not registered on this tree ... re-point this agent", so it ended
  * its only turn believing its manager did not exist. A child registered for a
  * saved circle took its managerName from that saved tree: the manager is a

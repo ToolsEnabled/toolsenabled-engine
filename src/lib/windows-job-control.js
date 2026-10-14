@@ -73,7 +73,7 @@ function decodeMessage(value) {
 }
 
 function powershellPath(environment = process.env) {
-  const systemRoot = environment.SystemRoot || environment.SYSTEMROOT || environment.windir || 'C:\\Windows';
+  const systemRoot = environment.SystemRoot || environment.SYSTEMROOT || environment.windir || '\x43:\\Windows';
   return path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 }
 
@@ -380,7 +380,7 @@ async function terminateRegisteredJob(wrapperPid, {
 
 function wrapperArguments({
   pipeName, token, command, args, cwd, cleanupTimeoutMs, handshakeTimeoutMs, wrapperScript, assemblyCacheDirectory,
-  terminateDescendantsOnRootExit = false
+  terminateDescendantsOnRootExit = false, verbatimArguments = false
 }) {
   const wrapperArgs = [
     '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass',
@@ -402,7 +402,48 @@ function wrapperArguments({
     wrapperArgs.push('-AssemblyCacheDirectoryBase64', encode(assemblyCacheDirectory));
   }
   if (terminateDescendantsOnRootExit) wrapperArgs.push('-TerminateDescendantsOnRootExit');
+  /* Node's windowsVerbatimArguments, carried to the wrapper (platform review
+     1.0.50 E2): the root's arguments are joined with single spaces exactly as
+     given, for a cmd.exe line that C runtime quoting would break. Absent, the
+     wrapper quotes every argument as it always has. */
+  if (verbatimArguments) wrapperArgs.push('-VerbatimArguments');
   return wrapperArgs;
+}
+
+/* THE COMMAND LINE A CONTAINED WINDOWS LAUNCH REALLY HANDS CreateProcess.
+ *
+ * spawnInJob does not start `command` itself. It starts powershell.exe with
+ * the wrapper script, and the command, its arguments and the working
+ * directory ride on THAT command line, base64-encoded (-CommandBase64,
+ * -ArgumentsBase64, -WorkingDirectoryBase64). Base64 of UTF-8 costs four
+ * units for every three bytes, so an argument list that fits the 32,767-unit
+ * cap on its own can overflow it once wrapped. A caller that must stay under
+ * the cap measures this argv, not its own.
+ *
+ * Same inputs and same builder as spawnInJob. The pipe name and token are
+ * random there; here they are placeholders of exactly the length spawnInJob
+ * generates, so the measured length is the launched length. Nothing is
+ * spawned, created or read. */
+function jobWrapperInvocation(command, args = [], options = {}, dependencies = {}) {
+  const assemblyCacheDirectory = dependencies.assemblyCacheDirectory === undefined
+    ? defaultAssemblyCacheDirectory() : dependencies.assemblyCacheDirectory;
+  const env = options.env || process.env;
+  return {
+    command: powershellPath(env),
+    args: wrapperArguments({
+      pipeName: `toolsenabled-job-${process.pid}-00000000-0000-0000-0000-000000000000`,
+      token: '0'.repeat(64),
+      command,
+      args,
+      cwd: path.resolve(typeof options.cwd === 'string' && options.cwd ? options.cwd : process.cwd()),
+      cleanupTimeoutMs: boundedTimeout(dependencies.cleanupTimeoutMs, DEFAULT_CLEANUP_TIMEOUT_MS, 'cleanupTimeoutMs'),
+      handshakeTimeoutMs: boundedTimeout(dependencies.handshakeTimeoutMs, DEFAULT_HANDSHAKE_TIMEOUT_MS, 'handshakeTimeoutMs'),
+      wrapperScript: path.resolve(dependencies.wrapperScript || WRAPPER_SCRIPT),
+      assemblyCacheDirectory: assemblyCacheDirectory ? path.resolve(assemblyCacheDirectory) : null,
+      terminateDescendantsOnRootExit: options.terminateDescendantsOnRootExit === true,
+      verbatimArguments: options.windowsVerbatimArguments === true
+    })
+  };
 }
 
 class ContainedChild extends EventEmitter {
@@ -826,10 +867,22 @@ function spawnInJob(command, args = [], options = {}, dependencies = {}) {
       && typeof options.terminateDescendantsOnRootExit !== 'boolean') {
     fail('WINDOWS_JOB_INPUT_INVALID', 'terminateDescendantsOnRootExit must be true or false.');
   }
-  const { terminateDescendantsOnRootExit: ignoredRootExitOption, ...childOptions } = options;
+  if (Object.hasOwn(options, 'windowsVerbatimArguments') && typeof options.windowsVerbatimArguments !== 'boolean') {
+    fail('WINDOWS_JOB_INPUT_INVALID', 'windowsVerbatimArguments must be true or false.');
+  }
+  const verbatimArguments = options.windowsVerbatimArguments === true;
+  /* windowsVerbatimArguments describes the ROOT's command line, so it is taken
+     out here: applied to the wrapper's own PowerShell spawn below it would
+     unquote the wrapper's arguments instead. */
+  const {
+    terminateDescendantsOnRootExit: ignoredRootExitOption,
+    windowsVerbatimArguments: ignoredVerbatimOption,
+    ...childOptions
+  } = options;
   if (platform !== 'win32') {
     return spawnImpl(command, args, {
       ...childOptions,
+      ...(verbatimArguments ? { windowsVerbatimArguments: true } : {}),
       // Kept explicit even though non-Windows runtimes ignore it.  The same
       // call site is also exercised by dependency-injected portability tests,
       // and every child-process launch must carry the quiet-desktop contract
@@ -875,7 +928,8 @@ function spawnInJob(command, args = [], options = {}, dependencies = {}) {
   const wrapperArgs = wrapperArguments({
     ...seed, command, args, cwd, cleanupTimeoutMs, handshakeTimeoutMs, wrapperScript,
     assemblyCacheDirectory: resolvedAssemblyCacheDirectory,
-    terminateDescendantsOnRootExit
+    terminateDescendantsOnRootExit,
+    verbatimArguments
   });
   const handshakeStartedAt = (dependencies.now || (() => performance.now()))();
   const nativeChild = spawnImpl(powershellPath(childOptions.env || process.env), wrapperArgs, {
@@ -905,6 +959,7 @@ module.exports = Object.freeze({
   connectPipe,
   defaultAssemblyCacheDirectory,
   defaultRecordDirectory,
+  jobWrapperInvocation,
   normalizeIdentity,
   readIdentity,
   requestTermination,

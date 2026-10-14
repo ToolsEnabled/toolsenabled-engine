@@ -58,6 +58,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { StringDecoder } = require('node:string_decoder');
 const { assertActive } = require('../policy');
 const coordinatorAudit = require('../coordinator-audit-events');
 const { executableFor, parseProviderOutput } = require('./cli-provider-gateway');
@@ -184,8 +185,10 @@ function defaultVertexAdcPath() {
 // (status/HEAD/worktree add/remove/diff --stat). Never shell:true; every call
 // is windowsHide so a repeated worktree-per-run flow never flashes a console.
 function defaultGitRun(args, cwd) {
-  const childProcess = require('node:child_process');
-  const result = childProcess.spawnSync('git', args, {
+  // By absolute path, never found in the repository or worktree it acts on
+  // (../git-command.js; platform review 1.0.50 E3).
+  const { spawnGitProcessSync } = require('../git-command');
+  const result = spawnGitProcessSync('git', args, {
     cwd, encoding: 'utf8', shell: false, windowsHide: true, timeout: GIT_TIMEOUT_MS,
     env: safeLaunchEnvironment()
   });
@@ -423,7 +426,7 @@ function baseEnvironment() {
   // The cross-provider scrub first: the gemini-only list below never removed
   // ANTHROPIC_API_KEY, so an agentic gemini run inherited the owner's
   // machine-wide key and anything it spawned that reached a claude CLI billed
-  // the API instead of their subscription.
+  // the API instead of his subscription.
   //
   // The gemini/vertex names below were exact-case `delete env[name]` until
   // 2026-08-11 -- the same hole, reintroduced immediately AFTER the shared
@@ -510,6 +513,10 @@ function spawnGeminiAgentic(deps, prepared, worktreePath, runId) {
     let stderr = '';
     let settled = false;
     let killTimer = null;
+    // One decoder per stream: a pipe read can end inside a multi-byte UTF-8
+    // character, and decoding each chunk alone corrupted it on both sides.
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     let child;
     try {
@@ -541,10 +548,14 @@ function spawnGeminiAgentic(deps, prepared, worktreePath, runId) {
       });
     };
 
-    child.stdout?.on('data', chunk => { stdout = boundedText(stdout + chunk.toString('utf8')); });
-    child.stderr?.on('data', chunk => { stderr = boundedText(stderr + chunk.toString('utf8')); });
+    child.stdout?.on('data', chunk => { stdout = boundedText(stdout + stdoutDecoder.write(chunk)); });
+    child.stderr?.on('data', chunk => { stderr = boundedText(stderr + stderrDecoder.write(chunk)); });
     child.once('error', () => finish({ ok: false, spawnError: true }));
-    child.once('close', code => finish({ ok: code === 0, exitCode: code }));
+    child.once('close', code => {
+      stdout = boundedText(stdout + stdoutDecoder.end());
+      stderr = boundedText(stderr + stderrDecoder.end());
+      finish({ ok: code === 0, exitCode: code });
+    });
 
     const deadline = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch { /* best-effort */ }
@@ -589,6 +600,40 @@ function boundedStats(stats) {
   for (const key of ['inputTokenCount', 'outputTokenCount', 'totalTokenCount', 'apiTimeMs', 'toolTimeMs']) {
     if (Number.isSafeInteger(stats[key]) && stats[key] >= 0) out[key] = stats[key];
   }
+  return Object.keys(out).length ? out : sessionMetricsStats(stats);
+}
+
+function reportedCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+// THE SHAPE THE INSTALLED CLI ACTUALLY WRITES. Gemini CLI's `--output-format
+// json` envelope carries its session metrics as `stats` (gemini-cli 0.58
+// JsonFormatter + UiTelemetryService): per-model `tokens.prompt` (input),
+// `tokens.candidates` (output), `tokens.total` and `api.totalLatencyMs`, plus
+// `tools.totalDurationMs`. The flat keys above are never written by it, so a
+// real run's usage was always reported as "not_reported". A figure is summed
+// across models only when EVERY model reports it; a partial sum is dropped,
+// never presented as the total.
+function sessionMetricsStats(stats) {
+  const models = plain(stats.models) ? Object.values(stats.models) : [];
+  const out = {};
+  if (models.length > 0 && models.every(plain)) {
+    const fields = [
+      ['inputTokenCount', model => model.tokens?.prompt],
+      ['outputTokenCount', model => model.tokens?.candidates],
+      ['totalTokenCount', model => model.tokens?.total],
+      ['apiTimeMs', model => model.api?.totalLatencyMs]
+    ];
+    for (const [key, read] of fields) {
+      const values = models.map(model => reportedCount(read(model)));
+      if (values.some(value => value === null)) continue;
+      const sum = values.reduce((total, value) => total + value, 0);
+      if (Number.isSafeInteger(sum)) out[key] = sum;
+    }
+  }
+  const toolTime = plain(stats.tools) ? reportedCount(stats.tools.totalDurationMs) : null;
+  if (toolTime !== null && Object.keys(out).length > 0) out.toolTimeMs = toolTime;
   return Object.keys(out).length ? out : null;
 }
 

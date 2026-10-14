@@ -1,8 +1,8 @@
 'use strict';
 
 // Council: a canonical way to decide a batch of contested questions when the
-// owner is not available to decide them.  Built after the 2026-08-03
-// overnight run, which established the two properties
+// owner is not available to decide them himself.  Built after the 2026-08-03
+// overnight run (owner directive R1097), which established the two properties
 // that matter more than the voting arithmetic:
 //
 //   1. The rules are sealed before any ballot is visible.  A tie rule chosen
@@ -13,7 +13,7 @@
 //      it.  So premises are correctable but never rewritable, and every vote
 //      must name the single fact it turns on.
 //
-// The council decides nothing the owner reserved to themselves.  Reserved items
+// The council decides nothing the owner reserved to himself.  Reserved items
 // are carried on the slate so they are visible and argued, but are marked
 // RESERVED and never put to a vote: allowing a vote implies the vote could
 // authorize the action, and it cannot.

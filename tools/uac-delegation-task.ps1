@@ -3,7 +3,7 @@
     Register (or remove) the Windows scheduled task that runs the ToolsEnabled
     UAC delegation helper ELEVATED, HIDDEN, and ON DEMAND.
 
-    WHAT THIS IS FOR (approved). Windows UAC stays FULLY ON.
+    WHAT THIS IS FOR (owner-approved 2026-07-28). Windows UAC stays FULLY ON.
     This does not weaken any Windows security posture. Registering this task ONCE
     (the single elevation-prompting step below) lets the coordinator later run a
     FIXED, owner-authored set of elevated operations

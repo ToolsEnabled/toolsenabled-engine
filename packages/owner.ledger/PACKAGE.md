@@ -16,7 +16,7 @@ including request-scope ids, archive, and merge across the request lifecycle.
 `src/lib/r-ledger.js`, `tools/r-ledger.js`, `tools/r-ledger-check.js`, and
 `tools/owner-spool-draft.js`, the one review pass over spooled owner turns.
 
-One ledger, one filing API (product rule).
+One ledger, one filing API (owner ruling 2026-09-02).
 `src/lib/owner-request-store.js` is the single write path for the person's
 requests at every tier -- global, session, tree, thread -- into
 `reports/OWNER-REQUEST-LEDGER.json`, with an append-only hash chain in

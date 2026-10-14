@@ -9,11 +9,11 @@
 // that checkout told them three different things at once, and nothing
 // mechanical ever said "you are standing in the retired tree".
 //
-// The first fix put this check in tools/agent-preflight.js -- which
+// The first fix (d36f815) put this check in tools/agent-preflight.js -- which
 // only ever runs when a session REMEMBERS to run it. The owner's rule is the
-// opposite: agents should not have to manage things like this inside
-// ToolsEnabled; it should be mechanical, because relying on memory causes
-// problems and belongs only where it is the only realistic solution. So the automatic
+// opposite: "agents shouldnt have to manage things like this inside
+// toolsenabled, it should be mechanical, remembering causes issues and should
+// only be implemented where its the only realistic solution." So the automatic
 // SessionStart onboarding packet (src/lib/agent-onboarding.js) now carries this
 // too, and two consumers means the logic cannot live inside either one of them.
 // A second, independently-drifting copy of "which tree is this" would recreate

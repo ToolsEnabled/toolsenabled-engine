@@ -290,6 +290,22 @@ function claudeCliCandidates({ platform = process.platform, env = process.env, h
     if (typeof appData === 'string' && path.win32.isAbsolute(appData)) {
       add(path.win32.join(appData, 'npm', ...NPM_PACKAGE_SEGMENTS, 'bin', 'claude.exe'), 'npm-global');
     }
+    /* THE PREFIX npm ITSELF IS CONFIGURED WITH, not only its Windows default.
+       `npm config set prefix` / npm_config_prefix (NVM for Windows, a
+       relocated global root) put the npm layout's claude.exe outside
+       %APPDATA%\npm. This list is the one the transport spawns from, the
+       mission bridge checks presence against and the gateway resolves
+       through, so a relocated install missing here was "not installed" to
+       all three (tests/providers.gateway/npm-global-prefix-discovery.js).
+       Read from the environment handed in only, in npm's own spelling and
+       precedence, and joined the way the gateway's globalNpmPrefixes() joins
+       it; %APPDATA%\npm stays first, so a machine with both copies keeps
+       running the one it always ran. */
+    for (const name of ['npm_config_prefix', 'PREFIX']) {
+      const prefix = envValue(env, name, platform);
+      if (typeof prefix !== 'string' || !prefix.trim() || prefix.includes('\0') || !path.isAbsolute(prefix.trim())) continue;
+      add(path.join(path.resolve(prefix.trim()), ...NPM_PACKAGE_SEGMENTS, 'bin', 'claude.exe'), 'npm-global');
+    }
     if (resolvedHome) add(path.win32.join(resolvedHome, '.local', 'bin', 'claude.exe'), 'native');
     const directories = pathDirectories(env, platform);
     const { natives, shims } = pathExtensions(env);
@@ -511,6 +527,8 @@ const MIN_CLI_VERSION_BY_MODEL = Object.freeze({
 /* One name per model a dispatch tier can pin (mission-bridge/actions.js
    TIERS), in the catalog's own words. */
 const MODEL_DISPLAY_NAMES = Object.freeze({
+  'claude-sonnet-5-5': 'Sonnet 5.5',
+  'claude-haiku-5-5': 'Haiku 5.5',
   'claude-opus-5-5': 'Opus 5.5',
   'claude-opus-5': 'Opus 5',
   'claude-sonnet-5': 'Sonnet 5',

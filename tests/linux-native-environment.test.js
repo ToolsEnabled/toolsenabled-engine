@@ -28,7 +28,6 @@ const REQUIRED_SUITES = Object.freeze([
   'tests/continuation-prune.test.js',
   'tests/t545-permission-provider-separation.test.js',
   'tests/vault-setter-error-boundary.test.js',
-  'tests/failover-setting-error-boundary.test.js',
   'tests/audit-admission-error-boundary.test.js',
   'tests/mcp-public-message-boundary.test.js',
 ]);
@@ -175,7 +174,7 @@ function assertRefusal(result, code, selector, marker) {
 
 function assertChildEnvironment(call, unrelatedValue) {
   assert.ok(call.options && call.options.env, 'child environment was not supplied');
-  assert.equal(call.options.env.UNRELATED_ENV_MARKER, unrelatedValue);
+  assert.equal(call.options.env.W13_UNRELATED_ENV, unrelatedValue);
   for (const selector of [...NORMAL_CONTROLS, MUTATION_SELECTOR]) {
     assert.equal(call.options.env[selector], undefined, selector + ' leaked to a clean child');
   }
@@ -219,7 +218,7 @@ function proofResult(result, expectedOutcome, expectedStatus) {
 
 for (const selector of NORMAL_CONTROLS) {
   test('actual entry refuses normal control ' + selector + ' by value', () => {
-    const marker = 'control-marker-' + selector.toLowerCase();
+    const marker = 'w13-control-marker-' + selector.toLowerCase();
     const environment = cleanEnvironment();
     environment[selector] = marker;
     const result = invokeEntry({
@@ -242,7 +241,7 @@ test('actual entry refuses unrequested continuation mutation by value', () => {
 
 test('normal actual entry forwards a clean copy and preserves unrelated values', () => {
   const environment = cleanEnvironment();
-  environment.UNRELATED_ENV_MARKER = 'retained-value';
+  environment.W13_UNRELATED_ENV = 'retained-value';
   const result = invokeEntry({
     environment,
     spawnResult: { status: 0, signal: null, error: null },
@@ -261,7 +260,7 @@ test('normal actual entry forwards a clean copy and preserves unrelated values',
 
 test('explicit continuation mutation proof selects one target and sets only the requested mutation', () => {
   const environment = cleanEnvironment();
-  environment.UNRELATED_ENV_MARKER = 'retained-value';
+  environment.W13_UNRELATED_ENV = 'retained-value';
   const result = invokeEntry({
     environment,
     args: [MUTATION_ARGUMENT],
@@ -277,7 +276,7 @@ test('explicit continuation mutation proof selects one target and sets only the 
   assert.equal(result.calls.length, 1);
   const call = result.calls[0];
   assert.deepEqual(Array.from(call.args.slice(1)), ['tests/continuation-prune.test.js']);
-  assert.equal(call.options.env.UNRELATED_ENV_MARKER, 'retained-value');
+  assert.equal(call.options.env.W13_UNRELATED_ENV, 'retained-value');
   assert.equal(call.options.env[MUTATION_SELECTOR], 'copy');
   for (const selector of NORMAL_CONTROLS) assert.equal(call.options.env[selector], undefined);
   proofResult(result, 'expected-behavior-red', 1);

@@ -571,9 +571,8 @@ test('lease sampling never exempts supplied checkpoint or descriptor credentials
   const fingerprint = crypto.createHash('sha256').update(leasePatternCollision.toString('base64url')).digest('hex');
   assert.throws(() => f.storage.save(running, { checkpoint: { taskId: 'T1', fingerprint, unchanged: 0 } }),
     { code: 'MEMORY_SECRET_REJECTED' });
-  // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
   assert.throws(() => f.storage.save(running, { descriptor: { sessionId: 'lease-sampling-fixture',
-    resumeThreadProvider: 'local', resumeAccount: 'sk-' + 'fixture-only-not-a-real-credential-1234567890' } }),
+    resumeThreadProvider: 'local', resumeAccount: '\x73k-fixture-only-not-a-real-credential-1234567890' } }),
     { code: 'MEMORY_SECRET_REJECTED' });
   const observed = f.storage.get(running.key);
   assert.equal(observed.revision, running.revision);
@@ -584,9 +583,9 @@ test('lease sampling never exempts supplied checkpoint or descriptor credentials
 /* ------------------------------------------------------------------ *
  * T123: A SESSION WHOSE MANAGER HAS STOPPED KEEPS WORKING ITS OWN TASK.
  *
- * A manager's session failed every turn; five circles reporting to it each
- * finished one item, sent the report to a circle that could no longer read it,
- * and sat idle for hours.
+ * MEASURED 2026-09-15. Manager (5323eb2d)'s session failed every turn from
+ * 21:47Z. Five circles reporting to it each finished one item, sent the report
+ * to a circle that could no longer read it, and sat idle for over three hours.
  * The scheduler was already giving those sessions their next turn; what it
  * could not learn was that the manager was gone, so the turn never said so and
  * nobody above the gap was ever told.

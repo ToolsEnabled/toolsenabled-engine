@@ -40,10 +40,10 @@ async function raises(code, action, message) {
    provider that never answered, and a live two-task proof came back with both
    unresolved because of exactly that. The dispatcher now refuses a shim by
    name, so the fixture has to be the thing a caller should really pass. */
-const CODEX_ENTRY = 'C:/npm/node_modules/@openai/codex/bin/codex.js';
+const CODEX_ENTRY = '\x43:/npm/node_modules/@openai/codex/bin/codex.js';
 
-const HOMES = { 'cloud-a': 'C:/homes/a', 'cloud-b': 'C:/homes/b' };
-const ENVIRONMENTS = { 'cloud-a': 'env-aaa', 'cloud-b': 'env-bbb' };
+const ACCOUNT_HOME = '\x43:/homes/a';
+const ENVIRONMENT = 'env-aaa';
 const TASK = { target: 'src/x.js', contract: 'CONTRACT/1\nrole IMPLEMENTER\ntarget src/x.js' };
 
 // A stand-in for the shared scrubber. Records that it was called, because the
@@ -56,8 +56,8 @@ function scrubber(seen) {
 function make(spawnImpl, extra = {}) {
   return dispatcher.createCodexDispatcher({
     codexBinary: CODEX_ENTRY,
-    accountHomes: HOMES,
-    accountEnvironments: ENVIRONMENTS,
+    accountHome: ACCOUNT_HOME,
+    environment: ENVIRONMENT,
     scrubEnvironment: scrubber(extra.seen || []),
     spawnImpl,
     ...extra.options
@@ -80,25 +80,25 @@ function make(spawnImpl, extra = {}) {
       {
         code: 'CLOUD_DISPATCH_SHIM_NOT_EXECUTABLE',
         label: 'an npm Windows shim',
-        options: { codexBinary: 'C:/npm/codex.cmd' }
+        options: { codexBinary: '\x43:/npm/codex.cmd' }
       },
       {
         code: 'CLOUD_DISPATCH_NO_HOMES',
-        label: 'a missing account-to-home declaration',
-        options: { accountHomes: null }
+        label: 'a missing selected account home',
+        options: { accountHome: null }
       },
       {
         code: 'CLOUD_DISPATCH_NO_ENVIRONMENTS',
-        label: 'a missing account-to-environment declaration',
-        options: { accountEnvironments: null }
+        label: 'a missing selected account environment',
+        options: { environment: null }
       }
     ]) {
       let spawnCalls = 0;
       let scrubCalls = 0;
       const options = {
         codexBinary: CODEX_ENTRY,
-        accountHomes: HOMES,
-        accountEnvironments: ENVIRONMENTS,
+        accountHome: ACCOUNT_HOME,
+        environment: ENVIRONMENT,
         spawnImpl: () => { spawnCalls += 1; return { status: 0, stdout: 'task_should_not_exist', stderr: '' }; },
         scrubEnvironment: () => { scrubCalls += 1; return {}; },
         ...fixture.options
@@ -126,13 +126,13 @@ function make(spawnImpl, extra = {}) {
       return { status: 0, stdout: 'https://chatgpt.com/codex/tasks/task_abc123\n', stderr: '' };
     });
     const a = await dispatch({ task: TASK, index: 0, account: 'cloud-a' });
-    const b = await dispatch({ task: TASK, index: 1, account: 'cloud-b' });
+    const b = await dispatch({ task: TASK, index: 1, account: 'cloud-a' });
     check(a.taskId === 'task_abc123', 'the task id is read from the URL the CLI prints');
-    check(b.taskId === 'task_abc123', 'the same for the second account');
-    check(calls[0].home === 'C:/homes/a' && calls[1].home === 'C:/homes/b',
+    check(b.taskId === 'task_abc123', 'the same for the second task on the selected account');
+    check(calls[0].home === '\x43:/homes/a' && calls[1].home === '\x43:/homes/a',
       'CODEX_HOME is pinned to the dispatching account, never left to the CLI default');
-    check(calls[0].args.includes('env-aaa') && calls[1].args.includes('env-bbb'),
-      'each account dispatches into the environment IT is authorized for');
+    check(calls[0].args.includes('env-aaa') && calls[1].args.includes('env-aaa'),
+      'every task dispatches into the selected account\'s authorized environment');
     /* A .js ENTRY POINT RUNS UNDER THIS PROCESS'S OWN NODE, so the script is
        argv[0] and the CLI's own verbs follow it. Asserted as "the verbs are
        present, in order, as separate array elements" rather than at fixed
@@ -151,6 +151,31 @@ function make(spawnImpl, extra = {}) {
   }
 
   // -------------------------------------------------------------------
+  // A BRIEF THAT OPENS WITH A DASH IS STILL THE PROMPT, NEVER AN OPTION.
+  // Measured on codex-cli 0.156.0: without `--`, "- fix ..." and "---" are
+  // clap usage errors (exit 2, nothing sent -- which this file can only hold
+  // as UNCERTAIN) and "-c..." is swallowed as a config override so the task
+  // goes out without its brief. The brief must follow an end-of-options `--`
+  // and be the only element after it.
+  // -------------------------------------------------------------------
+  {
+    for (const contract of ['- fix the flaky test\n- keep the API', '---\ntitle: brief\n---\nbody', '-cmodel="o3" do the thing', '--attempts=4 implement X']) {
+      const calls = [];
+      const dispatch = make((binary, args) => {
+        calls.push(args);
+        return { status: 0, stdout: 'https://chatgpt.com/codex/tasks/task_dash_brief\n', stderr: '' };
+      });
+      await dispatch({ task: { ...TASK, contract }, index: 0, account: 'cloud-a' });
+      const args = calls[0];
+      const separator = args.indexOf('--');
+      check(separator !== -1 && args.slice(separator + 1).length === 1 && args[separator + 1] === contract,
+        `a brief opening with ${JSON.stringify(contract.slice(0, 12))} is passed after an end-of-options "--" as the sole prompt, so the CLI cannot parse it as a flag`);
+      check(args.indexOf(contract) === separator + 1 && args.slice(0, separator).every((argument) => argument !== contract),
+        'and nowhere before the separator');
+    }
+  }
+
+  // -------------------------------------------------------------------
   // AN OVERSIZED PROMPT REFUSES BEFORE SPAWN. The scrubber returns a fresh
   // object, so checking that object as well as the spawn counter proves the
   // refusal did not hand anything to the process boundary.
@@ -160,8 +185,8 @@ function make(spawnImpl, extra = {}) {
     const launchEnvironment = { PATH: 'p' };
     const dispatch = dispatcher.createCodexDispatcher({
       codexBinary: CODEX_ENTRY,
-      accountHomes: HOMES,
-      accountEnvironments: ENVIRONMENTS,
+      accountHome: ACCOUNT_HOME,
+      environment: ENVIRONMENT,
       scrubEnvironment: () => launchEnvironment,
       spawnImpl: () => { spawnCalls += 1; return { status: 0, stdout: 'task_should_not_exist', stderr: '' }; }
     });
@@ -173,26 +198,23 @@ function make(spawnImpl, extra = {}) {
       'the oversized-prompt refusal is certain because no process reached the provider');
     check(spawnCalls === 0,
       'the oversized-prompt refusal never invokes the injected process boundary');
-    check(launchEnvironment.CODEX_HOME === HOMES['cloud-a'] && Object.keys(launchEnvironment).length === 2,
+    check(launchEnvironment.CODEX_HOME === ACCOUNT_HOME && Object.keys(launchEnvironment).length === 2,
       'the refusal performs only the documented CODEX_HOME preparation and writes no prompt or task payload');
   }
 
   // -------------------------------------------------------------------
-  // An account with no declared home or environment REFUSES rather than
-  // falling back. A fallback here runs real work against the wrong source.
+  // A missing selected home or environment refuses at construction.
   // -------------------------------------------------------------------
   {
-    const dispatch = make(() => ({ status: 0, stdout: 'task_x', stderr: '' }));
-    await raises('CLOUD_DISPATCH_ACCOUNT_HOME_UNKNOWN',
-      () => dispatch({ task: TASK, index: 0, account: 'cloud-nowhere' }),
-      'an account with no declared home refuses');
-    const noEnv = dispatcher.createCodexDispatcher({
-      codexBinary: CODEX_ENTRY, accountHomes: HOMES, accountEnvironments: { 'cloud-a': '' },
-      scrubEnvironment: scrubber([]), spawnImpl: () => ({ status: 0, stdout: '', stderr: '' })
-    });
-    await raises('CLOUD_DISPATCH_ACCOUNT_ENVIRONMENT_UNKNOWN',
-      () => noEnv({ task: TASK, index: 0, account: 'cloud-a' }),
-      'an account with no declared environment refuses rather than borrowing another');
+    for (const [options, code] of [
+      [{ accountHome: '' }, 'CLOUD_DISPATCH_NO_HOMES'],
+      [{ environment: '' }, 'CLOUD_DISPATCH_NO_ENVIRONMENTS']
+    ]) {
+      let calls = 0;
+      await raises(code, () => make(() => { calls += 1; return {}; }, { options }),
+        'missing selected account coordinates refuse before dispatch');
+      check(calls === 0, 'missing selected coordinates never reach the provider');
+    }
   }
 
   // -------------------------------------------------------------------
@@ -201,7 +223,7 @@ function make(spawnImpl, extra = {}) {
   {
     let threw = null;
     try {
-      dispatcher.createCodexDispatcher({ codexBinary: CODEX_ENTRY, accountHomes: HOMES, accountEnvironments: ENVIRONMENTS });
+      dispatcher.createCodexDispatcher({ codexBinary: CODEX_ENTRY, accountHome: ACCOUNT_HOME, environment: ENVIRONMENT });
     } catch (error) { threw = error; }
     check(threw && threw.code === 'CLOUD_DISPATCH_NO_SCRUB',
       'building a dispatcher without a scrubber refuses -- the codex child would inherit this process\'s provider credentials');
@@ -308,7 +330,7 @@ function make(spawnImpl, extra = {}) {
       'and returns null rather than a guess when neither shape is present');
   }
 
-  console.log(`codex-dispatcher tests passed (${checks} checks: CODEX_HOME pinned per account and the environment taken from the account that is authorized for it, arguments passed as an array, an undeclared account refusing rather than falling back, the credential scrubber required rather than defaulted, and above all the three answers kept apart -- a provider that ANSWERED marked certain, a transport failure or timeout left UNCERTAIN so a resume reconciles it, an absent binary certain because nothing was sent, a failed exit that still printed an id returning that id rather than stranding a billing task, and exit 0 with no readable id held as unknown rather than invented).`);
+  console.log(`codex-dispatcher tests passed (${checks} checks: CODEX_HOME pinned per account and the environment taken from the account that is authorized for it, arguments passed as an array, missing selected-account coordinates refusing rather than falling back, the credential scrubber required rather than defaulted, and above all the three answers kept apart -- a provider that ANSWERED marked certain, a transport failure or timeout left UNCERTAIN so a resume reconciles it, an absent binary certain because nothing was sent, a failed exit that still printed an id returning that id rather than stranding a billing task, and exit 0 with no readable id held as unknown rather than invented).`);
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
   process.exitCode = 1;

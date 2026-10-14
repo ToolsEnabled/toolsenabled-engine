@@ -29,7 +29,8 @@ const path = require('node:path');
 const {
   createCodexProcessTransport,
   detectCodexVersion,
-  startCodexSession
+  startCodexSession,
+  resumeCodexSession
 } = require('../../src/lib/agent-engine/codex-process');
 
 // These two budgets exist to prove BOUNDEDNESS -- that a failing Codex rejects
@@ -55,7 +56,9 @@ const ENVIRONMENT_NAMES = [
   'CODEX_PROCESS_FAKE_METHODS_PATH',
   'CODEX_PROCESS_FAKE_MODE',
   'CODEX_PROCESS_FAKE_PID_PATH',
-  'CODEX_PROCESS_FAKE_VERSION'
+  'CODEX_PROCESS_FAKE_VERSION',
+  'CODEX_PROCESS_FAKE_CONFIG_PATH',
+  'CODEX_PROCESS_FAKE_ARGV_PATH'
 ];
 
 function runFakeCodexAgent() {
@@ -77,6 +80,11 @@ function runFakeCodexAgent() {
   const pidPath = process.env.CODEX_PROCESS_FAKE_PID_PATH;
   const mode = process.env.CODEX_PROCESS_FAKE_MODE || 'happy';
   if (pidPath) fs.writeFileSync(pidPath, String(process.pid), 'utf8');
+  if (process.env.CODEX_PROCESS_FAKE_ARGV_PATH) {
+    const launch = { args: process.argv.slice(2), home: process.env.CODEX_HOME, pid: process.pid };
+    fs.writeFileSync(process.env.CODEX_PROCESS_FAKE_ARGV_PATH, JSON.stringify(launch));
+    fs.appendFileSync(process.env.CODEX_PROCESS_FAKE_ARGV_PATH + '.launches.jsonl', JSON.stringify(launch) + '\n');
+  }
 
   /* The real codex.exe app-server spawns its own code-mode-host child, and
      nothing in this product waits for or kills it by name -- only whatever
@@ -127,6 +135,29 @@ function runFakeCodexAgent() {
     }
 
     if (request.method === 'initialized') return;
+    if (request.method === 'config/read' && process.env.CODEX_PROCESS_FAKE_CONFIG_PATH) {
+      const config = JSON.parse(fs.readFileSync(process.env.CODEX_PROCESS_FAKE_CONFIG_PATH, 'utf8'));
+      // Simulate the external CLI's per-server boolean override semantics.
+      // A faulty provider can deliberately ignore them for the refusal case.
+      if (mode !== 'ignores-disable') {
+        const argv = process.argv.slice(2);
+        for (let i = 0; i < argv.length; i++) {
+          if (argv[i] !== '-c') continue;
+          const match = /^mcp_servers\.(.+)\.enabled=(true|false)$/.exec(argv[++i]);
+          if (!match) continue;
+          const key = match[1].startsWith('"') ? JSON.parse(match[1]) : match[1];
+          if (Object.hasOwn(config.mcp_servers, key)) config.mcp_servers[key].enabled = match[2] === 'true';
+        }
+      }
+      if (process.env.CODEX_PROCESS_FAKE_ARGV_PATH) fs.writeFileSync(process.env.CODEX_PROCESS_FAKE_ARGV_PATH + '.effective.json',
+        JSON.stringify(config));
+      respond(request, { result: { config } });
+      return;
+    }
+    if (request.method === 'thread/resume' && process.env.CODEX_PROCESS_FAKE_CONFIG_PATH) {
+      respond(request, { result: { thread: { id: request.params.threadId, turns: [] } } });
+      return;
+    }
     if (request.method === 'thread/start') {
       if (mode === 'not-initialized') {
         respond(request, { error: { code: -32600, message: 'Not initialized' } });
@@ -274,16 +305,19 @@ function createFixture() {
     process.env.CODEX_PROCESS_FAKE_PID_PATH = pidPath;
     process.env.CODEX_PROCESS_FAKE_VERSION = version;
     process.env.CODEX_PROCESS_FAKE_MODE = mode;
+    delete process.env.CODEX_PROCESS_FAKE_CONFIG_PATH;
+    delete process.env.CODEX_PROCESS_FAKE_ARGV_PATH;
     pidPaths.add(pidPath);
 
     return {
       methodsPath,
       pidPath,
-      start() {
+      start(options = {}) {
         return rememberSession(startCodexSession({
           cwd: process.cwd(),
           command,
-          args: ['app-server', FAKE_AGENT_MARKER]
+          args: ['app-server', FAKE_AGENT_MARKER],
+          ...options
         }));
       },
       startDefault() {
@@ -313,7 +347,7 @@ function createFixture() {
     try { fs.rmSync(testTempDir, { recursive: true, force: true }); } catch { /* Best effort. */ }
   }
 
-  return { command, nextCase, terminateFromPidPath, cleanup };
+  return { command, nextCase, terminateFromPidPath, cleanup, testTempDir };
 }
 
 function assertInvocationTypeError(error, expectedMessage) {
@@ -546,7 +580,7 @@ async function testCloseReapsGrandchild(fixture) {
     const grandchildPid = readPid(childPidPath);
     assert.equal(isProcessAlive(grandchildPid), true, 'fake grandchild process did not start');
 
-    process.env.PATH = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    process.env.PATH = path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32');
     session.close();
     process.env.PATH = originalPath;
 
@@ -575,7 +609,7 @@ async function testCloseReapsGrandchild(fixture) {
  * filename only npm creates. A winget, scoop or portable install lays down
  * codex.exe and no .cmd at all, so cmd.exe answered 9009, detectCodexVersion()
  * classified 9009 as missing, and the product told a person with a working
- * Codex to go install Codex. Measured on a development machine 2026-08-23.
+ * Codex to go install Codex. Measured on the owner's machine 2026-08-23.
  *
  * `.bat` stands in for `.exe` here on purpose: it is a real PATHEXT entry that
  * the old code could not resolve for exactly the same reason, and unlike a
@@ -602,8 +636,8 @@ async function testNonNpmInstallOnPathResolves() {
     PATH: commandDir,
     PATHEXT: '.COM;.EXE;.BAT;.CMD',
     APPDATA: appData,
-    SystemRoot: process.env.SystemRoot || 'C:\\Windows',
-    ComSpec: process.env.ComSpec || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
+    SystemRoot: process.env.SystemRoot || '\x43:\\Windows',
+    ComSpec: process.env.ComSpec || path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'cmd.exe')
   };
   try {
     const version = await withTimeout(
@@ -630,8 +664,8 @@ async function testAbsentCodexStillReportsNotFound() {
     PATH: root,
     PATHEXT: '.COM;.EXE;.BAT;.CMD',
     APPDATA: root,
-    SystemRoot: process.env.SystemRoot || 'C:\\Windows',
-    ComSpec: process.env.ComSpec || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
+    SystemRoot: process.env.SystemRoot || '\x43:\\Windows',
+    ComSpec: process.env.ComSpec || path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'cmd.exe')
   };
   try {
     await assert.rejects(
@@ -676,12 +710,183 @@ async function testUnreadablePathCandidateIsUnknownNotAbsent() {
   }
 }
 
+/* AN npm SHIM OUTSIDE %APPDATA%\npm RUNS THE LAUNCHER BESIDE IT, NOT cmd.exe
+ * (platform review 1.0.50 E1).
+ *
+ * nvm-windows, scoop and a custom npm prefix put `codex.CMD` on PATH with npm's
+ * node_modules folder next to it, and no %APPDATA%\npm layout. The PATH search
+ * used to hand that shim to hidden-spawn, which can only run it through
+ * cmd.exe -- where a Standard session's configuration overrides go over the
+ * 8191-character limit. The launcher beside the shim must be what runs.
+ *
+ * Off Windows the resolver's platform branch is entered by presenting the
+ * process as win32, as the unreadable-candidate check below does. The shim then
+ * cannot run at all (there is no cmd.exe), so the launcher's own answer is
+ * proof of which route was taken. Without the folder beside it, the shim is
+ * still the answer, as before. */
+async function testNpmShimOutsideAppDataRunsItsLauncher() {
+  const launcherVersion = 'codex-cli 0.0.0-launcher-beside-shim';
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'toolsenabled-codex-shim-prefix-'));
+  const prefix = path.join(root, 'nvm4w', 'nodejs');
+  const bare = path.join(root, 'bare-prefix');
+  const appData = path.join(root, 'AppData');
+  const launcherDir = path.join(prefix, 'node_modules', '@openai', 'codex', 'bin');
+  fs.mkdirSync(launcherDir, { recursive: true });
+  fs.mkdirSync(bare, { recursive: true });
+  fs.mkdirSync(appData, { recursive: true });
+  fs.writeFileSync(path.join(launcherDir, 'codex.js'), `console.log(${JSON.stringify(launcherVersion)});\n`, 'utf8');
+  const shimText = '@echo off\r\necho codex-cli shim-through-cmd\r\n';
+  fs.writeFileSync(path.join(prefix, 'codex.CMD'), shimText, 'utf8');
+  fs.writeFileSync(path.join(bare, 'codex.CMD'), shimText, 'utf8');
+  const envFor = directory => ({
+    PATH: directory,
+    PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    APPDATA: appData,
+    SystemRoot: process.env.SystemRoot || '\x43:\\Windows',
+    ComSpec: process.env.ComSpec || path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'cmd.exe')
+  });
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const presented = process.platform !== 'win32';
+  if (presented) Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+  try {
+    const version = await withTimeout(
+      detectCodexVersion({ command: 'codex', env: envFor(prefix) }),
+      'npm shim outside APPDATA detectCodexVersion'
+    );
+    assert.equal(version, launcherVersion, 'the launcher beside the npm shim must run instead of the shim');
+
+    const kept = await withTimeout(
+      detectCodexVersion({ command: 'codex', env: envFor(bare) }),
+      'bare shim detectCodexVersion'
+    ).then(value => ({ value }), error => ({ error }));
+    assert.notEqual(kept.value, launcherVersion, 'a shim with no npm folder beside it must not borrow a launcher');
+    if (presented) {
+      assert.equal(kept.error && kept.error.code, 'CODEX_CLI_NOT_FOUND',
+        'off Windows the kept shim route reaches for cmd.exe, which is absent here');
+    } else {
+      assert.equal(kept.value, 'codex-cli shim-through-cmd');
+    }
+  } finally {
+    if (presented) Object.defineProperty(process, 'platform', platform);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function testConfinementArgvAndAdmission(fixture) {
+  const confinement = require('../../src/lib/agent-session-confinement');
+  const codexHome = path.join(fixture.testTempDir, 'chosen-official-home');
+  fs.mkdirSync(codexHome);
+  const config = confinement.confinedCodexConfig(confinement.agentConfinement('guided'),
+    { mcpServers: { toolsenabled: { command: process.execPath, args: ['inert peer'], env: { INERT: 'fixture' } } } },
+    undefined, path.join(fixture.testTempDir, 'state'), true);
+  const plan = { ok: true, codexHome, codexConfig: config, codexArgs: confinement.codexConfigOverrideArgs(config) };
+  const effective = JSON.parse(JSON.stringify(config));
+  effective.mcp_servers.toolsenabled.environment_id = 'local';
+  effective.mcp_servers.toolsenabled.enabled = true;
+  const observe = (testCase, configuration) => {
+    const configPath = testCase.methodsPath + '.json', argvPath = testCase.methodsPath + '.argv.json';
+    fs.writeFileSync(configPath, JSON.stringify(configuration));
+    process.env.CODEX_PROCESS_FAKE_CONFIG_PATH = configPath;
+    process.env.CODEX_PROCESS_FAKE_ARGV_PATH = argvPath;
+    return { env: { ...process.env, CODEX_HOME: codexHome }, argvPath };
+  };
+  const happy = fixture.nextCase();
+  const observed = observe(happy, effective);
+  const session = await happy.start({ plan, env: observed.env, threadOptions: { sandbox: 'read-only', approvalPolicy: 'never' } });
+  const launched = JSON.parse(fs.readFileSync(observed.argvPath, 'utf8'));
+  assert.equal(launched.home, codexHome);
+  assert.deepEqual(launched.args.slice(-plan.codexArgs.length), plan.codexArgs);
+  assert.ok(readMethods(happy.methodsPath).indexOf('config/read') < readMethods(happy.methodsPath).indexOf('thread/start'));
+  session.close();
+  await waitForProcessExit(readPid(happy.pidPath));
+
+  const resumedCase = fixture.nextCase();
+  const resumedObservation = observe(resumedCase, effective);
+  const resumed = await resumeCodexSession({ command: fixture.command, args: ['app-server', FAKE_AGENT_MARKER],
+    env: resumedObservation.env, plan, threadId: 'saved-fixture-thread',
+    threadOptions: { sandbox: 'read-only', approvalPolicy: 'never' } });
+  assert.equal(resumed.threadId, 'saved-fixture-thread');
+  assert.deepEqual(JSON.parse(fs.readFileSync(resumedObservation.argvPath, 'utf8')).args.slice(-plan.codexArgs.length), plan.codexArgs);
+  resumed.close();
+  await waitForProcessExit(readPid(resumedCase.pidPath));
+
+  const inherited = JSON.parse(JSON.stringify(effective));
+  inherited.mcp_servers.user_server = { command: process.execPath, args: ['inert inherited peer'], enabled: true };
+  inherited.mcp_servers['personal_docs-server'] = { command: process.execPath, args: [], enabled: true };
+  const inheritedCase = fixture.nextCase();
+  const inheritedObservation = observe(inheritedCase, inherited);
+  const admitted = await inheritedCase.start({ plan, env: inheritedObservation.env });
+  const admittedConfig = JSON.parse(fs.readFileSync(inheritedObservation.argvPath + '.effective.json', 'utf8'));
+  assert.equal(admittedConfig.mcp_servers.user_server.enabled, false, 'the inherited server must be disabled');
+  assert.equal(admittedConfig.mcp_servers['personal_docs-server'].enabled, false, 'each inherited server must be disabled');
+  assert.equal(admittedConfig.mcp_servers.toolsenabled.enabled, true, 'the confined server must stay enabled');
+  const launches = fs.readFileSync(inheritedObservation.argvPath + '.launches.jsonl', 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(launches.length, 2, 'discovery and the admitted provider are separate owned processes');
+  assert.equal(await waitForProcessExit(launches[0].pid), true, 'discovery must be closed before thread admission');
+  assert.equal(launches.every(launch => launch.home === codexHome), true);
+  const inheritedMethods = readMethods(inheritedCase.methodsPath);
+  const beforeThread = inheritedMethods.slice(0, inheritedMethods.indexOf('thread/start'));
+  assert.equal(beforeThread.filter(method => method === 'config/read').length >= 2, true,
+    'both discovery and effective admission must precede the thread');
+  admitted.close();
+  await waitForProcessExit(launches[1].pid);
+
+  const ignoredCase = fixture.nextCase({ mode: 'ignores-disable' });
+  const ignoredObservation = observe(ignoredCase, inherited);
+  await assert.rejects(ignoredCase.start({ plan, env: ignoredObservation.env }), { code: 'AGENT_CODEX_CONFINEMENT_MISMATCH' });
+  assert.equal(readMethods(ignoredCase.methodsPath).includes('thread/start'), false, 'ignored disable must refuse before thread/MCP startup');
+  assert.equal(await waitForProcessExit(readPid(ignoredCase.pidPath)), true);
+
+  const resumedInheritedCase = fixture.nextCase();
+  const resumedInheritedObservation = observe(resumedInheritedCase, inherited);
+  const resumedInherited = await resumeCodexSession({ command: fixture.command, args: ['app-server', FAKE_AGENT_MARKER],
+    env: resumedInheritedObservation.env, plan, threadId: 'saved-inherited-fixture-thread' });
+  const resumedConfig = JSON.parse(fs.readFileSync(resumedInheritedObservation.argvPath + '.effective.json', 'utf8'));
+  assert.equal(resumedConfig.mcp_servers.user_server.enabled, false);
+  assert.equal(resumedConfig.mcp_servers.toolsenabled.enabled, true);
+  assert.equal(resumedInherited.threadId, 'saved-inherited-fixture-thread');
+  resumedInherited.close();
+  await waitForProcessExit(readPid(resumedInheritedCase.pidPath));
+
+  for (const mutation of [
+    cfg => { cfg.mcp_servers.toolsenabled.enabled = false; },
+    cfg => { cfg.mcp_servers.toolsenabled.env.INERT_EXTRA = 'merged user environment'; },
+    cfg => { cfg.features.shell_tool = true; },
+    cfg => { cfg.sandbox_workspace_write.writable_roots = [fixture.testTempDir]; }
+  ]) {
+    const bad = fixture.nextCase(), expanded = JSON.parse(JSON.stringify(effective));
+    mutation(expanded);
+    const observation = observe(bad, expanded);
+    await assert.rejects(bad.start({ plan, env: observation.env }), { code: 'AGENT_CODEX_CONFINEMENT_MISMATCH' });
+    assert.equal(readMethods(bad.methodsPath).includes('thread/start'), false, 'refusal must precede thread/MCP startup');
+    assert.equal(await waitForProcessExit(readPid(bad.pidPath)), true);
+  }
+  const malformedNamesCase = fixture.nextCase();
+  const malformedNames = observe(malformedNamesCase, { ...effective, mcp_servers: null });
+  await assert.rejects(malformedNamesCase.start({ plan, env: malformedNames.env }),
+    { code: 'AGENT_CODEX_CONFINEMENT_UNAVAILABLE' });
+  assert.equal(readMethods(malformedNamesCase.methodsPath).includes('thread/start'), false);
+  const malformedLaunches = fs.readFileSync(malformedNames.argvPath + '.launches.jsonl', 'utf8').trim().split('\n');
+  assert.equal(malformedLaunches.length, 1, 'unavailable discovery must not be mistaken for an empty inherited surface');
+  assert.equal(await waitForProcessExit(readPid(malformedNamesCase.pidPath)), true);
+
+  const unavailable = fixture.nextCase();
+  await assert.rejects(unavailable.start({ plan, env: { ...process.env, CODEX_HOME: codexHome } }),
+    { code: 'AGENT_CODEX_CONFINEMENT_UNAVAILABLE' });
+  assert.equal(readMethods(unavailable.methodsPath).includes('thread/start'), false);
+  const wrongHome = fixture.nextCase();
+  await assert.rejects(wrongHome.start({ plan, env: { ...process.env, CODEX_HOME: fixture.testTempDir } }),
+    { code: 'AGENT_CODEX_CONFINEMENT_UNAVAILABLE' });
+  assert.equal(fs.existsSync(wrongHome.methodsPath), false, 'a mismatched plan must refuse before app-server launch');
+}
+
 async function main() {
   const fixture = createFixture();
   const tests = [
     ['all public spawn entry points validate command and args', testInvocationValidation],
     ['valid command and args defaults still work', testDefaultInvocation],
     ['initialize precedes thread/start', testInitializePrecedesThreadStart],
+    ['chosen sign-in home, confinement argv and effective MCP admission', testConfinementArgvAndAdmission],
     ['Not initialized rejects within a bounded time', testNotInitializedRejectsWithinBound],
     ['detected version reaches the adapter', testDetectedVersionReachesAdapter],
     ['an incompatible Codex is named, with the update command', testIncompatibleCodexIsNamedWithTheUpdateCommand],
@@ -689,7 +894,8 @@ async function main() {
     ['close reaps a child the app-server itself spawned', testCloseReapsGrandchild],
     ['a non-npm Codex on PATH resolves', testNonNpmInstallOnPathResolves],
     ['an absent Codex still reports CODEX_CLI_NOT_FOUND', testAbsentCodexStillReportsNotFound],
-    ['an unreadable PATH candidate is unknown, not absent', testUnreadablePathCandidateIsUnknownNotAbsent]
+    ['an unreadable PATH candidate is unknown, not absent', testUnreadablePathCandidateIsUnknownNotAbsent],
+    ['an npm shim outside APPDATA runs its launcher, not cmd.exe', testNpmShimOutsideAppDataRunsItsLauncher]
   ];
 
   assert.ok(tests.length > 0, 'codex-process test table must not be empty');

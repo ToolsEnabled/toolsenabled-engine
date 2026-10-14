@@ -3,7 +3,7 @@
 // R1260 T4.3 / R1248 -- THE SETTINGS CATALOGUE MUST NOT GROW ANOTHER CONTROL
 // THAT ENFORCES NOTHING, AND MUST BE HONEST ABOUT THE ONES IT ALREADY HAS.
 //
-// THE DEFECT, MEASURED AT THE BASE REVISION.
+// THE DEFECT, MEASURED AT BASE SHA ceae7e7f.
 //   * config/settings-registry.json declares 51 user settings.
 //   * 41 of them carry `enforcedBy: ""` and 11 carry `derivedFrom: ""`.
 //   * src/lib/settings-registry.js validated both fields with
@@ -17,9 +17,9 @@
 //     model.name -- appear in any executable file. The other 48 are strings in
 //     a JSON catalogue that nothing reads.
 //
-// Product rule: any failure that a system exists to handle or
-// prevent, and that does not do its job according to user settings, is a
-// software failure. A settings row that enforces nothing is that failure, and
+// Owner, 2026-08-11: "every failure which there exists a system for or to
+// prevent; that doesnt do its job according to user settings, is vieweed as
+// software fialure". A settings row that enforces nothing is that failure, and
 // an empty `enforcedBy` accepted as valid is absence read as consent.
 //
 // WHY A RATCHET AND NOT A REJECTION. Making validateEntry refuse an empty
@@ -96,7 +96,7 @@ const UNENFORCED_BASELINE = [
                                        readAuthorization(), the shape
                                        capability.tier already has. */
   'machines.direct_link_setup', 'model.api_key', 'outward.identity_authorization',
-  /* fleet.concurrency_limits JOINED THIS LIST 2026-09-08. an earlier commit
+  /* fleet.concurrency_limits JOINED THIS LIST 2026-09-08. commit 3a131311
      added it as a readback beside fleet.max_declared_agents (which IS
      enforced -- src/lib/agent-org.js resolveMaxAgents; src/lib/agent-org-
      store.js write admission -- and stays out of this list), and declared
@@ -258,7 +258,7 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
      the catalogue as it stands; the O7 change adds NO row (it rewrites
      rules.capture_spoken in place) and shrinks the unenforced set by one,
      which the deepEqual below is the real guard for. The O7 improvements
-     (product rule) add ONE row, rules.ask_when_unsure, nested under
+     (owner 2026-08-22) add ONE row, rules.ask_when_unsure, nested under
      rules.capture_spoken and enforced by the same module, so the size is 67
      and the unenforced baseline above is unchanged. If your commit carries
      a different set of rows, recompute this for what YOUR commit contains.
@@ -276,7 +276,7 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
      that absent capability. Removing both makes 66 rows and pays down two
      entries in the unenforced baseline.
 
-     RECOUNTED 2026-08-24 for the AGENT API (product rule B9): it adds ONE
+     RECOUNTED 2026-08-24 for the AGENT API (owner directive B9): it adds ONE
      row, agent.agent_api, and that row is ENFORCED -- src/lib/agent-api-policy.js
      holds the decision and both `claude` spawn paths emit its answer as the
      CLI's `--tools` flag (src/lib/agent-engine/claude-cli-adapter.js for an
@@ -286,7 +286,8 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
      deliberately unchanged: the debt this ratchet counts did not move, which is
      the whole point of raising the size pin by hand rather than deriving it.
 
-     RECOUNTED 2026-08-29 for OWNER APPROVALS (product rules): it adds ONE row, agent.tool_approvals, and that row is
+     RECOUNTED 2026-08-29 for OWNER APPROVALS (owner directives 2026-08-27 and
+     2026-08-29): it adds ONE row, agent.tool_approvals, and that row is
      ENFORCED -- src/lib/policy.js requiresApproval() reads it through
      approvalsTurnedOffByOwner(), which opens the gate only for an explicit
      `false` classified in the person's own settings file with user or installer
@@ -295,15 +296,15 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
      deliberately unchanged: this row arrives with its enforcer, so the debt this
      ratchet counts did not move.
 
-     RECOUNTED 2026-09-02 for ONE LEDGER (product rule): it adds
+     RECOUNTED 2026-09-02 for ONE LEDGER (owner directive 2026-09-02): it adds
      ONE row, rules.agent_filed_needs_approval, and that row is ENFORCED --
      src/lib/owner-request-store.js files an agent's rule as 'proposed' when the
      person's own true is stored, read through
      src/lib/r-ledger-agent-gate.js agentFiledNeedsApprovalOf by the same three
      rules as its sibling rules.ask_when_unsure. So the size is 69 and
-     RECOUNTED 2026-09-02 for OUTSIDE CONTROL (product rule: an
-     agent may touch the app's buttons from the outside, as a setting rather
-     than a standard): it adds ONE row, app.outside_control, shipped OFF, and that
+     RECOUNTED 2026-09-02 for OUTSIDE CONTROL (owner directive 2026-09-02: an
+     agent may touch the app's buttons from the outside, "a setting not a
+     standard"): it adds ONE row, app.outside_control, shipped OFF, and that
      row is ENFORCED -- src/lib/outside-control.js outsideControlPolicy() opens
      the port only for an explicit `true` classified in the person's own
      settings file with user or installer provenance, and the desktop shell
@@ -325,9 +326,9 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
      failover-setting.js, read by rotation.js) and stays out of the list; the
      other three are honest about being inert and join it, which is why
      UNENFORCED_BASELINE grew by three above while the debt itself did not. */
-  /* RECOUNTED 2026-09-03 for MESSAGE SCREENING (product rule: a check that
-     refuses agent messages is a user setting with a slider and a reasonable
-     default): it adds ONE row, agent.message_screening, shipped
+  /* RECOUNTED 2026-09-03 for MESSAGE SCREENING (owner directive: a check that
+     refuses agent messages "should become user settings with sliders and a
+     reasonable default"): it adds ONE row, agent.message_screening, shipped
      at its middle option, and that row is ENFORCED --
      src/lib/agent-comms/history.js resolves it once when the durable history
      is constructed and applies it to every message on the write path, and
@@ -342,7 +343,7 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
   // RECOUNTED 2026-09-08. Measured against the shipped catalogue this pin was
   // stale at 79 vs an actual 81 -- a gap that predates this change and was not
   // narrated here row by row. Of the rows added since the 73 note above, this
-  // change can account for two by name: an earlier commit (org size as a user
+  // change can account for two by name: commit 3a131311 (org size as a user
   // setting) added fleet.max_declared_agents, which IS enforced (see
   // UNENFORCED_BASELINE above) and fleet.concurrency_limits, which is not
   // (joined UNENFORCED_BASELINE above). The remaining growth from 73 to 79 is
@@ -351,7 +352,7 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
   // Source18 already has 88 rows (the old 81 pin is retained as a reproduced
   // baseline failure). Tool activity audit adds one enforced choice. Preserve
   // the independently asserted list of unenforced rows below.
-  // 90 since an earlier change (2026-09-10) added exactly one row,
+  // 90 since a83338f4 (2026-09-10) added exactly one row,
   // agent.persistent_continuation -- verified by diffing that commit's registry
   // change, which adds one "id" and removes none. It is ENFORCED
   // (src/lib/agent-ledger-continuation.js), so UNENFORCED_BASELINE below is
@@ -359,23 +360,24 @@ test('the shipped catalogue reports the recorded number of unenforced rows', () 
   // Message delivery adds agent.message_delivery and agent.message_queue_seconds.
   // Both are read by src/lib/agent-message-delivery.js; the unenforced set is unchanged.
   // Per-turn complete rules delivery is enforced by rules-turn-snapshot and the desktop host.
-  // "Who adds standing rules" (rules.filing_from) adds one
+  // "Who adds standing rules" (rules.filing_from, owner 2026-09-15) adds one
   // enforced depth-2 choice, read by src/lib/r-ledger-agent-gate.js; the
   // unenforced set is unchanged.
   // "Letting agents edit ToolsEnabled source in checkouts"
-  // (agent.product_source_writes) adds one enforced toggle,
+  // (agent.product_source_writes, owner 2026-09-19) adds one enforced toggle,
   // read by src/lib/product-source-writes.js for src/lib/providers/host-control.js;
   // the unenforced set is unchanged.
-  // Recounted 2026-09-23 against the eight rows added since an earlier change:
+  // Recounted 2026-09-23 against the eight rows added since 61d221e8:
   // agent.comms_enabled, agent.task_difficulty_enabled, agent.task_only_delegation,
   // audit.enabled, diagnostics.retention, fleet.tree_depth, fleet.tree_width,
   // and ledger.verify_history. Each declares an enforcer; the two tree settings
   // are read by the paired application's shell/product-settings.cjs. The exact
   // 37-row unenforced ratchet remains unchanged and is asserted independently.
-  // "Keep Metrics history on this computer" (metrics.local_history) adds one
-  // enforced toggle, resolved by
+  // "Keep Metrics history on this computer" (metrics.local_history, owner
+  // 2026-09-23, T1669/T1670) adds one enforced toggle, resolved by
   // src/lib/runtime-policy.js and carried by src/lib/operation-audit.js for the
   // paired application's shell/main.cjs; the unenforced set is unchanged.
-  assert.equal(ids.length, 104, 'the catalogue size changed; update this file deliberately');
+  // The automatic account switching row was removed in 1.0.50.
+  assert.equal(ids.length, 103, 'the catalogue size changed; update this file deliberately');
   assert.deepEqual(unenforced, [...UNENFORCED_BASELINE].sort());
 });

@@ -6,7 +6,7 @@ const wire = key => key.export({ format: 'der', type: 'spki' }).toString('base64
 function fixture(stateRoot, now = Date.now()) {
   const device = crypto.generateKeyPairSync('ed25519'), issuer = crypto.generateKeyPairSync('ed25519');
   const context = { operationId: crypto.randomBytes(24).toString('hex'), accountId: 'test-account', email: 'owner@example.test',
-    name: 'Disposable Laptop', publicKey: wire(device.publicKey), profile: hash(stateRoot), issuerPublicKey: wire(issuer.publicKey) };
+    name: 'Disposable ROG', publicKey: wire(device.publicKey), profile: hash(stateRoot), issuerPublicKey: wire(issuer.publicKey) };
   const credential = { pairId: 'pair-' + crypto.randomBytes(16).toString('hex'), deviceId: 'device-' + crypto.randomBytes(12).toString('hex'),
     name: context.name, certificatePem: null, privateKeyPem: null, deviceToken: 'dt_' + crypto.randomBytes(32).toString('base64url'), claimedAtMs: now };
   function sign(value) { return { ...value, signature: crypto.sign(null, Buffer.concat([Buffer.from(REPLY_DOMAIN), Buffer.from(JSON.stringify(value))]), issuer.privateKey).toString('base64url') }; }

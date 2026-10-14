@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateNativeModelId, MAX_MODEL_ID_LENGTH } = require('../model-dispatch-tiers');
+
 const {
   validateApprovalAnswer,
   validateEngineEvent,
@@ -335,13 +337,13 @@ function parseSessionResult(result, method, fallbackSessionId = null) {
 
 function sessionModels(value) {
   const fields = ownRecord(value, 'session models');
-  const currentModelId = requiredString(fields, 'currentModelId', 'session models', { max: 512 });
+  const currentModelId = requiredString(fields, 'currentModelId', 'session models', { max: MAX_MODEL_ID_LENGTH });
   const choices = fields.availableModels?.value;
   if (!Array.isArray(choices) || choices.length > 256) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be bounded.');
   const ids = new Set();
   const availableModels = choices.map(choice => {
     const model = ownRecord(choice, 'session model');
-    const modelId = requiredString(model, 'modelId', 'session model', { max: 512 });
+    const modelId = requiredString(model, 'modelId', 'session model', { max: MAX_MODEL_ID_LENGTH });
     if (ids.has(modelId)) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be unique.');
     ids.add(modelId);
     return deepFreeze({ ...jsonData(choice, 'session model'), modelId });
@@ -559,6 +561,7 @@ class AcpAdapter {
     this.buffer = '';
     this.pendingExitInfo = null;
     this.receivePromise = null;
+    this.receiveDraining = false;
     this.closed = null;
     this.initialized = null;
     this.initializing = null;
@@ -811,26 +814,31 @@ class AcpAdapter {
 
   async selectModel(threadId, modelId) {
     this._assertInitialized();
+    validateNativeModelId(modelId);
     const id = validateThreadId(threadId);
     return this._withSessionSelection(id, async validate => {
       const option = this.sessionConfigOptions.get(id)?.find(item => item.category === 'model' || item.id === 'model');
       const models = this.sessionModels.get(id);
       if (option) {
-        if (!option.options?.some(choice => choice.value === modelId)) fail('ACP_MODEL_UNAVAILABLE', 'This account does not advertise the requested model.');
         await this._selectConfig(id, option, modelId, 'MODEL', validate);
         validate();
       } else {
-        if (!models?.availableModels.some(choice => choice.modelId === modelId)) fail('ACP_MODEL_UNAVAILABLE', 'This account does not advertise the requested model.');
-        if (models.currentModelId !== modelId) {
+        // The catalog is advisory. Let the provider decide whether this exact ID is available.
+        if (models?.currentModelId !== modelId) {
           const response = await this._request(METHOD.sessionSetModel, { sessionId: id, modelId });
           validate();
           const fields = ownRecord(response, 'session/set_model result', { allowed: ['_meta'] });
           if (Object.hasOwn(fields, '_meta')) jsonData(fields._meta.value, 'session/set_model result._meta');
         }
-        this.sessionModels.set(id, deepFreeze({ ...models, currentModelId: modelId }));
+        this.sessionModels.set(id, deepFreeze({ ...models, availableModels: models?.availableModels || [], currentModelId: modelId }));
       }
       this.selectedModels.set(id, modelId);
       return modelId;
+    }).catch(error => {
+      if (error?.code !== 'ACP_REQUEST_FAILED') throw error;
+      throw new AcpAdapterError('ACP_MODEL_UNAVAILABLE',
+        `${this.modelProvider || 'The assistant provider'} refused the requested model. Check model availability and access with that provider.`,
+        { rpcCode: error.rpcCode });
     });
   }
 
@@ -923,7 +931,7 @@ class AcpAdapter {
       for (const model of state.availableModels) {
         const current = options?.find(item => item.category === 'model' || item.id === 'model')?.currentValue || state.currentModelId;
         const efforts = model._meta?.reasoningEfforts || (model.modelId === current ? thought?.options : []) || [];
-        models.set(model.modelId, deepFreeze({ id: `${this.modelProvider}/${model.modelId}`,
+        models.set(model.modelId, deepFreeze({ id: model.modelId,
           displayName: model.name || model.modelId, description: model.description || null, hidden: false,
           efforts: efforts.map(item => ({ id: item.value || item.id, description: item.description || item.name || item.label || '' })),
           defaultEffort: model._meta?.reasoningEffort || (model.modelId === current ? thought?.currentValue : null) || null }));
@@ -1022,9 +1030,24 @@ class AcpAdapter {
           fail('ACP_PROTOCOL_INVALID', 'ACP transport line exceeds the safety limit');
         }
       }
-      const run = this.receivePromise
-        ? this.receivePromise.then(() => this._drainReceiveIfNeeded())
-        : this._drainReceive();
+      // One reader at a time. A reader awaiting a durable event boundary owns
+      // the stream: later chunks queue behind it. A synchronous reader already
+      // on the stack consumes bytes appended by a re-entrant callback. With no
+      // pending boundary the packet is handled before this call returns, as the
+      // Codex reader does again since 419fcca: an unconditional await here
+      // deferred every later packet behind a microtask chain, so a prompt's
+      // completion (or a permission after Stop) could still be pending when a
+      // click for the retired permission arrived, and that click was granted.
+      if (this.receivePromise) {
+        const run = this.receivePromise.then(() => this._drainReceiveIfNeeded());
+        this.receivePromise = run;
+        return run.finally(() => {
+          if (this.receivePromise === run) this.receivePromise = null;
+        });
+      }
+      if (this.receiveDraining) return undefined;
+      const run = this._drainReceive();
+      if (!run) return undefined;
       this.receivePromise = run;
       return run.finally(() => {
         if (this.receivePromise === run) this.receivePromise = null;
@@ -1035,7 +1058,10 @@ class AcpAdapter {
     }
   }
 
-  async _drainReceive() {
+  // Returns undefined when every accepted line was handled synchronously, or a
+  // promise that continues the same ordered drain after a durable boundary.
+  _drainReceive() {
+    this.receiveDraining = true;
     try {
       let newline;
       while ((newline = this.buffer.indexOf('\n')) !== -1) {
@@ -1044,11 +1070,12 @@ class AcpAdapter {
         if (line.length === 0) continue;
         let message;
         try { message = JSON.parse(line); } catch { fail('ACP_PROTOCOL_INVALID', 'ACP transport emitted malformed JSON'); }
-        await this._handleMessage(message);
+        const wait = this._handleMessage(message);
+        if (wait) return this._drainReceiveAfter(wait);
       }
       if (this.pendingExitInfo) {
         const wait = this.eventBoundary.wait();
-        if (wait) await wait;
+        if (wait) return this._drainReceiveAfter(wait);
         const exitInfo = this.pendingExitInfo;
         this.pendingExitInfo = null;
         throw processExitError(exitInfo);
@@ -1056,7 +1083,21 @@ class AcpAdapter {
     } catch (error) {
       this._failClosed(error instanceof AcpAdapterError
         ? error : new AcpAdapterError('ACP_PROTOCOL_INVALID', 'ACP protocol handling failed'));
+    } finally {
+      this.receiveDraining = false;
     }
+    return undefined;
+  }
+
+  async _drainReceiveAfter(wait) {
+    try {
+      await wait;
+    } catch (error) {
+      this._failClosed(error instanceof AcpAdapterError
+        ? error : new AcpAdapterError('ACP_PROTOCOL_INVALID', 'ACP protocol handling failed'));
+      return undefined;
+    }
+    return this._drainReceive();
   }
 
   _drainReceiveIfNeeded() {

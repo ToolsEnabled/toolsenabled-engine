@@ -7,7 +7,7 @@
 // installation keep its state", "which ports may it use", and "which folders may
 // an assistant touch" were not recorded anywhere a program could read. They were
 // hardcoded, in a TRACKED file that ships: `.mcp.json` names
-// a hardcoded machine-specific Node path five times and an absolute owner path
+// `C:\agent-apps\node-v22.19.0\node.exe` five times and an absolute owner path
 // three more. On any other computer all five MCP servers fail to launch, and the
 // only repair documented anywhere is "edit the JSON by hand", which is precisely
 // what the owner said must never be required of the person testing this.
@@ -243,7 +243,7 @@ function validateMachineRecord(record) {
 // checked its SHAPE and nothing else. Measured against the packaged payload at
 // release/win-unpacked on 2026-08-11: rewriting the single token `"tier":
 // "guided"` to `"tier": "unrestricted"` took the resolved surface from 102 of
-// 262 tools to 262 of 262 -- gaining host.exec, browser.start,
+// 262 tools to 262 of 262 -- gaining host.exec, browser.start, duo.institution_login,
 // system.credential_request, instagram.publish_image, the Stripe tools,
 // audit.flush and system.kill_switch_activate -- and flipped
 // assertUnrestrictedSpawn from PERMISSION_UNRESTRICTED_SPAWN_REFUSED to
@@ -567,10 +567,10 @@ const PLAYWRIGHT_PACKAGE_SPEC_RE = /^@playwright\/mcp@\d+\.\d+\.\d+(?:[-+][A-Za-
 
 /* THE V8 FLAG THAT REMOVES THE TASK BOTH MCP SERVERS DIED INSIDE.
  *
- * MEASURED: two crash dumps from two MCP servers -- the
- * `toolsenabled` and `toolsenabled-readonly` servers of ONE circle, started
- * together, both aborted in the same second. The CONTEXT-based stack walk
- * (the crash investigation evidence, identical in both dumps) is:
+ * MEASURED 2026-09-04T04:11:56Z, two crash dumps, pids 20204 and 11012 -- the
+ * `toolsenabled` and `toolsenabled-readonly` servers of ONE circle, both started
+ * 03:56:20Z, both aborted in the same second. The CONTEXT-based stack walk
+ * (REPORT-crash-20260903/evidence/D, identical in both dumps) is:
  *
  *   KERNELBASE!DebugBreak                                       <- EXCEPTION_BREAKPOINT
  *   electron.exe!uv_fatal_error                                 <- rsi=6, rdi="PostQueuedCompletionStatus"
@@ -654,7 +654,7 @@ function resetRuntimeGuardProbeForTests() {
 
 /* HOW MUCH MEMORY ONE OF THESE SERVERS MAY TAKE BEFORE IT DIES ALONE.
  *
- * MEASURED 2026-09-03 (the crash investigation evidence) on
+ * MEASURED 2026-09-03 (REPORT-crash-20260903/evidence/C/heapcap-probe.txt) on
  * the electron.exe this record names, started with ELECTRON_RUN_AS_NODE=1
  * exactly as an MCP client starts it:
  *
@@ -663,14 +663,15 @@ function resetRuntimeGuardProbeForTests() {
  *   NODE_OPTIONS=--max-old-space-size=384 heap_size_limit =  408 MB
  *
  * So the default is FOUR GIGABYTES of old space per server, and the generated
- * document starts THREE of them per assistant. Nine resumed assistants
- * therefore carry a V8 ceiling of over 100 GB, several times the physical
- * memory of a typical workstation. (Two such servers once died together; a stack walk
+ * document starts THREE of them per assistant. Nine assistants -- the number
+ * this computer actually resumed on 2026-09-03 between 21:15 and 21:24 --
+ * therefore carried a 113 GB V8 ceiling on a 32 GB machine with a 34.7 GB
+ * commit limit. (Two of those servers died at 04:11:56Z; lane D's stack walk
  * later showed that was a shutdown race, not an out-of-memory, so this cap is
  * protection against a runaway server, not the repair for that death.)
  *
  * The caps below are set against the MEASURED steady state, not a guess
- * (the crash investigation evidence): each server settles at
+ * (REPORT-crash-20260903/evidence/C/measure-*.json): each server settles at
  * 30-60 MB private bytes idle and after twenty tool calls, so 512/256 MB of old
  * space is 8-16x the observed working size. A server that exceeds that is a
  * runaway, and the point of the cap is that a runaway aborts by itself with a
@@ -900,8 +901,8 @@ function tierServerAllowlist(tier) {
  *   with    ELECTRON_RUN_AS_NODE -> initialize: answered; tools advertised: the
  *                                   allowlist exactly; 0 new windows
  *
- * So the user's report -- each agent launch opened a second, outdated-looking
- * ToolsEnabled window -- and "an app-started agent session has none of
+ * So the user's report -- "every time I launch an agent a second ToolsEnabled
+ * pops up that looks outdated" -- and "an app-started agent session has none of
  * this product's own tools" are ONE defect, and the window was the visible half.
  *
  * WHY THE CHECK IS "IS IT NODE" RATHER THAN "IS IT ELECTRON". The set of names
@@ -981,7 +982,7 @@ function generateMcpConfig(record, {
    * ASSISTANT and therefore starts a THIRD electron process for every assistant
    * on the computer, whether or not that assistant will ever open a page.
    *
-   * MEASURED 2026-09-03 (the crash investigation evidence): the browser gateway
+   * MEASURED 2026-09-03 (REPORT-crash-20260903/evidence/C): the browser gateway
    * costs a whole process of its own on top of the two tool servers, and nine
    * assistants were running at once on this computer when it died. Omitting it
    * where it is not wanted is one entire process per assistant that is never

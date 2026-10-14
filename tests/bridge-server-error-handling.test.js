@@ -238,7 +238,7 @@ test('listen() keeps the bridge up and retries when the identity probe is slow, 
       execFileSyncImpl: () => {
         probes += 1;
         if (probes <= 6) throw Object.assign(new Error('spawnSync ETIMEDOUT'), { code: 'ETIMEDOUT' });
-        return '"example-pc\\testuser","S-1-5-21-1111111111-2222222222-3333333333-1001"\r\n';
+        return '"\x64esktop-fixture\\fixture-profile","\x53-1-5-21-111111111-222222222-333333333-1027"\r\n';
       },
       sleepSyncImpl: () => {},
       delayImpl: () => Promise.resolve(),

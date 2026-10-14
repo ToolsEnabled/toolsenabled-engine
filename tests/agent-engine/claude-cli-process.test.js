@@ -55,7 +55,7 @@
  *      replaces was "IT NEVER OVERRIDES THE CONFIG DIRECTORY. Setting
  *      CLAUDE_CONFIG_DIR is the fence; not setting it is the feature. An edit
  *      that adds one would look exactly like a bugfix and would break
- *      authentication for every customer." A product decision was made on 2026-08-16 and the
+ *      authentication for every customer." The owner ruled on 2026-08-16 and the
  *      legal position of 2026-08-18 records it as binding, so the engine may now
  *      be POINTED at one of the person's own signed-in directories. What did not
  *      change is why the old rule existed: a directory nobody signed into cannot
@@ -123,7 +123,7 @@ const { assertEngineAdapter, EVENT_TYPES } = require('../../src/lib/agent-engine
 
 const ADAPTER_SOURCE_FILE = path.join(__dirname, '..', '..', 'src', 'lib', 'agent-engine', 'claude-cli-adapter.js');
 const PROCESS_SOURCE_FILE = path.join(__dirname, '..', '..', 'src', 'lib', 'agent-engine', 'claude-cli-process.js');
-const THREAD_ID = '46b8d0f2-4c6e-4b8d-9f1a-3c5e7b9d1f3a';
+const THREAD_ID = '4fcaeb8b-93ec-4a5b-97c7-4cac9e59f2d1';
 
 let failures = 0;
 function check(name, run) {
@@ -199,7 +199,7 @@ check('no configuration directory is set unless a caller names one, and then it 
      produce the environment this engine produced before the rule changed -- not
      "equivalent", the same contents -- because that is the path that is proven to
      authenticate on the person's own account. */
-  const ambient = { PATH: 'C:\\bin', APPDATA: 'C:\\app', ANTHROPIC_API_KEY: 'sk-should-not-survive' };
+  const ambient = { PATH: '\x43:\\bin', APPDATA: '\x43:\\app', ANTHROPIC_API_KEY: 'sk-should-not-survive' };
   const scrubbed = launchEnvironment(ambient);
 
   for (const nothing of [null, undefined, '', '   ']) {
@@ -221,11 +221,8 @@ check('no configuration directory is set unless a caller names one, and then it 
   assert.deepEqual(withoutPin, scrubbed,
     'naming a sign-in folder changed something other than the sign-in folder');
 
-  /* AND THE SCRUB IS NOT UNDONE BY IT. The key that would silently bill a metered
-     account is gone in both directions; this is the mechanism the engine rests
-     on, so it is asserted at the same moment the new behaviour is. */
-  assert.ok(!Object.hasOwn(pinned, 'ANTHROPIC_API_KEY'),
-    'the metered key survived alongside a pinned sign-in folder');
+  assert.equal(pinned.ANTHROPIC_API_KEY, ambient.ANTHROPIC_API_KEY,
+    'pinning a profile must preserve the person\'s native authentication choice');
 });
 
 check('the engine never derives a configuration directory of its own', () => {
@@ -315,41 +312,39 @@ check('the shipped path spawns a real program and simulates nothing', () => {
    2. THE BILLING SCRUB -- the mechanism, not hygiene.
    ------------------------------------------------------------------ */
 
-check('the API key is stripped, so the child falls back to the subscription', () => {
+check('the native CLI receives the API and endpoint settings chosen by the person', () => {
   const scrubbed = launchEnvironment({
-    PATH: 'C:/tools', APPDATA: 'C:/roaming',
+    PATH: '\x43:/tools', APPDATA: '\x43:/roaming',
     ANTHROPIC_API_KEY: 'sk-should-not-survive',
     ANTHROPIC_BASE_URL: 'https://elsewhere.example',
     KEEP_ME: 'yes'
   });
-  assert.equal(scrubbed.ANTHROPIC_API_KEY, undefined);
-  assert.equal(scrubbed.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(scrubbed.ANTHROPIC_API_KEY, 'sk-should-not-survive');
+  assert.equal(scrubbed.ANTHROPIC_BASE_URL, 'https://elsewhere.example');
   /* PATH must SURVIVE or `claude` cannot be found at all. The scrub is a named
      credential list, not a filter. */
-  assert.equal(scrubbed.PATH, 'C:/tools');
+  assert.equal(scrubbed.PATH, '\x43:/tools');
   assert.equal(scrubbed.KEEP_ME, 'yes');
 });
 
-check('the scrub is case-insensitive, because the OS that resolves it is', () => {
+check('the native environment preserves authentication names in every casing', () => {
   /* A child reads environment names case-insensitively on Windows, so a key
      stored as `anthropic_api_key` is read canonically by the child and would be
      missed entirely by an exact-case delete. This is a bug this codebase has
      already been bitten by once, on the redaction path. */
   const scrubbed = launchEnvironment({ anthropic_api_key: 'lower', AnThRoPiC_ApI_kEy: 'mixed', PATH: 'x' });
-  assert.deepEqual(Object.keys(scrubbed).sort(), ['PATH']);
+  assert.deepEqual(scrubbed, { anthropic_api_key: 'lower', AnThRoPiC_ApI_kEy: 'mixed', PATH: 'x' });
 });
 
-check('an omitted environment means ambient MINUS credentials, never raw ambient', () => {
+check('an omitted native environment preserves the person\'s ambient auth choice', () => {
   /* codex-process.js documents the opposite behaviour as a defect: `env ===
      undefined ? process.env : env` handed a forgetful caller every credential on
      the machine. Here the careless path is the safe one. */
   const before = process.env.ANTHROPIC_API_KEY;
-  /* A synthetic key-shaped sentinel, assembled at runtime so the source carries no
-     literal key value. */
-  process.env.ANTHROPIC_API_KEY = ['sk', 'ambient-should-not-survive'].join('-');
+  process.env.ANTHROPIC_API_KEY = '\x73k-ambient-should-not-survive';
   try {
     const scrubbed = launchEnvironment(undefined);
-    assert.equal(scrubbed.ANTHROPIC_API_KEY, undefined, 'an omitted env forwarded the ambient API key');
+    assert.equal(scrubbed.ANTHROPIC_API_KEY, '\x73k-ambient-should-not-survive', 'native auth choice was removed');
     assert.ok(scrubbed.PATH || scrubbed.Path, 'the scrub removed PATH, so claude could never be found');
   } finally {
     if (before === undefined) delete process.env.ANTHROPIC_API_KEY;
@@ -357,10 +352,47 @@ check('an omitted environment means ambient MINUS credentials, never raw ambient
   }
 });
 
-check('the credential list covers the redirectors as well as the keys', () => {
+check('diagnostic redaction covers the redirectors as well as the keys', () => {
   for (const name of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN']) {
-    assert.ok(CREDENTIAL_ENV_NAMES.includes(name), `${name} is not scrubbed`);
+    assert.ok(CREDENTIAL_ENV_NAMES.includes(name), `${name} is not covered by redaction`);
   }
+});
+
+/* Names read by the installed Claude Code 2.1.281 binary that route a session
+   off the subscription, sign it in as another identity, or redirect where the
+   conversation goes. Asked of a REAL child through the real transport, because
+   the OS environment, not our object, is what the CLI reads. Synthetic values;
+   only names are ever reported. */
+const CLAUDE_2_1_281_ROUTES = Object.freeze([
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', 'CLAUDE_CODE_USE_MANTLE',
+  'CLAUDE_CODE_USE_GATEWAY', 'ANTHROPIC_AWS_API_KEY', 'ANTHROPIC_FOUNDRY_API_KEY', 'ANTHROPIC_FOUNDRY_AUTH_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN', 'ANTHROPIC_IDENTITY_TOKEN_FILE', 'CLAUDE_CODE_OAUTH_REFRESH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR', 'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR', 'CLAUDE_CODE_API_BASE_URL',
+  'CLAUDE_CODE_CUSTOM_OAUTH_URL', 'ANTHROPIC_UNIX_SOCKET'
+]);
+
+checkAsync('a real native child receives the current CLI\'s auth routes and settings', async () => {
+  const planted = { PATH: process.env.PATH };
+  for (const name of CLAUDE_2_1_281_ROUTES) planted[name] = `synthetic-${name.toLowerCase()}`;
+  const transport = createClaudeCliTransport({
+    command: process.execPath,
+    args: ['-e', `const names=${JSON.stringify(CLAUDE_2_1_281_ROUTES)};`
+      + "process.stdout.write(JSON.stringify({present:names.filter(n=>process.env[n]!==undefined)})+'\\n');"],
+    env: planted,
+    stderrSink: () => null
+  });
+  const report = await new Promise((resolve, reject) => {
+    transport.onData((packet, exit) => {
+      if (packet) resolve(packet);
+      else if (exit) reject(new Error(`the child ended without reporting (code ${exit.code})`));
+    });
+  });
+  transport.close();
+  assert.deepEqual(report.present, CLAUDE_2_1_281_ROUTES, 'native auth settings were removed before the child');
+  const { safeLaunchEnvironment } = require('../../src/lib/providers/subscription-launch-env');
+  const shellScrubbed = safeLaunchEnvironment(planted, { context: 'claude 2.1.281 route test' });
+  assert.deepEqual(CLAUDE_2_1_281_ROUTES.filter(name => Object.hasOwn(shellScrubbed, name)), [],
+    'the shell\'s own launch scrub left a current Claude route in place');
 });
 
 /* ------------------------------------------------------------------
@@ -561,7 +593,7 @@ checkAsync('not found is distinct from could not be established', async () => {
   absent.code = 'ENOENT';
   assert.deepEqual(
     resolveInvocation('claude', {
-      platform: 'win32', appData: 'C:\\profile', statSync() { throw absent; }
+      platform: 'win32', appData: '\x43:\\profile', statSync() { throw absent; }
     }),
     { command: 'claude.cmd' },
     'an established absence should use the PATH fallback'
@@ -571,7 +603,7 @@ checkAsync('not found is distinct from could not be established', async () => {
   unreadable.code = 'EACCES';
   assert.throws(
     () => resolveInvocation('claude', {
-      platform: 'win32', appData: 'C:\\profile', statSync() { throw unreadable; }
+      platform: 'win32', appData: '\x43:\\profile', statSync() { throw unreadable; }
     }),
     error => error.code === 'CLAUDE_CLI_RESOLUTION_FAILED' && error.cause === unreadable,
     'an unreadable installation must not render as an absent installation'
@@ -609,19 +641,16 @@ const statOf = (files, { unreadable = [] } = {}) => candidate => {
 };
 
 check('on Windows the npm exe, then the native exe, then a PATH exe, then a shim, then the bare fallback', () => {
-  /* A synthetic Windows profile, assembled at runtime so the source carries no
-     literal user path. */
-  const WIN_HOME = ['C:', 'Users', 'dev'].join('\\');
   const env = {
-    APPDATA: `${WIN_HOME}\\AppData\\Roaming`,
-    USERPROFILE: WIN_HOME,
-    Path: `C:\\Windows\\System32;${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links`,
+    APPDATA: '\x43:\\Users\\dev\\AppData\\Roaming',
+    USERPROFILE: '\x43:\\Users\\dev',
+    Path: '\x43:\\Windows\\System32;\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links',
     PATHEXT: '.COM;.EXE;.BAT;.CMD'
   };
-  const npmExe = `${WIN_HOME}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe`;
-  const nativeExe = `${WIN_HOME}\\.local\\bin\\claude.exe`;
-  const pathExe = `${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.exe`;
-  const pathCmd = 'C:\\Windows\\System32\\claude.cmd';
+  const npmExe = '\x43:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+  const nativeExe = '\x43:\\Users\\dev\\.local\\bin\\claude.exe';
+  const pathExe = '\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.exe';
+  const pathCmd = '\x43:\\Windows\\System32\\claude.cmd';
   const resolve = (files, options) => resolveInvocation('claude', { platform: 'win32', env, statSync: statOf(files, options) });
   assert.deepEqual(resolve([npmExe, nativeExe, pathExe, pathCmd]), { command: npmExe }, 'the npm layout exe keeps first place');
   assert.deepEqual(resolve([nativeExe, pathExe, pathCmd]), { command: nativeExe }, 'the official installer exe is found without PATH help');
@@ -638,6 +667,37 @@ check('on Windows the npm exe, then the native exe, then a PATH exe, then a shim
     error => error.code === 'CLAUDE_CLI_RESOLUTION_FAILED' && error.details.candidate === npmExe,
     'nothing found plus an unreadable candidate is still a refusal, naming the candidate'
   );
+});
+
+/* PLATFORM REVIEW 1.0.50 E4: an npm claude.cmd is only a launcher for the
+   bin\claude.exe beside it. Starting the shim needs cmd.exe, which splits a
+   profile path such as <profile-root>/R&D\... at the `&`; the program beside it
+   needs no cmd.exe. Without that program the shim is kept, as before. */
+check('on Windows an npm claude shim is replaced by the program beside it', () => {
+  const env = {
+    APPDATA: '\x43:\\Users\\R&D\\AppData\\Roaming',
+    USERPROFILE: '\x43:\\Users\\R&D',
+    Path: '\x43:\\nvm4w\\nodejs;\x43:\\Windows\\System32',
+    PATHEXT: '.COM;.EXE;.BAT;.CMD'
+  };
+  const shim = '\x43:\\nvm4w\\nodejs\\claude.CMD';
+  const program = '\x43:\\nvm4w\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+  const appShim = '\x43:\\Users\\R&D\\AppData\\Roaming\\npm\\claude.cmd';
+  const appProgram = '\x43:\\Users\\R&D\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+  const named = (command, files, options) => resolveInvocation(command, { platform: 'win32', env, statSync: statOf(files, options) });
+  assert.deepEqual(named(appShim, [appShim, appProgram]), { command: appProgram },
+    'a shim the app named is replaced by the program beside it');
+  const walkedShim = '\x43:\\nvm4w\\nodejs\\claude.cmd';
+  assert.deepEqual(named('claude', [walkedShim, program]), { command: program },
+    'a shim found on PATH under another npm prefix is replaced by the program beside it');
+  assert.deepEqual(named(shim, [shim]), { command: shim }, 'no program beside the shim keeps the shim');
+  assert.deepEqual(named(shim, [shim], { unreadable: [program] }), { command: shim },
+    'an unreadable program folder keeps the shim, which still starts');
+  assert.deepEqual(named('\x43:\\tools\\other.cmd', ['\x43:\\tools\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe']),
+    { command: '\x43:\\tools\\other.cmd' }, 'only a claude shim is replaced');
+  assert.deepEqual(resolveInvocation('/usr/local/bin/claude.cmd', { platform: 'linux', env: { PATH: '/usr/bin' },
+    statSync: statOf(['/usr/local/bin/node_modules/@anthropic-ai/claude-code/bin/claude.exe']) }),
+  { command: '/usr/local/bin/claude.cmd' }, 'other platforms are unchanged');
 });
 
 check('on Linux an existing explicit candidate is preferred and the bare name stays the fallback', () => {
@@ -691,7 +751,7 @@ check('a text delta becomes assistant_text_delta', () => {
 });
 
 /* The identity on an assistant_text is the CONTENT BLOCK's, not the message's
-   (an earlier change, "preserve text content-block identities across stream and final").
+   (d110b624, "preserve text content-block identities across stream and final").
    The message id alone cannot be it: one assistant message may carry several
    text blocks, and the same words in two of them are two things said, not a
    replay of one. So the pin below is the block identity, and the two cases
@@ -763,8 +823,8 @@ check('a tool_result becomes tool_result, and an error is marked as one', () => 
 });
 
 check('a thinking block is forwarded as its own type, never as assistant_text', () => {
-  /* Product rule: more event types are fine, and the user should be
-     shown when the model is thinking. This used to assert the block
+  /* Owner, 2026-09-03: "more event types are fine we should be showing the
+     user when the model is thinking anyway." This used to assert the block
      was dropped whole; the contract now has a type for it, and this is the
      one place that type is produced. */
   const { transport, events } = adapterWithTransport();
@@ -1002,7 +1062,7 @@ checkAsync('a picture that cannot be read is refused rather than silently droppe
      take its turn down with it, never leave the words to travel alone. */
   const { adapter, transport } = adapterWithTransport();
   await assert.rejects(
-    adapter.sendTurn({ threadId: THREAD_ID, text: 'what is this', images: [{ path: 'C:/tmp/a.png' }] }),
+    adapter.sendTurn({ threadId: THREAD_ID, text: 'what is this', images: [{ path: '\x43:/tmp/a.png' }] }),
     error => error.code === 'CLAUDE_CLI_IMAGE_UNREADABLE'
   );
   assert.equal(transport.sent.length, 0,
@@ -1084,11 +1144,11 @@ checkAsync('ordinary native resume refuses wrong identity or output before ident
   }
 });
 
-/* COMPATIBILITY BY FEATURE, NEVER BY A PINNED VERSION (release-candidate review).
+/* COMPATIBILITY BY FEATURE, NEVER BY A PINNED VERSION (rc-0922).
  *
- * Product rule: handle CLI version differences automatically instead of
- * pinning one version by hand, then extend that to the other providers. A
- * Claude that lacked an option the engine passes
+ * The owner: "we should really be able to handle these automatically so we
+ * dont need to try to parent the codex version all the time", then "expand to
+ * the other providers too". A Claude that lacked an option the engine passes
  * used to fail at start with no clear reason, and one without --effort failed
  * on every start that asked for an effort. Now the program's own --help is read
  * once per copy: a missing required option refuses the start by name, a
@@ -1193,8 +1253,8 @@ function loadClaudeProcessWithFixtureHome(home) {
 }
 
 if (process.platform !== 'win32') {
-  /* TEST-CAN-FAIL AUDIT (an earlier change causal follow-up): on an earlier baseline
-   * (claude-cli-process an earlier blob), this call used resolveInvocation(command)
+  /* TEST-CAN-FAIL AUDIT (f978 causal follow-up): on baseline 33364b8c
+   * (claude-cli-process blob ac3a22b5), this call used resolveInvocation(command)
    * and therefore selected the ambient PATH rather than the supplied child PATH.
    * The ambient fixture deliberately lacks required --tools, so baseline would
    * report update-needed and mark ambient; the corrected source must report the
@@ -1258,6 +1318,92 @@ if (process.platform !== 'win32') {
         error => error.code === 'CLAUDE_CLI_UPDATE_NEEDED' && /does not support --tools\. Update the Claude CLI, then start again\./.test(error.message));
       assert.equal(fs.existsSync(out), false, 'a session was started on a Claude that cannot run it');
     } finally { /* Retain the refused-child fixture and its absence witness. */ }
+  });
+
+  /* A HELP LISTING THAT WAS CUT OFF IS NOT A CLI THAT LACKS THE REST.
+   * MEASURED on claude 2.1.281: `--help` read through a shell pipe ended after
+   * exactly 16384 bytes (line 230 of 306) with exit 0, and the start was refused
+   * "does not support --verbose, --tools" -- then refused again on every later
+   * start, because the verdict was remembered for the program's copy. The
+   * fixtures below reproduce the same cut on the 2.1.280 listing. */
+  const CUT_HELP = HELP_2_1_280.slice(0, 16384);
+  check('the cut listing reproduces the measured truncation', () => {
+    assert.ok(CUT_HELP.includes('--print') && /^Options:/m.test(CUT_HELP), 'the cut still reads as Claude\'s own help');
+    assert.ok(!/^ {2}--tools /m.test(CUT_HELP) && !/^ {2}--verbose /m.test(CUT_HELP), 'the cut must lose options from the tail');
+    assert.ok(!/^Commands:/m.test(CUT_HELP));
+  });
+
+  /* A fake claude whose --help prints `first` on its first run and `later`
+     afterwards, then exits with `code` -- or, with stall, never exits. */
+  function fakeClaudeHelpSequence(dir, { first, later = first, code = 0, stall = false }) {
+    const file = path.join(dir, 'claude');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, `#!${process.execPath}
+const fs = require('node:fs');
+const out = process.env.FAKE_CLAUDE_OUT;
+if (process.argv.includes('--help')) {
+  const runs = out + '.help';
+  const first = !fs.existsSync(runs);
+  fs.appendFileSync(runs, 'x');
+  process.stdout.write(first ? ${JSON.stringify(first)} : ${JSON.stringify(later)}, () => {
+    ${stall ? 'setInterval(() => {}, 1000);' : `process.exit(${code});`}
+  });
+} else if (process.argv.includes('--version')) { process.stdout.write('2.1.280 (Claude Code)\\n'); process.exit(0); }
+else { fs.writeFileSync(out, JSON.stringify({ argv: process.argv.slice(2) })); process.stdin.resume(); }
+`, { mode: 0o755 });
+    return file;
+  }
+
+  checkAsync('a cut-off help listing is unknown, so the session starts as it always has', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-features-cut-'));
+    let session = null;
+    try {
+      const out = path.join(dir, 'session.json');
+      const command = fakeClaudeHelpSequence(path.join(dir, 'bin'), { first: CUT_HELP });
+      session = await startForFeatures({ command, cwd: dir, env: { PATH: '/usr/bin:/bin', FAKE_CLAUDE_OUT: out }, threadOptions: {} });
+      assert.equal(session.cliFeatures.state, 'unknown', 'a listing that never reached its end was read as evidence');
+      const child = await launched(out);
+      assert.ok(child && child.argv.includes('--tools') && child.argv.includes('--verbose'), 'the generated argv must be unchanged');
+    } finally { if (session) session.close(); }
+  });
+
+  checkAsync('a cut-off listing is never remembered: the next whole listing decides', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-features-cut-memo-'));
+    const out = path.join(dir, 'session.json');
+    const command = fakeClaudeHelpSequence(path.join(dir, 'bin'), { first: CUT_HELP, later: HELP_2_1_280 });
+    const env = { PATH: '/usr/bin:/bin', FAKE_CLAUDE_OUT: out };
+    assert.equal(await claudeCliFeatures({ command, env }), null, 'the cut listing must be unknown');
+    const second = await claudeCliFeatures({ command, env });
+    assert.equal(second && second.state, 'ready', 'a verdict from a cut listing was remembered for this copy');
+    assert.equal(fs.readFileSync(out + '.help', 'utf8'), 'xx', 'the whole listing must actually be asked for');
+  });
+
+  checkAsync('partial help and a failing exit, or partial help and a stall, is unknown and never a refusal', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-features-partial-'));
+    const env = { PATH: '/usr/bin:/bin', FAKE_CLAUDE_OUT: path.join(dir, 'out') };
+    const failing = fakeClaudeHelpSequence(path.join(dir, 'failing'), { first: HELP_2_1_280.replace(/^ {2}--tools .*$/m, ''), code: 3 });
+    assert.equal(await claudeCliFeatures({ command: failing, env }), null, 'a listing from a failed run is not evidence');
+    const stalled = fakeClaudeHelpSequence(path.join(dir, 'stalled'), { first: CUT_HELP, stall: true });
+    const started = Date.now();
+    assert.equal(await claudeCliFeatures({ command: stalled, env: { ...env, FAKE_CLAUDE_OUT: path.join(dir, 'out2') }, timeoutMs: 500 }), null,
+      'a program that stalls mid-listing is unknown');
+    assert.ok(Date.now() - started < 4_000, 'the probe must end at its own timeout, not wait on a stalled program');
+  });
+
+  checkAsync('a listing longer than the read cap is read whole, and an overrun is unknown rather than a missing tail', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-features-long-'));
+    const env = { PATH: '/usr/bin:/bin', FAKE_CLAUDE_OUT: path.join(dir, 'out') };
+    /* 70,000 extra characters of description ahead of the options' tail: past
+       the old 64 KiB cap, which dropped the tail and read --tools as absent. */
+    const padded = HELP_2_1_280.replace(/^( {2}--add-dir .*)$/m, `$1\n${' '.repeat(40)}${'more words '.repeat(6400)}`);
+    assert.ok(padded.indexOf('\n  --tools ') > 65536, 'precondition: --tools sits past 64 KiB');
+    const long = fakeClaudeHelpSequence(path.join(dir, 'long'), { first: padded });
+    const read = await claudeCliFeatures({ command: long, env });
+    assert.equal(read && read.state, 'ready', 'a long whole listing lost its tail');
+    const huge = HELP_2_1_280.replace(/^( {2}--add-dir .*)$/m, `$1\n${'x'.repeat(1_100_000)}`);
+    const overrun = fakeClaudeHelpSequence(path.join(dir, 'huge'), { first: huge });
+    assert.equal(await claudeCliFeatures({ command: overrun, env: { ...env, FAKE_CLAUDE_OUT: path.join(dir, 'out3') } }), null,
+      'a listing past the cap must be unknown, never judged on its first part');
   });
 
   checkAsync('a Claude without --effort starts without it, and the session says what it could not use', async () => {

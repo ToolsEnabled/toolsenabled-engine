@@ -40,8 +40,9 @@
 //
 //   node tests/capability-recall-demo.js [--engine-root <path>]
 //
-// Product requirement: once it works, show examples of the input
-// prompt and of what the agents see, after testing and optimizing the system.
+// Owner requirement, 2026-08-22: "once you get it working show me examples of
+// what the input prompt and what the agents see are. make sure to test and
+// optimize your system first."
 //
 // So this runs AFTER the eval, prints the eval's headline numbers at the top so
 // what follows is dated and measured rather than chosen, and then shows three

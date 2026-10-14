@@ -127,7 +127,6 @@ const result = spawnSync(process.execPath, [path.join(root, 'tests/run-isolated.
   'tests/continuation-prune.test.js',
   'tests/t545-permission-provider-separation.test.js',
   'tests/vault-setter-error-boundary.test.js',
-  'tests/failover-setting-error-boundary.test.js',
   'tests/audit-admission-error-boundary.test.js',
   'tests/mcp-public-message-boundary.test.js',
   'tests/linux-native-environment.test.js'

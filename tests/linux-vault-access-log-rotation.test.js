@@ -59,10 +59,19 @@ def worker(root, barrier, rounds):
 
 
 def entries(p):
+    """Lines a CALLER put here, which is what "no logger may lose a line" is about.
+
+    rotate_access_log() now opens each rotated-into log with its own
+    "access-log-rotated" record, so a count keyed only on the action field
+    charges the rotation marker to the loggers, and the exact equality below
+    then fails by the number of rotations. Excluding it keeps that assertion
+    exactly as strict as it was rather than loosening it into an inequality.
+    """
     if not os.path.exists(p):
         return 0
     with open(p, "rb") as fh:
-        return sum(1 for line in fh if b'"action"' in line)
+        return sum(1 for line in fh
+                   if b'"action"' in line and b'access-log-rotated' not in line)
 
 
 root = tempfile.mkdtemp(prefix="te-rotate-")

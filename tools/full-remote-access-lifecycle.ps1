@@ -463,7 +463,7 @@ function Test-StateShape {
     return $true
 }
 
-# Correction A (2026-08-04 review round 2): an earlier fix changed the exact
+# Correction A (2026-08-04 review round 2): 3d7080b3 changed the exact
 # heartbeat bucket shape (added lastStage/lastAttempt/lastElapsedMs; this
 # pass adds lastAttempts too -- correction D) while leaving schemaVersion at
 # the SAME 'tools-enabled.full-remote-access-lifecycle.v3'. A state file
@@ -600,8 +600,8 @@ function Install-LifecycleTask {
     $arguments = '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Action Reconcile'
     $actionSpec = New-ScheduledTaskAction -Execute $WindowsPowerShell -Argument $arguments
     $periodic = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 2)
-    # The sign-in trigger comes from the startup.services_at_logon switch
-    # (product rule), never from a literal here. Named $triggerSet rather
+    # The sign-in trigger comes from the startup.services_at_logon switch (owner
+    # directive 2026-08-13), never from a literal here. Named $triggerSet rather
     # than $triggers because $triggers below is the READ-BACK from Windows, and
     # the verification under it is only worth anything if the two stay distinct.
     . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')

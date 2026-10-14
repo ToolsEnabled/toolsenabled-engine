@@ -27,6 +27,7 @@ const { executableFor, globalNpmPackagePaths } = require('../providers/cli-provi
 const claudeInstall = require('../agent-engine/claude-cli-install');
 const localNodeRuntime = require('../providers/local-node-runtime');
 const machineRecord = require('../setup/machine-record');
+const { statePath } = require('../runtime-state-root');
 const cloudMirror = require('../cloud-agent/cloud-mirror');
 const LOCAL_LANE_RUNNER = path.resolve(__dirname, '..', '..', '..', 'tools', 'local-node-lane-runner.js');
 /* The checkout this module is running from -- the same derivation LOCAL_LANE_RUNNER
@@ -37,7 +38,9 @@ const LOCAL_LANE_RUNNER = path.resolve(__dirname, '..', '..', '..', 'tools', 'lo
  * with cwd = the dispatch root, which on a packaged install is `<userData>/workspace`
  * (see the comment above ensureLaneMcpConfig) -- a directory with no `.claude/` in it
  * at all. The 13 project skills live in `<checkout>/.claude/skills`, so a lane that is
- * handed the Skill tool but never told about the checkout still sees none of them. */
+ * handed the Skill tool but never told about the checkout still sees none of them.
+ * Only the UNRESTRICTED lane is told (`--add-dir`); a confined lane loads nothing
+ * from here after 1.0.50 M1 and must not be able to edit it (see claudeArgs). */
 const PRODUCT_ROOT = path.resolve(__dirname, '..', '..', '..');
 const laneDispatch = require('./agent-lane-dispatch');
 const { resolveMissionCodexNativePair } = require('./codex-native-pair');
@@ -125,89 +128,7 @@ const CREDENTIAL_TEXT_PATTERNS = Object.freeze([
 // KEEP THESE ROWS FLAT. tools/test/orchestration-controls.test.mjs parses them
 // out of this source with a regex that stops at the first `}`; a nested ARRAY
 // is fine, a nested object literal would silently truncate the parse.
-const TIERS = Object.freeze({
-  // Codex's gpt-6 line, added 2026-09-07 for the 1.0.42 cut. The id, display
-  // name and efforts are transcribed from `model/list` on codex-cli 0.153.4
-  // (CODEX-MODEL-CATALOG-20260907.json, measured 2026-09-07),
-  // never guessed from the marketing name. The owner K3 reversal makes the
-  // product default `medium`, because that is Codex's own default and this is
-  // their model.
-  // `tier: 'premium'` is the DISPATCH class (agent-org.js only accepts
-  // cheap/standard/premium) and is not a price claim -- agent-session-observer
-  // still reports this model's COST tier as unknown, because no rate card for
-  // it has been measured. Those two are different questions on purpose.
-  astra: Object.freeze({ kind: 'codex', provider: 'codex', seats: Object.freeze(['astra']), tier: 'premium', model: 'gpt-6-astra', cliModel: 'gpt-6-astra', effort: 'medium' }),
-  // gpt-5.6-luna offers no ultra (~/.codex/models_cache.json, codex-cli
-  // 0.156.0, 2026-09-25), so its allowed set is listed, as on the narrower
-  // Claude rows below; the application offers the same five.
-  luna: Object.freeze({ kind: 'codex', provider: 'codex', seats: Object.freeze(['luna']), tier: 'cheap', model: 'gpt-5.6-luna', cliModel: 'gpt-5.6-luna', effort: 'medium', efforts: Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']) }),
-  terra: Object.freeze({ kind: 'codex', provider: 'codex', seats: Object.freeze(['terra']), tier: 'standard', model: 'gpt-5.6-terra', cliModel: 'gpt-5.6-terra', effort: 'high' }),
-  sol: Object.freeze({ kind: 'codex', provider: 'codex', seats: Object.freeze(['sol']), tier: 'premium', model: 'gpt-5.6-sol', cliModel: 'gpt-5.6-sol', effort: 'xhigh' }),
-  // gpt-6-sol and gpt-6-luna are NOT dispatch tiers in 1.0.48. Each would need
-  // a seat of its own, and a saved org overlay (agent-org-store.js read()) is a
-  // snapshot that never gains a seat a later config/agent-org.json adds, so
-  // every existing installation would refuse the row with
-  // BRIDGE_AGENT_DECLARATION_MISSING. The application offers them tree-only.
-  'claude-fable': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'cheap', model: 'claude/fable', cliModel: 'fable' }),
-  'claude-sonnet': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'standard', model: 'claude/sonnet', cliModel: 'sonnet' }),
-  'claude-opus': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/opus', cliModel: 'opus' }),
-  // ONE ROW PER CLAUDE MODEL, added 2026-09-25 for 1.0.48 so users can select
-  // every model a provider offers, Opus 5 and Sonnet 5 included. The three
-  // rows above are ALIASES: each runs whatever the
-  // installed Claude Code serves for that word (`opus` is Opus 5.5 from CLI
-  // 2.1.280 and Opus 5 before it), so Opus 5 could not be reached at all and
-  // Sonnet 5 only while `sonnet` still meant it. Their ids stay exactly as
-  // they are: signed usage rows, ledgers and continuations hold them.
-  //
-  // Each row below pins ONE model. The id is the one the Claude Code model
-  // catalog served this machine on 2026-09-25
-  // (Claude Code's local model-catalog cache), and every one of
-  // them appears in the installed CLI 2.1.283. `cliModel` is that id, handed
-  // to the CLI as `--model <id>`. Haiku's catalog id is the dated
-  // claude-haiku-4-5-20251001; the row passes the undated name, which is what
-  // the CLI's own `haiku` alias resolves to (claude-cli-install.js).
-  //
-  // `tier` is the DISPATCH class, as on astra: Opus premium, Sonnet standard,
-  // Fable and Haiku cheap -- the classes the alias rows already carry.
-  //
-  // `efforts` is present only where the MODEL offers less than the Claude
-  // launcher accepts (tool-registry.js AGENT_SPAWN_EFFORT_BY_PROVIDER): the
-  // catalog gives Haiku 4.5 no effort setting at all, and Opus 4.6 and Sonnet
-  // 4.6 no xhigh. It is the allowed set, never a default. Like every Claude row
-  // these carry no `effort`: the lane passes no --effort and the model's own
-  // default applies.
-  'claude-opus-5-5': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/claude-opus-5-5', cliModel: 'claude-opus-5-5' }),
-  'claude-opus-5': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/claude-opus-5', cliModel: 'claude-opus-5' }),
-  'claude-sonnet-5': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'standard', model: 'claude/claude-sonnet-5', cliModel: 'claude-sonnet-5' }),
-  'claude-fable-5-1': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'cheap', model: 'claude/claude-fable-5-1', cliModel: 'claude-fable-5-1' }),
-  'claude-fable-5': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'cheap', model: 'claude/claude-fable-5', cliModel: 'claude-fable-5' }),
-  'claude-haiku-4-5': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'cheap', model: 'claude/claude-haiku-4-5', cliModel: 'claude-haiku-4-5', efforts: Object.freeze([]) }),
-  'claude-opus-4-8': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/claude-opus-4-8', cliModel: 'claude-opus-4-8' }),
-  'claude-opus-4-7': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/claude-opus-4-7', cliModel: 'claude-opus-4-7' }),
-  'claude-opus-4-6': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'premium', model: 'claude/claude-opus-4-6', cliModel: 'claude-opus-4-6', efforts: Object.freeze(['low', 'medium', 'high', 'max']) }),
-  'claude-sonnet-4-6': Object.freeze({ kind: 'claude', provider: 'claude', seats: Object.freeze(['claude-1', 'claude-2', 'claude-3', 'claude-4']), tier: 'standard', model: 'claude/claude-sonnet-4-6', cliModel: 'claude-sonnet-4-6', efforts: Object.freeze(['low', 'medium', 'high', 'max']) }),
-  // A MODEL ON THE USER'S OWN GPU, IN THE SAME TABLE AS THE PAID ONES.
-  //
-  // Product requirement: people should be able to launch a local model
-  // such as Qwen2.5 on their own GPU as a node, not only Claude or Codex.
-  // Everything above bills
-  // somebody. This row does not, which is why it belongs beside them rather than
-  // in a separate "advanced/self-hosted" corner -- the free path is the product,
-  // not a consolation.
-  //
-  // `cliModel: null` is load-bearing, not an omission. A local node has no
-  // vendor CLI and no API key; every column here that assumes a credentialed
-  // provider is deliberately empty, and the code paths below tolerate that. The
-  // concrete model is NOT pinned here because it depends on what the user has
-  // pulled -- local-node-runtime.js resolves it at dispatch and refuses honestly
-  // if nothing is installed.
-  //
-  // FOUR SEATS OF ITS OWN. The presence registry refuses a second live lane per
-  // identity, so borrowing the claude-* seats would have made a local node and a
-  // Claude worker mutually exclusive on the same machine -- the machine most
-  // likely to be running several local lanes precisely because they are free.
-  local: Object.freeze({ kind: 'local', provider: 'local', seats: Object.freeze(['local-node-1', 'local-node-2', 'local-node-3', 'local-node-4']), tier: 'cheap', model: 'local/auto', cliModel: null })
-});
+const { TIERS } = require('../model-dispatch-tiers');
 
 /* THE ENGINE-HONOURED NO-PROVIDER SWITCH.
  *
@@ -216,7 +137,7 @@ const TIERS = Object.freeze({
  * the dispatch environment is built, before any CLI is looked for, and before
  * any launch record exists.
  *
- * WHY THIS EXISTS RATHER THAN A HARNESS FENCE. The 1.0.41 limitations notes,
+ * WHY THIS EXISTS RATHER THAN A HARNESS FENCE. LIMITATIONS-AND-HANDOFF-1.0.41
  * section 2.1: a packaged-QA driver fenced its paid lanes by ENVIRONMENT only
  * -- a cut-down PATH and empty home directories -- and a real, signed-in Codex
  * worker started anyway, because one inherited name it had never heard of
@@ -486,9 +407,9 @@ function authorizeMissionAgentInOrg(actor, org, provider = null, roleId = null, 
   // principal carries the org revision its credential was issued against, and
   // this used to refuse whenever the CURRENT org revision differed. But the
   // org revision moves on every write to the org -- and a tree spawn is one
-  // (the new circle's seat is declared before it starts). Measured on a
-  // live tree, 2026-09-03: every successful tree spawn bumped the
-  // overlay (revision 12 -> 13) and the SPAWNING session's next
+  // (the new circle's seat is declared before it starts). Measured on the
+  // owner's own tree, 2026-09-03: every successful tree spawn bumped the
+  // overlay (revision 12 -> 13 at 01:11:12Z) and the SPAWNING session's next
   // bridge action answered 403 through this check, so a circle lost its
   // authority as a direct consequence of doing what it was told to do.
   //
@@ -562,19 +483,7 @@ function declaredLane(org, tierName, dependencies = {}) {
       'The agent presence registry could not be read, so free seat capacity could not be established.',
       { status: 503 });
   }
-  // A FREE SEAT THAT CANNOT RUN IS NOT A FREE SEAT. For the Claude pool a seat
-  // whose registered account is absent or signed out is skipped exactly like a
-  // busy one, so one dead seat can no longer swallow every tier (measured
-  // 2026-09-10: seven launches, seven "Not logged in", all on claude-1).
-  const free = declaredSeats.filter(seat => !busy.has(seat.id));
-  const target = tier.kind === 'claude'
-    ? free.find(seat => claudeSeatUsable(seat.id, dependencies))
-    : free[0];
-  if (!target && tier.kind === 'claude' && free.length > 0) {
-    refuse('BRIDGE_CLAUDE_SEATS_UNPROVISIONED',
-      `No free Claude seat has a signed-in registered account (${free.map(seat => seat.id).join(', ')} are free but cannot run). Add or sign in a Claude account in ToolsEnabled.`,
-      { status: 503, details: { free: free.map(seat => seat.id) } });
-  }
+  const target = declaredSeats.find(seat => !busy.has(seat.id));
   if (!target) {
     refuse('BRIDGE_ALL_SEATS_BUSY',
       `Every declared ${tier.provider} seat for this tier is already running a lane `
@@ -643,13 +552,14 @@ function scrubEnvironment(base = process.env) {
  * runtime state. Pin the complete standard profile set from the installation
  * owner, validate the final compound environment, then apply the provider's
  * own explicit identity selector. */
-function accountConfinedDispatchEnvironment(base, kind, codexProfileDependencies = {}, claudeSeatDependencies = null) {
+function accountConfinedDispatchEnvironment(base, kind, codexProfileDependencies = {}) {
   const confinement = require('../agent-session-confinement');
   const accountBoundary = require('../account-profile-boundary');
   const isolation = require('../provider-session-isolation');
   const profileRoot = confinement.installationProfileRoot();
-  let environment = accountBoundary.accountConfinedEnvironment(scrubEnvironment(base), { profileRoot });
-  environment = isolation.providerSessionEnvironment(environment);
+  const source = kind === 'claude' ? { ...(base || process.env) } : scrubEnvironment(base);
+  let environment = accountBoundary.accountConfinedEnvironment(source, { profileRoot });
+  environment = isolation.providerSessionEnvironment(environment, { provider: kind });
   confinement.assertAccountProfileEnvironment(environment, profileRoot);
   if (kind === 'codex' && isolation.isolationContext(environment)) {
     // The isolated caller already selected a private named identity. Preserve
@@ -663,13 +573,6 @@ function accountConfinedDispatchEnvironment(base, kind, codexProfileDependencies
       ...codexProfileDependencies
     });
   }
-  if (kind === 'claude' && claudeSeatDependencies && typeof claudeSeatDependencies.seatId === 'string') {
-    environment = claudeDispatchEnvironment(environment, {
-      homeDir: profileRoot,
-      profileRoot,
-      ...claudeSeatDependencies
-    });
-  }
   if (kind === 'codex' || kind === 'claude') {
     environment = { ...environment, TOOLSENABLED_AGENT_ACTOR: kind };
   }
@@ -678,7 +581,7 @@ function accountConfinedDispatchEnvironment(base, kind, codexProfileDependencies
   return environment;
 }
 
-// Product rule: dispatched Codex workers run as the owner's
+// Owner directive 2026-08-09: dispatched Codex workers run as the owner's
 // DESIGNATED Codex identity (config/codex.json), never as whatever ~/.codex
 // happens to hold. scrubEnvironment above still strips any caller-supplied
 // CODEX_HOME first -- this is a pin applied after the scrub, not a
@@ -741,111 +644,6 @@ function codexDispatchEnvironment(env, {
     refuse('BRIDGE_CODEX_PROFILE_UNAVAILABLE', 'The configured Codex profile directory has no auth.json; log that profile in (codex login with CODEX_HOME set) or correct config/codex.json. Refusing to fall back to the default account.', { status: 503 });
   }
   return { ...env, CODEX_HOME: resolved };
-}
-
-/* THE CLAUDE TWIN OF THE CODEX PIN ABOVE, added 2026-09-10.
- *
- * Measured on the Linux LIVE generation: every
- * detached Claude lane on every tier was refused in one second with "Not logged
- * in", while `CLAUDE_CONFIG_DIR=<seat claude-1 home> claude -p` answered from
- * that same seat. Nothing here pinned the seat's home the way CODEX_HOME is
- * pinned above, so the child read the engine process's own HOME -- the
- * confined installation profile, whose .claude carries no sign-in -- and
- * because the child died at once the seat was never busy, so declaredLane()
- * handed every tier the same seat forever.
- *
- * A SEAT IS THE k-TH REGISTERED CLAUDE ACCOUNT, BY PRIORITY. The declared org
- * ships four pool seats (claude-1..claude-4); the account registry lists the
- * owner's Claude accounts in priority order (Codex entries interleaved). Seat
- * k runs as the k-th Claude account. On a development machine that is exactly
- * the seat-named homes account-homes/claude/claude-1 and claude-2; seats 3 and
- * 4 pick up the next two registered accounts, so the pool grows with the
- * registry and shrinks with a removal instead of pointing at a home nobody
- * registered any more.
- *
- * FAIL CLOSED, LIKE CODEX. A seat with no k-th account, or whose account has no
- * sign-in file, REFUSES with a code that says which -- a child that starts and
- * answers "Not logged in" is the silent-wrong-identity failure this exists to
- * end. Only a registry that is genuinely absent (a source checkout, a fresh
- * install before any account was added) keeps the legacy no-pin behaviour,
- * which is visible in the launch record rather than buried in code.
- *
- * Nothing here reads a credential: the sign-in file's EXISTENCE is the only
- * fact taken, through the registry's own profileProvisioned(). */
-const CLAUDE_SEAT_RE = /^claude-([1-9]\d*)$/;
-
-function claudeSeatAccount(seatId, {
-  registryPath = null,
-  homeDir = process.env.USERPROFILE || process.env.HOME || '',
-  profileRoot = null,
-  fsImpl = fs,
-  environment = process.env
-} = {}) {
-  const match = CLAUDE_SEAT_RE.exec(String(seatId || ''));
-  if (!match) return null;
-  const registryModule = require('../multi-account/registry');
-  let resolvedRegistryPath = registryPath;
-  if (!resolvedRegistryPath) {
-    try { resolvedRegistryPath = require('../multi-account/registry-location').accountRegistryPath({ environment }); }
-    catch (error) {
-      if (error && error.code === 'ACCOUNTS_REGISTRY_NOT_PRESENT_HERE') return Object.freeze({ seatId, registry: 'absent', account: null, configDir: null, signedIn: false });
-      throw error;
-    }
-  }
-  let registry;
-  try { registry = registryModule.loadRegistry({ configPath: resolvedRegistryPath, fsImpl }); }
-  catch (error) {
-    if (error && error.code === 'ACCOUNTS_REGISTRY_MISSING') return Object.freeze({ seatId, registry: 'absent', account: null, configDir: null, signedIn: false });
-    refuse('BRIDGE_CLAUDE_SEAT_REGISTRY_UNREADABLE',
-      'The account registry could not be read, so the Claude seat cannot be tied to an account; refusing to dispatch under an undetermined identity.',
-      { status: 503, details: { seatId, cause: String((error && error.code) || 'REGISTRY_UNREADABLE') } });
-  }
-  const accounts = registryModule.accountsFor(registry, 'claude');
-  const account = accounts[Number(match[1]) - 1] || null;
-  if (!account) return Object.freeze({ seatId, registry: 'present', account: null, configDir: null, signedIn: false, registered: accounts.length });
-  let resolved = registryModule.resolveProfileDir(account, { homeDir });
-  try {
-    const confinement = require('../agent-session-confinement');
-    resolved = confinement.assertAccountProfilePath(resolved, {
-      field: 'registered Claude account home',
-      profileRoot: profileRoot || confinement.installationProfileRoot()
-    });
-  } catch (error) {
-    refuse((error && error.code) || 'BRIDGE_CLAUDE_SEAT_ACCOUNT_REFUSED',
-      'The registered Claude account home crosses an untrusted Windows account boundary, so no agent was started.',
-      { status: 403, details: { seatId } });
-  }
-  let signedIn = false;
-  try { signedIn = registryModule.profileProvisioned(account, { homeDir, fsImpl }); }
-  catch (error) {
-    refuse('BRIDGE_CLAUDE_SEAT_SIGN_IN_UNKNOWN',
-      'Whether the Claude account for this seat is signed in could not be established; this does NOT claim it is signed out. Refusing to dispatch under an undetermined identity.',
-      { status: 503, details: { seatId, cause: String((error && error.code) || 'SIGN_IN_UNKNOWN') } });
-  }
-  return Object.freeze({ seatId, registry: 'present', account: account.name, configDir: resolved, signedIn, registered: accounts.length });
-}
-
-function claudeDispatchEnvironment(env, { seatId, ...dependencies } = {}) {
-  const seat = claudeSeatAccount(seatId, dependencies);
-  if (!seat || seat.registry === 'absent') return env;
-  if (!seat.account) {
-    refuse('BRIDGE_CLAUDE_SEAT_UNPROVISIONED',
-      `Claude seat ${seatId} has no registered Claude account to run as (the registry lists ${seat.registered}); add a Claude account in ToolsEnabled or dispatch on a lower seat.`,
-      { status: 503, details: { seatId, registered: seat.registered } });
-  }
-  if (!seat.signedIn) {
-    refuse('BRIDGE_CLAUDE_SEAT_SIGNED_OUT',
-      `The Claude account behind seat ${seatId} is not signed in; sign it in from Settings before dispatching a Claude lane.`,
-      { status: 503, details: { seatId } });
-  }
-  return { ...env, CLAUDE_CONFIG_DIR: seat.configDir };
-}
-
-// Whether a declared Claude seat could actually run a lane: an absent registry
-// is the legacy "yes"; a present one says yes only for a signed-in k-th account.
-function claudeSeatUsable(seatId, dependencies = {}) {
-  const seat = (dependencies.claudeSeatAccount || claudeSeatAccount)(seatId, dependencies.claudeSeatDependencies || {});
-  return !seat || seat.registry === 'absent' || (seat.account !== null && seat.signedIn === true);
 }
 
 /* The flags that bound a dispatched worker, chosen by the session's tier.
@@ -919,27 +717,48 @@ function laneConfinement(permissionSession) {
  * permissionTierPolicy.session(undefined) already refuses with
  * PERMISSION_SESSION_UNREADABLE. A default at this line is indistinguishable
  * from the bug being removed. */
+/* WHICH AGENT API MODES A LANE KIND CANNOT RUN UNDER, stated once.
+ *
+ * codexArgs() below and dispatch()'s early refusal both read this, so the
+ * sentence a caller sees cannot differ with where the refusal happened. A
+ * standalone Codex lane has its ToolsEnabled servers disabled on the argv, so
+ * Only would leave it with no tools at all; Optimized is Claude-only (see
+ * agent-api-policy.js optimizedToolSupport()). Claude and local lanes have no
+ * entry: claudeArgs() expresses every mode as flags, and the local runner
+ * takes no tools. */
+function laneAgentApiModeRefusal(kind, agentApiMode) {
+  if (kind !== 'codex') return null;
+  if (agentApiMode === 'Optimized') {
+    return Object.freeze({ code: 'AGENT_OPTIMIZED_TOOLS_UNSUPPORTED',
+      message: 'Optimized works with Claude only, so this standalone Codex lane was not started.' });
+  }
+  if (agentApiMode === 'Only') {
+    return Object.freeze({ code: 'BRIDGE_API_ONLY_UNAVAILABLE',
+      message: 'This standalone Codex lane has no ToolsEnabled API connection. Start an app-managed agent session for API-only work.' });
+  }
+  return null;
+}
+
 function codexArgs({ root, tier, promptFromStdin = true, permissionSession }) {
   const confined = laneConfinement(permissionSession);
   const agentApiMode = require('../agent-api-policy').agentApiMode();
-  if (agentApiMode === 'Optimized') {
-    const error = new Error('Optimized works with Claude only, so this standalone Codex lane was not started.');
-    error.code = 'AGENT_OPTIMIZED_TOOLS_UNSUPPORTED';
+  const modeRefusal = laneAgentApiModeRefusal('codex', agentApiMode);
+  if (modeRefusal) {
+    const error = new Error(modeRefusal.message);
+    error.code = modeRefusal.code;
     error.agentApiMode = agentApiMode;
-    throw error;
-  }
-  if (agentApiMode === 'Only') {
-    const error = new Error('This standalone Codex lane has no ToolsEnabled API connection. Start an app-managed agent session for API-only work.');
-    error.code = 'BRIDGE_API_ONLY_UNAVAILABLE';
     throw error;
   }
   const args = [
     'exec',
     ...(confined ? ['--sandbox', confined.sandbox] : ['--dangerously-bypass-approvals-and-sandbox']),
     '--json', '--ephemeral', '--ignore-user-config', '--skip-git-repo-check',
-    '-c', 'mcp_servers.playwright.command="disabled"', '-c', 'mcp_servers.playwright.enabled=false',
-    '-c', 'mcp_servers.toolsenabled-readonly.command="disabled"', '-c', 'mcp_servers.toolsenabled-readonly.enabled=false',
-    '-c', 'mcp_servers.toolsenabled.command="disabled"', '-c', 'mcp_servers.toolsenabled.enabled=false',
+    // exec supports --ignore-user-config while retaining the chosen sign-in
+    // home. Project layers are separate: mark this exact dispatch cwd untrusted
+    // so its MCP configuration cannot merge into the empty lane tool surface.
+    '-c', `projects={${JSON.stringify(path.resolve(root))}={trust_level="untrusted"}}`,
+    '-c', 'mcp_servers={}', '-c', 'features.plugins=false', '-c', 'features.hooks=false',
+    '-c', 'approval_policy="never"', '-c', 'sandbox_workspace_write.writable_roots=[]',
     '-c', 'notify=[]', '--cd', root,
     '--model', tier.model, '-c', `model_reasoning_effort=${tier.effort}`
   ];
@@ -971,44 +790,55 @@ function codexArgs({ root, tier, promptFromStdin = true, permissionSession }) {
  * missing from this installation, so a generated file can never name a path
  * that does not exist.
  *
- * STALENESS IS DEFEATED FOR THE COPY WE WROTE, AND ONLY FOR THAT COPY.
+ * THE DOCUMENT IS GENERATED ON EVERY DISPATCH AND NOTHING ON DISK IS ADOPTED
+ * (1.0.50 security H1).
  *
- * The earlier version of this comment claimed the absence-check itself beat
- * staleness. It did not: the function returned on the first `existsSync`, so a
- * document written under one recorded level was reused forever under another.
- * Measured 2026-08-13 with generateMcpConfig: at `unrestricted` the write-capable
- * `toolsenabled` server is emitted with NO allowlist -- which the server reads as
- * no limit, the full 263-tool surface -- while at `guided` that server is not
- * emitted at all and the read-only one is narrowed to 103 names. So a file left
- * behind by a level change does not merely go slightly out of date; it can hand a
- * confined installation the whole machine. That is the bug this file exists to
- * end, one directory over.
+ * An earlier version kept a fingerprint sidecar and ADOPTED any lane document it
+ * could not prove it had written -- "a dispatch root can legitimately hold a
+ * config a person maintains by hand". The dispatch root is also the lane's own
+ * working directory: a standard-tier Claude lane (acceptEdits + Write) and a
+ * Codex lane (`workspace-write --cd root`) can both write there, and Claude Code
+ * starts every stdio server in its --mcp-config at init -- as the person,
+ * unsandboxed, with the lane's whole environment, whatever --permission-mode or
+ * --tools say. The 1.0.50 audit measured a planted `{command:'/bin/sh'}`
+ * document adopted with no sidecar and with a stale one, and an edited generated
+ * file adopted from then on; wake respawns reused the same path. That is the
+ * lane granting itself an unconfined process, so adoption is gone:
  *
- * So the document is regenerated on DRIFT, not merely on absence -- but only when
- * we can prove the file is ours and untouched. The proof is a sidecar
- * (`.mcp.json.origin`) holding the fingerprint of the document we wrote:
+ *   1. the document lives in the STATE ROOT (laneMcpConfigFile()), never in the
+ *      dispatch root, so the path claudeArgs names -- and every wake respawn
+ *      reuses -- is outside the directory a confined lane is given to edit.
+ *      That holds on a packaged install (state root `<userData>/capability`,
+ *      dispatch root `<userData>/workspace`) and whenever
+ *      TOOLSENABLED_STATE_ROOT is set. In a SOURCE CHECKOUT with no state
+ *      root set, the state root is the checkout itself, so a dispatch root
+ *      that contains the checkout contains the document too; there the
+ *      confined lane's --permission-mode is the only bound (the 1.0.50
+ *      review of fixes, 2.1, stopped `--add-dir PRODUCT_ROOT` from putting
+ *      it in reach from any other root). Nothing here is an OS sandbox;
+ *   2. every dispatch regenerates it from the machine record, and rewrites the
+ *      file whenever it is not byte for byte what was generated, so nothing a
+ *      writer left there survives into a launch;
+ *   3. every server in it is checked before it is written: the shape rules the
+ *      confined session surfaces use (validateServerEntries/refuseNonNodeRuntime)
+ *      plus the lane's own rule that each entry is this engine's catalogue
+ *      server, started by this engine's runtime.
  *
- *   no sidecar, or a fingerprint that does not match what is on disk
- *                          -> somebody else's file. Left exactly as it is.
- *   sidecar matches, generated document differs   -> the record moved. Rewrite.
- *   sidecar matches, generated document identical -> nothing to do, no write.
+ * A hand-maintained lane document is therefore no longer honoured. That was the
+ * vulnerability, not a feature to preserve; a person who wants other MCP servers
+ * uses a session, not a dispatched lane.
  *
- * The "left exactly as it is" arm is not timidity, it is the same principle as
- * the rest of this function. A dispatch root can legitimately hold a config a
- * person maintains by hand -- this very checkout has one, tracked in git, naming
- * five servers this generator knows nothing about -- and silently replacing it
- * with a machine-derived document would be the same class of quiet damage as the
- * missing file: the lane still launches, and it is not the lane they configured.
- * Ownership is recorded, never guessed.
+ * NOT PASSED INLINE, although that would need no file at all: the standard-tier
+ * document is ~7 KB (measured 2026-10-13), and both the lane runner and the wake
+ * launch spec refuse any child argument over 4096 characters
+ * (agent-lane.js parseArgs, agent-wake.js), so an inline document would break
+ * every auto-wake of a standard lane.
  *
  * Writing stays atomic (writeJsonAtomic), so concurrent dispatches cannot tear
- * the document. The sidecar is written after it, so a failed stamp degrades to
- * "not ours" -- adoption, never an unowned overwrite.
+ * the document, and an unchanged record rewrites nothing.
  *
  * If there is no readable machine record we refuse, because at that point the
- * install genuinely is not set up and saying so is the useful answer. That
- * refusal is reached only on the paths that need to GENERATE; a foreign document
- * that is already in place is never made to depend on it.
+ * install genuinely is not set up and saying so is the useful answer.
  *
  * `servicesRoot` is a seam, and it is also a fix: this read was
  * `readMachineRecord()` with no argument, which is not "use the default" --
@@ -1017,82 +847,91 @@ function codexArgs({ root, tier, promptFromStdin = true, permissionSession }) {
  * function could only ever refuse. Nothing caught it because nothing called it. */
 /* THE LANE'S DOCUMENT IS THE LANE'S OWN FILE, NOT THE DIRECTORY'S `.mcp.json`.
  *
- * This was `.mcp.json` at the dispatch root, and the "left exactly as it is" arm
- * described above then did the opposite of what it was written for. On a dispatch
- * root that is ALSO a checkout -- which is every developer machine and this one --
- * the adoption arm fires on the repository's own hand-maintained, git-tracked
- * `.mcp.json`, and the lane is launched with `--strict-mcp-config` pointed at it.
+ * This was `.mcp.json` at the dispatch root. On a dispatch root that is ALSO a
+ * checkout -- every developer machine -- the lane was then launched with
+ * `--strict-mcp-config` pointed at the repository's own hand-maintained,
+ * git-tracked `.mcp.json` (MEASURED 2026-08-13: five servers, none of them the
+ * write-capable `toolsenabled` one, `mcpToolCount=0`). The lane gets a file at a
+ * name only this dispatcher writes, and since 1.0.50 H1 in a directory only this
+ * dispatcher writes: `<state root>/state/mission-bridge-mcp/`.
  *
- * MEASURED 2026-08-13 in this checkout: that file declares five servers, none of
- * them the write-capable `toolsenabled` one, and its three remote proxies all pin
- * REMOTE_AGENT_EXPECTED_ROOT to the legacy checkout root under the builder's home
- * directory -- a path that exists on no other machine
- * (.mcp.json:17,26,40). A real lane init reports `toolsenabled-readonly: pending`
- * and the other four `failed`, with `mcpToolCount=0`. So the guard that exists to
- * stop a zero-tool lane was itself handing one over, and the generator that would
- * have produced the correct document was never allowed to run.
- *
- * Adoption is not the bug -- respecting a file somebody else maintains is right.
- * The bug is that the lane and the human were being made to share one filename for
- * two different documents. They no longer are: the lane gets a file at a name only
- * this dispatcher writes, and `.mcp.json` goes back to meaning what its owner
- * wrote. The sidecar-proof logic below is unchanged and still applies, so a lane
- * document a person edits by hand is still adopted rather than overwritten.
- *
- * BOTH NAMES END IN `.local.json` ON PURPOSE, and it is not decoration: verified
- * with `git check-ignore -v`, they are matched by this repository's existing
- * `*.local.json` rule (.gitignore:16). A dispatch root is very often a checkout, so
- * a lane artefact under any other name would show up as untracked working-tree
- * churn on every dispatch. `.local.json` is also the honest label -- this document
- * is derived from ONE installation's machine record and is meaningless on another.
- *
- * They stay flat rather than nested under `state/` (where the brief and checkpoint
- * live, agent-lane-dispatch.js:19-20) because these two paths are joined to a bare
- * dispatch root by callers and tests that do not create intermediate directories. */
+ * The name keeps its `.local.json` suffix: in a source checkout the state root is
+ * the checkout, and `state/` is ignored there (.gitignore), so no dispatch shows
+ * up as working-tree churn. The document is derived from ONE installation's
+ * machine record and is meaningless on another. */
 const LANE_MCP_CONFIG_FILE = 'mission-bridge-mcp.local.json';
-const LANE_MCP_ORIGIN_FILE = 'mission-bridge-mcp-origin.local.json';
 
-/* Key order is an artefact of how a document was built, not part of what it
- * says. Comparing raw bytes would report drift for a re-serialization and
- * rewrite the file on every dispatch. */
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+function laneMcpConfigFile() {
+  return statePath('state', 'mission-bridge-mcp', LANE_MCP_CONFIG_FILE);
+}
+
+function samePath(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  const a = path.resolve(left);
+  const b = path.resolve(right);
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/* WHAT A LANE SERVER MAY BE, checked on the document before it is written.
+ *
+ * The shared shape and runtime rules first, exactly as prepareClaudeToolSurface()
+ * runs them. Then the lane's own, tighter rule, because the shared rules alone
+ * pass `/bin/sh` on Linux: every server must be a SERVER_CATALOGUE entry, started
+ * by the runtime this engine runs on, with only the generator's guard flags ahead
+ * of that entry's script under this engine's root, and nothing after it but the
+ * entry's pinned package. That is exactly the shape generateMcpConfig() emits, so
+ * on our own output this is defence in depth; it fires on a generator regression
+ * or an injected generator, which is when it must. */
+function assertLaneServers(document, generation, recordApi) {
+  const confinement = require('../agent-session-confinement');
+  const rules = recordApi && typeof recordApi.runtimeNeedsNodeMode === 'function' ? recordApi : machineRecord;
+  const catalogue = Array.isArray(rules.SERVER_CATALOGUE) ? rules.SERVER_CATALOGUE : machineRecord.SERVER_CATALOGUE;
+  const guardFlags = new Set(Array.isArray(rules.RUNTIME_GUARD_FLAGS) ? rules.RUNTIME_GUARD_FLAGS : machineRecord.RUNTIME_GUARD_FLAGS);
+  const servers = document && typeof document === 'object' && !Array.isArray(document) ? document.mcpServers : undefined;
+  if (!servers || typeof servers !== 'object' || Array.isArray(servers)) {
+    const error = new Error('The assistant tool configuration was not a server map, so the lane was not configured from it.');
+    error.code = 'LANE_MCP_DOCUMENT_INVALID';
+    throw error;
   }
-  return JSON.stringify(value === undefined ? null : value);
+  const entries = confinement.validateServerEntries(document, rules);
+  for (const [name, entry] of entries) {
+    confinement.refuseNonNodeRuntime(name, entry, rules);
+    const server = catalogue.find(candidate => candidate && candidate.name === name);
+    const args = Array.isArray(entry.args) ? entry.args : [];
+    const scriptAt = args.findIndex(value => typeof value !== 'string' || !value.startsWith('-'));
+    const tail = server && server.packageSpec !== undefined ? [server.packageSpec] : [];
+    const expected = Boolean(server)
+      && samePath(entry.command, generation.nodePath)
+      && (entry.cwd === undefined || samePath(entry.cwd, generation.installRoot))
+      && scriptAt >= 0
+      && args.slice(0, scriptAt).every(flag => guardFlags.has(flag))
+      && samePath(args[scriptAt], path.join(generation.installRoot, server.script))
+      && args.length === scriptAt + 1 + tail.length
+      && tail.every((value, index) => args[scriptAt + 1 + index] === value);
+    if (!expected) {
+      const error = new Error(`The "${String(name).slice(0, 60)}" assistant server is not one this installation starts, so the lane was not configured with it.`);
+      error.code = 'LANE_MCP_SERVER_REFUSED';
+      throw error;
+    }
+  }
 }
 
-function mcpConfigFingerprint(document) {
-  return crypto.createHash('sha256').update(canonicalJson(document)).digest('hex');
-}
-
-function ensureLaneMcpConfig({ root, fsImpl = fs, recordApi = machineRecord, servicesRoot } = {}) {
-  const file = path.join(root, LANE_MCP_CONFIG_FILE);
-  const originFile = path.join(root, LANE_MCP_ORIGIN_FILE);
-
-  const readJson = target => {
-    try { return JSON.parse(fsImpl.readFileSync(target, 'utf8')); }
-    catch { return undefined; }
-  };
-  const requireRecord = () => {
-    let record;
-    try {
-      record = recordApi.readMachineRecord({
-        servicesRoot: servicesRoot === undefined ? recordApi.resolveServicesRoot({}) : servicesRoot
-      });
-    } catch (error) {
-      refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
-        'This installation has no machine record, so the assistant cannot be told which tools it may use. Run setup once, then dispatch again.',
-        { status: 503, details: { root, cause: String(error?.code || 'MACHINE_RECORD_UNREADABLE') } });
-    }
-    if (!record) {
-      refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
-        'This installation has no machine record, so the assistant cannot be told which tools it may use. Run setup once, then dispatch again.',
-        { status: 503, details: { root, cause: 'MACHINE_RECORD_ABSENT' } });
-    }
-    return record;
-  };
+function ensureLaneMcpConfig({ root, fsImpl = fs, recordApi = machineRecord, servicesRoot, file = laneMcpConfigFile() } = {}) {
+  let record;
+  try {
+    record = recordApi.readMachineRecord({
+      servicesRoot: servicesRoot === undefined ? recordApi.resolveServicesRoot({}) : servicesRoot
+    });
+  } catch (error) {
+    refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
+      'This installation has no machine record, so the assistant cannot be told which tools it may use. Run setup once, then dispatch again.',
+      { status: 503, details: { root, cause: String(error?.code || 'MACHINE_RECORD_UNREADABLE') } });
+  }
+  if (!record) {
+    refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
+      'This installation has no machine record, so the assistant cannot be told which tools it may use. Run setup once, then dispatch again.',
+      { status: 503, details: { root, cause: 'MACHINE_RECORD_ABSENT' } });
+  }
   /* THE RECORD THE GENERATOR IS GIVEN IS NOT THE RECORD ON DISK, and this
    * function was the last place in the product that had not been told.
    *
@@ -1104,13 +943,10 @@ function ensureLaneMcpConfig({ root, fsImpl = fs, recordApi = machineRecord, ser
    * generated document is `{"mcpServers":{}}`. Handed to a lane together with
    * `--strict-mcp-config` -- which means use ONLY this file -- that is a lane
    * with ZERO ToolsEnabled tools which still launches and still reports healthy.
-   * It is the same failure the comment above this function was written against,
-   * reached from the other side: not a MISSING document, a PRESENT and empty one.
    *
    * MEASURED on a packaged installation 2026-08-29: two dispatched INVESTIGATOR
    * lanes both came back reporting no `repo.*`, no `code.*` and no shell, and
-   * the lane document on disk was `{"mcpServers":{}}` carrying this dispatcher's
-   * own fingerprint sidecar -- so it was generated here, not adopted.
+   * the lane document on disk was `{"mcpServers":{}}` -- generated here.
    *
    * agent-session-confinement.js already solved this for the three documents it
    * writes: generationRecord() substitutes installRoot for THIS ENGINE'S ROOT
@@ -1132,9 +968,12 @@ function ensureLaneMcpConfig({ root, fsImpl = fs, recordApi = machineRecord, ser
    *               runtime reads as no limit". It failed on exactly that. The
    *               lane's servers are started by the agent CLI in the dispatch
    *               root and have never carried it. */
-  const generatedDocument = record => {
+  let document;
+  let skipped;
+  try {
     const confinement = require('../agent-session-confinement');
-    return recordApi.generateMcpConfig(confinement.generationRecord(record), {
+    const generation = confinement.generationRecord(record);
+    const generated = recordApi.generateMcpConfig(generation, {
       agentActor: 'claude',
       /* THE LANE SAYS "ANONYMOUS" OUT LOUD, because saying nothing is not the
        * same thing here. agent-lane.js sets TOOLSENABLED_AGENT_ID in the lane
@@ -1158,56 +997,33 @@ function ensureLaneMcpConfig({ root, fsImpl = fs, recordApi = machineRecord, ser
       browserTools: require('../agent-api-policy').agentApiMode() !== 'Only',
       stateRoot: confinement.stateRootForGeneratedServers()
     });
-  };
-  const writeFromRecord = (record, refreshed) => {
-    /* writeMcpConfig() hard-codes `<targetDirectory>/.mcp.json`, which is exactly
-     * the filename this dispatcher must stop claiming, so the document is
-     * generated through the same authority and written at the lane's own path.
-     * writeJsonAtomic is the writer that function itself uses (machine-record.js:466)
-     * and it creates the directory, so `state/mission-bridge-mcp/` needs no
-     * separate mkdir and concurrent dispatches still cannot tear the file. */
-    let written;
-    try {
-      const generated = generatedDocument(record);
-      const writeJson = typeof recordApi.writeJsonAtomic === 'function'
-        ? recordApi.writeJsonAtomic
-        : machineRecord.writeJsonAtomic;
-      writeJson(file, generated.document);
-      written = { file, document: generated.document, skipped: generated.skipped };
-    } catch (error) {
-      refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
-        String(error?.message || 'The assistant tool configuration could not be written.').slice(0, 300),
-        { status: 503, details: { root, cause: String(error?.code || 'MCP_CONFIG_WRITE_FAILED') } });
-    }
-    // Best effort by design; see the comment above. An unstamped document is
-    // adopted next time, which costs the staleness check and risks nothing.
-    try { fsImpl.writeFileSync(originFile, `${JSON.stringify({ fingerprint: mcpConfigFingerprint(written.document) }, null, 2)}\n`, 'utf8'); }
-    catch { /* stays unstamped, and therefore stays unowned */ }
-    return Object.freeze({ file: written.file, generated: true, refreshed, adopted: false, skipped: written.skipped });
-  };
-
-  if (fsImpl.existsSync(file)) {
-    const onDisk = readJson(file);
-    const origin = readJson(originFile);
-    const stamped = origin && typeof origin.fingerprint === 'string' ? origin.fingerprint : null;
-    const ours = stamped !== null && onDisk !== undefined && mcpConfigFingerprint(onDisk) === stamped;
-    if (!ours) return Object.freeze({ file, generated: false, refreshed: false, adopted: true });
-
-    const record = requireRecord();
-    let desired;
-    try { desired = generatedDocument(record).document; }
-    catch (error) {
-      refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
-        String(error?.message || 'The assistant tool configuration could not be generated.').slice(0, 300),
-        { status: 503, details: { root, cause: String(error?.code || 'MCP_CONFIG_GENERATE_FAILED') } });
-    }
-    if (mcpConfigFingerprint(desired) === stamped) {
-      return Object.freeze({ file, generated: false, refreshed: false, adopted: false });
-    }
-    return writeFromRecord(record, true);
+    document = generated.document;
+    skipped = generated.skipped;
+    assertLaneServers(document, generation, recordApi);
+  } catch (error) {
+    refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
+      String(error?.message || 'The assistant tool configuration could not be generated.').slice(0, 300),
+      { status: 503, details: { root, cause: String(error?.code || 'MCP_CONFIG_GENERATE_FAILED') } });
   }
 
-  return writeFromRecord(requireRecord(), false);
+  // The bytes writeJsonAtomic would write. Anything else on disk -- absent,
+  // stale, edited, planted -- is replaced; identical bytes are left alone.
+  const desired = `${JSON.stringify(document, null, 2)}\n`;
+  let onDisk;
+  try { onDisk = fsImpl.readFileSync(file, 'utf8'); } catch { onDisk = undefined; }
+  if (onDisk === desired) return Object.freeze({ file, generated: false, refreshed: false, skipped });
+
+  try {
+    const writeJson = typeof recordApi.writeJsonAtomic === 'function'
+      ? recordApi.writeJsonAtomic
+      : machineRecord.writeJsonAtomic;
+    writeJson(file, document);
+  } catch (error) {
+    refuse('BRIDGE_MCP_CONFIG_UNAVAILABLE',
+      String(error?.message || 'The assistant tool configuration could not be written.').slice(0, 300),
+      { status: 503, details: { root, cause: String(error?.code || 'MCP_CONFIG_WRITE_FAILED') } });
+  }
+  return Object.freeze({ file, generated: true, refreshed: onDisk !== undefined, skipped });
 }
 
 /* What a CONFINED lane may use. An ALLOWLIST, and deliberately so.
@@ -1312,8 +1128,8 @@ function claudeArgs({ root, tier, permissionSession }) {
      * the bound the first block is about. If the census flag is wanted back, that
      * is a decision, not an oversight.
      *
-     * THAT DECISION HAS BEEN TAKEN, and it is the AGENT API (product rule: a
-     * setting deciding whether an agent may use its native tools or only ours,
+     * THAT DECISION HAS BEEN TAKEN, and it is the AGENT API (owner, 2026-08-24:
+     * a setting deciding whether an agent may use its native tools or only ours,
      * shipped on by default). The census flag comes back below, keyed on
      * `agent.agent_api` and emitted from src/lib/agent-api-policy.js, WITH Skill
      * on the keep-list -- so the measured regression that removed all 27 project
@@ -1341,12 +1157,27 @@ function claudeArgs({ root, tier, permissionSession }) {
      *
      * With the setting off it emits nothing and this argv is byte-identical to
      * what it has always been. */
+    /* A CONFINED LANE DOES NOT READ THE DISPATCH ROOT'S OWN CLAUDE SETTINGS.
+     * A `.claude/settings.json` in the root (or in a folder named by --add-dir)
+     * can declare hooks and helper commands that the CLI runs as this OS user
+     * before the lane calls any tool, and `permissions.allow` rules that widen
+     * --allowedTools; `-p` never shows the trust prompt. `user` keeps the
+     * person's own settings, exactly as the in-app session does (see
+     * settingSourceArgs in agent-engine/claude-cli-adapter.js; 1.0.50 security
+     * review, M1). Only already emits the stricter `--setting-sources ''` from
+     * agentApiArgs below, so it is not repeated there. The cost: outside Only a
+     * confined lane no longer loads project skills, agents, commands or
+     * CLAUDE.md from the root or from PRODUCT_ROOT; the unrestricted lane is
+     * unchanged. */
     ...(confined
       ? ['--permission-mode', confined.claudePermissionMode,
-        '--allowedTools', CONFINED_LANE_TOOLS.join(',')]
+        '--allowedTools', CONFINED_LANE_TOOLS.join(','),
+        ...(apiMode === 'Only' ? [] : ['--setting-sources', 'user'])]
       : ['--dangerously-skip-permissions']),
     ...require('../agent-api-policy').agentApiArgs({ mode: apiMode }),
-    '--mcp-config', apiMode === 'Disabled' ? '{"mcpServers":{}}' : path.join(root, LANE_MCP_CONFIG_FILE), '--strict-mcp-config',
+    // The state-root document ensureLaneMcpConfig() regenerated for this
+    // dispatch -- never a file in `root`, which the lane can write (1.0.50 H1).
+    '--mcp-config', apiMode === 'Disabled' ? '{"mcpServers":{}}' : laneMcpConfigFile(), '--strict-mcp-config',
     /* WHY THERE IS NO `--tools` HERE ANY MORE.
      *
      * This read `--tools Read,Edit,Write,Glob,Grep --allowedTools <the same five>`,
@@ -1379,8 +1210,23 @@ function claudeArgs({ root, tier, permissionSession }) {
      * is actually installed from, so the lane sees the same project skills a session
      * started by hand in that checkout sees. Omitted when the checkout is already
      * within the dispatch root, because then cwd covers it and the flag would be
-     * decoration. */
-    ...(inside(root, PRODUCT_ROOT) ? [] : ['--add-dir', PRODUCT_ROOT])
+     * decoration.
+     *
+     * UNRESTRICTED LANE ONLY (1.0.50 security review of fixes, 2.1). A confined
+     * lane passes `--setting-sources user` above (M1), so it loads no skill,
+     * agent, command or CLAUDE.md from PRODUCT_ROOT any more; for it the flag had
+     * nothing left to discover. What it still did was widen the lane's reach:
+     * `--add-dir` gives a directory the same file access as the working
+     * directory, and the standard profile runs `--permission-mode acceptEdits`
+     * with Edit and Write. PRODUCT_ROOT is this engine's own checkout or, on a
+     * per-user install, its user-writable resources directory -- the directory
+     * every lane server script (src/mcp-server.js) and, in a source checkout
+     * without TOOLSENABLED_STATE_ROOT, the state root itself live in. So a
+     * misbehaving standard lane could rewrite code that every later lane and
+     * session starts as the person, the class of defect H1 closed. The
+     * unrestricted lane keeps the flag and its argv is byte for byte what it
+     * was; a confined lane never receives it, whatever the dispatch root. */
+    ...(!confined && !inside(root, PRODUCT_ROOT) ? ['--add-dir', PRODUCT_ROOT] : [])
   ];
 }
 
@@ -1435,9 +1281,12 @@ function localArgs({ root, node, permissionSession, checkpoint = null, maxOutput
  * file found stays null. An environment with no PATH at all has not been
  * searched where a shell would look, so "nothing found" there is also null
  * rather than a claim that the program is not installed. */
-function detectClaudeCliPresence(environment = process.env, fsImpl = fs) {
+// `platform` selects the candidate layout, exactly as executableFor() takes it:
+// presence and resolution must answer the same question for the same inputs,
+// and without it a win32 caller was answered from the host's POSIX layout.
+function detectClaudeCliPresence(environment = process.env, fsImpl = fs, platform = process.platform) {
   try {
-    const located = claudeInstall.locateClaudeCli({ env: environment, statSync: fsImpl.statSync });
+    const located = claudeInstall.locateClaudeCli({ platform, env: environment, statSync: fsImpl.statSync });
     if (located.path) return true;
     if (located.unreadable.length > 0) return null;
     const rawPath = environment && (environment.PATH || environment.Path);
@@ -1468,6 +1317,15 @@ function laneStartupError(error, kind = 'codex') {
   if (code === 'AGENT_LANE_COMMAND_REFUSED') {
     return new MissionBridgeError(`BRIDGE_${kind.toUpperCase()}_UNAVAILABLE`, `The resolved ${kind} command is not accepted by the canonical lane runtime.`, {
       status: 503
+    });
+  }
+  /* The argv builders' own agent API mode refusals. dispatch() gives the same
+     answer before anything is recorded; this keeps the sentence when the saved
+     mode changes between that check and the argv. */
+  if (['BRIDGE_API_ONLY_UNAVAILABLE', 'AGENT_OPTIMIZED_TOOLS_UNSUPPORTED', 'AGENT_API_MODE_UNAVAILABLE'].includes(code)) {
+    return new MissionBridgeError(code, String(error.message).slice(0, 500), {
+      status: code === 'AGENT_API_MODE_UNAVAILABLE' ? 503 : 409,
+      details: { kind, ...(typeof error.agentApiMode === 'string' ? { agentApiMode: error.agentApiMode } : {}) }
     });
   }
   return new MissionBridgeError('BRIDGE_AGENT_LANE_START_FAILED', 'The canonical agent lane failed before reaching running state.', {
@@ -1670,7 +1528,7 @@ function createMissionActions(options = {}) {
     const dispatchActor = ownerUi
       ? actor
       : authorizeMissionAgentInOrg(actor, dispatchOrg, actorProvider, actorRoleId, actorOrgRevision, 'mayMutateMissionBridge');
-    const lane = declaredLane(dispatchOrg, input.tier, { claudeSeatDependencies: options.claudeSeatDependencies || {} });
+    const lane = declaredLane(dispatchOrg, input.tier);
     /* THE NO-PROVIDER SWITCH, HONOURED AT THE EARLIEST POINT THAT KNOWS THE
        KIND. Everything below this line -- the dispatch environment, the local
        runtime probe, the Claude presence probe, the launch record, the brief
@@ -1682,6 +1540,28 @@ function createMissionActions(options = {}) {
         `This installation is configured to refuse lanes that bill a provider (${NO_PAID_PROVIDER_ENV} is set), so the ${lane.kind} lane was not dispatched and no provider process was started. Free local lanes are unaffected.`,
         { status: 503, details: { kind: lane.kind, tier: input.tier } });
     }
+    /* THE AGENT API MODE, AT THE SAME EARLIEST POINT AND FOR THE SAME REASON.
+     * codexArgs() refuses a standalone Codex lane under Only -- the shipped
+     * default -- and under Optimized, and both argv builders refuse when the
+     * mode cannot be read. Reached only while building the argv, those
+     * refusals came after the launch record, the executable resolution, the
+     * brief and checkpoint files and, for a nested dispatch, a child slot the
+     * parent never gets back; laneStartupError() then reported them as
+     * BRIDGE_AGENT_LANE_START_FAILED, without the sentence saying what to
+     * change. The argv builders keep their own checks. */
+    if (lane.kind === 'codex' || lane.kind === 'claude') {
+      let agentApiMode;
+      try { agentApiMode = require('../agent-api-policy').agentApiMode(); }
+      catch {
+        refuse('AGENT_API_MODE_UNAVAILABLE',
+          'The Agent API setting could not be read, so the lane was not dispatched. Choose a mode for Agent API in Settings, then dispatch again.',
+          { status: 503, details: { kind: lane.kind } });
+      }
+      const modeRefusal = laneAgentApiModeRefusal(lane.kind, agentApiMode);
+      if (modeRefusal) {
+        refuse(modeRefusal.code, modeRefusal.message, { status: 409, details: { kind: lane.kind, agentApiMode } });
+      }
+    }
     let dispatchEnvironment;
     try {
       // Build and validate the installation-owner environment before any CLI
@@ -1689,8 +1569,7 @@ function createMissionActions(options = {}) {
       dispatchEnvironment = accountConfinedDispatchEnvironment(
         options.env,
         lane.kind,
-        options.codexProfileDependencies || {},
-        { seatId: lane.targetAgentId, ...(options.claudeSeatDependencies || {}) }
+        options.codexProfileDependencies || {}
       );
     } catch (error) {
       refuse('BRIDGE_ACCOUNT_PROFILE_REFUSED',
@@ -2490,6 +2369,18 @@ function createMissionActions(options = {}) {
   const CLOUD_BINDING_MAX_AGE_MS = 60_000;
   let cloudBindingReading = null;
 
+  function cloudRepositoryBinding(repository, providerRepository, enteredByPerson) {
+    const providerConfirmed = typeof providerRepository === 'string'
+      && providerRepository.toLowerCase() === repository.toLowerCase();
+    return Object.freeze({
+      source: enteredByPerson ? 'person-entered' : 'provider-catalog',
+      confirmation: providerConfirmed ? 'confirmed' : 'unconfirmed', providerConfirmed,
+      declaredRepository: repository, providerRepository: providerConfirmed ? providerRepository : null,
+      message: providerConfirmed ? 'The provider confirmed this environment\'s repository binding.'
+        : 'The environment ID was entered by the person. The provider has not confirmed its repository binding.'
+    });
+  }
+
   async function cloudBindings({ maxAgeMs = CLOUD_BINDING_MAX_AGE_MS } = {}) {
     /* `maxAgeMs: 0` means READ NOW, and it has to mean that even when the last
        reading was taken in this same millisecond -- which is exactly what
@@ -2539,8 +2430,8 @@ function createMissionActions(options = {}) {
    * to edit JSON and get five fields right.
    *
    * THE TYPED GITHUB REMOTE IS THE DESTINATION AUTHORITY. The backend derives
-   * its exact owner/name, requires the selected Cloud environment to report
-   * that identical repository, then calls authenticated github.repo_get for
+   * its exact owner/name, preserves any reported environment mismatch, then
+   * calls authenticated github.repo_get for
    * that exact owner/name. Environment visibility and default branch are not
    * security inputs: GitHub privacy must be private and the workspace branch is
    * always cloud-mirror/<projectKey>.
@@ -2564,9 +2455,13 @@ function createMissionActions(options = {}) {
   }
 
   async function cloudMirrorRegister(input) {
-    exact(input, ['projectKey', 'sourceRoot', 'mirrorRemote', 'environment', 'boundaryManifest', 'replace'],
+    exact(input, ['projectKey', 'sourceRoot', 'mirrorRemote', 'environment', 'environmentSource', 'boundaryManifest', 'replace'],
       ['projectKey', 'sourceRoot', 'mirrorRemote', 'environment'], 'cloud mirror register');
     guard('cloud-mirror-register');
+    if (input.environmentSource !== undefined && input.environmentSource !== 'person-entered') {
+      refuse('BRIDGE_INPUT_INVALID', 'The environment source must identify a person-entered ID.');
+    }
+    const enteredByPerson = input.environmentSource === 'person-entered';
 
     const projectKey = boundedText(input.projectKey, 'projectKey', 64, { singleLine: true });
     const sourceRoot = boundedText(input.sourceRoot, 'sourceRoot', 4096, { singleLine: true });
@@ -2585,7 +2480,7 @@ function createMissionActions(options = {}) {
 
     const known = Array.isArray(bindings.environments) ? bindings.environments : [];
     const match = known.find((entry) => entry && entry.environmentId === environment) || null;
-    if (!match) {
+    if (!match && (!enteredByPerson || bindings.environmentsComplete === true)) {
       /* UNKNOWN IS NOT ABSENT, and the difference decides what a person should
          do next. An environment missing from an INCOMPLETE list has not been
          shown not to exist -- most often the account that owns it is simply not
@@ -2600,21 +2495,23 @@ function createMissionActions(options = {}) {
         `The environment list could not be read in full, so whether ${environment} exists could not be established. Sign in to the account that owns it on this computer and try again -- refusing rather than registering a binding nobody confirmed.`,
         { status: 503 });
     }
-    if (!match.repository) {
+    if (match && !match.repository && !enteredByPerson) {
       // normalizeEnvironment() already wrote the reason -- no repository, or
       // more than one, each of which makes "which repository would this land
       // in" unanswerable. Forward its sentence rather than inventing a second.
       refuse('BRIDGE_CLOUD_ENVIRONMENT_UNBOUND',
-        String(match.reason || `Environment ${environment} names no single repository, so a mirror cannot be bound to it.`).slice(0, 300),
+        'The provider reports no single repository for this environment, so a mirror cannot be bound to it.',
         { status: 409 });
     }
 
-    if (String(match.repository).toLowerCase() !== destination.fullName.toLowerCase()) {
+    if (match?.repository && String(match.repository).toLowerCase() !== destination.fullName.toLowerCase()) {
       refuse('BRIDGE_CLOUD_MIRROR_REPOSITORY_MISMATCH',
-        `The typed GitHub mirror is ${destination.fullName}, but environment ${environment} reports ${match.repository}. Select an environment bound to the identical repository.`,
+        'The provider reports a different repository than the typed GitHub mirror. Nothing was registered.',
         { status: 409 });
     }
 
+    const binding = cloudRepositoryBinding(destination.fullName, match?.repository, enteredByPerson);
+    const cloudRepository = binding.providerRepository || destination.fullName;
     // The registry mutation is a release-bearing decision: it determines the
     // exact private destination every later publication and dispatch trusts.
     // Anchor intent before the core can write anything. A failed core call then
@@ -2627,8 +2524,9 @@ function createMissionActions(options = {}) {
     const intentAudit = receiptFor('cloud.mirror.register.intent', projectKey, {
       actor,
       environment,
-      cloudRepository: match.repository,
+      cloudRepository,
       sourceRootSha256,
+      repositoryBinding: binding,
       boundaryManifestSha256: boundaryManifestValue === null
         ? null
         : crypto.createHash('sha256').update(boundaryManifestValue).digest('hex'),
@@ -2641,7 +2539,7 @@ function createMissionActions(options = {}) {
         projectKey,
         sourceRoot,
         mirrorRemote,
-        cloudRepository: match.repository,
+        cloudRepository,
         // The core owns the fetch and the assertion. Supplying only the
         // authenticated implementation keeps caller data from masquerading as
         // GitHub metadata while preserving the mission bridge's permission and
@@ -2658,6 +2556,7 @@ function createMissionActions(options = {}) {
       environment,
       cloudRepository: result.project.cloudRepository,
       mirrorBranch: result.project.mirrorBranch,
+      repositoryBinding: binding,
       sourceRootSha256,
       replaced: result.replaced === true
     });
@@ -2671,6 +2570,8 @@ function createMissionActions(options = {}) {
         project: result.project,
         replaced: result.replaced,
         environment,
+        repositoryBinding: binding,
+        message: binding.message,
         intentAudit,
         audit: auditReceipt,
         // The per-fact list travels to the surface intact. Registration refuses
@@ -2904,28 +2805,20 @@ function createMissionActions(options = {}) {
    * flattened into an error: "a task may exist and I could not confirm it" is a
    * different fact from "nothing was created", and the retry advice differs. */
   async function cloudLaunch(input) {
-    exact(input, ['environment', 'branch', 'prompt', 'attempts', 'account', 'repository', 'confirmed'],
+    exact(input, ['environment', 'environmentSource', 'branch', 'prompt', 'attempts', 'account', 'repository', 'confirmed'],
       ['environment', 'branch', 'prompt', 'repository', 'confirmed'], 'cloud launch');
     guard('cloud-launch');
+    if (input.environmentSource !== undefined && input.environmentSource !== 'person-entered') {
+      refuse('BRIDGE_INPUT_INVALID', 'The environment source must identify a person-entered ID.');
+    }
+    const enteredByPerson = input.environmentSource === 'person-entered';
     if (input.confirmed !== true) {
       refuse('BRIDGE_CLOUD_LAUNCH_UNCONFIRMED',
         'A cloud launch must be explicitly confirmed. A Codex Cloud task cannot be cancelled once the provider accepts it.');
     }
-    /* THE DECLARED SOURCE BINDING, REQUIRED, AND CHECKED AGAINST THE PROVIDER.
-     *
-     * `repository` is listed in exact()'s required set and boundedText() refuses
-     * an empty or blank one, so an absent binding is a refusal and never an
-     * unbound launch. That ordering is the point: this codebase's recurring
-     * defect is a missing field read as permission, and a cloud submission is
-     * the worst possible place for it -- an environment points at a repository,
-     * the caller cannot see which, and a task sent to the wrong one runs real
-     * work against someone else's source and cannot be cancelled.
-     *
-     * Declaring it is necessary and not sufficient. The declaration is compared
-     * below against the binding the PROVIDER reports for that environment, so a
-     * caller that declares the repository it believes it is using and is wrong
-     * is stopped, which is the case a declaration alone would sail straight
-     * through. */
+    // Every launch declares its source. A real provider answer must match;
+    // person-entered IDs carry an explicitly unconfirmed declaration when
+    // the official CLI does not expose a repository catalog.
     const repository = boundedText(input.repository, 'repository', 220, { singleLine: true });
     const args = {
       environment: boundedText(input.environment, 'environment', 200, { singleLine: true }),
@@ -2941,20 +2834,12 @@ function createMissionActions(options = {}) {
       // they are the same object here, which is what keeps the two consistent.
       repository
     };
+    if (enteredByPerson) args.environmentSource = 'person-entered';
     if (input.attempts !== undefined && input.attempts !== null) args.attempts = input.attempts;
     if (input.account !== undefined && input.account !== null) args.account = boundedText(input.account, 'account', 200, { singleLine: true });
 
-    /* VERIFY THE BINDING BEFORE ANYTHING IS SENT, AND REFUSE ON EVERY ABSENCE.
-     *
-     * Four distinct outcomes, kept apart because they send a person to four
-     * different places and only one of them is "you typed the wrong repository":
-     *   - the environments could not be read at all -> unverified, refuse;
-     *   - the environment is absent from an INCOMPLETE reading -> unverified,
-     *     refuse. Absent-from-a-partial-list is not evidence of unauthorized,
-     *     and treating it as either would be a guess;
-     *   - the environment is absent from a COMPLETE reading -> not authorized;
-     *   - the environment is authorized but its repository binding is unknown
-     *     or differs from the declaration -> refuse, naming both. */
+    // Preserve real provider mismatch/authorization refusals. A manually entered
+    // ID can proceed with unknown confirmation, which must be shown in its receipt.
     let reading;
     try { reading = await cloudBindings(); }
     catch (error) {
@@ -2963,39 +2848,24 @@ function createMissionActions(options = {}) {
     }
     const authorized = Array.isArray(reading.environments) ? reading.environments : [];
     const bound = authorized.find(entry => entry && entry.environmentId === args.environment) || null;
-    if (!bound) {
+    if (!bound && (!enteredByPerson || reading.environmentsComplete === true)) {
       if (reading.environmentsComplete !== true) {
-        /* SAME DEFECT AS THE RAW TOOL'S IDENTICAL CONDITION, BECAUSE IT IS THE
-         * SAME CHECK TWICE. codex-cloud-launch.js's verifyRepositoryBinding()
-         * refused with this exact sentence and nothing else until it was fixed
-         * to name which account(s) could not be read and why -- unfixed here,
-         * that generic sentence would still be reachable through this second,
-         * bridge-side copy of the same gate. cloudBindings() is cloud.account_
-         * list's own result, and listCloudAccounts() already merges each
-         * account's `reading` onto it as `environmentsReading`/
-         * `environmentsReason` (see codex-cloud-launch.js), so the same per-
-         * account naming is available here without a second provider read. */
-        const unreadable = (Array.isArray(reading.accounts) ? reading.accounts : [])
-          .filter(entry => entry && entry.environmentsReading === 'unknown')
-          .map(entry => `${entry.name || 'an unnamed account'}: ${entry.environmentsReason || 'no reason was reported'}`);
         refuse('BRIDGE_CLOUD_BINDING_UNVERIFIED',
-          `The authorized Codex Cloud environments could not be read in full, so this environment's source repository could not be confirmed. Nothing was sent.${
-            unreadable.length ? ` Unread: ${unreadable.join('; ')}` : ''
-          } A Codex Cloud environment is scoped to the account that created it, so sign in to the account that owns ${args.environment} on this computer and try again.`,
+          'The authorized Codex Cloud environments could not be read in full, so this environment\'s source repository could not be confirmed. Nothing was sent.',
           { status: 409 });
       }
       refuse('BRIDGE_CLOUD_ENVIRONMENT_NOT_AUTHORIZED',
         'No configured Codex account is authorized for that Codex Cloud environment, so nothing was sent. A Codex Cloud environment is scoped to the account that created it.',
         { status: 409 });
     }
-    if (typeof bound.repository !== 'string' || !bound.repository) {
+    if (bound && (typeof bound.repository !== 'string' || !bound.repository) && !enteredByPerson) {
       refuse('BRIDGE_CLOUD_BINDING_UNVERIFIED',
-        `That Codex Cloud environment does not report exactly one source repository${bound.reason ? ` (${bound.reason})` : ''}, so a task cannot be bound to one. Nothing was sent.`,
+        'That Codex Cloud environment does not report exactly one source repository, so a task cannot be bound to one. Nothing was sent.',
         { status: 409 });
     }
-    if (bound.repository.toLowerCase() !== repository.toLowerCase()) {
+    if (typeof bound?.repository === 'string' && bound.repository.toLowerCase() !== repository.toLowerCase()) {
       refuse('BRIDGE_CLOUD_REPOSITORY_MISMATCH',
-        `That Codex Cloud environment is bound to ${bound.repository}, not to the declared ${repository}. Nothing was sent.`,
+        'The provider reports a different repository for this environment. Nothing was sent.',
         { status: 409 });
     }
 
@@ -3031,15 +2901,10 @@ function createMissionActions(options = {}) {
     if (!result || typeof result.state !== 'string') {
       refuse('BRIDGE_DEPENDENCY_UNKNOWN', 'The cloud launcher returned an unknown result.', { status: 503 });
     }
-    /* THE RECEIPT. Frozen, and complete enough to be the record of what was
-       submitted without a second call: task id, environment (id AND the label a
-       person recognises), the repository the environment is bound to, the
-       branch, and the state the provider acknowledged -- plus when the binding
-       was established, because a receipt that asserts a binding without saying
-       when it was read is asserting something it did not measure. The declared
-       repository is echoed beside the bound one: they are equal by the time this
-       is reached, and printing both is what makes that checkable rather than
-       claimed. */
+    const binding = cloudRepositoryBinding(repository,
+      result.repositoryBinding?.providerConfirmed === false ? null : bound?.repository, enteredByPerson);
+    // Record the declaration and its actual confirmation status. Unknown
+    // catalog read times must not appear as provider binding confirmation times.
     return Object.freeze({
       ok: true,
       receipt: Object.freeze({
@@ -3049,16 +2914,17 @@ function createMissionActions(options = {}) {
         taskId: result.taskId === undefined ? null : result.taskId,
         taskUrl: result.taskUrl === undefined ? null : result.taskUrl,
         environment: result.environment === undefined ? null : result.environment,
-        environmentLabel: typeof bound.label === 'string' ? bound.label : null,
-        repository: bound.repository,
+        environmentLabel: typeof bound?.label === 'string' ? bound.label : null,
+        repository: binding.providerRepository || repository,
+        repositoryBinding: binding,
         declaredRepository: repository,
-        bindingReadAt: typeof reading.environmentsReadAt === 'string' ? reading.environmentsReadAt : null,
+        bindingReadAt: binding.providerConfirmed && typeof reading.environmentsReadAt === 'string' ? reading.environmentsReadAt : null,
         submittedAt: new Date().toISOString(),
         branch: result.branch === undefined ? null : result.branch,
         account: result.account === undefined ? null : result.account,
         accountsConsidered: Array.isArray(result.accountsConsidered) ? result.accountsConsidered : [],
         code: result.code === undefined ? null : result.code,
-        message: result.message === undefined ? null : result.message,
+        message: binding.providerConfirmed ? (result.message === undefined ? binding.message : result.message) : binding.message,
         approvalRequired: approvalToken !== undefined
       })
     });
@@ -3176,7 +3042,7 @@ function createMissionActions(options = {}) {
 
 module.exports = Object.freeze({
   DISPATCH_OUTPUT_BUDGET_BYTES, LEDGER_ARCHIVE_OUTPUT_BUDGET_BYTES, MAX_BRIEF_BYTES, MAX_REASON_BYTES, MAX_REPORT_BYTES, TIERS,
-  LANE_MCP_CONFIG_FILE, LANE_MCP_ORIGIN_FILE,
+  LANE_MCP_CONFIG_FILE, laneMcpConfigFile,
   NO_PAID_PROVIDER_ENV, PROVIDER_FREE_LANE_KINDS,
-  CLAUDE_CLI_ADVISORY_ACTION, MissionBridgeError, accountConfinedDispatchEnvironment, authorizedMissionAgent, claudeArgs, claudeDispatchEnvironment, claudeSeatAccount, codexArgs, codexDispatchEnvironment, createMissionActions, declaredLane, declaredOrgContext, detectClaudeCliPresence, ensureLaneMcpConfig, isOutwardMissionBridgeAction, laneKindIsProviderFree, localArgs, missionCapabilityForAction, noPaidProviderSwitchEnabled, scrubEnvironment
+  CLAUDE_CLI_ADVISORY_ACTION, MissionBridgeError, accountConfinedDispatchEnvironment, authorizedMissionAgent, claudeArgs, codexArgs, codexDispatchEnvironment, createMissionActions, declaredLane, declaredOrgContext, detectClaudeCliPresence, ensureLaneMcpConfig, isOutwardMissionBridgeAction, laneKindIsProviderFree, localArgs, missionCapabilityForAction, noPaidProviderSwitchEnabled, scrubEnvironment
 });

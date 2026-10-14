@@ -9,7 +9,7 @@
 // RAN-OUTPUT; nothing ever re-ran the command and nothing ever compared its
 // output to what the reviewer claimed. A reviewer could invent both strings.
 //
-// A sound benchmarking harness (LEAN-Bench is one) never does this: the
+// The owner's own benchmarking harness never does this: the
 // HARNESS runs the code and the HARNESS parses the log. A model's account of
 // its own execution is never an input to a score. This module is that rule,
 // applied one level up:
@@ -54,9 +54,9 @@ const REVIEW_RUBRIC_VERSION = 2;
 const REVIEW_SCORE_THRESHOLD = 0.7;
 // A second, different-vendor reviewer is spent ONLY here: exactly the span
 // between the two anchors that straddle the line. 0.9/1.0 (clear accept) and
-// 0.3/0.0 (clear reject) get one reviewer. Rationale: two frontier judges on
-// the same locked rubric can disagree widely and land on OPPOSITE sides of
-// the pass line when a score sits near it -- a single
+// 0.3/0.0 (clear reject) get one reviewer. Rationale (that harness, measured):
+// two frontier judges on the same locked rubric disagreed by 0.178 mean and
+// landed on OPPOSITE sides of the pass line on 15 of 49 pairs -- a single
 // reviewer emitting one bit is near coin-flip precisely in this band, and a
 // bit carries no distance-from-threshold so we cannot even tell which verdicts
 // were borderline.
@@ -362,7 +362,7 @@ function runHarnessCommand(plan, {
 //      PLUS a hard rule that overlap alone cannot satisfy: EVERY NUMBER in the
 //      claim must really appear in the output. Numbers are the payload of an
 //      execution claim -- counts, totals, page numbers -- and fabricating one is
-//      precisely the PDF-count escape (a wrong count reported with ok:true). Prose may
+//      precisely the s03 escape (a wrong count reported with ok:true). Prose may
 //      drift; a number may not.
 //   5. otherwise                            -> 'mismatch'
 const MATCH_TOKEN_RATIO = 0.7;
@@ -619,8 +619,8 @@ function parseFailureModes(text) {
 // EFFECT: did the artifact actually DO anything
 // ---------------------------------------------------------------------------
 // That harness's `trade` stage exists solely to catch code that compiles, runs
-// clean, and does nothing (its `no_trades_placed` outcome). Our doctrine
-// failure mode #3 (unreachable/unregistered
+// clean, and does nothing; `no_trades_placed` is the second most common primary
+// failure in that corpus. Our doctrine failure mode #3 (unreachable/unregistered
 // code -- 100% of batch 1) is the same class and we had no analogue: a reviewer
 // could satisfy the old contract with a command that imports a module and
 // prints nothing.

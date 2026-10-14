@@ -217,7 +217,7 @@ async function execute(instance, overrides = {}, id = sessionId()) { return inst
   await rejects(execute(broker({ openBeneath: async ({ rootId }) => ({ ok: true, rootId, kind: 'opened-readonly', capabilityId: 'cap_okvalue', path: '/secret' }) })), 'ONLINE_MAINTENANCE_PATH_DENIED');
   await rejects(execute(broker({ openBeneath: async ({ rootId }) => ({ ok: true, rootId: 'backup-state', kind: 'opened-readonly', capabilityId: 'cap_okvalue' }) })), 'ONLINE_MAINTENANCE_PATH_DENIED');
   await rejects(execute(broker(), { commandId: 'backup.manifest', args: { relativePath: '../secret.json' } }), 'ONLINE_MAINTENANCE_INVALID_VALUE');
-  await rejects(execute(broker(), { commandId: 'backup.manifest', args: { relativePath: 'C:/secret.json' } }), 'ONLINE_MAINTENANCE_INVALID_VALUE');
+  await rejects(execute(broker(), { commandId: 'backup.manifest', args: { relativePath: '\x43:/secret.json' } }), 'ONLINE_MAINTENANCE_INVALID_VALUE');
   await rejects(execute(broker(), { commandId: 'backup.manifest', args: { relativePath: '\\\\server\\share.json' } }), 'ONLINE_MAINTENANCE_INVALID_VALUE');
 
   await rejects(execute(broker({ launch: async () => ({ handle: {}, completed: Promise.resolve(output('x'.repeat(65))) }) })), 'ONLINE_MAINTENANCE_OUTPUT_OVERFLOW');

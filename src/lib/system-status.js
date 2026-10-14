@@ -77,7 +77,7 @@ function filePresence(filePath) {
 // But tools/pack-capability-layer.mjs walks require() calls as TEXT, not at
 // runtime, so that one line staged the commercial tier table, the licence
 // verifier and its signed revocation store into the open payload -- the three
-// modules that must not ship in the open payload. No amount of laziness
+// modules the owner ruled must not ship on 2026-08-11. No amount of laziness
 // could have fixed that; only removing the specifier text could. See
 // src/lib/entitlement-report.js for the full reasoning and for who registers
 // the real reporter vendor-side.

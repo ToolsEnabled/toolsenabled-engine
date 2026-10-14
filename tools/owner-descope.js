@@ -3,9 +3,10 @@
 
 // RECORD THE DROPPING OF SOMETHING THE OWNER ASKED FOR.
 //
-// The worked example: a requested $350 purchase was dropped to satisfy a $100
-// daily cap that no person had set -- the cap traces to the repo's ROOT commit,
-// Co-Authored-By an AI agent. A real requirement was deleted to satisfy an
+// The worked example, 2026-08-11: a lane removed the $350 USPTO trademark
+// filing from the owner's purchase list because "$350 alone breaks his own
+// $100/day cap". The cap was never his -- it traces to the repo's ROOT commit,
+// Co-Authored-By an AI agent. His real requirement was deleted to satisfy an
 // invented one, and NO RECORD ANYWHERE said a requirement had been deleted.
 //
 // The problem is not that a lane said no. Lanes must be able to defer, narrow
@@ -22,17 +23,17 @@
 // Usage:
 //   node tools/owner-descope.js \
 //     --request-id R1200 \
-//     --requirement "the $350 annual licence, 1 seat" \
+//     --requirement "the $350 USPTO trademark filing, 1 class" \
 //     --action dropped|deferred|narrowed|replaced \
 //     --reason "why, substantively" \
 //     --decided-by "purchase-list-lane" \
 //     [--constraint-name "config/toolsenabled.policy.json limits.defaultDailySpendUsd"] \
 //     [--constraint-value "100"] \
-//     [--constraint-source "an earlier commit, Co-Authored-By an AI agent"] \
-//     [--restore-condition "when they approve the spend"]
+//     [--constraint-source "commit 02b27ac, Co-Authored-By an AI agent"] \
+//     [--restore-condition "when he approves the spend"]
 //
 //   node tools/owner-descope.js --list            show the journal
-//   node tools/owner-descope.js --pending-review  only those needing a person's decision
+//   node tools/owner-descope.js --pending-review  only those needing his decision
 //
 // Exit 0 recorded, 3 recorded AND needs the owner's decision, 1 refused, 2 error.
 
@@ -77,8 +78,8 @@ function readJournal(file) {
   if (!fs.existsSync(file)) {
     return {
       $comment: 'Every requirement an agent dropped, deferred, narrowed or replaced, and on whose '
-        + 'authority. Created because a requested $350 purchase was dropped invisibly, '
-        + 'citing a $100 daily cap that no person had set.',
+        + 'authority. Created because the $350 trademark filing was removed from the owner\'s '
+        + 'purchase list invisibly, citing a spend cap he never set.',
       schemaVersion: 1,
       records: []
     };
@@ -165,7 +166,7 @@ function main(argv) {
       // Provenance of the CONSTRAINT is resolved the same way: if it names a
       // ledger request, that entry's class decides. A constraint that is just a
       // config value an agent chose has no owner provenance and stays
-      // 'unclassified' -- which is what makes the borrowed-authority check fire.
+      // 'unclassified' -- which is what makes the trademark check fire.
       provenanceClass: /^R[0-9]/.test(args['constraint-name'])
         ? provenanceClassOf(readLedgerEntry(args['constraint-name'].split(/\s/)[0]))
         : 'unclassified'
@@ -196,13 +197,13 @@ function main(argv) {
 
   process.stdout.write(`Recorded ${record.descopeId}: ${record.action} "${record.requirement}" from ${record.requestId}.\n`);
   if (record.requiresOwnerReview) {
-    // LOUD. This is the borrowed-authority pattern, and it must not read as routine.
+    // LOUD. This is the trademark pattern, and it must not read as routine.
     process.stderr.write(
       '\n*** THIS DESCOPE NEEDS THE OWNER\'S DECISION, NOT AN AGENT\'S ***\n'
       + `${record.ownerReviewReason}\n`
       + `Requirement provenance: ${record.requirementProvenance}\n`
       + `Cited constraint:       ${record.citedConstraint.name} (${record.citedConstraint.provenanceClass})\n`
-      + 'Surface this to them rather than treating it as settled.\n\n');
+      + 'Surface this to him rather than treating it as settled.\n\n');
     return 3;
   }
   return 0;

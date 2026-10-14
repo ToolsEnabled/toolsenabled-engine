@@ -29,9 +29,11 @@
 //
 // tools/check-owner-attribution.js exists because `defaultDailySpendUsd: 100`
 // -- authored by an agent in the initial commit, never chosen by any human --
-// was described back to the owner as the owner's own cap, and that invented
-// constraint was then used to drop a requested $350 purchase. Nobody had asked
-// for a $100 daily cap, and agent-made rules were being presented as the owner's.
+// was described back to the owner as "his own $100/day cap", and that invented
+// constraint was then used to drop a $350 trademark filing he had personally
+// asked for. The owner, 2026-08-11: "And again who put a $100 day cap?
+// Literally not something I did" / "Why are agent rules stille being pushed as
+// mine".
 //
 // These tests run the guard as a real process against real fixture files and
 // assert on its EXIT CODE, because that is what a caller acts on. The guard is
@@ -98,11 +100,11 @@ function someOwnerStatedId() {
   return entry ? entry.id : null;
 }
 
-// 1. THE KNOWN CASE. The exact claim shape that dropped the $350 purchase
-//    must be refused.
+// 1. THE KNOWN CASE. The exact claim shape that cost the owner his trademark
+//    filing must be refused.
 function theHundredDollarCapCaseIsCaught() {
   const file = fixture('cap.md',
-    'The daily spend limit is $100. This is his own cap, so the $350 annual\nlicence breaks it and was removed from the list.\n');
+    'The daily spend limit is $100. This is his own cap, so the $350 trademark\nfiling breaks it and was removed from the list.\n');
   const result = runGuard(file);
   check(result.status === 1, 'an unsourced claim that the $100 cap was the owner\'s must FAIL, not warn');
   check(/UNSOURCED ATTRIBUTION/.test(result.stdout), 'the guard must name what it found');
@@ -125,7 +127,7 @@ function bareMarkersDoNotLaunderAClaim() {
 //    routed around and ignored.
 function quotedOwnerWordsAreAccepted() {
   const file = fixture('quoted.md',
-    'Owner directive 2026-08-09, verbatim: "pause the nightly batch until the flaky suite is fixed" -- he decided this.\n');
+    'Owner directive 2026-08-09, verbatim: "i dont think your codex workers are doing anything" -- he decided this.\n');
   checkClean(runGuard(file), 'a claim carrying the owner\'s actual quoted words must pass');
 }
 

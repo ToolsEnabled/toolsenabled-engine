@@ -18,9 +18,9 @@
 //   5  WITHHELD  the surface is off in your settings. Nothing was searched.
 //
 // tools/grepsaver-orient.js used to exit 0 while printing "No carded system
-// matched" -- including for "licensing", with six licensing documents sitting
+// matched" -- including for "trademark", with six trademark documents sitting
 // in docs/ -- and exit 0 is what every caller reads as "fine, nothing to see".
-// The fleet redid the work on the strength of it. So nothing here
+// The fleet redid four nights of work on the strength of it. So nothing here
 // exits 0 unless something was actually found, and a build chain that consumes
 // this status gets a different number for "nothing exists" than for "I could
 // not look" than for "you switched me off".

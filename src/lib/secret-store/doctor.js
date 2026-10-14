@@ -46,13 +46,13 @@ function evaluateIntegration(requirement, byName) {
    * validate(): a provider file that calls getSecret() must declare its
    * secrets. So "required" means "code exists that would use this", which is
    * true of every integration shipped in the binary -- not "this machine
-   * needs it". MEASURED 2026-09-03 on a development installation: the
+   * needs it". MEASURED 2026-09-03 on the owner's own installation: the
    * doctor reported ok:false with SIX required failures (instagram,
    * chrome-web-store, google-default, github, stripe, paddle), none of which
    * this machine has ever used. `ok` was therefore false on every run since
    * install, and agents that call system.doctor -- described to them as
    * "what is configured here" -- read "REQUIRED credential missing" and went
-   * to the owner for an Instagram token they have no use for.
+   * to the owner for an Instagram token he has no use for.
    *
    * The distinction is the one the rest of this file already draws between
    * 'missing' and 'unreadable': not there, versus there and wrong. An

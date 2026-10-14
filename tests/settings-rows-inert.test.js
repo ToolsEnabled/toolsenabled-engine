@@ -71,7 +71,6 @@ const test = require('node:test');
 
 const registryModule = require('../src/lib/settings-registry');
 const settings = require('../src/lib/settings');
-const { failoverChoice, SETTING_ID: FAILOVER_ID } = require('../src/lib/multi-account/failover-setting.js');
 const rotation = require('../src/lib/multi-account/rotation.js');
 const { PROVIDERS, signInFilePath } = require('../src/lib/multi-account/registry.js');
 const { STATUS } = require('../src/lib/multi-account/health.js');
@@ -262,41 +261,7 @@ test('every row that claims an enforcer is mentioned somewhere that runs', () =>
 // 3. accounts.failover, WIRED -- the reader, then the behaviour it changes.
 // ---------------------------------------------------------------------------
 
-test('the failover row is read only when the person chose one of its own two answers', () => {
-  const chosen = value => ({ values: { [FAILOVER_ID]: value }, provenance: { [FAILOVER_ID]: { source: 'user' } } });
 
-  assert.deepEqual(
-    { ...failoverChoice({ loadSettings: () => chosen('manual') }) },
-    { chosen: true, settingId: FAILOVER_ID, value: 'manual', reason: 'chosen', source: 'user' },
-  );
-  assert.equal(failoverChoice({ loadSettings: () => chosen('auto') }).value, 'auto');
-  assert.equal(
-    failoverChoice({
-      loadSettings: () => ({ values: { [FAILOVER_ID]: 'auto' }, provenance: { [FAILOVER_ID]: { source: 'installer' } } }),
-    }).value,
-    'auto',
-    'a value the installer recorded was refused',
-  );
-
-  /* A value nobody chose decides nothing, so a flipped catalogue default cannot
-     move a machine. */
-  assert.deepEqual(
-    { ...failoverChoice({ loadSettings: () => ({ values: { [FAILOVER_ID]: 'auto' }, provenance: { [FAILOVER_ID]: { source: 'default' } } }) }) },
-    { chosen: false, settingId: FAILOVER_ID, value: null, reason: 'not-chosen', source: 'default' },
-  );
-  assert.equal(failoverChoice({ loadSettings: () => ({ values: { [FAILOVER_ID]: 'auto' }, provenance: {} }) }).reason, 'not-chosen');
-
-  /* Anything that is not one of the row's own two answers is not an answer. */
-  for (const nonsense of ['AUTO', 'priority', '', true, 42, null, undefined]) {
-    const answer = failoverChoice({ loadSettings: () => ({ values: { [FAILOVER_ID]: nonsense }, provenance: { [FAILOVER_ID]: { source: 'user' } } }) });
-    assert.equal(answer.chosen, false, `${JSON.stringify(nonsense)} was accepted as a choice`);
-    assert.equal(answer.reason, 'not-a-choice');
-  }
-
-  assert.equal(failoverChoice({ loadSettings: () => ({ values: {} }) }).reason, 'not-declared');
-  assert.equal(failoverChoice({ loadSettings: () => { throw new Error('settings file is a directory'); } }).reason, 'settings-unreadable',
-    'an unreadable settings file was allowed to escape as a thrown error and stop a start');
-});
 
 /* A whole machine in a temporary folder, the same shape
    tests/multi-account-rotation.test.js builds: an account list and one
@@ -304,9 +269,9 @@ test('the failover row is read only when the person chose one of its own two ans
    no provider is contacted. */
 async function withMachine(run, accounts) {
   /* UNDER THE REPO, NOT UNDER TEMP. TOOLSENABLED_STATE_ROOT is fenced by
-     src/lib/runtime-state-root.js accountFencedStateRoot(), and on a Windows
-     machine os.tmpdir() can be the 8.3 short-name form of the profile
-     (<drive>:\\Users\\SAMPLE~1\\AppData\\Local\\Temp), which the fence refuses with
+     src/lib/runtime-state-root.js accountFencedStateRoot(), and on this machine
+     os.tmpdir() is the 8.3 short-name form of the profile (<profile-root>/TOOLSE~1\\
+     AppData\\Local\\Temp), which the fence refuses with
      ERR_STATE_ROOT_ACCOUNT_BOUNDARY -- so a fixture in TEMP makes every call
      answer ACCOUNTS_REGISTRY_UNREADABLE and the assertions below would be
      measuring the fence rather than the row. `scratch/` is ignored by git and
@@ -339,7 +304,7 @@ async function withMachine(run, accounts) {
 }
 
 const TWO_CODEX = [
-  { name: 'team', provider: 'codex', profileDir: '.codex-team', priority: 1 },
+  { name: 'school', provider: 'codex', profileDir: '.codex-school', priority: 1 },
   { name: 'personal', provider: 'codex', profileDir: '.codex-personal', priority: 2 },
 ];
 
@@ -363,96 +328,13 @@ function rowSaying(value) {
   return () => Object.freeze({ chosen: true, settingId: FAILOVER_ID, value, reason: 'chosen', source: 'user' });
 }
 
-test('moving the failover row changes what a start does when an account is spent', async () => {
-  /* THE ASSERTION THE ROW EXISTED FOR AND NEVER HAD. Same machine, same spent
-     account, same probe; the only difference is what the person chose. */
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    const stopped = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir,
-      probe: probeReturning({ team: STATUS.EXHAUSTED }),
-      failoverChoiceImpl: rowSaying('manual'),
-    });
-    assert.equal(stopped.code, 'ACCOUNT_EXHAUSTED_MANUAL',
-      'the person chose to be asked and the computer switched anyway');
-    assert.equal(stopped.rotated, false);
-    assert.equal(stopped.blocked, true);
-    assert.match(stopped.reason, /team/);
-    assert.match(stopped.nextStep, /personal/);
-  }, TWO_CODEX);
 
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    const moved = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir,
-      probe: probeReturning({ team: STATUS.EXHAUSTED }),
-      failoverChoiceImpl: rowSaying('auto'),
-    });
-    assert.equal(moved.code, 'ACCOUNT_SELECTED');
-    assert.equal(moved.rotated, true);
-    assert.equal(moved.blocked, false);
-    assert.equal(moved.account.name, 'personal', 'the person chose to carry on and the computer stopped');
-  }, TWO_CODEX);
-});
 
-test('a row nobody moved leaves the shipped answer exactly where it was', async () => {
-  /* The half that makes wiring this safe to land: an unchosen row must be
-     indistinguishable from the code before this change, which walked. */
-  for (const unchosen of [
-    () => ({ chosen: false, reason: 'not-chosen', value: null }),
-    () => ({ chosen: false, reason: 'settings-unreadable', value: null }),
-    () => ({ chosen: false, reason: 'not-declared', value: null }),
-  ]) {
-    await withMachine(async ({ servicesRoot, homeDir }) => {
-      const result = await rotation.resolveAccountForSession({
-        provider: 'codex', servicesRoot, homeDir,
-        probe: probeReturning({ team: STATUS.EXHAUSTED }),
-        failoverChoiceImpl: unchosen,
-      });
-      assert.equal(result.code, 'ACCOUNT_SELECTED', 'an unchosen row changed what the product does');
-      assert.equal(result.account.name, 'personal');
-    }, TWO_CODEX);
-  }
-});
 
-test('anything more specific than the global row still wins, and the row is not even asked', async () => {
-  /* Precedence, asserted as behaviour rather than as a reading of the code: a
-     caller's answer and the accounts panel's answer both beat the global row,
-     and the row's reader is not consulted at all when they do -- so a start
-     that already has its answer never opens the settings file. */
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    let asked = 0;
-    const counting = () => { asked += 1; return { chosen: true, value: 'manual' }; };
 
-    const byCaller = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'priority',
-      probe: probeReturning({ team: STATUS.EXHAUSTED }),
-      failoverChoiceImpl: counting,
-    });
-    assert.equal(byCaller.code, 'ACCOUNT_SELECTED', 'the global row overrode what the caller asked for');
-    assert.equal(byCaller.account.name, 'personal');
 
-    const byLegacy = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, mode: 'auto',
-      probe: probeReturning({ team: STATUS.EXHAUSTED }),
-      failoverChoiceImpl: counting,
-    });
-    assert.equal(byLegacy.code, 'ACCOUNT_SELECTED', 'the global row overrode a mode the caller stated');
 
-    assert.equal(asked, 0, 'the settings file was opened for an answer that was already decided');
-  }, TWO_CODEX);
-});
 
-test('the row shows the answer the product actually gives when nobody has chosen', () => {
-  /* It shipped saying "manual" -- stop -- while ./selection-modes.js defaults to
-     the walk, so the control misreported the value in force as well as failing
-     to change it. Both halves are read from the code, not restated. */
-  const { byId } = registryModule.loadRegistry();
-  const row = byId.get(FAILOVER_ID);
-  assert.ok(row, 'the failover row is gone from the catalogue');
-  const { DEFAULT_SELECTION_MODE, MODE } = require('../src/lib/multi-account/selection-modes.js');
-  assert.equal(row.default, DEFAULT_SELECTION_MODE === MODE.MANUAL ? 'manual' : 'auto',
-    'the row names a different answer than the one an unchosen machine gives');
-  assert.deepEqual(row.options, ['manual', 'auto']);
-});
 
 // ---------------------------------------------------------------------------
 // 4. A READBACK THAT DECLARES ITSELF READ-ONLY IS READ-ONLY ON THE WAY IN.

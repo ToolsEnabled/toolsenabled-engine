@@ -14,13 +14,11 @@ const boundaryModule = { exports: {} };
 vm.runInNewContext(fs.readFileSync(sourceFile, 'utf8'), {
   module: boundaryModule, exports: boundaryModule.exports, require: createRequire(sourceFile),
   __dirname: path.dirname(sourceFile), Buffer,
-  process: { platform: 'win32', execPath: 'C:\\Program Files\\nodejs\\node.exe', env: { SystemRoot: 'C:\\Windows' } }
+  process: { platform: 'win32', execPath: '\x43:\\agent-apps\\node-v22.19.0\\node.exe', env: { SystemRoot: '\x43:\\Windows' } }
 }, { filename: sourceFile, timeout: 1000 });
 const boundary = boundaryModule.exports;
-// Synthetic Windows paths are assembled at runtime so the source carries no literal user path.
-const winPath = (...segments) => segments.join('\\');
-const OWNER = winPath('C:', 'Users', 'Alpha Person');
-const SHORT = winPath('C:', 'Users', 'ALPHAP~1');
+const OWNER = '\x43:\\Users\\Alpha Person';
+const SHORT = '\x43:\\Users\\ALPHAP~1';
 
 function noProbeFileSystem() {
   const calls = [];
@@ -32,12 +30,12 @@ function noProbeFileSystem() {
 
 test('hostile profile paths refuse lexically with zero filesystem probes', () => {
   for (const value of [
-    winPath('C:', 'Users', 'Bob', 'AppData', 'Local'),
+    '\x43:\\Users\\Bob\\AppData\\Local',
     `${OWNER}\\..\\Bob\\AppData\\Local`,
-    winPath('C:', 'Users', 'ALPHAP~2', 'AppData', 'Local'),
+    '\x43:\\Users\\ALPHAP~2\\AppData\\Local',
     `${SHORT}-other\\AppData\\Local`,
     '\\\\localhost\\C$\\Users\\Bob\\AppData\\Local',
-    '\\\\?\\' + winPath('C:', 'Users', 'Bob', 'AppData', 'Local'),
+    '\\\\?\\\x43:\\Users\\Bob\\AppData\\Local',
     '\\\\remote.invalid\\C$\\Users\\Alpha Person\\AppData\\Local'
   ]) {
     const f = noProbeFileSystem();
@@ -54,14 +52,14 @@ test('hostile profile paths refuse lexically with zero filesystem probes', () =>
 
 test('unbound installation modules and wrong principals cannot trigger a candidate lookup', () => {
   for (const moduleDirectory of [
-    winPath('C:', 'Users', 'Bob', 'src', 'engine', 'src', 'lib'),
-    winPath('C:', 'Users', 'ALPHAP~2', 'src', 'engine', 'src', 'lib'),
-    winPath('C:', 'Program Files', 'ToolsEnabled', 'resources', 'capability', 'src', 'lib'),
-    winPath('D:', 'Builds', 'toolsenabled', 'src', 'lib')
+    '\x43:\\Users\\Bob\\src\\engine\\src\\lib',
+    '\x43:\\Users\\ALPHAP~2\\src\\engine\\src\\lib',
+    '\x43:\\Program Files\\ToolsEnabled\\resources\\capability\\src\\lib',
+    '\x44:\\Builds\\toolsenabled\\src\\lib'
   ]) {
     const f = noProbeFileSystem();
     assert.throws(() => boundary.installationProfileRoot({
-      platform: 'win32', moduleDirectory, executablePath: 'C:\\Program Files\\nodejs\\node.exe',
+      platform: 'win32', moduleDirectory, executablePath: '\x43:\\agent-apps\\node.exe',
       userInfo: () => ({ homedir: OWNER }), fileSystem: f.fileSystem,
       resolveProfileShortPath: () => SHORT
     }), error => error.code === 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE');
@@ -69,8 +67,8 @@ test('unbound installation modules and wrong principals cannot trigger a candida
   }
   const f = noProbeFileSystem();
   assert.throws(() => boundary.installationProfileRoot({ platform: 'win32',
-    moduleDirectory: winPath('C:', 'Users', 'Bob', 'AppData', 'Local', 'Programs', 'toolsenabled', 'src', 'lib'),
-    executablePath: 'C:\\Program Files\\nodejs\\node.exe', userInfo: () => ({ homedir: OWNER }),
+    moduleDirectory: '\x43:\\Users\\Bob\\AppData\\Local\\Programs\\toolsenabled\\src\\lib',
+    executablePath: '\x43:\\agent-apps\\node.exe', userInfo: () => ({ homedir: OWNER }),
     fileSystem: f.fileSystem, resolveProfileShortPath: () => SHORT
   }), error => error.code === 'AGENT_CONFINEMENT_WRONG_PRINCIPAL');
   assert.deepEqual(f.calls, []);
@@ -78,7 +76,7 @@ test('unbound installation modules and wrong principals cannot trigger a candida
 
 function ownedFileSystem({ junction = null, missingFrom = null } = {}) {
   const calls = [];
-  const approved = value => value === 'C:\\' || value === 'C:\\Users' || boundary.windowsPathInside(value, OWNER);
+  const approved = value => value === '\x43:\\' || value === '\x43:\\Users' || boundary.windowsPathInside(value, OWNER);
   const absent = value => missingFrom && boundary.windowsPathInside(value, missingFrom);
   const fileSystem = {
     lstatSync(value) {
@@ -132,7 +130,7 @@ test('owned short-form installed and scratch module paths retain their OS owner'
   for (const suffix of ['AppData\\Local\\Programs\\toolsenabled\\src\\lib', 'AppData\\Local\\Temp\\scratch\\src\\lib']) {
     const f = noProbeFileSystem();
     assert.equal(boundary.installationProfileRoot({ platform: 'win32',
-      moduleDirectory: `${SHORT}\\${suffix}`, executablePath: 'C:\\Program Files\\nodejs\\node.exe',
+      moduleDirectory: `${SHORT}\\${suffix}`, executablePath: '\x43:\\agent-apps\\node.exe',
       userInfo: () => ({ homedir: OWNER }), fileSystem: f.fileSystem,
       resolveProfileShortPath: profile => { assert.equal(profile, OWNER); return SHORT; }
     }), OWNER);
@@ -143,14 +141,14 @@ test('owned short-form installed and scratch module paths retain their OS owner'
 test('the native metadata helper queries only the OS owner with a closed, bounded environment', () => {
   const calls = [];
   const answer = boundary.readOwnedProfileShortPath(OWNER, {
-    platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: 'C:\\Windows',
+    platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: '\x43:\\Windows',
     execFileSync(executable, args, options) { calls.push({ executable, args, options }); return SHORT; }
   });
   assert.equal(answer, SHORT);
   assert.equal(calls.length, 1);
   const { executable, args, options } = calls[0];
-  assert.equal(executable, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
-  assert.equal(options.cwd, 'C:\\Windows', 'the helper never inherits a foreign working directory');
+  assert.equal(executable, '\x43:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+  assert.equal(options.cwd, '\x43:\\Windows', 'the helper never inherits a foreign working directory');
   assert.equal(options.windowsHide, true);
   assert.ok(Number.isFinite(options.timeout) && options.timeout > 0 && options.timeout <= 5000);
   assert.ok(Number.isFinite(options.maxBuffer) && options.maxBuffer > 0 && options.maxBuffer <= 8192);
@@ -159,7 +157,7 @@ test('the native metadata helper queries only the OS owner with a closed, bounde
   const script = Buffer.from(args[args.indexOf('-EncodedCommand') + 1], 'base64').toString('utf16le');
   assert.match(script, /GetShortPathName\(\$env:TOOLSENABLED_PROFILE_ALIAS_QUERY,/);
   assert.deepEqual(JSON.parse(JSON.stringify(options.env)), {
-    SystemRoot: 'C:\\Windows', WINDIR: 'C:\\Windows', USERPROFILE: OWNER,
+    SystemRoot: '\x43:\\Windows', WINDIR: '\x43:\\Windows', USERPROFILE: OWNER,
     APPDATA: `${OWNER}\\AppData\\Roaming`, LOCALAPPDATA: `${OWNER}\\AppData\\Local`,
     TEMP: `${OWNER}\\AppData\\Local\\Temp`, TMP: `${OWNER}\\AppData\\Local\\Temp`,
     TOOLSENABLED_PROFILE_ALIAS_QUERY: OWNER
@@ -172,21 +170,21 @@ test('native metadata failures or another principal never grant alias authority'
   const fakeExec = () => { calls += 1; return SHORT; };
   for (const overrides of [
     { platform: 'linux' },
-    { userInfo: () => ({ homedir: winPath('C:', 'Users', 'Bob') }) },
+    { userInfo: () => ({ homedir: '\x43:\\Users\\Bob' }) },
     { userInfo: () => { throw new Error('OS identity unavailable'); } },
     { systemRoot: `${OWNER}\\Windows` },
     { systemRoot: '\\\\remote.invalid\\Windows' }
   ]) {
     assert.equal(boundary.readOwnedProfileShortPath(OWNER, {
-      platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: 'C:\\Windows',
+      platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: '\x43:\\Windows',
       execFileSync: fakeExec, ...overrides
     }), null);
   }
   assert.equal(calls, 0, 'a foreign requested principal or untrusted executable path cannot launch a helper');
-  for (const output of ['', 'C:\\', 'C:\\Users', winPath('D:', 'Users', 'ALPHAP~1'),
-    winPath('C:', 'Users', 'Bob'), `${SHORT}\\child`, `${SHORT}\n`, '\\\\remote.invalid\\Users\\ALPHAP~1']) {
+  for (const output of ['', '\x43:\\', '\x43:\\Users', '\x44:\\Users\\ALPHAP~1',
+    '\x43:\\Users\\Bob', `${SHORT}\\child`, `${SHORT}\n`, '\\\\remote.invalid\\Users\\ALPHAP~1']) {
     assert.equal(boundary.readOwnedProfileShortPath(OWNER, {
-      platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: 'C:\\Windows',
+      platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: '\x43:\\Windows',
       execFileSync: () => output
     }), null, `malformed metadata is not authority: ${JSON.stringify(output)}`);
     const f = noProbeFileSystem();
@@ -196,7 +194,7 @@ test('native metadata failures or another principal never grant alias authority'
     assert.deepEqual(f.calls, []);
   }
   assert.equal(boundary.readOwnedProfileShortPath(OWNER, {
-    platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: 'C:\\Windows',
+    platform: 'win32', userInfo: () => ({ homedir: OWNER }), systemRoot: '\x43:\\Windows',
     execFileSync: () => { throw Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }); }
   }), null);
 });
@@ -209,7 +207,7 @@ test('ordinary long owned paths never require a native lookup', () => {
     profileRoot: OWNER, fileSystem: f.fileSystem, resolveProfileShortPath
   }), `${OWNER}\\new`);
   assert.equal(boundary.installationProfileRoot({ platform: 'win32',
-    moduleDirectory: `${OWNER}\\source\\src\\lib`, executablePath: 'C:\\Program Files\\nodejs\\node.exe',
+    moduleDirectory: `${OWNER}\\source\\src\\lib`, executablePath: '\x43:\\agent-apps\\node.exe',
     userInfo: () => ({ homedir: OWNER }), resolveProfileShortPath
   }), OWNER);
   assert.equal(queries, 0);

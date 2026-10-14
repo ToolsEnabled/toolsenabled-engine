@@ -515,7 +515,7 @@ async function run() {
     ['browser_run_code_unsafe', { code: 'async page => page.url()' }, 'BROWSER_LIFECYCLE_REQUIRES_OWNER_APPROVAL'],
     ['browser_tabs', { action: 'close' }, 'BROWSER_LIFECYCLE_REQUIRES_OWNER_APPROVAL'],
     ['browser_future_unreviewed', {}, 'BROWSER_TOOL_NOT_ALLOWED'],
-    ['browser_navigate', { url: 'file:///C:/Windows/win.ini' }, 'BROWSER_NAVIGATION_URL_FORBIDDEN']
+    ['browser_navigate', { url: 'file:///\x43:/Windows/win.ini' }, 'BROWSER_NAVIGATION_URL_FORBIDDEN']
   ]) {
     writeRequest({ tool, arguments: args });
     assert.throws(() => readRequestFile(relativeRequest), errorCode(code), `${tool} must fail closed`);
@@ -539,7 +539,7 @@ async function run() {
     0,
     'every later step must be reviewed before the launcher is spawned'
   );
-  const blockedConsoleUrl = 'file:///C:/private/do-not-print.txt?token=do-not-print';
+  const blockedConsoleUrl = 'file:///\x43:/private/do-not-print.txt?token=do-not-print';
   writeRequest({ tool: 'browser_navigate', arguments: { url: blockedConsoleUrl } });
   const blockedCli = spawnSync(process.execPath, [
     path.join(ROOT, 'tools', 'playwright-call.js'),

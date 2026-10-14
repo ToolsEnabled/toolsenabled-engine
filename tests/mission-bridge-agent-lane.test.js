@@ -5,7 +5,7 @@
 // 'coordinator-opus5', the manager luna reported to in the author's own
 // config/agent-org.json. The named-skip guard in tests/run-isolated.js is
 // presence-based, so when the neutral example org was committed AT
-// config/agent-org.json the guard disarmed and the suite ran — and
+// config/agent-org.json (755dc91) the guard disarmed and the suite ran — and
 // failed — on every checkout: the runtime faithfully delivered the declared
 // reporting line, which in the neutral org is 'controller'. The org is now an
 // explicit fixture (FIXTURE_ORG below): dispatch receives it through
@@ -40,6 +40,13 @@
 // restored or removed byte-for-byte; no source or tool file remains changed.
 
 'use strict';
+
+// Codex lanes run only when the saved Agent API mode permits them; Only (the
+// shipped default) refuses them at dispatch, before any launch record.
+require('./lib/agent-api-mode-fixture').selectAgentApiMode('Enabled');
+// Auditing is an explicit choice under the Basic runtime policy; this suite
+// asserts audited launch receipts, so the choice is injected (never written).
+const auditChosen = () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] });
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -226,9 +233,7 @@ async function main() {
     roots: { isolated: root },
     actor: FIXTURE_CONTROLLER,
     audit: auditApi,
-    // Queue and launch receipts are ledger events only on the audited install;
-    // the default install is Basic, which writes none.
-    loadSettings: () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] }),
+    loadSettings: auditChosen,
     policy: { assertActive() {} },
     agentOrg: FIXTURE_ORG,
     env: { PATH: process.env.PATH, HOME: root, TEST_API_KEY: 'must-not-reach-child' },
@@ -427,9 +432,7 @@ async function main() {
       roots: { isolated: root },
       actor: FIXTURE_CONTROLLER,
       audit: auditApi,
-      // Queue and launch receipts are ledger events only on the audited install;
-      // the default install is Basic, which writes none.
-      loadSettings: () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] }),
+      loadSettings: auditChosen,
       policy: { assertActive() {} },
       agentOrg: FIXTURE_ORG,
       env: { PATH: process.env.PATH },

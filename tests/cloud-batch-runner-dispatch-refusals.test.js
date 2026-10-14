@@ -31,7 +31,7 @@ function declaration(label) {
         `report    REPORT-${label}.md`
       ].join('\n')
     }],
-    bounds: { launchesPerMinute: 1, accounts: 1 }
+    bounds: { launchesPerMinute: 1 }
   };
 }
 
@@ -46,7 +46,7 @@ async function exercise(label, dispatch) {
       admission,
       declaration: input,
       stateRoot,
-      accounts: ['account-one'],
+      account: 'account-one',
       now: () => 1000,
       sleep: async () => {},
       dispatch: async (request) => {
@@ -76,8 +76,9 @@ async function exercise(label, dispatch) {
   }
 
   {
+    const confidential = require('node:crypto').randomBytes(24).toString('base64url');
     const observed = await exercise('uncoded-provider-throw', async () => {
-      const refusal = new Error('provider rejected the request');
+      const refusal = Object.assign(new Error(confidential), { code: confidential });
       refusal.providerAnswered = true;
       throw refusal;
     });
@@ -88,9 +89,30 @@ async function exercise(label, dispatch) {
     );
     assert.equal(observed.dispatchCalls, 1, 'the fallback code is reached from an injected provider-answer throw');
     assert.equal(observed.parsed.refused.length, 1, 'exactly one refusal is persisted');
+    assert.equal(JSON.stringify(observed).includes(confidential), false);
     assert.equal(observed.parsed.refused[0].code, 'CLOUD_DISPATCH_THREW');
-    assert.equal(observed.parsed.refused[0].reason, 'provider rejected the request');
+    assert.match(observed.parsed.refused[0].reason, /provider declined/);
     assert.equal(observed.parsed.launched.length, 0, 'no launched outcome is written for a provider refusal');
+  }
+
+  // The selected account's coordinates are required before a dispatcher exists.
+  {
+    const { createCodexDispatcher } = require('../src/lib/cloud-agent/codex-dispatcher');
+    for (const [override, code] of [
+      [{ accountHome: '' }, 'CLOUD_DISPATCH_NO_HOMES'],
+      [{ environment: '' }, 'CLOUD_DISPATCH_NO_ENVIRONMENTS']
+    ]) {
+      let calls = 0;
+      let scrubs = 0;
+      assert.throws(() => createCodexDispatcher({
+        codexBinary: 'synthetic-codex', accountHome: 'synthetic-home', environment: 'a'.repeat(32),
+        spawnImpl: async () => { calls += 1; return {}; },
+        scrubEnvironment: () => { scrubs += 1; return {}; },
+        ...override
+      }), error => error.code === code);
+      assert.equal(calls, 0, 'missing selected coordinates never spawn a provider process');
+      assert.equal(scrubs, 0, 'missing selected coordinates refuse before preparing an environment');
+    }
   }
 
   console.log('cloud batch runner dispatch refusal tests passed');

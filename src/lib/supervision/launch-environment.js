@@ -30,6 +30,27 @@ const ENVIRONMENT_RULES = Object.freeze([
   ['AWS_ACCESS_KEY_ID', 'claude', true],
   ['AWS_SECRET_ACCESS_KEY', 'claude', true],
   ['AWS_SESSION_TOKEN', 'claude', true],
+  // Read by Claude Code 2.1.281 (names taken from the installed binary) and
+  // absent above: provider routes that bill a cloud account instead of the
+  // subscription, the credentials those routes and workload-identity sign-in
+  // read, a refresh token that signs the child in as whichever account minted
+  // it rather than the selected home, and endpoint overrides that send the
+  // conversation somewhere other than Anthropic. Same harms, same rule.
+  ['CLAUDE_CODE_USE_ANTHROPIC_AWS', 'claude', true],
+  ['CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', 'claude', true],
+  ['CLAUDE_CODE_USE_MANTLE', 'claude', true],
+  ['CLAUDE_CODE_USE_GATEWAY', 'claude', true],
+  ['ANTHROPIC_AWS_API_KEY', 'claude', true],
+  ['ANTHROPIC_FOUNDRY_API_KEY', 'claude', true],
+  ['ANTHROPIC_FOUNDRY_AUTH_TOKEN', 'claude', true],
+  ['ANTHROPIC_IDENTITY_TOKEN', 'claude', true],
+  ['ANTHROPIC_IDENTITY_TOKEN_FILE', 'claude', true],
+  ['CLAUDE_CODE_OAUTH_REFRESH_TOKEN', 'claude', true],
+  ['CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR', 'claude', true],
+  ['CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR', 'claude', true],
+  ['CLAUDE_CODE_API_BASE_URL', 'claude', true],
+  ['CLAUDE_CODE_CUSTOM_OAUTH_URL', 'claude', true],
+  ['ANTHROPIC_UNIX_SOCKET', 'claude', true],
   ['OPENAI_API_KEY', 'codex', true],
   ['OPENAI_BASE_URL', 'codex', true],
   ['CODEX_API_KEY', 'codex', true],

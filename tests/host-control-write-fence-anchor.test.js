@@ -10,7 +10,7 @@
  *
  *     WRITE-ALLOWED  ...\toolsenabled\engine\config\toolsenabled.policy.json
  *     WRITE-ALLOWED  ...\toolsenabled\engine\src\mcp-server.js
- *     REFUSED        ...\ToolsEnabled-copy\config\...          (control)
+ *     REFUSED        ...\Desktop\ToolsEnabled-lane1\config\...   (control)
  *
  * The fence was real and pointed at a layout the product does not use. Since
  * `host.write_file` is a destructive local-write that is NOT approval-eligible,
@@ -138,7 +138,7 @@ try {
     /* No path component here contains the product name at all. If this passes
        only because of the name-anchored list, renaming the fixture breaks it --
        which is precisely the defect. */
-    // The Windows account itself may legitimately carry the product name.
+    // The Windows account itself may legitimately be named fixture-profile.
     // What matters to the old name-based rule is the fixture path *beneath*
     // that profile, so do not mistake the account boundary for a fixture
     // component that could satisfy the protected-leaf pattern.
@@ -172,7 +172,7 @@ try {
   check('the name-anchored rules still hold, so nothing was traded away', () => {
     /* The original list still covers sibling-lane layouts and the non-repo
        anchors. This fix ADDED a check; it must not have replaced one. */
-    const lane = path.join(HOME, 'work', 'ToolsEnabled-copy', 'config', 'x.json');
+    const lane = path.join(HOME, 'Desktop', 'ToolsEnabled-lane1', 'config', 'x.json');
     assert.equal(refuses(lane), 'HOST_PATH_WRITE_PROTECTED');
     assert.equal(refuses(path.join(HOME, '.gitconfig')), 'HOST_PATH_WRITE_PROTECTED');
   });

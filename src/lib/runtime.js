@@ -153,7 +153,7 @@ function directGcloudInvocation(executable, args = []) {
 // Every commandExists() spawns where.exe, and for terraform/firebase it then
 // RUNS the resolved binary with a 5,000 ms timeout. system.doctor asks about
 // gcloud, terraform, firebase, node and npx across several provider modules on
-// every call; measured on a live install, that was 6.6 s of process
+// every call; measured on the owner's install, that was 6.6 s of process
 // spawning per four doctor calls, and system.status pays one on every poll.
 //
 // Three rules, and the first two are contracts other code already depends on:
@@ -284,7 +284,10 @@ function commandExists(command) {
 }
 
 function findBrowser() {
-  if (process.platform !== 'win32') return commandExists('google-chrome') || commandExists('chromium') || commandExists('microsoft-edge');
+  // Callers use the answer as a path (system.status reports it as
+  // browser.path; system.doctor takes its basename), so off Windows this
+  // returns the resolved executable path, never a boolean.
+  if (process.platform !== 'win32') return commandPath('google-chrome') || commandPath('chromium') || commandPath('microsoft-edge') || null;
   const paths = [
     path.join(process.env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
     path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
@@ -573,7 +576,7 @@ function vaultFilePath() {
 // a timer: src/full-remote-access-bridge.js polls its token every 2 seconds
 // for as long as the bridge lives, which is ~43,000 process creations per day
 // on a service that is idle almost all of that time. Measured 2026-08-09 on
-// a development machine as a standing, unexplained CPU cost.
+// the owner's machine as a standing, unexplained CPU cost.
 //
 // A secret cannot change without the vault file changing, so a stat is a sound
 // gate in front of the expensive read. It returns null when the file cannot be
@@ -626,7 +629,7 @@ function vaultContentDigest() {
 // A DECRYPTED VAULT VALUE MAY BE REMEMBERED WHILE THE VAULT FILE'S BYTES ARE
 // UNCHANGED, FOR A BOUNDED TIME. AN UNCERTAIN ANSWER MAY NOT.
 //
-// Every read below spawns a full powershell.exe. Measured on a development
+// Every read below spawns a full powershell.exe. Measured on the owner's
 // machine 2026-09-03: ~220 ms of that is interpreter start and ~130 ms is
 // parsing tools/secrets.ps1, before any decryption happens. The pathology is
 // bursts: readSecretsFromVault's own header records that oauthKeysFor() asks
@@ -927,7 +930,7 @@ function captureCredential(key, suppliedDefinition) {
 // cardholder, the PAN, the expiry month and year, and the postal code -- and
 // nothing else. The dialog has no security-code field and does not ask for
 // one; there is no vault key, file, log, audit entry, MCP result or report in
-// this product that may hold the code. This is product rule Q-O4
+// this product that may hold the code. This is owner ruling Q-O4 (2026-08-14)
 // and legal's X3 launch gate (2026-08-18), and it is what PCI DSS Requirement
 // 3.2 demands: sensitive authentication data, of which the security code is
 // one, may not be retained after authorisation, encrypted or otherwise. Both
@@ -1302,9 +1305,10 @@ function getSecret(key, options = {}) {
    into `message` -- execFileSync does exactly that whenever stderr is piped,
    so an unconditional append prints the whole PowerShell error twice.
 
-   SAME SEAM, TWO HALVES: `vaultSetterFailure`, on a separate branch that is
-   not an ancestor of this tree, is this same function for the three setters,
-   which are not in these bytes. When the two land together they should be collapsed
+   SAME SEAM, TWO HALVES: `vaultSetterFailure` on branch
+   m8/vault-setter-stderr-and-scrub-20260916 (60825a3c) is this same function
+   for the three setters, which are not in these bytes -- 60825a3c is not an
+   ancestor of this tree. When the two land together they should be collapsed
    into one function; two spellings of one rule is how a seam starts
    disagreeing with itself. Reading stderr is already established practice in
    this file: the `get-many` path above binds its catch and tests

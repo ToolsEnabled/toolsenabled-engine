@@ -21,7 +21,7 @@
 
 require('./lib/isolated-environment').activate('desktop-app-capture');
 // The captures directory THE PRODUCT resolves, not a pinned precedence.
-// desktop.js:100 computes rootPath('captures'); before an earlier change the isolated
+// desktop.js:100 computes rootPath('captures'); before fe452d3 the isolated
 // environment left TOOLSENABLED_STATE_ROOT unset, so that fell back to
 // process.cwd() and these tests pinned the fallback -- green only in a world
 // the shipped shell never produces. Deriving the expectation through the same

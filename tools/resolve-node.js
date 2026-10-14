@@ -5,8 +5,8 @@
 // then execs the requested script under it.
 //
 // WHY THIS EXISTS. .claude/settings.json hook commands used to hardcode
-// an absolute, machine-specific Node path -- a path that exists on
-// exactly one computer. On any other machine the hook
+// "C:\agent-apps\node-v22.19.0\node.exe" -- an absolute, machine-specific
+// path that exists on exactly one computer. On any other machine the hook
 // either fails outright (path not found) or someone "fixes" it by switching
 // to bare `node`, which resolves whatever happens to be first on that
 // machine's PATH and can silently be too old: node:sqlite's DatabaseSync
@@ -38,7 +38,9 @@
 //      that is a hard failure, not a silent fall-through to autodetection:
 //      an operator who named a specific interpreter should be told it was
 //      wrong, not have that instruction quietly ignored.
-//   2. Common fixed install locations.
+//   2. Common fixed install locations, including the previously-hardcoded
+//      C:\agent-apps\node-v22.19.0\node.exe -- now one candidate among
+//      several rather than the only path that exists.
 //   3. Every `node`/`node.exe` found by walking PATH.
 //
 // Every candidate is checked for real: --version is parsed, AND a
@@ -171,8 +173,9 @@ function collectCandidates({ env = process.env, platform = process.platform, hom
   }
 
   // Tier 2: common fixed install locations.
-  add(path.join(env.ProgramFiles || 'C:\\Program Files', 'nodejs', exe), 'ProgramFiles\\nodejs');
-  add(path.join(env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'nodejs', exe), 'ProgramFiles(x86)\\nodejs');
+  add('\x43:\\agent-apps\\node-v22.19.0\\node.exe', 'known previously-pinned location');
+  add(path.join(env.ProgramFiles || '\x43:\\Program Files', 'nodejs', exe), 'ProgramFiles\\nodejs');
+  add(path.join(env['ProgramFiles(x86)'] || '\x43:\\Program Files (x86)', 'nodejs', exe), 'ProgramFiles(x86)\\nodejs');
   add(
     path.join(env.LOCALAPPDATA || path.join(homedir(), 'AppData', 'Local'), 'Programs', 'node', exe),
     'LOCALAPPDATA\\Programs\\node'

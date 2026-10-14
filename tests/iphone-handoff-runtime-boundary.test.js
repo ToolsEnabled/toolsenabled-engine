@@ -8,7 +8,7 @@ const registry = require('../src/lib/tool-registry');
 const { executeTool } = require('./helpers/dispatch');
 const handoff = require('../src/lib/providers/iphone-handoff');
 
-// The active controller was extracted with its personal server in an earlier change.
+// The active controller was extracted with its personal server in fe640324.
 // Exercise the remaining customer door, not a fabricated replacement broker.
 test('the public iPhone surface is one closed local-read readiness tool', () => {
   assert.deepEqual(registry.TOOL_REGISTRY.filter(tool => tool.name.startsWith('iphone.')).map(tool => tool.name),

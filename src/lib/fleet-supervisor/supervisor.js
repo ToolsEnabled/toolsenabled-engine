@@ -2,7 +2,8 @@
 
 // The persistent fleet supervisor.
 //
-// WHAT WAS MISSING (the Gemini lanes were reported running when none were):
+// WHAT WAS MISSING (the owner's complaint, 2026-07-28: "the gemini lanes are
+// not running though? why not i thought you told me like 15 were running"):
 // `tools/gemini-fleet.js` is one-shot. `main()` launches a batch with
 // Promise.all, prints a summary, removes the worktrees and exits. There is no
 // loop, no queue consumer, no relaunch and no persistent state, so when lanes
@@ -33,7 +34,7 @@ const geminiReportContract = require('./gemini-report-contract.js');
 // Review is required at load, but review.js only reaches for the provider
 // gateway lazily, so `--status`/`--plan` stay as cheap as they were.
 const reviewStage = require('./review.js');
-// Planning (request R91): decomposes a whole phase into bounded
+// Planning (owner ledger R91): decomposes a whole phase into bounded
 // sub-tasks before dispatch. Also lazy inside about the provider gateway
 // (defaultRunPlanningLane requires lane-runner.js only when actually
 // planning), so `--status`/`--plan` stay cheap.
@@ -63,7 +64,7 @@ const TRANSIENT_REFUND_CAP = 6;
 const TRANSIENT_COOLDOWN_BASE_MS = 5 * 60_000;
 const TRANSIENT_COOLDOWN_MAX_MS = 30 * 60_000;
 // A provider that states WHEN capacity returns is more informative than any
-// backoff we could invent. Observed live 2026-07-29 on the
+// backoff we could invent. Observed live 2026-07-29T00:05Z on the
 // subscription CLI: "You have exhausted your capacity on this model. Your
 // quota will reset after 11h43m52s." A 5-30 minute cooldown against an
 // 11-hour exhaustion is ~90 pointless lane launches per item, so the stated
@@ -669,8 +670,8 @@ function recordLaneOutcome(stateFile, laneId, {
       servedBelowFloor: laneModels.servedBelowFloor(resolvedBackend || 'subscription', reportedModels),
       // The CLI's OWN token total for this lane. Persisted so credit burn is
       // measured from what the provider reported, never estimated afterwards
-      // from wall-clock (a spend budget must be measurable from what the
-      // provider reported).
+      // from wall-clock (owner order R77: the $300 must be measurably spent
+      // before 2026-10-25).
       reportedTokens: Number.isFinite(reportedTokens) ? reportedTokens : null,
       detail: detail === null ? null : String(detail).slice(0, 400),
       durationMs
@@ -1027,8 +1028,8 @@ function status(stateFile, {
     // BOTH must be live to claim `running`. A lane process that outlived its
     // supervisor is an orphan: nobody holds its stdout or exit code, so its
     // OUTCOME is unobservable even though the process is up. Counting it as
-    // running is precisely the overstatement that led the owner to believe about
-    // 15 were running -- so it lands in `unknown` with a reason instead. This is
+    // running is precisely the overstatement that produced "I thought like 15
+    // were running" -- so it lands in `unknown` with a reason instead. This is
     // checked here, not only in reconcile(), so a bare `--status` read from a
     // machine where no supervisor is running still tells the truth.
     if (laneProcessLive && supervisorLive) {
@@ -1126,7 +1127,7 @@ function status(stateFile, {
     lanesWithUnknownServedModel: servedModelUnknown,
     // Per-(backend, model) review outcomes from the append-only history.
     verdictsByModel: verdictsByModel(state),
-    // Phase decomposition (request R91). `planning` is the headline: a
+    // Phase decomposition (owner ledger R91). `planning` is the headline: a
     // planner that cannot RUN is reported as loudly as a wedged review tier,
     // because a silent fallback to whole-phase dispatch is indistinguishable
     // from normal operation and hid a 100%-failing planner for a whole batch.
@@ -1147,7 +1148,7 @@ function status(stateFile, {
 }
 
 // ---------------------------------------------------------------------------
-// Phase decomposition (request R91): expand open phases into claimable
+// Phase decomposition (owner ledger R91): expand open phases into claimable
 // items, preferring a phase's planned sub-tasks over the whole phase.
 // ---------------------------------------------------------------------------
 
@@ -1401,7 +1402,7 @@ class FleetSupervisor {
     // not wired a reviewer cannot deadlock its own fleet behind a backlog
     // nothing drains; tools/fleet-supervisor.js turns it ON for the real fleet.
     review = null,
-    // The planning pass (request R91). OFF by default in the library,
+    // The planning pass (owner ledger R91). OFF by default in the library,
     // same reasoning as `review` above: an embedder (or a test) that
     // constructs a FleetSupervisor directly and injects its own `runLane`
     // gets EXACTLY the pre-decomposition dispatch behaviour unless it opts
@@ -1595,7 +1596,7 @@ class FleetSupervisor {
     const queue = this.readQueue();
     const openItemIds = queue.open.map(phase => phase.id);
 
-    // Decomposition (request R91): make sure every open phase has a plan
+    // Decomposition (owner ledger R91): make sure every open phase has a plan
     // attempt on record (bounded per tick), THEN claim from sub-task ids
     // where a plan is ready, or the phase id itself where planning fell back
     // or is disabled. A phase with no plan record yet contributes nothing
@@ -1892,7 +1893,7 @@ class FleetSupervisor {
   // Start one lane. Never awaited by tick(): the whole point is that lanes run
   // concurrently and the supervisor stays free to refill slots as they empty.
   // `subtask` is non-null when this claim came from a planned decomposition
-  // (request R91): the lane gets a bounded sub-task brief instead of the
+  // (owner ledger R91): the lane gets a bounded sub-task brief instead of the
   // whole phase, but every other mechanic below -- worktree isolation,
   // materialization, the stale-snapshot backstop, review packet capture,
   // attempt/park bookkeeping -- is completely unchanged.

@@ -1,5 +1,7 @@
 'use strict';
 
+const RETIRED_SETTING_IDS = new Set(['accounts.failover']);
+
 // Saved-value mechanics shared by the settings surface and kernel tuning.
 // Callers supply any authority readbacks or domain-specific validation; this
 // module never loads machine authority, models, dispatch or settings surfaces.
@@ -79,8 +81,10 @@ function applyStoredValues({ registry, document, requested, values, provenance, 
   for (const [id, raw] of Object.entries(document.values)) {
     if (requested && !requested.has(id)) continue;
     const entry = registry.byId.get(id);
+    // A setting 1.0.50 retired with automatic account switching may still be stored by an older profile;
+    // it is ignored without a report. Any other undeclared id is still reported.
     if (!entry) {
-      rejected.push({ id, raw, reason: `Setting "${id}" is unknown and is not present in the registry.` });
+      if (!RETIRED_SETTING_IDS.has(id)) rejected.push({ id, raw, reason: `Setting "${id}" is unknown and is not present in the registry.` });
       continue;
     }
     const readOnly = readOnlyReason(entry, id);

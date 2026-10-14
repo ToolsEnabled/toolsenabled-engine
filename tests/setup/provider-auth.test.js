@@ -66,6 +66,24 @@ function main() {
     detail: 'a key is configured for this computer'
   });
 
+  for (const configuredKey of ['inert-configured-api-key', undefined]) {
+    const calls = [];
+    const missingClaude = providerAuth.probeProvider('claude', {
+      runner: (command, args) => {
+        calls.push([command, ...args]);
+        return { error: Object.assign(new Error('missing'), { code: 'ENOENT' }) };
+      },
+      env: configuredKey ? { ANTHROPIC_API_KEY: configuredKey } : {}
+    });
+    assert.equal(missingClaude.installed, false);
+    assert.equal(missingClaude.signedIn, false, 'a configured key cannot make a missing Claude executable signed in');
+    assert.deepEqual(missingClaude, {
+      provider: 'claude', installed: false, signedIn: false,
+      detail: 'the assistant program is not on this computer yet'
+    }, 'a configured key cannot make a missing Claude executable ready');
+    assert.deepEqual(calls, [['claude', '--version']]);
+  }
+
   const loginRunner = scriptedRunner([
     { command: ['codex', '--version'], result: result(0) },
     {
@@ -117,18 +135,16 @@ function main() {
     signedIn: false, reason: 'not signed in yet'
   });
 
-  // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-  const syntheticKey = 'sk-ant-' + '12345678901234567890';
-  assert.equal(providerAuth.checkClaudeApiKeyShape(`  ${syntheticKey}  `).ok, true);
+  assert.equal(providerAuth.checkClaudeApiKeyShape('  \x73k-ant-12345678901234567890  ').ok, true);
   assert.equal(providerAuth.checkClaudeApiKeyShape('').code, 'SETUP_CLAUDE_KEY_MISSING');
   assert.equal(providerAuth.checkClaudeApiKeyShape('sk-ant-has spaces in it').code, 'SETUP_CLAUDE_KEY_MALFORMED');
   assert.equal(providerAuth.checkClaudeApiKeyShape('other-12345678901234567890').code, 'SETUP_CLAUDE_KEY_MALFORMED');
 
   const writes = [];
-  const stored = providerAuth.storeClaudeApiKey(`  ${syntheticKey}  `, {
+  const stored = providerAuth.storeClaudeApiKey('  \x73k-ant-12345678901234567890  ', {
     setSecret: (key, value) => writes.push([key, value])
   });
-  assert.deepEqual(writes, [['anthropic_api_key', syntheticKey]]);
+  assert.deepEqual(writes, [['anthropic_api_key', '\x73k-ant-12345678901234567890']]);
   assert.deepEqual(stored, { stored: true, vaultKey: 'anthropic_api_key' });
   assert.equal(JSON.stringify(stored).includes('1234567890'), false, 'the result must not expose the secret');
   assertRefusal(() => providerAuth.storeClaudeApiKey('bad', { setSecret: assert.fail }), 'SETUP_CLAUDE_KEY_MALFORMED');

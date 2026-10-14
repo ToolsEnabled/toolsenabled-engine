@@ -323,8 +323,8 @@ function runWorker(args) {
   {
     // THE CHAIN ROOT IS A PARAMETER, SO COLD STORAGE DOES NOT BREAK THE LEDGER.
     //
-    // The audit ledger is never bounded today: at a development install's
-    // rate it holds hundreds of thousands of events after a year, and every short-lived process
+    // The audit ledger is never bounded today: measured 1,527 events/day on the
+    // owner's install, ~557,000 after a year, and every short-lived process
     // re-verifies all of it. Moving the oldest events to signed cold storage is
     // what bounds that, and it needs the live rows to start above sequence 1
     // chained to something other than ZERO_HASH.

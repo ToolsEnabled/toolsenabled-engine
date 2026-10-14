@@ -49,10 +49,10 @@ function fixtureLedgerData() {
       { id: 'R01', request: 'A plain existing request with no verbatim field.', status: 'done', evidence: 'x' },
       {
         id: 'R44',
-        verbatim: "[1] 'there is a product brief draft somewhere in the shared drafts folder, the newest one'",
-        request: '(interpretation) find and finish the product brief draft',
+        verbatim: "[1] 'locate the most recent synthetic sample document'",
+        request: '(interpretation) find and finish the scholarship draft',
         status: 'done',
-        gates: [{ instruction: 'verify against the previously published version', met: false, evidence: '' }]
+        gates: [{ instruction: 'verify against the previously submitted version', met: false, evidence: '' }]
       }
     ],
     controllerNotes: ['fixture note']
@@ -140,7 +140,7 @@ check('toGateObject records an explicit hedge marker while retaining string-call
 check('capture scope grammar keeps global unbound and requires a stable key for every other tier', () => {
   // MEASURED 2026-09-03: the canonical ledger (src/lib/owner-request-store.js
   // SCOPES) has carried four tiers -- global, session, tree, thread -- since
-  // a later product rule, and every other writer already speaks all
+  // the owner's 2026-09-02 ruling, and every other writer already speaks all
   // four. This tool answered OWNER_CAPTURE_SCOPE_INVALID for 'session' and
   // 'tree' until now, so a spooled turn shell/agent-host.cjs spoolPersonTurn
   // had tagged scope:'session' could never be promoted back at that same tier.
@@ -241,7 +241,7 @@ check('applyAppend strictly extends existing verbatim text and never rewrites it
   const data = fixtureLedgerData();
   const before = data.requests.find(r => r.id === 'R44').verbatim;
   const next = applyAppend(data, {
-    id: 'R44', text: "use the copy on the team wiki as the base, the one that we had published last sprint",
+    id: 'R44', text: "Fetch the prior synthetic submission and verify the previously submitted synthetic version.",
     gates: [], actor: 'controller', timestamp: '2026-07-28T01:00:00.000Z'
   });
   const entry = next.requests.find(r => r.id === 'R44');
@@ -249,7 +249,7 @@ check('applyAppend strictly extends existing verbatim text and never rewrites it
   assert.ok(entry.verbatim.length > before.length);
   // the exact clause that was paraphrased away in the real R44 incident must
   // survive byte-for-byte in the appended text.
-  assert.ok(entry.verbatim.includes('that we had published last sprint'));
+  assert.ok(entry.verbatim.includes("the previously submitted synthetic version"));
   // the original fixture object is untouched
   assert.equal(data.requests.find(r => r.id === 'R44').verbatim, before);
 });
@@ -265,7 +265,7 @@ check('applyAppend appends new gates onto existing gates without disturbing them
   const next = applyAppend(data, { id: 'R44', text: 'more words', gates: ['a new sub-instruction'], actor: 'controller', timestamp: 't' });
   const entry = next.requests.find(r => r.id === 'R44');
   assert.equal(entry.gates.length, 2);
-  assert.equal(entry.gates[0].instruction, 'verify against the previously published version');
+  assert.equal(entry.gates[0].instruction, 'verify against the previously submitted version');
   assert.equal(entry.gates[1].instruction, 'a new sub-instruction');
   assert.equal(entry.gates[1].hedged, false);
 });
@@ -293,7 +293,7 @@ check('applyAppend leaves every other field of the entry untouched', () => {
   const data = fixtureLedgerData();
   const next = applyAppend(data, { id: 'R44', text: 'x', gates: [], actor: 'controller', timestamp: 't' });
   const entry = next.requests.find(r => r.id === 'R44');
-  assert.equal(entry.request, '(interpretation) find and finish the product brief draft');
+  assert.equal(entry.request, '(interpretation) find and finish the scholarship draft');
   assert.equal(entry.status, 'done');
 });
 
@@ -436,12 +436,12 @@ check('CLI: --request-id appends to an existing entry and never shortens or rewr
   const before = readJson(file).requests.find(r => r.id === 'R44').verbatim;
   const result = runCli([
     '--ledger', file, '--request-id', 'R44', '--actor', 'controller',
-    '--text', "start from the wiki copy instead, the one that we had published last sprint"
+    '--text', "Retrieve the synthetic source record and compare the previously submitted synthetic version."
   ]);
   assert.equal(result.status, 0, result.stderr);
   const after = readJson(file).requests.find(r => r.id === 'R44').verbatim;
   assert.ok(after.startsWith(before));
-  assert.ok(after.includes('that we had published last sprint'));
+  assert.ok(after.includes("the previously submitted synthetic version"));
 });
 
 check('CLI: refuses two captures that race the same ledger file (lock holds for the process lifetime of the first)', () => {
@@ -558,16 +558,16 @@ check('CLI: --help exits 0 and prints usage without requiring any other flag', (
 // Cross-module wiring: a gate captured by owner-capture.js is consumable by
 // the existing enforcement primitive in src/lib/egress-preflight.js on the
 // same ledger file. This is the concrete replay of incident 2 (the dropped
-// "go pull the previously published copy and check" instruction): captured as a
+// "go pull the previous submission and check" instruction): captured as a
 // gate here, it must show up as an unmet, blocking precondition there.
 // =============================================================================
 
 check('a gate captured via owner-capture.js is read and enforced by egress-preflight.assertGatesMet on the same file', () => {
   const file = freshLedgerFile();
   const result = runCli([
-    '--ledger', file, '--new-id', 'R98', '--interpretation', 'redo an upload properly',
+    '--ledger', file, '--new-id', 'R98', '--interpretation', 'redo a submission properly',
     '--actor', 'controller', '--text', 'redo it and verify first this time',
-    '--gate', 'fetch the last published copy and compare it before rebuilding anything'
+    '--gate', 'go pull the previous week submission and check before rebuilding anything'
   ]);
   assert.equal(result.status, 0, result.stderr);
 
@@ -577,7 +577,7 @@ check('a gate captured via owner-capture.js is read and enforced by egress-prefl
 
   assert.throws(() => assertGatesMet('R98', file), (error) => {
     assert.equal(error.code, 'EGRESS_GATES_UNMET');
-    assert.match(error.message, /fetch the last published copy and compare it/);
+    assert.match(error.message, /go pull the previous week submission and check/);
     return true;
   });
 });
@@ -587,7 +587,7 @@ check('a gate captured via owner-capture.js is read and enforced by egress-prefl
 // STANDING-ORDERS.md class RECORD, order 2: "Never mark a request done without
 // independent verification. Never soften a status."
 //
-// The shape this refuses is not hypothetical: a fleet lane shipped a
+// The shape this refuses is not hypothetical: fleet lane s10 shipped a
 // `set-gate` command that would have let an agent self-certify its own egress
 // gate (GEMINI-LANE-DOCTRINE failure mode 5). It was caught by review. These
 // pins make the next one fail at the writer instead of depending on a reviewer

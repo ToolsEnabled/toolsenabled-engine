@@ -11,7 +11,7 @@ const CHOICES = Object.freeze([DEFAULT_CHOICE, '30 days / 256 MiB', 'Keep diagno
 const MIB = 1024 * 1024, DAY = 86400000;
 const LIMITS = Object.freeze({ entriesPerPass: 64, candidates: 64, filesPerPass: 8,
   bytesPerPass: 8 * MIB, segmentBytes: MIB, writerBytes: 4 * MIB, lineBytes: 16384, metadataBytes: 4096 });
-const KINDS = new Set(['main-lag', 'main-heap', 'exit-record', 'native-decisions', 'native-stream', 'startup-fatal']);
+const KINDS = new Set(['main-lag', 'main-heap', 'exit-record', 'native-decisions', 'native-stream', 'startup-fatal', 'legacy-signin-cleanup']);
 const ID = /^diag-[0-9]{1,16}-[a-f0-9-]{36}\.jsonl$/;
 
 function resolveDiagnosticPolicy(value = DEFAULT_CHOICE) {

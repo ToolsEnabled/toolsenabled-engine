@@ -20,8 +20,9 @@
 // - NOT-FOUND (5): a guard that makes the whole file a no-op. Only the optional
 //   real-ledger block is skipped, explicitly; the other 20 checks still execute.
 // - NOT-FOUND (6): expected values computed by the implementation under test.
-// - Unmet precondition: Machine A's retired LIVE ledger is not present on
-//   this host, so its optional cross-checks could not be mutation-tested here.
+// - Unmet precondition: Machine A's retired LIVE ledger is not present at
+//   /root/Desktop/ToolsEnabled/reports/OWNER-REQUEST-LEDGER.json, so its optional
+//   cross-checks could not be mutation-tested on this host.
 
 'use strict';
 
@@ -219,7 +220,7 @@ check('REFUSAL: a merged doc missing a verbatim is never written; no file, no tm
   const theirs = doc([{ id: 'R2', verbatim: 'and separately said this', status: 'open' }]);
   const { doc: merged } = mergeLedgerDocuments(clone(ours), clone(theirs));
   const poisoned = clone(merged);
-  poisoned.requests[0].verbatim = 'the owner said'; // truncation = rewrite of their words
+  poisoned.requests[0].verbatim = 'the owner said'; // truncation = rewrite of his words
   const dir = tempDir();
   const outPath = path.join(dir, 'merged.json');
   assert.throws(
@@ -340,7 +341,8 @@ check('CLI: --in-place refuses while owner capture holds the ledger lock', () =>
 // requests, ~450KB, real owner prose with its own quoting and line breaks).
 //
 // These are no longer "the two diverged files" this block was written against.
-// Trunk was reset to zero requests on 2026-08-12, so the retired tree is the only side still carrying data and the
+// Trunk was reset to zero requests on 2026-08-12 (commit 4cae519, owner
+// directive), so the retired tree is the only side still carrying data and the
 // merge is a pure union rather than a reconciliation. The no-loss property is
 // what the tool exists for and it is exercised exactly as hard either way; the
 // re-file-on-divergence property no longer has real inputs here and is covered
@@ -349,12 +351,12 @@ check('CLI: --in-place refuses while owner capture holds the ledger lock', () =>
 // still runs.
 
 const CURRENT_LEDGER = path.join(ROOT, 'reports', 'OWNER-REQUEST-LEDGER.json');
-// Machine A's retired LIVE tree is named by LEDGER_MERGE_LIVE_PATH, or looked
-// for under the operator's own home directory -- never a literal username, so
-// this still finds the tree on whichever machine happens to have it, and still
-// reports SKIPPED elsewhere.
+// Machine A's retired LIVE tree lives on the operator's own Desktop (same
+  // the installed runtime-tree convention
+// constant) -- never a literal username, so this still finds the tree on
+// whichever machine happens to have it, and still reports SKIPPED elsewhere.
 const LIVE_LEDGER = process.env.LEDGER_MERGE_LIVE_PATH ||
-  path.join(os.homedir(), 'ToolsEnabled', 'reports', 'OWNER-REQUEST-LEDGER.json');
+  path.join(os.homedir(), 'Desktop', 'ToolsEnabled', 'reports', 'OWNER-REQUEST-LEDGER.json');
 
 if (process.env.LEDGER_MERGE_REAL_TEST !== '1' || process.env.TOOLSENABLED_TEST_STRICT === '1') {
   test('real owner-ledger cross-check', {
@@ -478,7 +480,7 @@ if (process.env.LEDGER_MERGE_REAL_TEST !== '1' || process.env.TOOLSENABLED_TEST_
   //
   // These used to pin the 2026-08-03 reconciliation snapshot: LIVE must not have
   // grown past trunk, and trunk must carry that reconciliation's dotted re-files.
-  // A commit on 2026-08-12 reset trunk to zero requests and
+  // Commit 4cae519 (2026-08-12, owner directive) reset trunk to zero requests and
   // archived the previous 721-request record, so BOTH became permanently false --
   // trunk has no requests at all, dotted or otherwise.
   //

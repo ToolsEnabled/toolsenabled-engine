@@ -1,9 +1,11 @@
 # ToolsEnabled Security Disclosure Policy
 
-**Status: draft, not yet in effect.** The sections describing current product
-state were checked against the source on the date below. The reporting
-process in §4 is a proposed default, not a commitment: no security contact
-mailbox exists yet, and no response timelines have been committed.
+**Status: DRAFT. Prepared for owner review before publication.** Sections
+describing current product state are grounded in direct source verification
+(dated below) and are safe to publish as-is once a real contact address
+exists (§4). Sections proposing a response process are a reasonable default,
+not a commitment the owner has made — he should confirm the timelines before
+this goes live.
 
 Last updated: 2026-08-10
 
@@ -35,7 +37,7 @@ them have themselves been independently verified.
 permissive configuration, ToolsEnabled agents can read, modify, or delete
 any file on the host machine and execute arbitrary programs, without a
 per-action confirmation. This is a deliberate, disclosed product capability
-for users who choose it — it is not treated
+(see `TERMS-OF-SERVICE.md` §1.1) for users who choose it — it is not treated
 here as a vulnerability, but it materially changes what "secure" can mean
 for this product, and any report that assumes sandboxing is always active
 should account for that.
@@ -59,8 +61,8 @@ preconditions. Nothing in the current shipping product listens on a public
 address.
 
 **License enforcement is offline and currently unwired.** Paid-tier
-restriction is not currently enforced by any code path. This is a
-product/business gap, not by itself a
+restriction is not currently enforced by any code path — see
+`TERMS-OF-SERVICE.md` §5. This is a product/business gap, not by itself a
 security vulnerability, but is disclosed here because a researcher probing
 "can I bypass the paywall" should know there is, today, no paywall to
 bypass.
@@ -72,26 +74,31 @@ control.
 
 ## 3. Planned, not yet done
 
-An external security review is planned. It has not started. A mobile
+An external security review is planned and is one of the largest single line
+items in the launch approval queue (`docs/design/LAUNCH-APPROVALS.md`),
+estimated at $8,000–$30,000. It has not started. A specific mobile
 companion app's own threat model already treats this review as
-release-blocking for that component specifically. Until it happens, no claim in this
+release-blocking for that component specifically — see
+`docs/design/MOBILE-APP-THREAT-MODEL.md`. Until it happens, no claim in this
 document or elsewhere should be read as "independently verified security,"
 only as "our own engineers checked this."
 
 ## 4. How to report a vulnerability
 
-**Open item — cannot be finalized yet.** There is no `security@` mailbox to
-publish yet. Until one exists, this section is a placeholder. The intended
-shape:
+**Open item — cannot be finalized yet.** No company domain is registered
+(see `PURCHASE-LIST.md`), so there is no `security@` mailbox to publish.
+Until one exists, this section is a placeholder. Recommended shape, for the
+owner to approve once a domain exists:
 
 - A dedicated `security@<domain>` address, monitored and answered within a
-  stated window (the acknowledgement window will be set when the mailbox
-  exists; this document does not invent one).
+  stated window (we suggest acknowledging within 3 business days — a
+  commitment the owner should set deliberately, not one this document
+  invents on his behalf).
 - A request that reporters not publicly disclose a finding before we've had
   a reasonable window to address it (a standard coordinated-disclosure ask,
   not yet a legally reviewed safe-harbor commitment — see §5).
 - No bug bounty program exists today. This document should not imply one
-  until one is funded.
+  until the owner decides to fund it.
 
 ## 5. Safe harbor **[LAWYER]**
 
@@ -110,9 +117,10 @@ exists) and what's out of scope (third-party AI provider infrastructure,
 which is covered by the provider's own program; and unrelated products,
 which require their own policies).
 
-## 7. Relationship to the Privacy Policy
+## 7. Relationship to the Terms of Service and Privacy Policy
 
 This document is the detailed, security-specific version of the disclosures
-referenced from `PRIVACY-POLICY.md` §9. If either document is updated to
-change a security-relevant fact, the other must be checked for consistency in
-the same change.
+summarized in `TERMS-OF-SERVICE.md` §10 and referenced from
+`PRIVACY-POLICY.md` §9. If any of the three documents is updated to change a
+security-relevant fact, the other two must be checked for consistency in the
+same change.

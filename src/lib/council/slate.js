@@ -20,7 +20,7 @@ const crypto = require('node:crypto');
 const MAX_IDENTIFIER_LENGTH = 64;
 const MAX_TEXT_LENGTH = 16_384;
 
-// An item whose subject matter the owner reserved to themselves is not put to a
+// An item whose subject matter the owner reserved to himself is not put to a
 // vote at all.  Voting on it implies the vote could authorize it, and it can't.
 const DISPOSITION = Object.freeze({
   VOTABLE: 'VOTABLE',

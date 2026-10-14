@@ -341,7 +341,7 @@ function createReader({ stateRoot, environment = process.env } = {}) {
       const listed = await runAsync('list', {}, file, env);
       // The helper's 'list' result is the key array. A protocol answer of any
       // other shape is a protocol failure, not an empty vault -- answering []
-      // here would tell the owner they have no credentials when we simply could
+      // here would tell the owner he has no credentials when we simply could
       // not read them.
       if (!Array.isArray(listed) || listed.some(key => typeof key !== 'string')) {
         throw failure('SECRET_HELPER_PROTOCOL_INVALID');

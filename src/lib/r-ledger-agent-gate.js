@@ -13,9 +13,9 @@
 // yourself". Meanwhile the settings catalogue had shipped the row
 // `rules.capture_spoken` ("Turning something you said into a standing rule")
 // with `enforcedBy: ""` since it was drafted -- a control a person could set
-// that changed nothing. The product rule for that shape: any
-// failure that a system exists to handle or prevent, and that does not do its
-// job according to user settings, is a software failure. This
+// that changed nothing. The owner's rule for that shape, 2026-08-11: "every
+// failure which there exists a system for or to prevent; that doesnt do its
+// job according to user settings, is vieweed as software fialure". This
 // module is that row's enforcer.
 //
 // THE THREE RULES are the research gate's (src/lib/research/settings-gate.js
@@ -42,7 +42,7 @@
 // is read as a standing rule at boot (collectStack reads the four markdown
 // ledgers only). The row's consequence text says so in the person's words.
 //
-// THREE MORE DOORS ON THE SAME PATH (O7 improvements):
+// THREE MORE DOORS ON THE SAME PATH (O7 improvements, owner 2026-08-22):
 //
 // VERBATIM OR NOTHING. The words an agent files must be an exact contiguous
 // slice of something the person typed -- whitespace aside, no case folding,
@@ -72,7 +72,7 @@
 // question, and that the person's yes files their ORIGINAL sentence. Off, the
 // paragraph reads exactly as before.
 //
-// APPROVE BEFORE IT COUNTS (product note: one ledger, managed on the
+// APPROVE BEFORE IT COUNTS (owner, 2026-09-02: one ledger, managed on the
 // Ledger page). A second sub-setting, rules.agent_filed_needs_approval, read
 // by the same three rules: with it on, a rule an agent files lands 'proposed'
 // and waits for the person's approval before any agent reads it at boot; the
@@ -88,8 +88,8 @@ const AGENT_FILING_SETTING_ID = 'rules.capture_spoken';
 const ASK_WHEN_UNSURE_SETTING_ID = 'rules.ask_when_unsure';
 const NEEDS_APPROVAL_SETTING_ID = 'rules.agent_filed_needs_approval';
 
-// WHO ADDS STANDING RULES (product note: the ledger page only, the ledger
-// page and /request, or agents as well, as today). One
+// WHO ADDS STANDING RULES (owner, 2026-09-15: "either manually on the ledger
+// page only, or ledger page and /request, or agent and such like now"). One
 // three-way choice over every door into the rules ledger. src/lib/settings.js
 // keeps rules.capture_spoken in step with it (on only for "Agents too"), so the
 // mode decision below still reads the switch it was built on; this module reads
@@ -107,8 +107,8 @@ const path = require('node:path');
 
 const MODES = Object.freeze({ OFF: 'off', PROPOSE: 'propose', AUTO: 'auto' });
 
-// ONE SWITCH, ON OR OFF. The product rule: a plain on/off switch
-// is enough -- agents manage the ledgers, or the person does. The row in
+// ONE SWITCH, ON OR OFF. The owner's ruling (2026-08-22): "i think just on or
+// off is fine" -- agents manage the ledgers, or the person does. The row in
 // config/settings-registry.json is a toggle; `true` is the only value that
 // turns it on (the research gate's rule, value === true), and on means AUTO:
 // the agent files. PROPOSE survives as an internal mode the tools still
@@ -315,8 +315,8 @@ function loadAgentFilingMode({ valuesPath, env } = {}) {
 // ---------------------------------------------------------------------------
 
 // Said to an agent whose person keeps the ledger to themselves (rules.filing_from
-// is not "Agents too"). The product note: when it is disabled, agents do
-// not ask either -- off means no filing, no proposing and no asking, so the
+// is not "Agents too"). The owner, 2026-09-15: "agents shouldnt ask if its
+// disabled either" -- off means no filing, no proposing and no asking, so the
 // closing sentence is the same in both forms; only the door the person uses
 // differs. The first form is the host's pre-O7 constant with that sentence
 // appended; the second is for a person who types no /Request at all.
@@ -419,14 +419,35 @@ function isAssent(words) {
    lets through are added here and nowhere else: a bare "token:" / "secret:"
    style prefix with a value after it (the scrubber wants a word before
    "token"), and one unbroken run of forty or more letters-and-digits, which
-   is a key's shape and not a sentence's. */
+   is a key's shape and not a sentence's.
+
+   THE LONG RUN EXCUSES THE IDS THIS PRODUCT AND GIT MINT (2026-09-24). `-` is
+   inside that run's character class, so the shape also caught a 40-character
+   git object id, a `node-<uuid>`, a `gen-<uuid>` and a `sess-<40 hex>`. On
+   2026-09-24 that refused five real checkpoints and filings -- T1812, T1821,
+   T1867, T1888, T1766 -- and because a refusal writes nothing, those results
+   are gone. Naming the commit, the node or the session is how a checkpoint is
+   worth reading, so a long run that lies WHOLLY INSIDE one of the narrow id
+   shapes in secret-patterns.js (SAFE_IDENTIFIER_SOURCE) is not a key's shape.
+   Only this heuristic is excused: the scrubber's judgement and the bare
+   prefix below still refuse on their own, so a credential beside an id, an id
+   with anything glued to it, and any high-entropy run that is not one of those
+   exact shapes are all still refused.
+
+   Redaction was the alternative and does not work here: _checkWords judges the
+   words against the person's own spooled turns immediately afterwards
+   (isVerbatimSlice), so filing a redacted copy would simply trade
+   R_LEDGER_WORDS_REFUSED for R_LEDGER_WORDS_NOT_VERBATIM and still write
+   nothing. Lowering the 40 threshold refuses more, not less; raising it lets
+   real keys through. The character class, not the length, was the bug. */
 const BARE_SECRET_PREFIX = /\b(?:token|secret|password|passwd|pwd|passphrase|otp)\s*[=:]\s*\S+/i;
-const LONG_TOKEN_RUN = /(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}/;
+const LONG_TOKEN_RUN = /(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}/g;
 function looksSecretShaped(words, { scrub } = {}) {
   const text = String(words === undefined || words === null ? '' : words);
   if (!text) return false;
   const cleaner = typeof scrub === 'function' ? scrub : value => require('./audit').scrubText(value, Math.max(1, value.length));
-  return cleaner(text) !== text || BARE_SECRET_PREFIX.test(text) || LONG_TOKEN_RUN.test(text);
+  if (cleaner(text) !== text || BARE_SECRET_PREFIX.test(text)) return true;
+  return require('./secret-patterns').matchedOutsideSafeIdentifiers(text, LONG_TOKEN_RUN);
 }
 
 /* Verbatim: after whitespace normalisation only, the words are a contiguous

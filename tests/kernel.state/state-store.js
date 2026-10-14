@@ -448,11 +448,11 @@ const RESTORE_TELEGRAM_TABLES_V1 = `
     migrated.close();
   }
 
-  // THE RETIRED CORRECTION STORAGE IS GONE, AND A DATABASE THAT ALREADY HAS IT LOSES IT.
+  // THE review CORRECTION STORAGE IS GONE, AND A DATABASE THAT ALREADY HAS IT LOSES IT.
   //
   // This block asserted the exact opposite until 2026-08-11: that migrating created the five
-  // retired correction tables. That correction subsystem is not part of this product and
-  // was believed to have been removed already. MIGRATION_V20 removes it, and this
+  // review_correction_* tables. The owner stated that the review system is not part of
+  // this product and believed it had already been removed. MIGRATION_V20 removes it, and this
   // is the test that keeps it removed -- re-adding the tables to the migration chain fails
   // here by name.
   //
@@ -466,7 +466,7 @@ const RESTORE_TELEGRAM_TABLES_V1 = `
   // TRIGGERS ARE CHECKED SEPARATELY FROM TABLES ON PURPOSE. Dropping a table drops its
   // triggers, so a table-only assertion cannot tell a real drop from a rename, and a trigger
   // left behind referencing a missing table is a schema this store would refuse to open.
-  const LEGACY_CORRECTION_DDL = `
+  const LEGACY_review_DDL = `
     CREATE TABLE review_correction_closures (
       closure_family_id TEXT PRIMARY KEY CHECK(length(closure_family_id) = 64 AND closure_family_id NOT GLOB '*[^0-9a-f]*'),
       source_run_id TEXT NOT NULL UNIQUE CHECK(length(source_run_id) = 36 AND source_run_id GLOB 'run-[0-9a-f]*'),
@@ -570,7 +570,7 @@ const RESTORE_TELEGRAM_TABLES_V1 = `
     CREATE TRIGGER review_correction_acceptance_bindings_no_delete BEFORE DELETE ON review_correction_acceptance_bindings
       BEGIN SELECT RAISE(ABORT, 'immutable review correction acceptance binding'); END;
   `;
-  // MIGRATION_V19's tables, verbatim, for the same reason the correction DDL above is here:
+  // MIGRATION_V19's tables, verbatim, for the same reason the review DDL above is here:
   // a database that claims user_version 19 has to actually look like one. V22 drops these,
   // so a store created by THIS build no longer carries them and the fake legacy database
   // has to put them back before it can be recognised as a 19 and upgraded past it.
@@ -615,8 +615,8 @@ const RESTORE_TELEGRAM_TABLES_V1 = `
     CREATE INDEX discord_command_events_received_idx ON discord_command_events(received_at_ms, event_id);
   `;
   for (const [name, statements, seedLegacy] of [
-    ['correction-tables-removed-from-v16', RESTORE_LEGACY_MISSION_NAMES + 'DROP TABLE research_results; DROP TABLE research_runs; DROP TABLE research_project_sessions; DROP TABLE research_findings; DROP TABLE research_experiments; DROP TABLE research_projects; ' + RESTORE_TELEGRAM_TABLES_V1 + 'PRAGMA user_version = 16;', false],
-    ['correction-tables-removed-from-v19-legacy', RESTORE_LEGACY_MISSION_NAMES + 'DROP TABLE research_results; DROP TABLE research_runs; DROP TABLE research_project_sessions; DROP TABLE research_findings; DROP TABLE research_experiments; DROP TABLE research_projects; ' + RESTORE_TELEGRAM_TABLES_V1 + 'PRAGMA user_version = 19;', true]
+    ['review-removed-from-v16', RESTORE_LEGACY_MISSION_NAMES + 'DROP TABLE research_results; DROP TABLE research_runs; DROP TABLE research_project_sessions; DROP TABLE research_findings; DROP TABLE research_experiments; DROP TABLE research_projects; ' + RESTORE_TELEGRAM_TABLES_V1 + 'PRAGMA user_version = 16;', false],
+    ['review-removed-from-v19-legacy', RESTORE_LEGACY_MISSION_NAMES + 'DROP TABLE research_results; DROP TABLE research_runs; DROP TABLE research_project_sessions; DROP TABLE research_findings; DROP TABLE research_experiments; DROP TABLE research_projects; ' + RESTORE_TELEGRAM_TABLES_V1 + 'PRAGMA user_version = 19;', true]
   ]) {
     const test = fixture(name);
     test.store.health();
@@ -624,7 +624,7 @@ const RESTORE_TELEGRAM_TABLES_V1 = `
     // distinguish "the correction tables were dropped" from "the database was rebuilt".
     test.store.recordSpend({ amountCents: 42, dailyLimitCents: 1000, purpose: 'preserve', provider: 'fixture', reference: name });
     test.store.transaction(db => {
-      if (seedLegacy) db.exec(`${LEGACY_CORRECTION_DDL}
+      if (seedLegacy) db.exec(`${LEGACY_review_DDL}
 ${LEGACY_DISCORD_DDL}`);
       db.exec(statements);
     });
@@ -646,7 +646,7 @@ ${LEGACY_DISCORD_DDL}`);
     const residue = migrated.transaction(db => db.prepare(
       "SELECT type, name FROM sqlite_schema WHERE name LIKE 'review_correction_%' OR sql LIKE '%review_correction_%' ORDER BY type, name"
     ).all());
-    assert.deepEqual(residue, [], `${name}: no retired correction table, trigger or index may survive migration`);
+    assert.deepEqual(residue, [], `${name}: no review correction table, trigger or index may survive migration`);
     // V22, the same shape of assertion for the Discord connector storage. Agent comms is a
     // different system with no table here, so nothing in this query can reach it.
     const discordResidue = migrated.transaction(db => db.prepare(

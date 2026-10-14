@@ -19,8 +19,8 @@ assert.equal(process.platform, 'linux', 'this acceptance suite requires real Lin
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'te-owner-linux-'));
 // Sockets get their own SHORT root, deliberately not under `scratch`. A unix
 // socket path must fit sockaddr_un.sun_path (108 bytes with its terminator),
-// and TMPDIR is not always shallow -- one development installation set it
-// to a 49-byte directory under the user's home, which pushed
+// and TMPDIR is not always shallow -- this installation sets it to
+// <profile-root>/toolsenabled-port/private/linux-live/temp, 49 bytes, which pushed
 // `scratch`/<uuid>.sock to 113 and made every socket case in this file refuse.
 // The product itself is not affected: it derives /run/user/<uid>/... at 80
 // bytes, independent of install depth. This is a harness bound, so it is

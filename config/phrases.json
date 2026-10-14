@@ -1552,7 +1552,8 @@
     {
       "$intent": "duo two-factor",
       "tools": [
-        "duo.desktop_status"
+        "duo.desktop_status",
+        "duo.institution_login"
       ],
       "says": [
         "duo",

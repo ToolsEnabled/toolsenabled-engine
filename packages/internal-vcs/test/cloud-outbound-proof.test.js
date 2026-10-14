@@ -13,7 +13,7 @@ function input(overrides = {}) {
   return {
     manifestId: MANIFEST_ID,
     sourceCommit: GIT_COMMIT,
-    branch: 'feature/filekeeper-custody',
+    branch: 'r1177/s2-filekeeper-custody',
     remoteLabel: 'origin',
     createdAt: CREATED_AT,
     ...overrides,
@@ -25,7 +25,7 @@ test('outbound proofs are deterministic and bind manifest, commit, branch, remot
   const second = createOutboundProof({
     createdAt: CREATED_AT,
     remoteLabel: 'origin',
-    branch: 'feature/filekeeper-custody',
+    branch: 'r1177/s2-filekeeper-custody',
     sourceCommit: GIT_COMMIT,
     manifestId: MANIFEST_ID,
   });

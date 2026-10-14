@@ -3,9 +3,9 @@
 
 // logs/ retention.
 //
-// WHY THIS EXISTS. logs/ had grown to hundreds of MB on a development install
-// with nothing anywhere that prunes it. The audit projections are NOT the
-// problem -- they are a small share of that. The bulk is material nothing has ever had a policy for:
+// WHY THIS EXISTS. logs/ had grown to ~783 MB on this machine with nothing
+// anywhere that prunes it. The audit projections are NOT the problem -- they
+// are 37 MB of that. The bulk is material nothing has ever had a policy for:
 // 274 MB of `actions.jsonl.legacy-*` / `actions.log.legacy-*` migration
 // archives (one full copy of the pre-migration file per legacy import), 291 MB
 // of lane console captures, and two ~70-85 MB service logs.
@@ -51,7 +51,7 @@
 //     guess which files are open.
 //   * Anything reached through a symlink or a junction. This repo has already
 //     had a recursive delete empty a shared node_modules through a junction,
-//     and a development install can carry hundreds of worktrees with junctions. A
+//     and there are ~250 live worktrees with junctions on this machine. A
 //     reparse point is never followed and never a candidate; Node reports a
 //     Windows junction as a symlink dirent, which is asserted by a test rather
 //     than assumed.
@@ -90,8 +90,8 @@ const NEVER = null;                                  // "not a candidate class"
 
 // THE DEFAULTS A CUSTOMER INSTALL GETS.
 //
-// Measured, not guessed. On a development install, lane consoles reached
-// hundreds of MB in under a week, which is why the console floor is 7 days and not the 14 the first
+// Measured, not guessed. On this machine 112 lane consoles reached 291 MB in
+// 6.5 days, which is why the console floor is 7 days and not the 14 the first
 // draft used: a 14-day console floor on a busy machine is a 600 MB directory.
 // The per-class ages answer "how long is this still worth reading"; the budget
 // answers "and what if the machine is busier than whoever picked those ages

@@ -21,8 +21,8 @@
 // path on the machine refuses -- and the only sentence the agent could render
 // said "internal error", terminal, with nothing to act on. A person watching
 // their agent fail had no way to learn that a stale dialog was the cause. The
-// product's first external user reported exactly this shape: agents that
-// could not use the credential manager or vault.
+// product's first external user reported exactly this shape: that agents "were
+// not able to use credential manager or vault".
 //
 // THE DISTINCTION THIS TABLE EXISTS TO HOLD. A full queue is capacity almost
 // everywhere in this tree -- TASK_QUEUE_FULL and

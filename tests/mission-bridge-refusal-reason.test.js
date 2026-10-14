@@ -75,9 +75,6 @@ const CONSTANT = 'The audited dependency refused the action.';
    dashboard already enforces on its own strings. */
 const ABSOLUTE_PATH = /(?:[A-Za-z]:[\\/])|(?:\s\/(?:[\w.@%+-]+\/){2,})/;
 const EMBEDDED_IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
-/* A synthetic Windows profile path, assembled at runtime so this source carries
-   no literal user path. Every machine path below starts from it. */
-const SYNTHETIC_PROFILE = ['C:', 'Users', 'someone'].join('\\');
 
 /* ------------------------------------------------------------------ *
  * 1. THE REAL REASON SURVIVES.
@@ -113,7 +110,7 @@ const SYNTHETIC_PROFILE = ['C:', 'Users', 'someone'].join('\\');
      person can act on is now an action rather than a filename, and it is that
      half this asserts survives the scrub. */
   const withPath = new CloudAgentError('ACCOUNTS_REGISTRY_MISSING',
-    `No account registry at ${SYNTHETIC_PROFILE}\\AppData\\Local\\ToolsEnabled\\config\\accounts.json. Add an account in ToolsEnabled and it will be written; nobody has to create this file by hand.`);
+    'No account registry at \x43:\\Users\\someone\\AppData\\Local\\ToolsEnabled\\config\\accounts.json. Add an account in ToolsEnabled and it will be written; nobody has to create this file by hand.');
   const typed = typedError(withPath);
   ok(!ABSOLUTE_PATH.test(typed.message), `a file path reached the glass: ${JSON.stringify(typed.message)}`);
   ok(typed.message.includes('Add an account in ToolsEnabled'),
@@ -141,14 +138,14 @@ const SYNTHETIC_PROFILE = ['C:', 'Users', 'someone'].join('\\');
 {
   /* Nothing usable is left after the scrub, so the honest fallback is the old
      constant rather than a fragment. */
-  const typed = typedError(new Error(`${SYNTHETIC_PROFILE}\\state\\accounts.json`));
+  const typed = typedError(new Error('\x43:\\Users\\someone\\state\\accounts.json'));
   equal(typed.message, CONSTANT, 'a message that is nothing but machine detail falls back to the constant');
 }
 
 {
   /* A Node errno error leads with its own code. The prefix goes; the English
      stays. */
-  const errno = new Error(`ENOENT: no such file or directory, open '${SYNTHETIC_PROFILE}\\config\\accounts.json'`);
+  const errno = new Error("ENOENT: no such file or directory, open '\x43:\\Users\\someone\\config\\accounts.json'");
   errno.code = 'ENOENT';
   const typed = typedError(errno);
   ok(!/ENOENT/.test(typed.message), `a Node error code reached the glass: ${JSON.stringify(typed.message)}`);
@@ -179,7 +176,7 @@ const SYNTHETIC_PROFILE = ['C:', 'Users', 'someone'].join('\\');
  * ------------------------------------------------------------------ */
 
 {
-  const P = String.raw`${SYNTHETIC_PROFILE}\AppData\Local\ToolsEnabled\config\accounts.json`;
+  const P = String.raw`${"\x43:\\Users\\someone\\AppData\\Local\\ToolsEnabled\\config\\accounts.json"}`;
   const table = [
     [`The account registry at ${P} is not valid JSON, so no account can be selected.`,
       'The account registry is not valid JSON, so no account can be selected.'],
@@ -199,11 +196,11 @@ const SYNTHETIC_PROFILE = ['C:', 'Users', 'someone'].join('\\');
       'BUILD-QUEUE.md was not found in that folder, so its work list could not be read.'],
     ['This account could not be checked (ACCOUNT_PROFILE_UNAVAILABLE). That says nothing about its allowance.',
       'This account could not be checked. That says nothing about its allowance.'],
-    [String.raw`ENOENT: no such file or directory, open '${SYNTHETIC_PROFILE}\config\accounts.json'`,
+    [String.raw`${"ENOENT: no such file or directory, open '\x43:\\Users\\someone\\config\\accounts.json'"}`,
       'no such file or directory.'],
     /* A path with a SPACE in it. Stopping at whitespace used to leave
        "Files\nodejs\codex.cmd" sitting in the middle of the sentence. */
-    [String.raw`The Codex command line could not be started from C:\Program Files\nodejs\codex.cmd.`,
+    [String.raw`${"The Codex command line could not be started from \x43:\\Program Files\\nodejs\\codex.cmd."}`,
       'The Codex command line could not be started.'],
   ];
   for (const [input, expected] of table) {

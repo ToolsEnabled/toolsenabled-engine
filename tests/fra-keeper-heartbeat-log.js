@@ -55,8 +55,8 @@ const serviceRegistry = require('../src/lib/service-registry');
 const fixtureRegistryInput = Object.freeze({
   schemaVersion: 1,
   machines: Object.freeze({
-    'machine-a': Object.freeze({ address: '192.0.2.10', root: 'C:\\fixture\\machine-a' }),
-    'machine-b': Object.freeze({ address: '192.0.2.11', root: 'C:\\fixture\\machine-b' })
+    'machine-a': Object.freeze({ address: '192.0.2.10', root: '\x43:\\fixture\\machine-a' }),
+    'machine-b': Object.freeze({ address: '192.0.2.11', root: '\x43:\\fixture\\machine-b' })
   }),
   services: Object.freeze({
     'full-remote-access': Object.freeze({ transport: 'tcp', resolution: 'peer', port: 8790 })
@@ -132,7 +132,7 @@ async function main() {
   {
     const smuggled = sanitizeHeartbeatTelemetry({
       ok: true, stage: 'liveness_write', attempt: 1, elapsedMs: 99,
-      secretPath: 'C:\\should\\never\\appear',
+      secretPath: '\x43:\\should\\never\\appear',
       token: 'must-not-leak-anywhere-0123456789'
     });
     assert.deepEqual(Object.keys(smuggled).sort(), ['attempt', 'attemptsHistory', 'code', 'elapsedMs', 'stage']);
@@ -268,7 +268,7 @@ async function main() {
     await keeper.runHeartbeat('203.0.113.1', 'steady', {
       heartbeatFn: async () => ({
         ok: true, stage: 'liveness_write', attempt: 1, elapsedMs: 55,
-        secretPath: 'C:\\should\\never\\appear', token: 'must-not-leak-0123456789'
+        secretPath: '\x43:\\should\\never\\appear', token: 'must-not-leak-0123456789'
       }),
       logFn: record => logged.push(record)
     });

@@ -60,6 +60,26 @@ const MIN_UNOBSERVABLE_REASON = 20;
 const DIRECT_LISTENER_START_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z$/;
 const ELEVATED_PROCESS_START_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
+// WINDOWS-ONLY BY ITS DATA SOURCE, AND THAT IS WHY THIS IS CORRECT.
+//
+// Both transforms below are non-injective on POSIX: a backslash is a legal byte in a
+// Linux or macOS filename, so folding it to '/' maps two different paths to one, and
+// those filesystems are case-sensitive, so lowercasing does it again. Either would
+// let a crafted Execute or WorkingDirectory satisfy the root-binding comparison in
+// scheduledTaskRootBinding() while naming somewhere else.
+//
+// It is nonetheless correct as written, because the only caller is the
+// 'scheduled-task' probe and its values come from the Windows Task Scheduler via
+// ctx.getScheduledTask(). Off Windows that read has nothing to return, the probe
+// answers `unknown`, and this function is never reached. On Windows both transforms
+// are the right rule.
+//
+// SO THIS IS A NOTE, NOT A FIX. The same shape WAS a live defect in
+// src/lib/providers/agent-sandbox.js normalizedHostPath(), which applied it on every
+// platform to a bind-mount boundary assertion; that one is fenced to win32 now. If a
+// non-Windows task or service source is ever added here, fence these two the same
+// way in the same commit -- the comparison this feeds is a containment check, and its
+// dangerous direction is a false accept.
 function canonicalActionPath(value) {
   return String(value || '').replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
 }

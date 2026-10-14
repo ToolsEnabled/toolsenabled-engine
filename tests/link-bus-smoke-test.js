@@ -24,8 +24,8 @@ const assert = require('node:assert/strict');
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.2', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '203.0.113.1', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.2', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '203.0.113.1', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -81,7 +81,7 @@ function testTheAllowlistCameFromTheFixture() {
 }
 
 // The probe's paging is a contract with the server it probes, not a tuning
-// knob. an earlier change took the page size from transport-relay's DEFAULT_PAGE_SIZE --
+// knob. b0e07ba took the page size from transport-relay's DEFAULT_PAGE_SIZE --
 // an unrelated subsystem -- so the probe silently dropped from 200 to 25 per
 // page and every positioned read went to a limit this contract did not expect.
 // Assert the agreement itself, so a retune anywhere reports as a stated drift
@@ -90,7 +90,7 @@ function testPagingAgreesWithTheServer() {
   assert.equal(READ_PAGE_SIZE, MAX_PAGE_SIZE,
     'the probe must page at the link bus server\'s own maximum page size; a larger ask is truncated and a smaller one only widens the HEAD_MOVED race');
   assert.ok(Number.isSafeInteger(READ_PAGE_SIZE) && READ_PAGE_SIZE > 0, 'the page size must be a positive integer');
-  // The invariant an earlier change existed to guarantee, now actually asserted: the
+  // The invariant b0e07ba existed to guarantee, now actually asserted: the
   // response cap must hold one whole page at the per-message envelope ceiling,
   // or the probe destroys its own socket on a healthy bus.
   assert.ok(MAX_RESPONSE_BYTES >= READ_PAGE_SIZE * MAX_MESSAGE_ENVELOPE_BYTES,

@@ -47,7 +47,7 @@ function fixture() {
   fs.chmodSync(root, 0o700);
   roots.push(root);
   const env = { ...process.env, TOOLSENABLED_PROVIDER_ISOLATION_ROOT: root,
-    TOOLSENABLED_STATE_ROOT: path.join(root, 'ToolsEnabled-Isolated', 'capability') };
+    TOOLSENABLED_STATE_ROOT: path.join(root, 'fixture-profileelopment', 'capability') };
   for (const key of Object.keys(env)) if (['CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'GEMINI_CLI_HOME', 'GROK_HOME'].includes(key.toUpperCase())) delete env[key];
   const context = isolation.isolationContext(env);
   const home = path.join(context.servicesRoot, 'account-homes', 'codex', 'development');
@@ -132,6 +132,18 @@ async function main() {
   const claudeEnv = isolation.providerSessionEnvironment({ ...first.env,CLAUDE_SECURESTORAGE_CONFIG_DIR:live.home },
     { provider:'claude',home:path.join(first.root,'private-claude'),requireHome:true });
   assert.equal(claudeEnv.CLAUDE_SECURESTORAGE_CONFIG_DIR,path.join(first.root,'private-claude'));
+  const nativeSettings = { ANTHROPIC_API_KEY:'fixture', anthropic_auth_token:'fixture',
+    CLAUDE_CODE_OAUTH_TOKEN:'fixture', CLAUDE_CODE_USE_BEDROCK:'1',
+    AWS_PROFILE:'fixture-profile', GOOGLE_APPLICATION_CREDENTIALS:path.join(first.root,'cloud-auth'),
+    CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR:'3', CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR:'4' };
+  const nativeEnv = isolation.providerSessionEnvironment({ ...first.env,...nativeSettings },
+    { provider:'claude',home:path.join(first.root,'private-claude'),requireHome:true });
+  for (const [name,value] of Object.entries(nativeSettings)) {
+    assert.ok(nativeEnv[name] === value, `Native Claude authentication setting ${name} was removed`);
+  }
+  assert.equal(nativeEnv.HOME,first.context.userProfile);
+  assert.equal(nativeEnv.CLAUDE_CONFIG_DIR,path.join(first.root,'private-claude'));
+  isolation.assertProviderSessionEnvironment(nativeEnv);
   assert.throws(() => isolation.assertProviderSessionEnvironment({ ...claudeEnv,CLAUDE_SECURESTORAGE_CONFIG_DIR:live.home }),
     { code:'AGENT_PROVIDER_ISOLATION_ENVIRONMENT' });
   const geminiHome = path.join(first.root,'private-gemini');
@@ -264,10 +276,11 @@ async function main() {
       servicesRoot:first.context.servicesRoot,userCodexHome:first.home,accountName:'development',accountHome:first.context.userProfile,record:null });
     const home = prepare();
     assert.equal(home.env.HOME,first.context.userProfile);
-    assert.equal(fs.readFileSync(path.join(home.codexHome,'config.toml'),'utf8').includes('cli_auth_credentials_store = "file"'),true);
-    assert.equal(fs.statSync(path.join(home.codexHome,'auth.json')).ino,fs.statSync(path.join(first.home,'auth.json')).ino);
+    assert.equal(home.codexConfig.cli_auth_credentials_store, 'file');
+    assert.equal(home.codexHome, first.home);
+    assert.equal(fs.existsSync(path.join(home.agentHome, 'auth.json')), false);
     isolation.providerSessionEnvironment(home.env,{ provider:'codex',requireHome:true });
-    assert.equal(prepare().codexHome,home.codexHome,'legitimate same-session links could not be reused');
+    assert.equal(prepare().codexHome, first.home, 'the official account home stays pinned');
     const outsideLink = path.join(live.root,'linked-private-auth.json');
     fs.linkSync(path.join(first.home,'auth.json'),outsideLink);
     assert.throws(() => isolation.providerSessionEnvironment(home.env,{ provider:'codex',requireHome:true }),{ code:'AGENT_PROVIDER_ISOLATION_PATH' });
@@ -288,9 +301,11 @@ async function main() {
         return originalLink(source,...args);
       };
       fs.copyFileSync = (...args) => { credentialCopies++; return originalCopy(...args); };
-      assert.throws(() => confinement.prepareConfinedCodexHome(confinement.agentConfinement('guided'),{
+      const inPlace = confinement.prepareConfinedCodexHome(confinement.agentConfinement('guided'), {
         servicesRoot:first.context.servicesRoot,userCodexHome:independentHome,accountName:'unlinkable',
-        accountHome:first.context.userProfile,record:null }),{ code:'AGENT_CONFINEMENT_CREDENTIAL_UNLINKABLE' });
+        accountHome:first.context.userProfile,record:null });
+      assert.equal(inPlace.env.CODEX_HOME, independentHome);
+      assert.equal(fs.existsSync(path.join(inPlace.agentHome, 'auth.json')), false);
     } finally { fs.linkSync = originalLink; fs.copyFileSync = originalCopy; }
     assert.equal(credentialCopies,0,'a failed private hard link copied authentication');
     assert.equal(fs.readFileSync(independentAuth,'utf8'),'synthetic private credential');
@@ -327,7 +342,7 @@ async function main() {
     assert.equal(claudePlan.env.HOME,first.context.userProfile);
     assert.equal(claudePlan.configDir,claudeHome);
   });
-  console.log('PASS credential links stay in-session, external links/junctions refuse, MCP children retain private state');
+  console.log('PASS Codex sign-in stays in place without linking/copying, external links/junctions refuse, MCP children retain private state');
 
   const firstExe = installPeer(first); installPeer(second);
   assert.equal(isolation.resolvePrivateProviderExecutable('codex',first.env).executablePath,firstExe);

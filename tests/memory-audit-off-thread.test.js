@@ -2,7 +2,7 @@
 
 // THE MEMORY-MUTATION AUDIT EVENT LEAVES THE MAIN THREAD -- WITHOUT LEAVING.
 //
-// memory.mutation is n=93 in a full-record ranking. The event was
+// memory.mutation is n=93 in Builder 5's full-record ranking. The event was
 // recorded with the SYNCHRONOUS coordinatorAudit.write(), which runs the whole
 // admission (writer-lock spin, projection digests, redaction) on the caller's
 // thread, while the off-thread route (writeAsync -> the group-commit queue)
@@ -20,7 +20,7 @@ const memory = require('../src/lib/providers/memory');
 const throughput = require('../src/lib/throughput-mode');
 const operationAudit = require('../src/lib/operation-audit');
 
-/* Since an earlier change ("Make Basic runtime audit optional") the memory mutation is
+/* Since a6c70ac6 ("Make Basic runtime audit optional") the memory mutation is
    recorded only when the person turned audit on; Basic records nothing. The
    recorded cases run under that choice through the trusted policy seam, the
    way tests/runtime-basic-policy.test.js does. */

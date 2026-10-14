@@ -26,7 +26,7 @@
 //   * A vault FINGERPRINT (an mtime+size stat) gates the expensive read. The
 //     default identity read shells out to powershell.exe to decrypt DPAPI; at a
 //     2s poll that is ~43,000 process creations per day on an idle machine,
-//     which was measured on a development machine as a standing CPU cost.
+//     which was measured on the owner's machine as a standing CPU cost.
 //   * A NULL fingerprint means "I could not look", NEVER "nothing changed", and
 //     always falls through to a real read.
 //   * TWO CONSECUTIVE AGREEING READS are required before any rotation is

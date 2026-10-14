@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { createStateStore } = require('./state-store');
+const { validateNativeModelId } = require('./model-dispatch-tiers');
 const { plaintextCredentialPattern } = require('./secret-patterns');
 
 const NAMESPACE = 'agent.continuation.v1';
@@ -19,7 +20,7 @@ const STATUSES = new Set(['idle', 'ready', 'retry_wait', 'claimed', 'running', '
 // scheduling boundary the moment this one changes.
 const DEFAULT_BASE_DELAY_MS = 15000;
 const DESCRIPTOR_KEYS = ['sessionId', 'resumeThreadId', 'resumeThreadProvider', 'cwd', 'tier',
-  'effort', 'resumeAccount', 'requestKeys', 'treeIdentity', 'roleBinding', 'profileId', 'agentId'];
+  'effort', 'model', 'resumeAccount', 'requestKeys', 'treeIdentity', 'roleBinding', 'profileId', 'agentId'];
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 function object(value, label, keys) {
@@ -46,8 +47,12 @@ function integer(value, label, min = 0, max = Number.MAX_SAFE_INTEGER) {
 function descriptor(input) {
   object(input, 'resume descriptor', DESCRIPTOR_KEYS);
   const result = {};
-  for (const key of DESCRIPTOR_KEYS.filter(key => !['requestKeys', 'treeIdentity', 'roleBinding'].includes(key))) {
+  for (const key of DESCRIPTOR_KEYS.filter(key => !['requestKeys', 'treeIdentity', 'roleBinding', 'model'].includes(key))) {
     result[key] = string(input[key], key, key === 'cwd' ? 4096 : 512, key !== 'sessionId');
+  }
+  if (Object.hasOwn(input, 'model')) {
+    try { result.model = validateNativeModelId(input.model); }
+    catch (error) { fail('CONTINUATION_INVALID', error.message); }
   }
   if (result.resumeThreadProvider && !['codex', 'claude', 'gemini', 'grok', 'local'].includes(result.resumeThreadProvider)) {
     fail('CONTINUATION_INVALID', 'The resume provider is not supported.');
@@ -108,6 +113,10 @@ function checkpoint(input) {
   return result;
 }
 function classifyFailure(error, { retrySafe = false } = {}) {
+  const failure = error?.payload?.failure;
+  if (failure?.category === 'safety-policy' || ['misalignmentPolicyViolation', 'misalignment_policy_violation'].includes(failure?.code || error?.code)) {
+    return { retry: false, reason: 'safety_policy_refusal' };
+  }
   const code = typeof error?.code === 'string' ? error.code.toUpperCase() : '';
   const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
   // Never infer retry safety from a message or a provider's generic retryable
@@ -372,13 +381,27 @@ function createContinuationState({ file, now = Date.now, leaseMs = 30000,
   function settleRetry(handle, options = {}) {
     return options.success === true ? success(handle, options) : failed(handle, options.error, options);
   }
+  // Manual restore needs the fields that were actually recorded, not optional
+  // defaults synthesized by descriptor(). In particular, an absent account
+  // must not become permission to resume under the provider's default sign-in.
+  function nativeSessionIdentity(sessionId) {
+    active();
+    const entry = store.getMemory({ namespace: NAMESPACE, key: keyFor({ sessionId }) });
+    const row = decode(entry);
+    if (!row) return null;
+    if (['resumeThreadId', 'resumeThreadProvider', 'resumeAccount']
+      .some(field => !Object.hasOwn(entry.value.descriptor, field))) {
+      fail('CONTINUATION_IDENTITY_UNAVAILABLE', 'The saved native identity is incomplete.');
+    }
+    return row.descriptor;
+  }
   function close() {
     if (closed) return;
     closed = true;
     store.close();
   }
   return Object.freeze({ track, save, success, failed, stop, cancel: stop, dueRecoveries, claim, begin,
-    heartbeat, reconcile, settleRetry, get: key => publicRow(read(key)), list, close });
+    heartbeat, reconcile, settleRetry, get: key => publicRow(read(key)), nativeSessionIdentity, list, close });
 }
 
 module.exports = { createContinuationState, keyFor, classifyFailure, DEFAULT_BASE_DELAY_MS };

@@ -67,7 +67,7 @@ const ROUTES = Object.freeze({
   '/v1/actions/terminate': 'terminate',
   '/v1/actions/ledger-archive': 'ledgerArchive',
   // The in-app owner popup's two write actions. Mission Control's renderer
-  // (the app's src/mission-bridge.js ACTION_ROUTES) posts exactly these
+  // (wt-installer src/mission-bridge.js ACTION_ROUTES) posts exactly these
   // paths; its read half is GET /v1/owner-prompts below.
   '/v1/actions/owner-prompt-presented': 'ownerPromptPresented',
   '/v1/actions/owner-prompt-decision': 'ownerPromptDecision',
@@ -298,9 +298,55 @@ function originSet(values) {
 // CORS response headers are omitted for no-Origin callers because they are
 // meaningless without one -- the browser is the only thing that reads them.
 //
-// The concrete defect this fixes: our own agents are meant to run from
+// The concrete defect this fixes: the owner asked that our own agents run from
 // inside the product, and they could not reach the mission bridge at all.
 const NO_ORIGIN_HEADERS = Object.freeze({});
+
+// THE HOST HEADER IS THE ONE CHECK THAT STOPS DNS REBINDING.
+//
+// Admitting requests with no Origin is correct and deliberate -- a CLI, a
+// script and an agent are not browsers, and the comment above records why
+// refusing them was backwards. It has one consequence the Origin allowlist
+// cannot cover, because the attack arrives with no Origin by construction.
+//
+// A page on http://attacker.example, served with a one-second DNS TTL, fetches
+// http://attacker.example:<this port>/. That is SAME-ORIGIN for the page, so the
+// browser sends no Origin header. The attacker rebinds attacker.example to
+// 127.0.0.1 and the next fetch lands here, carrying no Origin and a Host naming
+// the attacker's domain -- and the page can read the reply, because as far as
+// the browser is concerned it is reading its own origin.
+//
+// MEASURED before this existed: `Host: attacker.example:<port>` with no Origin
+// got 200 and the runtime record from GET /v1/runtime, which answers before the
+// principal is resolved. Nothing else fell over -- /v1/bootstrap wants a proof
+// value from an owner-only file in state/, and every other route wants the
+// bearer or an agent session credential -- so it was a disclosure of
+// {baseUrl, port, startedAt, pid}, not a takeover. T2010 / T-A21.
+//
+// A request whose Host does not name THIS listener is not a request to this
+// listener, so it is refused ahead of CORS, authentication and routing: no
+// route's own checks are reached and nothing is disclosed by which one refused.
+// The names are the three the origin allowlist itself accepts (:267), and none
+// of them can be pointed at an attacker's DNS. The port is read from the socket
+// rather than from configuration, so it is the port this connection actually
+// arrived on and cannot drift from it.
+const LOOPBACK_HOST_NAMES = Object.freeze(new Set(['127.0.0.1', '127.0.0.2', 'localhost']));
+
+function hostNamesThisListener(request) {
+  const header = request.headers.host;
+  // Node answers 400 to an HTTP/1.1 request with no Host before a listener
+  // runs, but this must not depend on that: absence is refused here too, so
+  // "no Host" can never become a one-header way around the check.
+  if (typeof header !== 'string' || header.length === 0 || header.length > 255) return false;
+  let parsed;
+  try { parsed = new URL(`http://${header}`); }
+  catch { return false; }
+  if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) return false;
+  if (!LOOPBACK_HOST_NAMES.has(parsed.hostname)) return false;
+  const stated = parsed.port === '' ? 80 : Number(parsed.port);
+  const bound = request.socket && request.socket.localPort;
+  return Number.isSafeInteger(bound) && stated === bound;
+}
 
 function corsHeaders(request, allowedOrigins) {
   const origin = request.headers.origin;
@@ -442,7 +488,7 @@ function authorizedBootstrap(parsedUrl, proof) {
 // from then on. Mission Control's owner popup swallows that failure whenever
 // no prompt is currently open, so the owner's approvals simply never appeared
 // and nothing anywhere said why. Failing loudly here costs a fixture one line;
-// not failing cost the owner their approval queue.
+// not failing cost the owner his approval queue.
 function testScopedServer(options) {
   return options.allowTestPortZero === true
     || options.allowTestRuntimeFile === true
@@ -490,7 +536,7 @@ function mintBootstrapProof(options) {
       + 'it would delete state/mission-bridge-bootstrap-proof.json and write a proof that no running process holds. '
       + 'That is not a test-only inconvenience. A live bridge keeps its proof in memory, so it would answer every /v1/bootstrap with 401 from '
       + 'that moment until someone restarted it, and Mission Control would show the owner an empty approvals surface with no error explaining why. '
-      + 'That exact failure hid eight decisions they were waiting on. '
+      + 'That exact failure hid eight decisions he was waiting on. '
       + 'Your test is not wrong to build a real server; it just has to bring its own credential. '
       + 'Fix: pass bootstrapProof: crypto.randomBytes(32) in this createMissionBridgeServer(...) call.',
       { status: 500 });
@@ -627,6 +673,14 @@ function createMissionBridgeServer(options = {}) {
   // those sites in one place instead of wrapping each call individually.
   async function handleMissionBridgeRequest(request, response) {
     const requestId = crypto.randomUUID();
+    /* Ahead of CORS, authentication and routing: see hostNamesThisListener().
+       No CORS headers on the refusal -- a caller this listener does not answer
+       for is told nothing about which origins it would have answered for. */
+    if (!hostNamesThisListener(request)) {
+      const failure = errorBody(new MissionBridgeError('BRIDGE_HOST_REFUSED',
+        'This request names a host this bridge does not answer for.', { status: 403 }), requestId);
+      return send(response, failure.status, failure.body);
+    }
     const cors = corsHeaders(request, allowedOrigins);
     if (!cors) return send(response, 403, errorBody(new MissionBridgeError('BRIDGE_ORIGIN_REFUSED', 'Request origin is not an allowed dashboard origin.', { status: 403 }), requestId).body);
     if (request.method === 'OPTIONS') return send(response, 204, {}, cors);

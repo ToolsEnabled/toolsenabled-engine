@@ -114,7 +114,6 @@ const path = require('node:path');
 const { StringDecoder } = require('node:string_decoder');
 
 const { executableFor } = require('./cli-provider-gateway.js');
-const { safeLaunchEnvironment } = require('./subscription-launch-env.js');
 
 // Measured: the reply takes under two seconds on this machine. Twenty seconds
 // is the same order of patience the auth probe's status call gets.
@@ -334,6 +333,7 @@ async function exchange(command, args, { env, cwd, timeoutMs, exitGraceMs, spawn
         cwd,
         env,
         windowsHide: true,
+        nativeClaudeCode: true,
         containProcessTree: true,
         shell: false,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -429,13 +429,11 @@ async function runUsageProbe({
   const budget = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_USAGE_TIMEOUT_MS;
   const grace = Number.isFinite(exitGraceMs) && exitGraceMs >= 0 ? exitGraceMs : DEFAULT_EXIT_GRACE_MS;
 
-  // The same scrub the auth probe and every launch use: ambient billing
-  // credentials are removed so the CLI answers for the subscription login and
-  // not for a metered key. The scrub can refuse outright, and that refusal is
-  // a stated nothing here rather than an exception.
+  // Ask the official CLI under the same selected authentication as the native
+  // session. The CLI reports unavailable usage for auth modes without quotas.
   let env;
   try {
-    env = safeLaunchEnvironment(baseEnvironment, { context: 'claude usage probe' });
+    env = { ...baseEnvironment };
     env = require('../provider-session-isolation').providerSessionEnvironment(env,
       { provider: 'claude', home: configDir, requireHome: true });
   } catch (error) {

@@ -21,7 +21,7 @@ const test = require('node:test');
 const SCRATCH = fs.mkdtempSync(path.join(os.tmpdir(), 'r-ledger-tools-'));
 process.env.TOOLSENABLED_STATE_ROOT = path.join(SCRATCH, 'state');
 fs.mkdirSync(process.env.TOOLSENABLED_STATE_ROOT, { recursive: true });
-// Since an earlier change ("Make Basic runtime audit optional") audit and Ledger
+// Since a6c70ac6 ("Make Basic runtime audit optional") audit and Ledger
 // history verification follow the person's saved choices; with no saved
 // settings this process is Basic. A scratch settings file lets one test state
 // those choices the way the Settings page saves them.
@@ -109,7 +109,7 @@ function build(mode, { durable = true, needsApproval = false } = {}) {
   const audits = [];
   const control = new RLedgerAgentControl({
     gate: () => ({ mode, state: mode === 'off' ? 'withheld' : 'enabled', why: mode === 'off' ? '"rules.capture_spoken" is off.' : null, needsApproval }),
-    // Audit turned on by the person (an earlier change made it optional; Basic skips it).
+    // Audit turned on by the person (a6c70ac6 made it optional; Basic skips it).
     auditEnabled: () => true,
     auditRequire: (action, target, details) => { audits.push({ action, target, details }); return { durable }; },
     ledgerOptions: opts
@@ -167,8 +167,8 @@ test('the tool note names the r_ledger family at Standard and not at Guided', ()
 test('off: both refuse by name, the refusal names the setting, and no file appears', () => {
   const { dir, control, audits } = build(MODES.OFF);
   const args = { actor: 'codex', scope: 'global', words: 'always ask before spending money' };
-  // The refusal names the setting and tells the agent not to ask (product
-  // rule: when it is disabled, agents do not ask either).
+  // The refusal names the setting and tells the agent not to ask (owner,
+  // 2026-09-15: "agents shouldnt ask if its disabled either").
   assert.throws(() => control.file(args), { code: 'R_LEDGER_AGENT_FILING_OFF', message: /"Who adds standing rules" in Settings/ });
   assert.throws(() => control.propose(args), { code: 'R_LEDGER_AGENT_FILING_OFF', message: /Do not ask the person whether to file it/ });
   assert.equal(fs.existsSync(path.join(dir, 'reports')), false);
@@ -262,7 +262,7 @@ test('a non-durable audit intent refuses before the gate is consulted', () => {
   assert.equal(fs.existsSync(path.join(dir, 'reports')), false);
 });
 
-/* THE O7 IMPROVEMENTS (product note) THROUGH THE TOOL SEAM. Both schemas
+/* THE O7 IMPROVEMENTS (owner, 2026-08-22) THROUGH THE TOOL SEAM. Both schemas
    carry the optional sessionId the product supplies; the results say how the
    verbatim check went; a duplicate answers alreadyStanding with the standing
    id; a refinement lands as a child; a bare "ok" is refused; and with a

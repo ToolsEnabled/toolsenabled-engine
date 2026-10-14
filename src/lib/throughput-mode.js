@@ -13,9 +13,9 @@
  *   strict             The previous behaviour: one call at a time per
  *                      connection and one writer-lock acquisition per record.
  *
- * Product requirement: this must keep things secure and tracked
- * without slowing down a user, even one with 1000 agents making tool calls.
- * The default is therefore `fast`; a
+ * Owner, 2026-09-03: "security or not, this has to be worked into something
+ * that keeps things secure and tracked but does not slow down a user with
+ * even 1000 agents making tool calls." The default is therefore `fast`; a
  * person who wants the older one-at-a-time behaviour chooses it.
  *
  * Read on the hot path of every tool call, so the answer is memoised for a

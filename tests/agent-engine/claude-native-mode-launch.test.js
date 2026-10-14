@@ -22,6 +22,11 @@ function spawnHidden(command,args) {
     return true;
   }};
   if(args.includes('--version'))queueMicrotask(()=>{child.stdout.emit('data','fixture-version');child.emit('close',0);});
+  // The feature probe (`--help`) must CLOSE, or nothing below ever runs: its
+  // timeout is unref'd, so with the child left open the event loop drains and
+  // node exits 0 before the first await resolves, with every assertion unrun
+  // (1.0.50 review of fixes, 3.1). A non-zero exit reads as "features unknown".
+  else if(args.includes('--help'))queueMicrotask(()=>child.emit('close',1));
   else launches.push({args,child});
   return child;
 }
@@ -36,12 +41,14 @@ async function run(){
     for(const resume of [false,true]) {
       const session=await (resume?resumeClaudeSession:startClaudeSession)({
         cwd:process.cwd(),command:process.execPath,env:{},
-        ...(resume?{threadId:'72d4f6b8-0c2e-4a6c-9e0b-2d4f6a8c0e1f'}:{}),
+        ...(resume?{threadId:'7cf7c88e-6912-4388-a181-78aef262c494'}:{}),
         plan:{claudePermissionMode:initialMode,roleFunctionsOnly:true,agentApiMode:'Only'}});
       const args=launches.at(-1).args;
       assert.equal(args[args.indexOf('--permission-mode')+1],initialMode);
       assert.equal(args[args.indexOf('--tools')+1],'');
-      assert.equal(args[args.indexOf('--setting-sources')+1],'');
+      // Native user authentication settings remain available; a confined launch drops only the folder's own (1.0.50 M1).
+      assert.deepEqual(args.flatMap((value,index)=>value==='--setting-sources'?[args[index+1]]:[]),
+        initialMode==='bypassPermissions'?[]:['user']);
       assert.ok(args.includes('--disable-slash-commands'));
       try {
         const modes=session.adapter.getSessionModes(session.threadId);

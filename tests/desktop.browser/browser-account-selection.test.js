@@ -12,7 +12,7 @@ const { setThroughputModeForTests } = require('../../src/lib/throughput-mode');
 
 (async () => {
 const primary = 'studenta@example.com';
-const secondary = 'student@example.test';
+const secondary = 'student\x40example.edu';
 
 assert.equal(isAccountAwareGoogleUrl('https://myaccount.google.com/'), true);
 assert.equal(isAccountAwareGoogleUrl('https://console.firebase.google.com/'), true);
@@ -22,8 +22,8 @@ assert.equal(
   `https://myaccount.google.com/security?authuser=${encodeURIComponent(primary)}`
 );
 assert.equal(
-  applyGoogleAccount('https://drive.google.com/drive/u/0?authuser=student%40example.test', primary),
-  'https://drive.google.com/drive/u/0?authuser=student%40example.test',
+  applyGoogleAccount('\x68ttps://drive.google.com/drive/u/0?authuser=student\x2540example.edu', primary),
+  '\x68ttps://drive.google.com/drive/u/0?authuser=student\x2540example.edu',
   'An explicit Google URL account selector must never be silently overwritten.'
 );
 assert.equal(applyGoogleAccount('https://example.com/path', primary), 'https://example.com/path');
@@ -42,7 +42,7 @@ assert.equal(defaultRoute.account, 'studenta');
 assert.match(defaultRoute.url, /authuser=studenta%40example\.com/);
 const chosenRoute = routeBrowserStart({ url: 'https://myaccount.google.com/', account: 'student' }, accounts);
 assert.equal(chosenRoute.account, 'student');
-assert.match(chosenRoute.url, /authuser=student%40example\.test/);
+assert.match(chosenRoute.url, /authuser=student\x2540example\.edu/);
 const firebaseRoute = routeBrowserStart({
   url: 'https://console.firebase.google.com/project/example-revenue-project/settings/general',
   account: 'studenta'

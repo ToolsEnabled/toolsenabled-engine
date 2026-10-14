@@ -21,10 +21,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const scratchState = fs.mkdtempSync(path.join(os.tmpdir(), 'build-queue-state-'));
+const scratchState = fs.mkdtempSync(path.join(os.tmpdir(), 'w52-state-'));
 process.env.TOOLSENABLED_STATE_ROOT = scratchState;
 
-const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'build-queue-workspace-'));
+const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'w52-workspace-'));
 const queueFile = path.join(workspace, 'BUILD-QUEUE.md');
 
 /* The queue REFUSES to create itself: "Refusing to create a queue file
@@ -36,7 +36,7 @@ fs.writeFileSync(queueFile, '# Build queue\n\n', 'utf8');
 
 const corpus = require('../src/lib/build-queue-corpus.js');
 const missionBridge = require('../src/lib/mission-bridge/actions.js');
-// The code under test. Driving the bridge action directly would exercise code
+// The code W52 adds. Driving the bridge action directly would exercise code
 // that was already shipping and prove nothing about the three new tools.
 const { buildQueueOperation } = require('../src/lib/tool-registry.js');
 const taxonomy = require('../src/lib/error-taxonomy');
@@ -84,7 +84,7 @@ function recordingAudit({ durable = true, anchored = true } = {}) {
     requireRecord(action, target, details) {
       sequence += 1;
       auditCalls.push({ action, target, details });
-      return { durable, anchored, sequence, eventHash: `fixture-event-${sequence}` };
+      return { durable, anchored, sequence, eventHash: `w52-event-${sequence}` };
     }
   };
 }
@@ -157,27 +157,27 @@ test('the build queue through the real tool helper', async t => {
   record('an item opened through the agent surface lands in BUILD-QUEUE.md', async () => {
     const answer = await queueThroughTool('open', {
       expectedHash: currentHash(),
-      title: 'Fixture behaviour probe item',
-      authority: 'R18 tree scope; directiveId: fixture-behaviour-test',
+      title: 'W52 behaviour probe item',
+      authority: 'R18 tree scope; directiveId: w52-behaviour-test',
       brief: 'An item opened by the test so the queue can be read back.'
     });
     assert.ok(answer && answer.ok === true, 'opening an item must succeed');
     assert.ok(fs.existsSync(queueFile), 'BUILD-QUEUE.md must exist after an open');
     const text = fs.readFileSync(queueFile, 'utf8');
-    assert.ok(text.includes('Fixture behaviour probe item'), 'the queue must contain the title that was opened');
-    assert.ok(text.includes('fixture-behaviour-test'), 'the queue must carry the directive that authorised the item');
+    assert.ok(text.includes('W52 behaviour probe item'), 'the queue must contain the title that was opened');
+    assert.ok(text.includes('w52-behaviour-test'), 'the queue must carry the directive that authorised the item');
   });
 
   record('an authority that cites no R-number and no directive is refused', async () => {
     const error = await refusalOf(queueThroughTool('open', {
       expectedHash: currentHash(),
-      title: 'Fixture item with no authority',
+      title: 'W52 item with no authority',
       authority: 'because I felt like it',
       brief: 'This must not reach the queue.'
     }));
     assert.ok(error, 'an uncited authority must be refused, not accepted');
     const text = fs.existsSync(queueFile) ? fs.readFileSync(queueFile, 'utf8') : '';
-    assert.ok(!text.includes('Fixture item with no authority'),
+    assert.ok(!text.includes('W52 item with no authority'),
       'a refused item must not appear in the queue');
   });
 
@@ -185,8 +185,8 @@ test('the build queue through the real tool helper', async t => {
     const stale = corpus.sha256('this is not the queue');
     const error = await refusalOf(queueThroughTool('open', {
       expectedHash: stale,
-      title: 'Fixture item written against a stale hash',
-      authority: 'R18 tree scope; directiveId: fixture-behaviour-test',
+      title: 'W52 item written against a stale hash',
+      authority: 'R18 tree scope; directiveId: w52-behaviour-test',
       brief: 'This must not reach the queue either.'
     }));
     assert.ok(error, 'a write citing a stale hash must be refused');
@@ -195,7 +195,7 @@ test('the build queue through the real tool helper', async t => {
     assert.equal(failure.code, 'STALE_DATA');
     assert.equal(failure.retryable, false);
     const text = fs.readFileSync(queueFile, 'utf8');
-    assert.ok(!text.includes('Fixture item written against a stale hash'),
+    assert.ok(!text.includes('W52 item written against a stale hash'),
       'a refused stale write must not appear in the queue');
   });
 
@@ -215,8 +215,8 @@ test('the build queue through the real tool helper', async t => {
     const before = currentHash();
     await queueThroughTool('open', {
       expectedHash: before,
-      title: 'Fixture second item',
-      authority: 'R18 tree scope; directiveId: fixture-behaviour-test',
+      title: 'W52 second item',
+      authority: 'R18 tree scope; directiveId: w52-behaviour-test',
       brief: 'A second item, so the chain has to advance.'
     });
     const after = currentHash();
@@ -227,8 +227,8 @@ test('the build queue through the real tool helper', async t => {
     const before = auditCalls.length;
     await queueThroughTool('open', {
       expectedHash: currentHash(),
-      title: 'Fixture audited item',
-      authority: 'R18 tree scope; directiveId: fixture-behaviour-test',
+      title: 'W52 audited item',
+      authority: 'R18 tree scope; directiveId: w52-behaviour-test',
       brief: 'An item opened so the audit trail can be inspected.'
     });
     const written = auditCalls.slice(before).map(call => call.action);
@@ -241,13 +241,13 @@ test('the build queue through the real tool helper', async t => {
   record('a write whose audit receipt is not durably anchored is refused', async () => {
     const error = await refusalOf(queueThroughTool('open', {
       expectedHash: currentHash(),
-      title: 'Fixture unanchored item',
-      authority: 'R18 tree scope; directiveId: fixture-behaviour-test',
+      title: 'W52 unanchored item',
+      authority: 'R18 tree scope; directiveId: w52-behaviour-test',
       brief: 'This must not reach the queue, because its receipt was not anchored.'
     }, { audit: recordingAudit({ anchored: false }) }));
     assert.ok(error, 'an unanchored audit receipt must refuse the write');
     const text = fs.readFileSync(queueFile, 'utf8');
-    assert.ok(!text.includes('Fixture unanchored item'),
+    assert.ok(!text.includes('W52 unanchored item'),
       'an item refused for a weak audit receipt must not appear in the queue');
   });
 

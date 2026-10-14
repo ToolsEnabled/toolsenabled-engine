@@ -16,7 +16,7 @@ const requestContextPath = require.resolve('../../src/lib/request-context');
 const requestContext = { ...require(requestContextPath) };
 require.cache[requestContextPath].exports = requestContext;
 const registry = require('../../src/lib/tool-registry');
-// Since an earlier change ordinary operation records follow the person's audit choice
+// Since a6c70ac6 ordinary operation records follow the person's audit choice
 // (Basic records none). The audited case runs under that choice through the
 // trusted policy seam; Basic is asserted beside it.
 const operationAudit = require('../../src/lib/operation-audit');
@@ -47,7 +47,7 @@ function checkThrows(block, predicate, message) {
 }
 
 function main() {
-  /* Since an earlier change ("Make Basic runtime audit optional") executeTool only
+  /* Since a6c70ac6 ("Make Basic runtime audit optional") executeTool only
      captures the audit policy and delegates to executeToolWithinPolicy, where
      the chokepoint now lives. Pin the delegation, then read that function. */
   const wrapperSource = registry.executeTool.toString();
@@ -96,6 +96,16 @@ function main() {
     requestContext.getActiveRequest = () => null;
     checkEqual(registry.resolveActiveRequestId({}), null,
       'absence versus unreadable: an established absent active-request marker remains null');
+
+    const unreadableGates = Object.assign(new Error('gate record unreadable'), { code: 'EIO' });
+    egress.readGates = () => { throw unreadableGates; };
+    checkThrows(
+      () => registry.authorizeExactDuoLiveProof(
+        { name: 'duo.institution_login' }, 'owner-request-42', { duoDesktopApproval: 'exact_owner_requested' }, 'invocation-0'
+      ),
+      error => error === unreadableGates,
+      'inapplicable versus unreadable: a failed gate read must not render as a definite denied bypass'
+    );
 
     const blocked = Object.freeze({ allowed: false, severity: 'block', findings: [{ code: 'AI_GENERATED_ARTIFACT' }] });
     egress.preflight = input => {

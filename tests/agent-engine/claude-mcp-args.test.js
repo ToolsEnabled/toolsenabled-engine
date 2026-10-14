@@ -44,7 +44,7 @@ require('../helpers/scratch-state-root');
 const { claudeArgs, claudeResumeArgs, claudeServerPermissionRule } = require('../../src/lib/agent-engine/claude-cli-adapter');
 const { startClaudeSession, resumeClaudeSession } = require('../../src/lib/agent-engine/claude-cli-process');
 
-const THREAD_ID = '46b8d0f2-4c6e-4b8d-9f1a-3c5e7b9d1f3a';
+const THREAD_ID = '4fcaeb8b-93ec-4a5b-97c7-4cac9e59f2d1';
 const MCP_CONFIG = path.join(__dirname, 'fixture-home', '.mcp.json');
 const SETTINGS = path.join(__dirname, 'fixture-home', 'settings.json');
 
@@ -55,6 +55,8 @@ fs.writeFileSync(throwawayRuntime, process.platform === 'win32'
   ? `@echo off\r\n"${process.execPath}" "${peer}" %*\r\n`
   : `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(peer)} "$@"\n`, { mode: 0o700 });
 let nextObservation = 0;
+// Every value given to --setting-sources, in argv order.
+const settingSourcesOf = argv => argv.flatMap((value, index) => value === '--setting-sources' ? [argv[index + 1]] : []);
 async function bounded(promise, label, milliseconds = 15_000) {
   let timer;
   try {
@@ -70,8 +72,14 @@ async function observedSession(start, options, inspect) {
   let session;
   let observed;
   try {
+    /* The plan is the only source of a configuration directory under test. A
+       run started from inside a Claude Code session inherits that session's
+       own CLAUDE_CONFIG_DIR, which would otherwise be reported as if the
+       engine had chosen it. */
+    const ambient = Object.fromEntries(Object.entries(process.env)
+      .filter(([key]) => key.toUpperCase() !== 'CLAUDE_CONFIG_DIR'));
     session = await start({ ...options, command: throwawayRuntime, cwd: isolated.root,
-      env: { ...process.env, TOOLSENABLED_TEST_CLAUDE_ARGV_OUTPUT: output },
+      env: { ...ambient, TOOLSENABLED_TEST_CLAUDE_ARGV_OUTPUT: output },
       rootLaunch: { beforeRootSpawn() { checks++; }, spawned(value) { assert.equal(child, null); child = value; } },
     });
     const deadline = Date.now() + 10_000;
@@ -283,8 +291,19 @@ async function main() {
       assert.ok(spawned.includes('--strict-mcp-config'));
       assert.equal(spawned[spawned.indexOf('--settings') + 1], SETTINGS, 'the spawned argv does not carry the plan\'s grant');
       assert.equal(spawned[spawned.indexOf('--permission-mode') + 1], 'acceptEdits');
+      assert.deepEqual(settingSourcesOf(spawned), ['user'],
+        'a confined spawn must read only the person\'s own settings, never the folder\'s .claude hooks or rules (1.0.50 M1)');
       assert.equal(session.configDir, null, 'the shipped plan reported a home; nothing may relocate the session');
       assert.equal(session.settings, SETTINGS);
+    });
+  });
+
+  await checkAsync('an UNRESTRICTED plan spawns with the folder settings source it always had', async () => {
+    /* The person's own reach is unchanged by the confined-only restriction. */
+    const plan = { configDir: null, mcpConfig: MCP_CONFIG, settings: SETTINGS, claudePermissionMode: 'bypassPermissions' };
+    await observedSession(startClaudeSession, { plan }, (_session, spawned) => {
+      assert.equal(spawned[spawned.indexOf('--permission-mode') + 1], 'bypassPermissions');
+      assert.deepEqual(settingSourcesOf(spawned), [], 'the unrestricted level must not gain a --setting-sources restriction');
     });
   });
 
@@ -313,6 +332,7 @@ async function main() {
       assert.equal(spawned[spawned.indexOf('--mcp-config') + 1], MCP_CONFIG, 'the resume spawn dropped the tool file');
       assert.equal(spawned[spawned.indexOf('--resume') + 1], THREAD_ID);
       assert.ok(!spawned.includes('--session-id'), 'a resume also declared a new session id');
+      assert.deepEqual(settingSourcesOf(spawned), ['user'], 'a confined resume must keep the folder\'s .claude settings out (1.0.50 M1)');
     });
   });
 
@@ -333,7 +353,7 @@ async function main() {
 
   await checkAsync('a plan beside separate settings is refused, so nothing silently loses', async () => {
     await assert.rejects(
-      startClaudeSession({ plan: { mcpConfig: MCP_CONFIG }, configDir: 'C:\\somewhere' }),
+      startClaudeSession({ plan: { mcpConfig: MCP_CONFIG }, configDir: '\x43:\\somewhere' }),
       error => error.code === 'CLAUDE_CLI_PLAN_CONFLICT'
     );
     await assert.rejects(

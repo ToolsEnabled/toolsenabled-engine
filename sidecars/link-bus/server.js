@@ -2,8 +2,8 @@
 'use strict';
 
 // Registry-addressed link bus: a small, dependency-free HTTP server bridging
-// this machine (ToolsEnabled) and a second owner-controlled PC at the
-// exact address declared in the service registry,
+// this machine (ToolsEnabled) and the owner's other physical, owner-
+// controlled PC at the exact address declared in the service registry,
 // so Codex running there can coordinate with Claude here. Deliberately
 // separate from the rest of this machine's fleet/coordinator machinery
 // (owner instruction, R117) -- its own directory, its own state, its own
@@ -52,7 +52,7 @@ const LOG_FILE = path.join(STATE_DIR, 'link-bus.log');
  * "this-machine", at loopback, and its own comment refuses to ship the builder's
  * topology because those machines "are none of a customer's business". A default
  * that resolves only on the machine it was written on is what the owner's ruling
- * forbids: this is production code, and nothing machine-specific may be hardcoded.
+ * forbids: "this is PRODUCTION code... You cant hardcode things."
  *
  * And the lookup ran at MODULE SCOPE, so the failure was a throw on `require`
  * rather than on use -- defect class (c), a module-scope read that works in a

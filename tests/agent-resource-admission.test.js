@@ -214,7 +214,7 @@ test('an explicitly authenticated controller bootstrap uses mechanical checks in
 });
 
 test('a resource refusal says which scarcity it measured, so a retry can classify before it loops', () => {
-  /* Measured in a signed spawn record 2026-09-14T09Z: 558
+  /* Measured in the owner's signed spawn record 2026-09-14T09Z: 558
      AGENT_RESOURCE_PRESSURE refusals in one hour for one node, every one
      worded as a CPU ceiling although the latch also trips on loop lag and on
      an unreadable sample. Assert the classification by driving each hold. */

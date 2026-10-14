@@ -34,7 +34,7 @@ async function run() {
     await assert.rejects(a.selectMode('t',mode,retained),{code:'CODEX_MODE_UNAVAILABLE'});
     assert.equal(f.writes.length,before,'Invalid ids must refuse before contacting the provider');
   }
-  for (const settings of [undefined,{}, {...retained,developerInstructions:null},{model:retained.model,effort:null}, {...retained,model:''},{...retained,effort:3},{...retained,extra:true},{...retained,model:'m'.repeat(513)},{...retained,effort:'e'.repeat(33)},{...retained,developerInstructions:'d'.repeat(1_000_001)}]) {
+  for (const settings of [undefined,{}, {...retained,developerInstructions:null},{model:retained.model,effort:null}, {...retained,model:''},{...retained,effort:3},{...retained,extra:true},{...retained,model:'m'.repeat(2049)},{...retained,effort:'e'.repeat(33)},{...retained,developerInstructions:'d'.repeat(1_000_001)}]) {
     await assert.rejects(a.selectMode('t','plan',settings),{code:'CODEX_MODE_SETTINGS_REQUIRED'});
   }
   await assert.rejects(a.selectMode('t','auto',retained),{code:'CODEX_MODE_UNAVAILABLE'});

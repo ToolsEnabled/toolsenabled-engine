@@ -447,8 +447,8 @@ function runHeartbeat({ stdout = '', exitCode = 0 } = {}) {
     '',
     HEARTBEAT_FUNCS,
     '',
-    "$Node = 'C:\\fake\\node.exe'",
-    "$HeartbeatHelper = 'C:\\fake\\tools\\fra-peer-heartbeat.js'",
+    "$Node = '\x43:\\fake\\node.exe'",
+    "$HeartbeatHelper = '\x43:\\fake\\tools\\fra-peer-heartbeat.js'",
     "$HostName = '203.0.113.1'",
     '',
     '$result = Invoke-PeerHeartbeat',
@@ -473,8 +473,8 @@ check('a clean successful heartbeat result passes through, and is wired to the r
   const outcome = runHeartbeat({ stdout, exitCode: 0 });
   assert.equal(outcome.result.ok, true);
   assert.equal(outcome.result.readOnlyToolVerified, 'system.kill_switch_status');
-  assert.equal(outcome.capturedFilePath, 'C:\\fake\\node.exe');
-  assert.equal(outcome.capturedArguments, 'C:\\fake\\tools\\fra-peer-heartbeat.js|--host|203.0.113.1');
+  assert.equal(outcome.capturedFilePath, '\x43:\\fake\\node.exe');
+  assert.equal(outcome.capturedArguments, '\x43:\\fake\\tools\\fra-peer-heartbeat.js|--host|203.0.113.1');
   // Fourth layer of the recalibrated timeout ordering (2026-08-04): must
   // comfortably exceed fra-peer-heartbeat.js's own TOTAL_TIMEOUT_MS (raised
   // to 420s, now covering BOTH attempts -- original + one retry -- under a
@@ -679,7 +679,7 @@ check('a probe object with no telemetry fields at all (e.g. the local-gate-not-r
 
 check('a smuggled/unexpected property on the probe object is never surfaced -- only the allowlisted fields are ever read', () => {
   const result = evaluateHeartbeatTelemetry(
-    "[pscustomobject]@{ stage = 'connect'; attempt = 1; elapsedMs = 12; secretPath = 'C:\\\\should\\\\never\\\\appear'; token = 'must-not-leak-0123456789' }"
+    "[pscustomobject]@{ stage = 'connect'; attempt = 1; elapsedMs = 12; secretPath = '\x43:\\\\should\\\\never\\\\appear'; token = 'must-not-leak-0123456789' }"
   );
   assert.equal(result.stage, 'connect');
   assert.equal(result.attempt, 1);
@@ -712,7 +712,7 @@ check('attemptsHistory is bounded to 2 entries and sanitizes hostile per-entry c
   const result = evaluateHeartbeatTelemetry(
     "[pscustomobject]@{ ok = $false; attemptsHistory = @(" +
     "[pscustomobject]@{ attempt = 1; stage = 'connect'; code = 'REMOTE_BRIDGE_RESET'; elapsedMs = 10; ok = $false }," +
-    "[pscustomobject]@{ attempt = 2; stage = 'not_a_real_stage'; code = 'lowercase not safe'; elapsedMs = -5; ok = $false; secretPath = 'C:\\\\should\\\\never\\\\appear' }," +
+    "[pscustomobject]@{ attempt = 2; stage = 'not_a_real_stage'; code = 'lowercase not safe'; elapsedMs = -5; ok = $false; secretPath = '\x43:\\\\should\\\\never\\\\appear' }," +
     "[pscustomobject]@{ attempt = 1; stage = 'connect'; code = 'SHOULD_NOT_APPEAR'; elapsedMs = 1; ok = $false }" +
     ") }"
   );
@@ -755,9 +755,9 @@ check('Invoke-Reconcile persists Get-SanitizedHeartbeatTelemetry\'s output into 
 
 // ============================================================================
 // Correction A (2026-08-04 review round 2): persisted-state migration gap.
-// an earlier fix changed the exact heartbeat bucket shape while leaving
+// 3d7080b3 changed the exact heartbeat bucket shape while leaving
 // schemaVersion at the same v3 -- a genuinely valid OLD-shape v3 state file
-// (the narrower, pre-fix 4-key heartbeat bucket) must survive Read-State
+// (the narrower, pre-3d7080b3 4-key heartbeat bucket) must survive Read-State
 // with every existing field preserved and the new fields added as safe
 // defaults, NOT be silently discarded in favour of New-DefaultState.
 // ============================================================================
@@ -827,7 +827,7 @@ const OLD_SHAPE_STATE_LITERAL = `[pscustomobject]@{
   lastAction = 'verified_existing_session'; lastErrorCode = $null; secretValuesEmitted = $false
 }`;
 
-check('a realistic OLD-shape (pre-fix) v3 state survives Read-State\'s migration unchanged except for safe new-field defaults', () => {
+check('a realistic OLD-shape (pre-3d7080b3) v3 state survives Read-State\'s migration unchanged except for safe new-field defaults', () => {
   const outcome = evaluateMigration(OLD_SHAPE_STATE_LITERAL);
   assert.equal(outcome.shapeValid, true,
     'the migrated state must pass Test-StateShape -- if this is false, the migration produced an invalid shape ' +

@@ -25,8 +25,9 @@ function isPlainObject(value) {
 function exactKeys(value, allowed, label) {
   if (!isPlainObject(value)) throw new TypeError(`${label} must be a plain object.`);
   for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) throw new TypeError(`${label}.${key} is not allowed; credentials must be supplied only by vaultKey.`);
-    if (SENSITIVE_NAME.test(key) && key !== 'vaultKey') throw new TypeError(`${label}.${key} is not allowed; credentials must be supplied only by vaultKey.`);
+    if (!allowed.includes(key) || (SENSITIVE_NAME.test(key) && key !== 'vaultKey')) {
+      throw new TypeError(`${label} contains an unsupported property; credentials must be supplied only by vaultKey.`);
+    }
   }
   return value;
 }
@@ -93,8 +94,20 @@ function safeObject(value, secret, depth = 0) {
   if (Array.isArray(value)) return value.slice(0, 100).map(item => safeObject(item, secret, depth + 1));
   if (!isPlainObject(value)) return null;
   const output = {};
-  for (const [key, item] of Object.entries(value).slice(0, 100)) {
-    output[key] = SENSITIVE_NAME.test(key) ? '[REDACTED]' : safeObject(item, secret, depth + 1);
+  const entries = Object.entries(value).slice(0, 100);
+  const reserved = new Set(entries.map(([key]) => redactText(key, secret)));
+  const unchanged = new Set(entries.filter(([key]) => key === redactText(key, secret)).map(([key]) => key));
+  for (const [key, item] of entries) {
+    const sanitized = redactText(key, secret);
+    let projected = sanitized;
+    let suffix = 1;
+    while (Object.hasOwn(output, projected) || (key !== sanitized && unchanged.has(projected))) {
+      do { projected = `${sanitized} (${suffix++})`; } while (reserved.has(projected));
+    }
+    // Special property names are data. Assignment to __proto__ would instead
+    // mutate the returned object's prototype, and redaction can merge names.
+    Object.defineProperty(output, projected, { enumerable: true, configurable: true, writable: true,
+      value: SENSITIVE_NAME.test(key) ? '[REDACTED]' : safeObject(item, secret, depth + 1) });
   }
   return output;
 }

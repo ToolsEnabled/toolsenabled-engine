@@ -1,7 +1,7 @@
 'use strict';
 /* WHAT A VAULT SPAWN IS ALLOWED TO DO BEFORE IT ANSWERS.
  *
- * THE DEFECT, measured on a development machine 2026-09-03 against a PRIVATE
+ * THE DEFECT, measured on the owner's machine 2026-09-03 against a PRIVATE
  * scratch vault (never the installation's). One
  * `powershell.exe -File tools/secrets.ps1 get <key>` had a median of 881 ms,
  * and two things it did not need accounted for a third of it:

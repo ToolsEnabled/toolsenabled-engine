@@ -136,9 +136,9 @@ const RENEW_ABANDON_LEAD_MS = 2_000;
 const DRAIN_MS = 10_000;
 const DRAIN_GUARD_MS = 250;
 const MAX_SESSIONS_PER_LEG = 2;
-/* THE OWNER'S SAFETY GUARD: the session lasts until the person has been
-   inactive for about 4 minutes or closes the window, and a setting lets them
-   change that to any value, with 0 meaning never.
+/* THE OWNER'S SAFETY GUARD: "the session should last until they are inactive
+   for like 4 minutes or if they close the window ... and in settings they
+   should be able to change it to anything they want and like 0 is never".
    0 IS IMPLEMENTED AS "ALWAYS RENEW", A BRANCH RATHER THAN A SENTINEL -- a zero
    threaded through arithmetic silently becomes an INSTANT timeout, which is the
    exact opposite of what it is supposed to mean. */
@@ -289,8 +289,8 @@ export function createWebClient({
      * machine -- the lease's peerDeviceId names it, and the reciprocity check in
      * the session enforces it either way -- and it says which ROLE that machine
      * holds in its pair beside the key, as `machine.role`. The owner's rule:
-     * when two machines are connected, the interface serves both and both are
-     * controllable -- so a browser may be introduced to machine-b, and the
+     * "If there's two we need to serve both in the interface and both need to
+     * be controllable" -- so a browser may be introduced to machine-b, and the
      * leg byte it addresses must be B's, or every hello lands on the wrong
      * computer and is refused there on the exact-peer fields. This was a
      * constant 'machine-a'. Absent means machine-a, which keeps an account

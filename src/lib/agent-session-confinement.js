@@ -1,115 +1,10 @@
 'use strict';
 
-// THE RECORDED LEVEL, BINDING THE APP'S OWN AGENT SESSIONS.
-//
-// src/lib/permission-tier-policy.js narrows the MCP TOOL surface a recorded
-// level may reach, and src/lib/setup/machine-record.js writes that narrowing
-// into a generated `.mcp.json`. Both were measured through the real dispatch
-// seam and both are correct. Neither reaches the agent Mission Control starts.
-//
-// The app's session is `codex app-server` (src/lib/agent-engine/codex-process.js
-// startCodexSession), spawned by desktop-app/shell/agent-host.cjs with
-// `threadOptions: {}` and no argument or environment of its own. That is a
-// different mechanism from the `codex exec` swarm lane in
-// src/lib/mission-bridge/actions.js, and the three `mcp_servers.*.enabled=false`
-// overrides that lane passes reach none of it. So an app session inherits the
-// user's own `~/.codex/config.toml` wholesale. MEASURED on a real installation
-// whose user config carried the widest settings Codex accepts:
-//
-//     approval_policy = "never"
-//     sandbox_mode    = "danger-full-access"
-//     [windows] sandbox = "elevated"
-//
-// A `guided` install -- the level whose own words are that the assistant cannot
-// reach the rest of the computer -- therefore started an agent with unrestricted
-// write access to the whole machine and no approval prompt. The product asked
-// the question, recorded the answer, and then handed the answer to nothing.
-//
-// TWO HOLES, TWO MECHANISMS, BOTH MEASURED BEFORE BEING BUILT ON.
-//
-// 1. THE AGENT PROCESS. `thread/start` takes `sandbox` and `approvalPolicy`
-//    (src/lib/agent-engine/engine-contract.js validateThreadOptions already
-//    accepts and validates both -- the knob existed and was never turned).
-//    Measured, same prompt, same code path, against the danger-full-access user
-//    config above:
-//      sandbox=read-only          -> write outside cwd REFUSED by the OS
-//      sandbox=workspace-write    -> write to ~/Documents REFUSED by the OS
-//      sandbox=danger-full-access -> the same write SUCCEEDS
-//    The thread option WINS over config.toml. That is the confinement.
-//
-//    AND EVERY ROW OF THAT LADDER IS A REFUSAL. Read it again: not one of the
-//    three measured a write that was supposed to be PERMITTED actually landing.
-//    `workspace-write` was admitted to the table on the strength of refusing a
-//    write it was always going to refuse, which is a negative result with no
-//    positive control -- and it hid the following, MEASURED 2026-08-20 against
-//    codex-cli 0.146.0 on Windows 11, through this module's own generated home:
-//
-//      asked workspace-write, `[windows] sandbox` ABSENT  -> the CLI resolves
-//        `sandbox: read-only`, silently, with no warning line. The generated
-//        config.toml confinedCodexConfig() writes below has no `[windows]`
-//        section, so this is what the product ships. STANDARD IS READ-ONLY.
-//      the identical session with -c windows.sandbox=elevated OR unelevated
-//        -> `sandbox: workspace-write [workdir, /tmp, $TMPDIR]`. One key, both
-//        values, flipped it back. (Only those two words parse; anything else
-//        is refused by name: "expected `elevated` or `unelevated`".)
-//      and with the policy genuinely resolved to workspace-write, a write
-//        INSIDE the workdir STILL FAILED on this machine -- "Failed to write
-//        file <path>" at unelevated, "windows sandbox:
-//        orchestrator_helper_incomplete" at elevated -- in a git-initialised,
-//        already-trusted workspace, from both the product's confined home and
-//        the user's own. The write outside it was refused correctly throughout
-//        ("patch rejected: writing outside of the project").
-//      POSITIVE CONTROL, same directory, same home, same prompt, 13 seconds:
-//        danger-full-access created the file. So the machine, the credential
-//        and the patch path are all fine; `workspace-write` is what does not
-//        deliver a write here.
-//
-//    SO DO NOT MOVE `guided` TO workspace-write TO MAKE ITS COPY TRUE. That is
-//    the obvious repair for the walkthrough defect of 2026-08-20 -- setup
-//    promising "read and change things inside this one folder" over a read-only
-//    sandbox -- and on this platform it would buy nothing but a different error
-//    message: a level that says it can write, cannot, and no longer even says
-//    why. The walkthrough's sentence was made honest instead (the app side), and
-//    what the ENGINE resolved is now read off thread/start rather than assumed.
-//    Whether the request can be honoured at all is a codex-cli
-//    question, and it is open.
-//
-// 2. THE MCP SERVERS. Those are separate processes Codex spawns; no sandbox
-//    applied to the agent covers them, which is exactly why the Confined tier
-//    refuses host.exec at the tool layer. The obvious lever -- `-c` overrides on
-//    the app-server argv -- LOOKS like it works and does not:
-//      -c mcp_servers={}                        -> ignored; every server still started
-//      -c mcp_servers.<n>.enabled=false         -> "invalid transport in mcp_servers.<n>"
-//      -c mcp_servers.<n>.command="disabled"    -> "url is not supported for stdio"
-//                                                  in another declared server
-//      --ignore-user-config                     -> not a flag app-server accepts
-//    A partial override on a server the user declares through a plugin or an
-//    HTTP transport produces an incomplete table entry and Codex refuses to load
-//    the configuration at all. Enumerating the stdio servers and disabling only
-//    those would start cleanly and leave the rest running: a mechanism that only
-//    appears to work, which is the one outcome this lane was told to avoid.
-//
-//    CODEX_HOME redirection is fail-closed BY CONSTRUCTION. A confined session
-//    reads a home this installation owns, so a server the user adds tomorrow --
-//    by any transport, from any plugin or marketplace -- is not inherited
-//    because that file is never read. Measured: `codex mcp list` reports the
-//    user's full declared server list under their own home and 0 under a
-//    prepared one.
-//
-// UNRESTRICTED RUNS IN THE PRODUCT'S OWN HOME TOO (a change from the first
-// design, and the old rule is stated so the change is visible: it used to be
-// "no redirect, no narrowing, byte for byte the session that ran before this
-// file existed"). MEASURED on a real installation: guided and standard
-// sessions got the generated document -- browser tools included -- while
-// unrestricted inherited the user's own ~/.codex, whose allowlist had no
-// browser.*, whose playwright entry pointed at a directory that no longer
-// existed, and whose third-party browser plugin answered "open chrome" with
-// webstore instructions.
-// The most-trusted tier was the least capable one, by inversion, not intent.
-// What unrestricted still means is intact where it matters: sandbox_mode
-// danger-full-access, approval never, the widest reach the engine offers --
-// but its TOOLS are now the product's own generated surface, full-width, kept
-// current by the same generator every other tier reads.
+// Confined Codex sessions use the account's official sign-in home in place.
+// ToolsEnabled restrictions travel through -c TOML launch overrides, never a
+// copied config or sign-in. Codex 0.161 merges table overrides; the adapter
+// therefore checks the effective configuration before admitting a thread.
+// Claude's generated tool surface has its separate CLI argument transport.
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -119,6 +14,7 @@ const path = require('node:path');
 const permissionTierPolicy = require('./permission-tier-policy');
 const accountProfileBoundary = require('./account-profile-boundary');
 const providerIsolation = require('./provider-session-isolation');
+// Node built-ins only; a literal require so the capability packer stages it.
 
 // Lazily required: machine-record reaches the tool registry through
 // generateMcpConfig, and a caller merely resolving a sandbox word has no reason
@@ -377,7 +273,6 @@ function resolveAgentConfinement({ servicesRoot, machineRecord = machineRecordMo
 const CONFINED_HOME_LEAF = 'agent-home';
 const ACCOUNT_FENCE_FILE = 'ACCOUNT-FENCE.md';
 const CODEX_ACCOUNT_FENCE_FILE = 'AGENTS.md';
-const CLAUDE_ACCOUNT_FENCE_FILE = 'CLAUDE.md';
 
 // isProvablyLocalWindowsHost, normalizeWindowsAccountPathAlias,
 // windowsProfileRootOf, installationProfileRoot, sameWindowsPath,
@@ -780,7 +675,7 @@ function tomlKey(name, label) {
 
 /* THE SYMMETRIC ASSERTION, shared by BOTH renderings of the one document.
  * confinedCodexConfig() renders the generated document into the TOML Codex
- * reads and prepareConfinedClaudeHome() writes the same document as the
+ * reads and prepareClaudeToolSurface() writes the same document as the
  * `.mcp.json` the Claude CLI reads; an entry that would boot the application
  * instead of a server is exactly as fatal in either -- and worse to diagnose
  * than a refusal, because the agent CLI starts the "server", gets no JSON-RPC,
@@ -878,164 +773,138 @@ function validateServerEntries(document, machineRecord = machineRecordModule()) 
   return entries;
 }
 
-/**
- * The config.toml a confined session reads INSTEAD of the user's own.
- *
- * It restates the sandbox and approval policy that `thread/start` already sends,
- * which is not redundancy for its own sake: the thread option is what the
- * measurement above proves confines the process, and the file value is what
- * bounds anything in this home that does not go through that one call. They are
- * derived from the same confinement object, so they cannot disagree.
- *
- * `notify = []` is explicit. The user's own config launches a computer-use
- * helper on every turn-ended; a confined session must not.
- */
-/* `machineRecord` is the CALLER'S seam, defaulted rather than re-required, for
-   the reason refuseNonNodeRuntime() states about itself: a test that injects a
-   runtime module must have this rendering consult the injected one. Passing it
-   through was missing here while the JSON rendering passed it, so the Codex
-   side silently consulted the real module and its runtime tests were not
-   testing the seam they named. Existing two-argument callers are unchanged. */
+// Restrictions the official Codex CLI consumes as one-run overrides.
+// MCP entries retain generated role/account/workspace boundaries. They are
+// checked against effective configuration because -c tables merge.
+
 const CODEX_SCRIPT_CALL_GUIDANCE = 'Run at most 8 ToolsEnabled calls at once per script, since more can stall it; for many Ledger records, pass ids to one ledger.read.';
 
-function confinedCodexConfig(confinement, mcpDocument, machineRecord = machineRecordModule(), sqliteHome = null, roleFunctionsOnly = false) {
-  const lines = [
-    '# Generated by ToolsEnabled. Do not edit: rewritten whenever an agent session starts.',
-    `# Permission level: ${confinement.tier}`,
-    `approval_policy = ${tomlLiteral(confinement.approvalPolicy, 'approvalPolicy')}`,
-    `sandbox_mode = ${tomlLiteral(roleFunctionsOnly ? 'read-only' : confinement.sandbox, 'sandbox')}`,
-    'notify = []',
-    ''
-  ];
-  if (providerIsolation.isolationRequested()) lines.push('cli_auth_credentials_store = "file"', '');
-  if (sqliteHome !== null) {
-    lines.push(`sqlite_home = ${tomlLiteral(sqliteHome, 'sqlite_home')}`, '');
+/* The values confinedCodexConfig() forwards by name: one environment for the Codex process. Two servers that name the
+   same key with different values would make the forwarded value ambiguous, so that is refused. */
+const FORWARDED_BY_NAME = /CREDENTIAL|SECRET|TOKEN|PASSWORD|API_?KEY/i;
+function codexForwardedEnvironment(mcpDocument, machineRecord = machineRecordModule()) {
+  const forwarded = {};
+  for (const [name, entry] of validateServerEntries(mcpDocument, machineRecord)) {
+    for (const [key, value] of Object.entries(entry.env || {})) {
+      if (!FORWARDED_BY_NAME.test(key)) continue;
+      if (Object.prototype.hasOwnProperty.call(forwarded, key) && forwarded[key] !== value) {
+        throw new AgentConfinementRefusal('AGENT_CONFINEMENT_SERVER_ENV_CONFLICT',
+          `Two ToolsEnabled tool servers need different values for ${key}, so this session was not started.`, { server: name });
+      }
+      forwarded[key] = value;
+    }
   }
+  return forwarded;
+}
+
+function confinedCodexConfig(confinement, mcpDocument, machineRecord = machineRecordModule(), sqliteHome = null, roleFunctionsOnly = false) {
+  const config = {
+    approval_policy: confinement.approvalPolicy,
+    sandbox_mode: roleFunctionsOnly ? 'read-only' : confinement.sandbox,
+    sandbox_workspace_write: { writable_roots: [], network_access: false,
+      exclude_tmpdir_env_var: false, exclude_slash_tmp: false },
+    notify: [],
+    developer_instructions: '',
+    // A generated home never inherited the person's plugins or hooks.
+    features: { hooks: false, plugins: false, remote_plugin: false, plugin_sharing: false },
+    mcp_servers: {}
+  };
+  if (providerIsolation.isolationRequested()) config.cli_auth_credentials_store = 'file';
+  if (sqliteHome !== null) config.sqlite_home = sqliteHome;
   if (roleFunctionsOnly) {
-    // Codex describes this native sandbox to the model as a read-only
-    // filesystem. Without the separate MCP boundary, a real Only-mode agent
-    // refused even to invoke an allowed host.write_file: it treated the
-    // native sandbox as the API's permission policy. Keep the OS restriction
-    // intact and explain the independently enforced API at developer scope.
     if (Object.keys(mcpDocument?.mcpServers || {}).some(name =>
       ['toolsenabled-readonly', 'toolsenabled'].includes(name))) {
-      const instructions = [
+      config.developer_instructions = [
         'ToolsEnabled API mode is Only. The read-only filesystem sandbox and restricted network apply to native Codex tools, including apply_patch.',
         'ToolsEnabled MCP tools execute through a separate server-enforced permission boundary. The native sandbox does not make those APIs read-only.',
         'For work authorized by the person, discover and invoke the relevant ToolsEnabled API, including write operations its contract and current permissions allow.',
         'The API still enforces the recorded permission tier, workspace boundary, role functions, direct-user authorization and required approvals. Respect every API refusal; do not bypass it through native tools, another agent or another transport.',
-        // Codex runs a model's script in its code-mode host. Above about 130
-        // tool calls in flight that host fails or stops dispatching, with no
-        // event and no timeout (206 ledger_read calls, measured
-        // 2026-09-24). 8 is far below that and matches the batches that work.
-        CODEX_SCRIPT_CALL_GUIDANCE,
+        CODEX_SCRIPT_CALL_GUIDANCE
       ].join(' ');
-      lines.push(`developer_instructions = ${tomlLiteral(instructions, 'developer_instructions')}`, '');
     }
-    // Role-scoped assistants operate through the generic, audited registry.
-    // Native shell/browser/connectors/delegation do not carry that authority.
-    // apply_patch has no supported off switch: the read-only sandbox bounds it.
-    lines.push('web_search = "disabled"', '[features]');
+    config.web_search = 'disabled';
     for (const feature of [
       'shell_tool', 'unified_exec', 'apps', 'browser_use', 'browser_use_external',
       'browser_use_full_cdp_access', 'computer_use', 'code_mode',
       'multi_agent', 'multi_agent_v2', 'goals', 'hooks', 'plugins', 'remote_plugin',
       'plugin_sharing', 'image_generation', 'view_image', 'in_app_browser',
       'in_app_chat', 'in_app_local_automation', 'in_app_updates',
-      'skill_mcp_dependency_install', 'workspace_dependencies', 'tool_suggest',
-    ]) lines.push(`${feature} = false`);
-    // This host executes MCP tools as well as built-ins. Disabling it prevents
-    // all role functions from running; it is not a native-tool restriction.
-    lines.push('code_mode_host = true', 'skip_host_skill_discovery = true', '');
+      'skill_mcp_dependency_install', 'workspace_dependencies', 'tool_suggest'
+    ]) config.features[feature] = false;
+    config.features.code_mode_host = true;
+    config.features.skip_host_skill_discovery = true;
   }
-  /* The shared shape rules first -- see validateServerEntries() -- so a
-     malformed entry is refused identically here and in the JSON rendering.
-     tomlKey/tomlLiteral below stay as the render-level assertion for what
-     TOML specifically cannot carry. */
-  for (const [rawName, entry] of validateServerEntries(mcpDocument, machineRecord)) {
-    const name = tomlKey(rawName, 'MCP server name');
-    lines.push(`[mcp_servers.${name}]`);
-    if (process.platform === 'linux' && ['toolsenabled', 'toolsenabled-readonly', 'playwright'].includes(rawName)) {
-      // Codex filters a stdio server's inherited environment. The CLI itself
-      // had the desktop session during the native /cloud check, but its tools
-      // lost D-Bus and could not reach the already-unlocked owner keyring.
-      // Inherit these runtime connections by name; never copy credentials or
-      // freeze the builder's desktop addresses into a generated configuration.
-      lines.push("env_vars = ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY']");
+  for (const [name, entry] of validateServerEntries(mcpDocument, machineRecord)) {
+    tomlKey(name, 'MCP server name');
+    tomlLiteral(entry.command, `${name}.command`);
+    refuseNonNodeRuntime(name, entry, machineRecord);
+    const server = { command: entry.command, args: Array.isArray(entry.args) ? entry.args : [], enabled: true };
+    server.args.forEach((value, i) => tomlLiteral(value, `${name}.args[${i}]`));
+    if (typeof entry.cwd === 'string') {
+      tomlLiteral(entry.cwd, `${name}.cwd`);
+      server.cwd = entry.cwd;
     }
-    if (['toolsenabled', 'toolsenabled-readonly'].includes(rawName)) {
-      // A native .45 hand check requested a 600s host.exec, but the Codex MCP
-      // client stopped waiting at 300s while the owned command kept running.
-      // Await its existing 10-minute execution bound plus audit/cleanup time.
-      // This changes only the client wait, never command or Stop authority.
-      lines.push('tool_timeout_sec = 900');
+    if (process.platform === 'linux' && ['toolsenabled', 'toolsenabled-readonly', 'playwright'].includes(name)) {
+      server.env_vars = ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY'];
     }
+    if (['toolsenabled', 'toolsenabled-readonly'].includes(name)) server.tool_timeout_sec = 900;
     if (roleFunctionsOnly) {
-      if (!['toolsenabled-readonly', 'toolsenabled'].includes(rawName)) {
+      if (!['toolsenabled-readonly', 'toolsenabled'].includes(name)) {
         throw new AgentConfinementRefusal('AGENT_ROLE_TOOL_SERVER_UNSUPPORTED',
           'Role-scoped sessions may use only the generated ToolsEnabled registry servers.', {});
       }
-      // These exact generated servers enforce the role, direct-person turn,
-      // product tier and owner confirmation themselves. Codex's read-only
-      // native sandbox otherwise adds an unanswerable second MCP approval.
-      // This does NOT admit native writes or bypass the local consent broker.
-      lines.push('default_tools_approval_mode = "approve"');
+      server.default_tools_approval_mode = 'approve';
     }
-    lines.push(`command = ${tomlLiteral(entry.command, `${name}.command`)}`);
-    /* After the quoting refusals, at this rendering's established point --
-       see the note in validateServerEntries(). The caller's runtime module
-       travels with it, so an injected seam is the seam consulted. */
-    refuseNonNodeRuntime(name, entry, machineRecord);
-    const args = Array.isArray(entry.args) ? entry.args : [];
-    lines.push(`args = [${args.map((a, i) => tomlLiteral(a, `${name}.args[${i}]`)).join(', ')}]`);
-    if (typeof entry.cwd === 'string') lines.push(`cwd = ${tomlLiteral(entry.cwd, `${name}.cwd`)}`);
-    lines.push('');
-    const env = entry.env && typeof entry.env === 'object' ? entry.env : null;
-    if (env && Object.keys(env).length > 0) {
-      lines.push(`[mcp_servers.${name}.env]`);
-      for (const [key, value] of Object.entries(env)) {
-        lines.push(`${tomlKey(key, `${name}.env key`)} = ${tomlLiteral(value, `${name}.env.${key}`)}`);
+    if (entry.env && Object.keys(entry.env).length) {
+      /* SECRETS BY NAME, NEVER ON THE COMMAND LINE. The confined surface reaches Codex as -c overrides on its command
+         line, which any local process can read, and a server's environment can hold the agent's session credential.
+         A secret-shaped key is forwarded by name (env_vars) with its value in the Codex process environment
+         (codexForwardedEnvironment); ordinary per-server settings stay inline, since servers differ in them. */
+      for (const [key, value] of Object.entries(entry.env)) {
+        tomlKey(key, `${name}.env key`);
+        tomlLiteral(value, `${name}.env.${key}`);
+        if (FORWARDED_BY_NAME.test(key)) {
+          server.env_vars = [...(server.env_vars || [])];
+          if (!server.env_vars.includes(key)) server.env_vars.push(key);
+        } else {
+          server.env = { ...(server.env || {}), [key]: value };
+        }
       }
-      lines.push('');
     }
+    config.mcp_servers[name] = server;
   }
-  return lines.join('\n');
+  return config;
 }
 
-/* The credential, LINKED rather than copied.
- *
- * A hard link is one file with two names: the confined home reads the same bytes
- * the user's own home holds, so this does not put a second copy of an OAuth
- * token on disk. It is re-made on every prepare because Codex rewrites auth.json
- * through a temporary file and a rename when a token refreshes, which leaves an
- * existing link pointing at the superseded inode -- a session that started
- * yesterday would otherwise authenticate with yesterday's token.
- *
- * A copy is the fallback ONLY because a hard link cannot span volumes, and a
- * user whose LOCALAPPDATA and profile are on different drives must still be able
- * to start an agent. Neither branch invents a credential; if the user's home has
- * no auth.json there is nothing to link and the session is refused rather than
- * started against an account it cannot name.
- *
- * `signInFile` is which file the provider treats as its sign-in, from the one
- * table multi-account/registry.js keeps: auth.json for a Codex home,
- * .credentials.json for a Claude configuration directory. Same mechanism, same
- * refresh hazard, so one function serves both rather than two copies that
- * could drift. It is REQUIRED: a default here would be a second copy of the
- * registry's own value, and the two could drift apart.
- *
- * THE FORK, AND WHICH SIDE WINS. Refresh rewrites happen through a temporary
- * file and a rename ON WHICHEVER NAME THE REFRESHING PROCESS USES, and a
- * rename splits a hard link: after a confined session refreshes its token, the
- * NEWEST credential lives under the confined name while the person's own home
- * still holds the superseded one. Re-linking blindly at the next prepare would
- * RESURRECT the older token over the newer -- and if the provider rotates
- * refresh tokens, that kills the agent's sign-in without fixing the person's.
- * So when the two names have split AND the confined side is the newer, it is
- * KEPT ('kept-refreshed'); the person's own home is never written to either
- * way -- their file, their terminal, their business. A newer SOURCE (a fresh
- * sign-in, an account switch) still wins and is re-linked, which is the
- * healing this function has always done. */
+// Each top-level table is supplied whole. Codex 0.161 merges these tables;
+// launch discovers and disables foreign MCP names, then verifies the surface.
+function codexConfigOverrideArgs(config) {
+  const value = item => {
+    if (typeof item === 'string') return JSON.stringify(item);
+    if (typeof item === 'boolean' || typeof item === 'number') return String(item);
+    if (Array.isArray(item)) return '[' + item.map(value).join(', ') + ']';
+    return '{' + Object.entries(item).map(([key, entry]) =>
+      JSON.stringify(key) + ' = ' + value(entry)).join(', ') + '}';
+  };
+  return Object.freeze(Object.entries(config).flatMap(([key, entry]) => ['-c', key + '=' + value(entry)]));
+}
+
+// Inspect existence/type only. The official CLI owns reading and refreshing
+// the chosen sign-in in place; ToolsEnabled never opens or relocates it.
+function assertCodexSignedIn(file) {
+  try {
+    if (fs.statSync(file).isFile()) return;
+  } catch (error) {
+    if (!['ENOENT', 'ENOTDIR'].includes(error?.code)) {
+      throw new AgentConfinementRefusal('AGENT_CONFINEMENT_SIGN_IN_UNAVAILABLE',
+        'The assistant sign-in could not be checked, so this is not claiming that the assistant is signed out.',
+        { cause: error?.code || 'unknown' });
+    }
+  }
+  throw new AgentConfinementRefusal('AGENT_CONFINEMENT_SIGNED_OUT',
+    'The assistant is not signed in on this computer. Sign in with codex login before starting it.', {});
+}
+
 /* WRITE A FILE SO A CRASH LEAVES EITHER THE OLD BYTES OR THE NEW ONES.
  *
  * Measured 2026-09-02 on the installed product: one hard power loss zeroed
@@ -1061,90 +930,6 @@ function writeFileDurably(target, text) {
       try { fs.closeSync(descriptor); } catch { /* closing a failed handle */ }
     }
     try { fs.unlinkSync(temporary); } catch { /* already renamed away */ }
-  }
-}
-
-function linkCredential(userHome, confinedHome, signInFile, { allowCopy = true } = {}) {
-  const source = path.join(userHome, signInFile);
-  const target = path.join(confinedHome, signInFile);
-  let sourceStat = null;
-  let targetStat = null;
-  try {
-    sourceStat = fs.statSync(source, { bigint: true });
-  } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      throw new AgentConfinementRefusal(
-        'AGENT_CONFINEMENT_SIGNED_OUT',
-        'The assistant is not signed in on this computer, so no confined session can be started for it.',
-        {}
-      );
-    }
-    throw new AgentConfinementRefusal(
-      'AGENT_CONFINEMENT_SIGN_IN_UNAVAILABLE',
-      'The assistant sign-in could not be checked, so this is not claiming that the assistant is signed out.',
-      { cause: error && error.code ? String(error.code) : 'unknown' }
-    );
-  }
-  try {
-    targetStat = fs.statSync(target, { bigint: true });
-  } catch (error) {
-    if (!error || error.code !== 'ENOENT') {
-      throw new AgentConfinementRefusal(
-        'AGENT_CONFINEMENT_SIGN_IN_UNAVAILABLE',
-        'The cached assistant sign-in could not be checked, so this is not claiming that it is absent.',
-        { cause: error && error.code ? String(error.code) : 'unknown' }
-      );
-    }
-  }
-  if (sourceStat && targetStat) {
-    if (sourceStat.dev === targetStat.dev && sourceStat.ino === targetStat.ino) {
-      /* Still one file with two names; there is nothing to redo. */
-      return 'hardlink';
-    }
-    if (targetStat.mtimeMs > sourceStat.mtimeMs) {
-      return 'kept-refreshed';
-    }
-  }
-
-  /* Every failure below is a NAMED refusal rather than a raw errno: a caller
-     switches on AGENT_CONFINEMENT_* codes, and a bare EBUSY escaping as
-     plan.code is outside that taxonomy. A target that cannot be replaced --
-     typically a live session holding it -- refuses rather than writing bytes
-     through a name another session is reading. */
-  try {
-    fs.rmSync(target, { force: true });
-  } catch (error) {
-    throw new AgentConfinementRefusal(
-      'AGENT_CONFINEMENT_CREDENTIAL_BUSY',
-      'The sign-in for this assistant home is in use and could not be replaced, so no session was started against it.',
-      { cause: error && error.code ? String(error.code) : 'unknown' }
-    );
-  }
-  try {
-    fs.linkSync(source, target);
-    return 'hardlink';
-  } catch (linkError) {
-    if (!allowCopy) {
-      throw new AgentConfinementRefusal('AGENT_CONFINEMENT_CREDENTIAL_UNLINKABLE',
-        'The private session credential could not be linked within this session. Credential copying is disabled.', {});
-    }
-    /* The copy is the fallback for a volume that cannot hard-link at all --
-       cross-drive homes and link-less filesystems. It is only ever REPORTED as
-       'copy' when a copy actually happened; a copy that also fails is a named
-       refusal carrying both causes, never a silent half-state. */
-    try {
-      fs.copyFileSync(source, target);
-      return 'copy';
-    } catch (copyError) {
-      throw new AgentConfinementRefusal(
-        'AGENT_CONFINEMENT_CREDENTIAL_UNLINKABLE',
-        'The sign-in could not be carried into the assistant home, so no session was started against it.',
-        {
-          linkCause: linkError && linkError.code ? String(linkError.code) : 'unknown',
-          copyCause: copyError && copyError.code ? String(copyError.code) : 'unknown'
-        }
-      );
-    }
   }
 }
 
@@ -1197,80 +982,19 @@ function assertAccountMarker(home, accountName) {
   fs.writeFileSync(marker, `${JSON.stringify({ name: accountName })}\n`, 'utf8');
 }
 
-/* NOTHING STARTABLE SURVIVES A REFUSAL. Without this, a person who signs out
- * revokes their own credential file while `agent-home/...` keeps the PREVIOUS
- * prepare's complete home -- a hard-linked credential whose bytes outlive the
- * deletion of their own copy, beside a tool document and a grant pre-approving
- * it. A durable authenticated artifact that outlives the person's revocation
- * is not this product's to keep, so every prepare failure scrubs the files
- * that make its home startable. Every file is attempted, and an incomplete
- * scrub replaces the triggering refusal with a named refusal that carries it:
- * callers must not hear "the home was scrubbed" when that was not established.
- *
- * WHAT THIS CAN DESTROY, NAMED, BECAUSE IT IS A DELIBERATE TRADE. When the
- * confined session has refreshed its own token, the link has forked and the
- * NEWEST credential is the one sitting here (see linkCredential's
- * 'kept-refreshed' branch). A prepare that fails for some entirely unrelated
- * reason then scrubs that newer token, and the next prepare re-links the
- * person's older one -- so with provider-side refresh-token rotation the
- * AGENT'S sign-in can be dead until the person signs in again. That is
- * accepted, and the reason is the asymmetry: the person's OWN terminal is
- * unaffected either way, because nothing here ever writes to their home. A
- * dead agent sign-in is visible, recoverable in one action, and fails toward
- * the person; a durable authenticated artifact left behind after they revoked
- * their sign-in is none of those. Preferring the first is the whole point.
- *
- * The account marker is
- * deliberately kept -- it records whose the directory WAS, which is exactly
- * what the collision check needs to keep meaning something.
- *
- * WHY THE SIGN-IN IS SCRUBBED ONLY ON A SIGN-OUT, AND THE OTHERS ALWAYS.
- * The try opens well BEFORE the credential is ever linked, so every refusal in
- * between lands in the same catch -- an account-name collision, a malformed
- * machine record, an empty tier profile, a disk-full write. Scrubbing the
- * sign-in for those was a CROSS-ACCOUNT DENIAL OF SERVICE reachable by naming
- * an account: assertAccountMarker() throws first, so merely ATTEMPTING to
- * start under a second name that slugs to the same folder ("work." beside
- * "work") deleted the credential out of the FIRST account's home, possibly
- * while a session was running from it. The generated artifacts are the
- * product's own and cost nothing to rewrite, so they are scrubbed on any
- * refusal; the credential is scrubbed ONLY for the refusal that means the
- * person actually revoked it.
- *
- * AND ONLY IF IT IS STILL GONE. The person's own CLI replaces its credential
- * through a temporary file and a rename, so `existsSync` can be false for the
- * width of that rename. Re-reading before deleting turns a transient absence
- * back into a no-op instead of destroying a sign-in that was never revoked. */
-/* REVOKING A CREDENTIAL MUST REACH EVERY NAME IT HAS, NOT JUST THE OWNER'S.
- *
- * linkCredential hard-links the owner's live sign-in into every confined home
- * it prepares, one per (agent, session, provider, tier, account). Nothing reaps
- * those homes: `agent-home` appears in no cleanup, prune or sweep path in either
- * repository, so the link count on the owner's credential grows for the life of
- * the install. scrubStartableHome below removes links, but only for the single
- * home a failing prepare was working on, and only when that prepare is attempted
- * again -- which never happens for a retired agent or a closed session.
- *
- * MEASURED on a development machine: ~/.codex/auth.json had nlink=9 -- eight links
- * under six different profile trees, all from agents and sessions that had
- * ended. Signing out and deleting that file leaves the inode alive under eight
- * other names, each a working OAuth refresh token. That is revocation-at-the-
- * user's-copy failing to revoke, the shape RFC 9700 s4.14 describes.
- *
- * MATCHED BY INODE, NOT BY NAME, because the name is the part that differs: the
- * whole defect is one inode wearing many names. Paths are walked with lstat and
- * symlinks are never followed or removed, so a link planted inside the tree
- * cannot steer this at a file outside it.
- *
- * Reports what it could not remove rather than reporting success. A caller that
- * hears "revoked" when a link survived is worse off than one that hears nothing.
- */
+
+
 function revokeCredentialLinks(searchRoot, identity, { limit = 20000 } = {}) {
   const removed = [];
   const failures = [];
   if (!searchRoot || !identity || identity.ino === undefined || identity.dev === undefined) {
     return Object.freeze({ removed, failures, scanned: 0, complete: false });
   }
+
+  let wantedDev;
+  let wantedIno;
+  try { wantedDev = BigInt(identity.dev); wantedIno = BigInt(identity.ino); }
+  catch { return Object.freeze({ removed, failures, scanned: 0, complete: false }); }
   let scanned = 0;
   let truncated = false;
   const walk = (directory) => {
@@ -1291,8 +1015,8 @@ function revokeCredentialLinks(searchRoot, identity, { limit = 20000 } = {}) {
       if (!entry.isFile()) continue;
       if ((scanned += 1) > limit) { truncated = true; return; }
       let info;
-      try { info = fs.lstatSync(full); } catch { continue; }
-      if (info.ino !== identity.ino || info.dev !== identity.dev) continue;
+      try { info = fs.lstatSync(full, { bigint: true }); } catch { continue; }
+      if (info.ino !== wantedIno || info.dev !== wantedDev) continue;
       try { fs.rmSync(full, { force: true }); removed.push(full); }
       catch (cause) {
         failures.push(Object.freeze({ operation: 'unlink', file: full, cause: cause?.code || 'unknown' }));
@@ -1315,80 +1039,177 @@ function revokeCredentialLinks(searchRoot, identity, { limit = 20000 } = {}) {
  * nothing left to match the other names against. */
 function credentialIdentity(file) {
   try {
-    const info = fs.lstatSync(file);
+    // bigint: see revokeCredentialLinks() -- a rounded Windows file id is
+    // somebody else's file.
+    const info = fs.lstatSync(file, { bigint: true });
     if (!info.isFile()) return null;
-    return Object.freeze({ dev: info.dev, ino: info.ino, nlink: info.nlink });
+    return Object.freeze({ dev: info.dev, ino: info.ino, nlink: Number(info.nlink) });
   } catch { return null; }
 }
 
-function scrubStartableHome(home, { error, artifacts, signInFile = null, signInSource = null }) {
+/* HOW FAR A SIGN-OUT SWEEP LOOKS. revokeCredentialLinks() counts every file it
+ * passes, and agent-home also holds each provider's own session logs and state
+ * -- the 20,000 default is a fixture's number, and an ordinary well-used
+ * agent-home can pass it, after which the sweep stops and reports itself
+ * incomplete. This bound only stops a runaway walk; a sign-out is rare and a
+ * few hundred thousand lstat calls is the price of reaching every name. */
+const CREDENTIAL_REVOCATION_SCAN_LIMIT = 500000;
+
+/* WHERE A FAILED SWEEP IS REPORTED, WITHOUT THE PERSON'S PROFILE PATH. Refusal
+ * details travel to the application and its logs; a path inside agent-home is
+ * named relative to it. */
+function confinedRelativeName(confinedRoot, file) {
+  const relative = path.relative(confinedRoot, file);
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+    ? path.join(CONFINED_HOME_LEAF, relative)
+    : CONFINED_HOME_LEAF;
+}
+
+/* THE SIGN-OUT HALF OF THE FAN-OUT FIX, NOW CALLED (c41e071 wrote it; nothing
+ * called it). Every confined name of the credential that was just revoked is
+ * removed from the product's own agent-home, not only the one home a prepare
+ * happens to be building: those are the names a retired agent or a closed
+ * session left behind, and each one is a working sign-in the person believes
+ * they revoked. `confinedRoot` is always <services root>/agent-home, never the
+ * person's own home or an account home. Returns the failures in the scrub's own
+ * shape; a scan that stopped early is a failure too, because "revoked" must not
+ * be heard when a name may have survived.
+ *
+ * TWO WAYS A NAME IS FOUND, BECAUSE A REFRESH SPLITS THE FILE.
+ *   - By inode (`identity`): every name that is still the revoked file. This is
+ *     the only test for a home prepared before the source marker existed.
+ *   - By recorded source (`source`): every home whose CREDENTIAL_SOURCE_MARKER
+ *     names the revoked sign-in, whatever its lineage. A provider refresh inside
+ *     a confined home renames a NEW file over its name, and the family heal then
+ *     deliberately brings its siblings onto that new file -- so after one
+ *     refresh the names holding the LIVE token are exactly the ones an inode
+ *     match cannot reach. Measured before this: a removed account's receipt said
+ *     confinedCopiesRevoked: true while two confined homes still held its live
+ *     token, and a sign-out left the refreshed home's token working.
+ * Another account's sign-in is a different file AND records a different source,
+ * so neither test reaches it. */
+function revokeConfinedCopies(confinedRoot, identity, { source = null } = {}) {
+  const key = source ? credentialSourceKey(source) : null;
+  if (!confinedRoot || (!identity && !key)) return Object.freeze({ removed: 0, failures: Object.freeze([]) });
+  const removed = new Set();
   const failures = [];
-  const remember = (operation, file, cause) => failures.push(Object.freeze({
-    operation,
-    file,
-    cause: cause && cause.code ? String(cause.code) : 'unknown'
-  }));
+  let complete = true;
+  const take = (sweep) => {
+    for (const file of sweep.removed) removed.add(path.resolve(file));
+    for (const failure of sweep.failures) {
+      failures.push(Object.freeze({
+        operation: `revoke-${failure.operation}`,
+        file: confinedRelativeName(confinedRoot, failure.file),
+        cause: failure.cause
+      }));
+    }
+    if (!sweep.complete) complete = false;
+  };
+  if (identity) take(revokeCredentialLinks(confinedRoot, identity, { limit: CREDENTIAL_REVOCATION_SCAN_LIMIT }));
+  if (key) take(revokeRecordedSourceNames(confinedRoot, key, path.basename(source), { limit: CREDENTIAL_REVOCATION_SCAN_LIMIT }));
+  if (!complete && failures.length === 0) {
+    failures.push(Object.freeze({ operation: 'revoke-scan', file: CONFINED_HOME_LEAF, cause: 'SCAN_LIMIT' }));
+  }
+  return Object.freeze({ removed: removed.size, failures: Object.freeze(failures) });
+}
+
+
+function revokeRecordedSourceNames(searchRoot, key, leaf, { limit = 20000 } = {}) {
+  const removed = [];
+  const failures = [];
+  let scanned = 0;
+  let truncated = false;
+  if (!searchRoot || !key || !leaf) return Object.freeze({ removed, failures, scanned, complete: false });
+  const walk = (directory) => {
+    if (truncated) return;
+    let entries;
+    try { entries = fs.readdirSync(directory, { withFileTypes: true }); }
+    catch (cause) {
+      if (!cause || cause.code !== 'ENOENT') {
+        failures.push(Object.freeze({ operation: 'read', file: directory, cause: cause?.code || 'unknown' }));
+      }
+      return;
+    }
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.isSymbolicLink()) continue;
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.isFile()) continue;
+      if ((scanned += 1) > limit) { truncated = true; return; }
+      if (entry.name !== CREDENTIAL_SOURCE_MARKER) continue;
+      const recorded = recordedCredentialFamily(directory);
+      if (!recorded || recorded.source !== key) continue;
+      const name = path.join(directory, leaf);
+      let info;
+      try { info = fs.lstatSync(name); } catch { continue; }
+      if (!info.isFile()) continue;
+      try { fs.rmSync(name, { force: true }); removed.push(name); }
+      catch (cause) {
+        failures.push(Object.freeze({ operation: 'unlink', file: name, cause: cause?.code || 'unknown' }));
+      }
+    }
+  };
+  walk(searchRoot);
+  return Object.freeze({
+    removed: Object.freeze(removed),
+    failures: Object.freeze(failures),
+    scanned,
+    complete: !truncated && failures.length === 0
+  });
+}
+
+
+// Retained only to revoke artifacts from older releases; no new family is recorded.
+const CREDENTIAL_SOURCE_MARKER = 'toolsenabled-credential-source.json';
+const CREDENTIAL_SOURCE_MARKER_MAX_BYTES = 8192;
+
+/* THE KEY A SIGN-IN IS FILED UNDER, the same on every side that files or finds
+ * it: the prepare that records it (the person's or account's own file), the
+ * sign-out scrub, and account removal (registry-write and the app store, which
+ * name the file as signInFilePath(resolvedHome, spec)). Each side may spell the
+ * same folder differently -- a relative or symlinked spelling, or, on Windows,
+ * another letter case -- so the folder is resolved and, where it exists, taken
+ * through realpath, and the key is case-folded on win32. A folder that cannot be
+ * resolved keys by its resolved spelling. */
+function credentialSourceKey(file, platform = process.platform) {
+  if (typeof file !== 'string' || !file) return null;
+  let resolved = path.resolve(file);
+  try {
+    const realpath = fs.realpathSync.native || fs.realpathSync;
+    resolved = path.join(realpath(path.dirname(resolved)), path.basename(resolved));
+  } catch { /* keep the resolved spelling */ }
+  return platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+
+function recordedCredentialFamily(home) {
+  const marker = path.join(home, CREDENTIAL_SOURCE_MARKER);
+  try {
+    const info = fs.lstatSync(marker);
+    if (!info.isFile() || info.size > CREDENTIAL_SOURCE_MARKER_MAX_BYTES) return null;
+    const parsed = JSON.parse(fs.readFileSync(marker, 'utf8'));
+    if (!parsed || typeof parsed.source !== 'string') return null;
+    return Object.freeze({ source: parsed.source, lineage: typeof parsed.lineage === 'string' ? parsed.lineage : null });
+  } catch { return null; }
+}
+
+function scrubStartableHome(home, { error, artifacts }) {
+  const failures = [];
   for (const file of artifacts) {
     try { fs.rmSync(path.join(home, file), { force: true }); } catch (cause) {
-      remember('remove-artifact', file, cause);
+      failures.push({ operation: 'remove-artifact', file, cause: cause?.code || 'unknown' });
     }
   }
-  if (!signInFile || !error || error.code !== 'AGENT_CONFINEMENT_SIGNED_OUT') {
-    if (failures.length === 0) return;
-    throw new AgentConfinementRefusal(
-      'AGENT_CONFINEMENT_HOME_SCRUB_INCOMPLETE',
+  if (failures.length) {
+    throw new AgentConfinementRefusal('AGENT_CONFINEMENT_HOME_SCRUB_INCOMPLETE',
       'The assistant home was refused, but whether its startable artifacts were removed could not be established.',
-      { refusal: error && error.code ? String(error.code) : 'unknown', failures }
-    );
-  }
-  let revoked = true;
-  try { revoked = !fs.existsSync(signInSource); } catch (cause) {
-    revoked = false;
-    remember('establish-revocation', signInFile, cause);
-  }
-  if (revoked) {
-    try { fs.rmSync(path.join(home, signInFile), { force: true }); } catch (cause) {
-      remember('remove-sign-in', signInFile, cause);
-    }
-  }
-  if (failures.length > 0) {
-    throw new AgentConfinementRefusal(
-      'AGENT_CONFINEMENT_HOME_SCRUB_INCOMPLETE',
-      'The assistant home was refused, but whether its startable artifacts were removed could not be established.',
-      { refusal: error && error.code ? String(error.code) : 'unknown', failures }
-    );
+      { refusal: error?.code || 'unknown', failures });
   }
 }
 
-/**
- * Build the home a confined session runs against, and answer with the
- * environment that session must be spawned under.
- *
- * RAISES rather than returning the user's own home on any failure. Falling back
- * would restore every inherited MCP server and the user config's
- * danger-full-access at the exact moment something went wrong -- the widest
- * possible surface, reached by the least visible path.
- */
-/* WHICH ACCOUNT THIS HOME BELONGS TO, and why the directory has to say so.
- *
- * `accountName` is null until something above chooses an account, and a null
- * name reproduces the ORIGINAL path byte for byte -- that is the whole
- * fail-closed promise: a computer with no account list is not merely handled,
- * it takes the identical code path it took before any of this existed.
- *
- * WHEN AN ACCOUNT IS CHOSEN THE HOME MUST BE ITS OWN, AND THIS IS A BUG THE
- * OBVIOUS DESIGN WOULD HAVE INTRODUCED. linkCredential() re-links on every
- * prepare, by design, because a token refresh leaves an old link pointing at a
- * superseded inode. With ONE home per level and two accounts, starting a second
- * session would re-link the shared home and the FIRST session -- still running,
- * still holding that directory -- would silently continue as somebody else.
- * Nobody would see it: both sessions look correct from the outside, which is the
- * signature of every wrong-identity failure this system has already had. One
- * home per account per level makes that unrepresentable rather than avoided.
- *
- * The name is sanitised into a single path segment because it comes from a file
- * a person edits; a name is not permitted to choose a directory.
- */
+// Keep the existing private-account, profile and generated-artifact identity
+// checks even though CODEX_HOME now selects the original account home.
 function requirePrivateAccount(provider, home, name, servicesRoot, machineRecord) {
   if (!providerIsolation.isolationRequested()) return null;
   const context = providerIsolation.isolationContext(process.env, {
@@ -1456,17 +1277,16 @@ function prepareConfinedCodexHome(confinement, {
       : path.join(root, CONFINED_HOME_LEAF, confinement.tier),
   { field: 'generated Codex home', profileRoot });
   providerIsolation.assertIsolatedPath(home, privateContext);
-  // Codex 0.153.2 can read this long config path on Windows, but SQLite cannot
-  // open its state DB there. Keep short homes unchanged; for a long home place
-  // only the DB in a compact, per-home directory under the SAME services root.
-  // Hash the complete identity (agent/session/provider/tier/account), never a
-  // truncated or sanitized display name. Configs and sign-ins stay isolated.
-  const sqliteHome = process.platform === 'win32' && home.length > 220
+  // Runtime history now belongs to the official account home as well.
+  // Keep its state path stable across fresh ToolsEnabled session authorities
+  // so native resume can find a paginated thread. Windows SQLite still needs
+  // a compact path when the selected account home itself exceeds its budget.
+  const sqliteHome = process.platform === 'win32' && sourceHome.length > 220
     ? assertAccountProfilePath(path.join(root, 'agent-db',
-      crypto.createHash('sha256').update(home, 'utf8').digest('base64url')),
+      crypto.createHash('sha256').update(sourceHome, 'utf8').digest('base64url')),
     { field: 'generated Codex database home', profileRoot })
-    : null;
-  if (sqliteHome && sqliteHome.length > 220) {
+    : sourceHome;
+  if (process.platform === 'win32' && sqliteHome.length > 220) {
     throw new AgentConfinementRefusal('AGENT_CONFINEMENT_STATE_PATH_TOO_LONG',
       'The assistant state directory is too long for Windows SQLite. Choose a shorter application data location.', {});
   }
@@ -1476,7 +1296,7 @@ function prepareConfinedCodexHome(confinement, {
 
   try {
     assertAccountMarker(home, leaf ? accountName : null);
-    if (sqliteHome) fs.mkdirSync(sqliteHome, { recursive: true });
+    if (sqliteHome !== sourceHome) fs.mkdirSync(sqliteHome, { recursive: true });
 
     // The tool surface this level may carry, from the ONE generator the rest of
     // the product already writes `.mcp.json` from. Rendering the same document
@@ -1509,278 +1329,48 @@ function prepareConfinedCodexHome(confinement, {
 
     accountFenceTarget = syncAccountFence(home, CODEX_ACCOUNT_FENCE_FILE, boundaryHome);
     providerIsolation.assertIsolatedPath(path.join(sourceHome, signInFile), privateContext);
-    const credential = linkCredential(sourceHome, home, signInFile, { allowCopy: !privateContext });
-    fs.writeFileSync(path.join(home, 'config.toml'), confinedCodexConfig(confinement, document, machineRecord, sqliteHome, roleFunctionsOnly), 'utf8');
+    assertCodexSignedIn(path.join(sourceHome, signInFile));
+    const codexConfig = confinedCodexConfig(confinement, document, machineRecord, sqliteHome, roleFunctionsOnly);
+    if (fs.existsSync(accountFenceTarget)) {
+      codexConfig.developer_instructions = [fs.readFileSync(accountFenceTarget, 'utf8'),
+        codexConfig.developer_instructions].filter(Boolean).join('\n\n');
+    }
+    const codexArgs = codexConfigOverrideArgs(codexConfig);
 
     return Object.freeze({
-      codexHome: home,
-      credential,
+      codexHome: sourceHome,
+      agentHome: home,
+      codexArgs,
+      codexConfig: Object.freeze(codexConfig),
       account: leaf ? accountName : null,
       servers: Object.freeze(Object.keys(document.mcpServers || {})),
-      env: Object.freeze({ ...accountProfileEnvironment(profileRoot), CODEX_HOME: home })
+      env: Object.freeze({ ...codexForwardedEnvironment(document, machineRecord), ...accountProfileEnvironment(profileRoot), CODEX_HOME: sourceHome })
     });
   } catch (error) {
-    /* See scrubStartableHome(): a refusal must not leave the previous
-       prepare's credential and configuration sitting in a startable home --
-       and must not delete a sign-in over a refusal that was never about one. */
+    // Only product-generated artifacts are scrubbed. Authentication stays
+    // under official-client custody, even when preparation is refused.
     scrubStartableHome(home, {
       error,
-      artifacts: ['config.toml', ...(accountFenceTarget ? [CODEX_ACCOUNT_FENCE_FILE] : [])],
-      signInFile,
-      signInSource: path.join(sourceHome, signInFile)
+      artifacts: ['config.toml', ...(accountFenceTarget ? [CODEX_ACCOUNT_FENCE_FILE] : [])]
     });
     throw error;
   }
 }
 
-// --- the isolated Claude home -------------------------------------------------
-//
-// THE SAME TWO LEAKS, THE OTHER ENGINE, MEASURED BEFORE BEING BUILT ON. An
-// in-app Claude session (2026-08-19, from inside the product) started with NO
-// --mcp-config -- "no ToolsEnabled MCP server is connected", the session's own
-// words -- and with no CLAUDE_CONFIG_DIR, so the official CLI resolved the
-// OWNER'S ~/.claude and injected the owner's global CLAUDE.md into a session
-// the product started. The tool surface was empty and the memory surface was
-// somebody else's.
-//
-// WHAT WAS MEASURED off the installed claude 2.1.186 (scrubbed environment,
-// scratch directories) before choosing this mechanism:
-//
-//   CLAUDE_CONFIG_DIR=<empty dir>          -> loggedIn:false        (auth is
-//     scoped to the configuration directory, not to the machine)
-//   <dir with hard-linked .credentials.json> -> loggedIn:true,
-//     authMethod:"claude.ai", and a real --print turn served with
-//     is_error:false                       (ONE linked file carries the
-//     person's own subscription sign-in; the CLI creates the rest itself)
-//   CLAUDE.md canary in the pointed dir    -> quoted back verbatim
-//   pointed dir with no CLAUDE.md          -> "NONE"                (the
-//     pointed directory's CLAUDE.md is the WHOLE user-memory surface)
-//
-// So a Claude session pointed at a home this installation owns, with the
-// sign-in linked in, authenticates as the person and reads NO memory the
-// product did not put there. What remains shared BY DESIGN: the credential
-// bytes (one file, two names -- that is the sign-in working, not a leak) and
-// any machine-wide managed policy the CLI reads outside its config directory.
-//
-// THE HOME IS agent-home/claude/<tier>/<@default | account>, and both segments
-// of that layout are load-bearing:
-//
-//   - PROVIDER FIRST: a codex ACCOUNT is a name a person types, accountSegment()
-//     can produce the string 'claude', and codex account homes live at
-//     agent-home/<tier>/<account> -- so a provider directory placed at that
-//     depth could be addressed by an account name. One level up, no account
-//     name can reach it.
-//   - NO LIVE HOME CONTAINS ANOTHER: the no-account home is `@default`, a
-//     SIBLING of every account home, never their parent. A CLAUDE_CONFIG_DIR is
-//     a directory the CLI enumerates and writes under (projects/, sessions/,
-//     backups/ -- observed on 2.1.186), so a shared home that contained the
-//     account homes would put every account's credential inside another
-//     session's live config dir. `@` cannot come out of accountSegment(), so no
-//     account name can collide with the default leaf.
-
-const CONFINED_CLAUDE_SEGMENT = 'claude';
-const CONFINED_DEFAULT_LEAF = '@default';
-
-/**
- * Build the home a confined CLAUDE session runs against.
- *
- * The sibling of prepareConfinedCodexHome(), one for one: same tier/account
- * layout, same generator, same credential-link rule, same fail-closed RAISES.
- * What differs is what the engine consumes -- Codex reads a config.toml and is
- * pointed by CODEX_HOME in the environment; the official Claude CLI reads the
- * generated document DIRECTLY as `.mcp.json` via --mcp-config, and is pointed
- * at the home by the `configDir` ARGUMENT the engine takes (pointed, never
- * derived -- the fence in claude-cli-process.js). So this returns those paths
- * plus the owning account's standard profile-variable pins.
- */
-function prepareConfinedClaudeHome(confinement, {
-  record,
-  servicesRoot,
-  accountHome = installationProfileRoot(),
-  userClaudeHome = null,
-  accountName = null,
-  agentId = null,
-  sessionId = null,
-  sessionCredential = null,
-  agentApiMode,
-  machineRecord = machineRecordModule(),
-  generate = null
-} = {}) {
-  if (!confinement || confinement.isolated !== true) {
-    throw new AgentConfinementRefusal('AGENT_CONFINEMENT_NOT_ISOLATED',
-      'Only a confined permission level has an isolated assistant home.', {});
-  }
-  const privateContext = requirePrivateAccount('claude', userClaudeHome, accountName, servicesRoot, machineRecord);
-  const profileRoot = installationProfileRoot();
-  const boundaryHome = assertAccountProfilePath(accountHome, {
-    field: 'account home', profileRoot, requireOwnedProfile: process.platform === 'win32'
-  });
-  const sourceHome = assertAccountProfilePath(
-    userClaudeHome || path.join(boundaryHome, '.claude'),
-    { field: 'Claude sign-in home', profileRoot }
-  );
-  const root = assertAccountProfilePath(
-    servicesRoot || machineRecord.resolveServicesRoot({}),
-    { field: 'services root', profileRoot }
-  );
-  const leaf = accountSegment(accountName);
-  const agent = declaredAgentSegment(agentId);
-  const session = sessionAuthoritySegment(sessionId, sessionCredential);
-  const home = assertAccountProfilePath(path.join(
-    root,
-    CONFINED_HOME_LEAF,
-    ...(agent ? [AGENT_HOME_NAMESPACE, agent] : []),
-    ...(session ? [SESSION_HOME_NAMESPACE, session] : []),
-    CONFINED_CLAUDE_SEGMENT,
-    confinement.tier,
-    leaf || CONFINED_DEFAULT_LEAF
-  ), { field: 'generated Claude home', profileRoot });
-  providerIsolation.assertIsolatedPath(home, privateContext);
-  fs.mkdirSync(home, { recursive: true });
-  // .credentials.json is what the official CLI treats as its sign-in in this
-  // directory, from the one table multi-account/registry.js keeps.
-  const signInFile = require('./multi-account/registry').providerSpec(CONFINED_CLAUDE_SEGMENT).signInFile;
-  let accountFenceTarget = null;
-
-  try {
-    assertAccountMarker(home, leaf ? accountName : null);
-
-    // The tool surface this level may carry, from the ONE generator every other
-    // surface reads. `agentActor: 'claude'` stamps the calling principal on every
-    // entry the same way the Codex home stamps 'codex'; the state root and
-    // ELECTRON_RUN_AS_NODE ride the entries generator-side, identically for both
-    // engines, because both renderings are the same document.
-    let document = { mcpServers: {} };
-    if (record) {
-      const generator = generate || machineRecord.generateMcpConfig;
-      document = generator(generationRecord(record), {
-        agentActor: CONFINED_CLAUDE_SEGMENT,
-        agentApiMode,
-        agentId: agent,
-        sessionCredential,
-        stateRoot: stateRootForGeneratedServers()
-      }).document;
-    }
-    const entries = validateServerEntries(document, machineRecord);
-    for (const [name, entry] of entries) refuseNonNodeRuntime(name, entry, machineRecord);
-    const servers = entries.map(([name]) => name);
-
-    accountFenceTarget = syncAccountFence(home, CLAUDE_ACCOUNT_FENCE_FILE, boundaryHome);
-    providerIsolation.assertIsolatedPath(path.join(sourceHome, signInFile), privateContext);
-    const credential = linkCredential(sourceHome, home, signInFile, { allowCopy: !privateContext });
-
-    const mcpConfig = path.join(home, '.mcp.json');
-    writeFileDurably(mcpConfig, `${JSON.stringify(document, null, 2)}\n`);
-
-    // THE GRANT THAT MAKES THE CONFIGURED SERVERS CALLABLE, and the ceiling
-    // written beside it. MEASURED off claude 2.1.186, this exact document, a
-    // --print session: without the grant the servers CONNECTED and every call
-    // came back permission-not-granted, because a --print session has no one
-    // to ask -- tools that are advertised and can never run. With it, the
-    // calls ran at BOTH confined modes this table maps to: memory set/get
-    // round-tripped under acceptEdits, and under `plan` (the guided tier) a
-    // cross-session memory_get returned a value this session could not have
-    // guessed -- so the read-only tier's read-only tools really work. The rule
-    // grammar itself is the adapter's fact (claudeServerPermissionRule), kept
-    // beside the CLI's other measured strings. `defaultMode` writes the tier's
-    // own mode INTO the home, so the file bounds what the argv bounds: a
-    // session pointed here without our argv still starts at the recorded
-    // level's mode, the same both-places rule the codex home follows with
-    // sandbox_mode in config.toml.
-    //
-    // The allow list names the plan's SERVERS and nothing else: built-in tools
-    // stay governed by the mode, and the per-tier narrowing of WHICH tools
-    // those servers even advertise is already stamped on the entries
-    // (TOOLSENABLED_TOOL_ALLOWLIST), server-side, by the generator.
-    const { claudeServerPermissionRule } = require('./agent-engine/claude-cli-adapter');
-    fs.writeFileSync(
-      path.join(home, 'settings.json'),
-      `${JSON.stringify({
-        permissions: {
-          defaultMode: confinement.claudePermissionMode,
-          allow: servers.map(claudeServerPermissionRule)
-        }
-      }, null, 2)}\n`,
-      'utf8'
-    );
-
-    // CLAUDE.md is exactly this OS account's ACCOUNT-FENCE.md or absent. The
-    // synchronizer removes an older target when the current account has no
-    // fence, so a reusable home cannot retain another account's directives.
-
-    return Object.freeze({
-      configDir: home,
-      mcpConfig,
-      credential,
-      account: leaf ? accountName : null,
-      servers: Object.freeze(servers),
-      env: accountProfileEnvironment(profileRoot)
-    });
-  } catch (error) {
-    /* See scrubStartableHome(): a refusal must not leave the previous
-       prepare's credential, tool document and grant sitting in a startable
-       home -- after a sign-out, that trio would be an authenticated artifact
-       outliving the person's own revocation. The credential goes only for the
-       refusal that means it was actually revoked; the generated pair goes
-       every time, because rewriting them costs nothing. */
-    scrubStartableHome(home, {
-      error,
-      artifacts: [
-        '.mcp.json', 'settings.json',
-        ...(accountFenceTarget ? [CLAUDE_ACCOUNT_FENCE_FILE] : [])
-      ],
-      signInFile,
-      signInSource: path.join(sourceHome, signInFile)
-    });
-    throw error;
-  }
-}
-
-// --- the tool surface, WITHOUT COPYING A HOME OR CREDENTIAL ------------------
-//
-// WHY THIS EXISTS BESIDE prepareConfinedClaudeHome(), WHICH DOES MORE. The two
-// defects measured on 2026-08-19 are separable, and only one of them is safe to
-// fix tonight:
-//
-//   1. NO TOOLS. The session started with no --mcp-config -- "no ToolsEnabled
-//      MCP server is connected", its own words. This is the defect the owner's
-//      first external user actually hit, and fixing it touches NO credential.
-//   2. THE OWNER'S MEMORY. With no CLAUDE_CONFIG_DIR the CLI resolved the
-//      owner's ~/.claude and read their global CLAUDE.md. Fixing THAT requires
-//      pointing the session at a home this installation owns, which requires
-//      carrying their sign-in into that home, which is what opens the credential
-//      fork: the confined session's own refresh replaces the file and splits
-//      the hard link, leaving the SUPERSEDED token in the owner's own home.
-//      With provider-side rotation that is server-side and already done by the
-//      time it is observable, and nothing here can heal it -- this module
-//      deliberately never writes their home. Confirmed live on this machine:
-//      ~/.claude/.credentials.json has nlink=1 and birthtime == mtime, so it
-//      was newly CREATED rather than rewritten in place, which is exactly what
-//      breaks a link. There is also no credential backup to recover from.
-//
-// So this path ships and the copied-home path does not. It writes the SAME
-// generated document and grant, and points CLAUDE_CONFIG_DIR at the owning OS
-// profile's existing `.claude` directory (or the explicitly selected account
-// directory) without reading, copying or linking its credential. That preserves
-// the official client's own sign-in while preventing stale HOME/USERPROFILE
-// values from selecting another Windows account's CLAUDE.md.
-//
-// NO ACCOUNT SEGMENT IN THE GENERATED FILES: there is no copied home to mis-link
-// a sign-in into and no slug collision to refuse. The selected configDir is an
-// explicit pointer validated inside the owning profile; the generated files
-// remain per-TIER because only the recorded tier changes their content.
+// --- the tool surface, without relocating sign-in --------------------------
 
 const CLAUDE_TOOLS_LEAF = 'agent-tools';
 
 /* WHO GETS THE THIRD PROCESS.
  *
  * Every generated surface starts a browser gateway beside the two tool servers,
- * so an assistant costs THREE electron processes. A development computer
- * once resumed nine assistants within a few minutes and died
- * with the CPU pegged.
+ * so an assistant costs THREE electron processes. This computer resumed nine
+ * assistants between 21:15:50 and 21:24:31 local on 2026-09-03 and died at
+ * 21:26:20 with the CPU pegged.
  *
  * MEASURED the same evening, three consecutive runs of the exact command the
- * generated document spells (the crash investigation evidence): with no ToolsEnabled-owned browser running,
+ * generated document spells (REPORT-crash-20260903/evidence/C/
+ * playwright-gateway-lifetime.txt): with no ToolsEnabled-owned browser running,
  * src/playwright-gateway.js writes "The ToolsEnabled-owned browser could not be
  * revalidated" and EXITS 2 after 835-1170 ms. It advertises no tool and answers
  * no call. So for an assistant started while no browser is owned -- which is
@@ -1860,8 +1450,13 @@ function prepareGeneratedToolSurface(confinement, {
   const boundaryHome = assertAccountProfilePath(accountHome, {
     field: 'account home', profileRoot, requireOwnedProfile: process.platform === 'win32'
   });
+  const nativeClaudeHome = provider === 'claude' && !configDir
+    ? process.platform === 'win32'
+      ? Object.entries(process.env).find(([name]) => name.toUpperCase() === 'CLAUDE_CONFIG_DIR')?.[1]
+      : process.env.CLAUDE_CONFIG_DIR
+    : null;
   const selectedConfigDir = provider === 'local' ? null : assertAccountProfilePath(
-    configDir || (provider === 'gemini' ? boundaryHome : path.join(boundaryHome, `.${provider}`)),
+    configDir || nativeClaudeHome || (provider === 'gemini' ? boundaryHome : path.join(boundaryHome, `.${provider}`)),
     { field: 'Claude configuration home', profileRoot }
   );
   const root = assertAccountProfilePath(
@@ -2016,9 +1611,10 @@ const PLAN_ENGINES = Object.freeze({
     passThroughNonIsolated: true,
     prepare: (resolved, prepareOptions) => prepareConfinedCodexHome(resolved, prepareOptions),
     accountOverrides: account => ({ userCodexHome: account.resolvedHome, accountName: account.name }),
-    /* What bounds a codex session rides the ENVIRONMENT (CODEX_HOME). */
-    emptySurface: () => ({ env: null, codexHome: null, servers: EMPTY_SERVERS }),
-    surfaceOf: home => ({ env: home.env, codexHome: home.codexHome, servers: home.servers })
+    // The official sign-in stays in place; restrictions travel on argv.
+    emptySurface: () => ({ env: null, codexHome: null, agentHome: null, codexArgs: null, codexConfig: null, servers: EMPTY_SERVERS }),
+    surfaceOf: home => ({ env: home.env, codexHome: home.codexHome, agentHome: home.agentHome,
+      codexArgs: home.codexArgs, codexConfig: home.codexConfig, servers: home.servers })
   }),
   /* THE SHIPPED CLAUDE PATH. Tools by argument, no copied home or credential -- see
      the note above prepareClaudeToolSurface() for why this is the half that
@@ -2041,28 +1637,7 @@ const PLAN_ENGINES = Object.freeze({
       claudePermissionMode: resolved.claudePermissionMode || null, servers: surface.servers
     })
   }),
-  claude: Object.freeze({
-    /* WITHHELD FROM THE SHIPPED PATH, deliberately, and kept whole. Reachable
-       only through confinedClaudeSessionPlan(), which the app does not call.
-       See prepareClaudeToolSurface()'s note: this half also relocates the
-       session and links the sign-in, and the credential fork that opens can
-       leave the owner's own home holding a superseded refresh token. */
-    passThroughNonIsolated: false,
-    prepare: (resolved, prepareOptions) => prepareConfinedClaudeHome(resolved, prepareOptions),
-    accountOverrides: account => ({ userClaudeHome: account.resolvedHome, accountName: account.name }),
-    /* What bounds a Claude session rides as ARGUMENTS (configDir, mcpConfig)
-       plus the recorded level's own CLI mode. The environment carries only the
-       owning account's standard profile pins; configDir remains the one explicit
-       selector for the provider sign-in. */
-    emptySurface: resolved => ({
-      env: null, configDir: null, mcpConfig: null,
-      claudePermissionMode: resolved.claudePermissionMode || null, servers: EMPTY_SERVERS
-    }),
-    surfaceOf: (home, resolved) => ({
-      env: home.env, configDir: home.configDir, mcpConfig: home.mcpConfig,
-      claudePermissionMode: resolved.claudePermissionMode || null, servers: home.servers
-    })
-  })
+
 });
 
 function buildConfinedSessionPlan(options, engine, prepare = true) {
@@ -2094,12 +1669,12 @@ function buildConfinedSessionPlan(options, engine, prepare = true) {
   // Resolve the same provider capability matrix exposed by Settings using
   // the actual planner transport. No renderer-selected provider is trusted.
   if (apiMode === 'Optimized') {
-    const provider = engine === PLAN_ENGINES.claudeTools || engine === PLAN_ENGINES.claude ? 'claude'
+    const provider = engine === PLAN_ENGINES.claudeTools ? 'claude'
       : engine === PLAN_ENGINES.codex ? 'codex'
       : engine === PLAN_ENGINES.gemini || engine === PLAN_ENGINES.antigravity ? 'gemini'
       : engine === PLAN_ENGINES.grok ? 'grok' : engine === PLAN_ENGINES.local ? 'local' : null;
     const support = require('./agent-api-policy').optimizedToolSupport({
-      provider, client: engine === PLAN_ENGINES.claude ? 'legacy-home' : null, roleFunctionsOnly
+      provider, roleFunctionsOnly
     });
     if (support.status !== 'supported') return refusal('AGENT_OPTIMIZED_TOOLS_UNSUPPORTED', null);
   }
@@ -2112,10 +1687,6 @@ function buildConfinedSessionPlan(options, engine, prepare = true) {
   }
   if (options.roleFunctionsOnly === true && apiMode === 'Disabled') {
     return refusal('AGENT_TOOL_MODE_ROLE_CONFLICT', null);
-  }
-  // The legacy copied Claude home has no native-tool restriction transport.
-  if ((roleFunctionsOnly || apiMode === 'Disabled') && engine === PLAN_ENGINES.claude) {
-    return refusal('AGENT_ROLE_TOOL_RESTRICTION_UNAVAILABLE', null);
   }
 
   /* THE ACCOUNT IS VALIDATED HERE, ONCE, FOR BOTH ENGINES, and silently
@@ -2252,29 +1823,6 @@ function localSessionPlan(options = {}) {
 }
 
 /**
- * BUILT AND WITHHELD -- not reached from the shipped path. The app calls
- * claudeToolsSessionPlan(). This one additionally relocates the session into a
- * home this installation owns and links the person's sign-in into it, which is
- * what closes the owner-memory leak AND what opens the credential fork
- * described above prepareClaudeToolSurface(). It stays here, with its tests,
- * pending the refresh-token rotation question.
- *
- * Everything the agent host needs to start ONE Claude session at the recorded
- * level: the fields the Claude engine takes as ARGUMENTS -- `configDir` (which
- * home, pointed never derived), `mcpConfig` (which tool file, --mcp-config
- * with --strict-mcp-config) and `claudePermissionMode` (the recorded level's
- * own CLI mode) -- travelling on ONE object so they cannot be recombined from
- * different plans.
- *
- * A HOME THAT CANNOT BE BUILT REFUSES THE START (`ok: false`) rather than
- * falling back to no configDir -- which would be the owner's own ~/.claude,
- * global memory and all, restored at the exact moment something went wrong.
- */
-function confinedClaudeSessionPlan(options = {}) {
-  return buildConfinedSessionPlan(options, PLAN_ENGINES.claude);
-}
-
-/**
  * Everything desktop-app/shell/agent-host.cjs needs to start ONE session at
  * the recorded level: the thread options that confine the process and the
  * environment that bounds what it can reach around the process.
@@ -2283,18 +1831,8 @@ function confinedClaudeSessionPlan(options = {}) {
  * a host that throws when the record is unreadable is a host whose safe path is
  * the one that does not run.
  */
-/* `account` is the record src/lib/multi-account/rotation.js produced, or null.
- *
- * NULL IS NOT A DEGRADED CASE, it is the ordinary one: a computer with no
- * account list, which is every computer until somebody adds a second sign-in.
- * It links the credential from the home the person already uses, into the home
- * this plan already built, exactly as it always did.
- *
- * WHAT AN ACCOUNT CHANGES IS ONE DIRECTORY NAME. It says which of the person's
- * OWN signed-in homes the credential is linked from, and gives that account its
- * own confined home so two sessions cannot overwrite each other. Nothing here
- * opens a credential, and rotation had no way to make it: the record carries a
- * name and a directory and nothing else. */
+// The selected account names the official Codex sign-in home. Null selects
+// the owning profile's default home; neither case relocates authentication.
 function confinedSessionPlan(options = {}) {
   return buildConfinedSessionPlan(options, PLAN_ENGINES.codex);
 }
@@ -2349,6 +1887,9 @@ module.exports = Object.freeze({
   CONFINED_HOME_LEAF,
   revokeCredentialLinks,
   credentialIdentity,
+  revokeConfinedCopies,
+  credentialSourceKey,
+  CREDENTIAL_SOURCE_MARKER,
   AgentConfinementRefusal,
   installationProfileRoot,
   assertAccountProfilePath,
@@ -2362,12 +1903,14 @@ module.exports = Object.freeze({
   bindAgentSessionCredential,
   revokeAgentSessionCredential,
   confinedCodexConfig,
+  codexConfigOverrideArgs,
   generationRecord,
   stateRootForGeneratedServers,
+  // The shared server-entry rules, also run by mission-bridge on its lane document.
+  validateServerEntries,
+  refuseNonNodeRuntime,
   prepareConfinedCodexHome,
   confinedSessionPlan,
-  prepareConfinedClaudeHome,
-  confinedClaudeSessionPlan,
   prepareClaudeToolSurface,
   claudeToolsSessionPlan
 });

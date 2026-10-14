@@ -13,7 +13,7 @@
   "cwsLoginAccount": null,
   "$comment_cwsLoginAccount": "Optional. The alias whose browser session the Chrome Web Store publisher flow is allowed to use. Leave null until you configure Chrome Web Store publishing.",
   "duoAccount": null,
-  "$comment_duoAccount": "Optional. The alias for a Duo-protected institutional Google Workspace sign-in. Leave null unless you have that specific setup.",
+  "$comment_duoAccount": "Optional. The alias for a Duo-protected institutional Google Workspace sign-in (for example, a university NetID). Leave null unless you have that specific setup.",
   "vertexSeatAccount": null,
   "$comment_vertexSeatAccount": "Optional. The alias whose Google account holds your paid Vertex AI seat. Only affects which account the dashboard reserves the 'vertex' Gemini lane row for; leave null and that row simply does not appear.",
   "vertexApiAccount": null,

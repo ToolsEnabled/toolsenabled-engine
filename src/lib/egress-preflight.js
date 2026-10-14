@@ -65,7 +65,7 @@ const METADATA_FIELDS = Object.freeze(['title', 'author', 'creator', 'producer',
 // provider is sending it, not merely when it happens to sit inside a
 // containment-checked root.
 // The last four stem groups were ported on 2026-09-07 from the sibling,
-// unmerged commit, which fixed this same class independently with a
+// unmerged commit a099930, which fixed this same class independently with a
 // non-overlapping rule set. Each closes a name that BOTH lineages' patterns
 // let through -- password.json, access_key.json, service_account.json and
 // wallet.json all read "Clean: no provenance or internal-state markers

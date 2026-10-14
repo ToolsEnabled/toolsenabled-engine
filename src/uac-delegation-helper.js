@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// UAC delegation elevated helper (approved).
+// UAC delegation elevated helper (owner-approved, 2026-07-28).
 //
 // This is the process the ONE-TIME scheduled-task registration
 // (tools/uac-delegation-task.ps1) runs elevated, hidden, on demand. It:

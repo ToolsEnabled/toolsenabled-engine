@@ -348,7 +348,7 @@ function fingerprintManifest(sourcePath, manifest) {
 // wsl: content hashes via wsl.exe (immune to 9P mtime weirdness). Optional
 // wsl_base anchors relative manifest entries.
 // CRITICAL GUARD: `wsl -d <distro> <cmd>` BOOTS a stopped distro. The
-// distro being fingerprinted must never be booted as a side effect of a fingerprint
+// OpenClawGateway distro must never be booted as a side effect of a fingerprint
 // check (billing gotcha) — so first consult --list --running and bail to
 // UNKNOWN without ever invoking `-d` when the distro is not already up.
 function wslDistroRunning(distro) {
@@ -428,21 +428,20 @@ function serverFacts(root, serversJsonPath) {
     source = fs.readFileSync(p, 'utf8');
   } catch (error) {
     /* ABSENCE IS DATA, UNREADABILITY IS NOT -- and this function needed BOTH
-     * halves, which is why neither side alone was right. One earlier version
-     * returned [] for every failure, so an unreadable registry became a
-     * confident "this root has no servers". A later one threw for every
-     * failure, so a machine that has simply never registered a server -- the
-     * ordinary state, no file at all -- could no longer produce facts. NO
-     * REGISTRY is a measured answer: there are no ServerControl-registered
-     * servers. Anything else is unmeasurable. */
+     * halves, which is why neither side alone was right. main returned [] for
+     * every failure, so an unreadable registry became a confident "this root
+     * has no servers". w20 threw for every failure, so a machine that has
+     * simply never registered a server -- the ordinary state, no file at all --
+     * could no longer produce facts. NO REGISTRY is a measured answer: there
+     * are no ServerControl-registered servers. Anything else is unmeasurable. */
     if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return [];
     throw new Error(`could not read ServerControl registry ${p}: ${error.message}`, { cause: error });
   }
   try {
     const servers = JSON.parse(source.replace(/^﻿/, ''));
     const abs = path.resolve(root).toLowerCase();
-    // Boundary-safe prefix match: 'projects\app' must not claim a
-    // sibling 'projects\appOld'.
+    // Boundary-safe prefix match: 'Desktop\Presentation' must not claim a
+    // sibling 'Desktop\PresentationOld'.
     const inRoot = (w) => { const r = path.resolve(w).toLowerCase(); return r === abs || r.startsWith(abs + path.sep); };
     return servers
       .filter((s) => s.WorkDir && inRoot(s.WorkDir))

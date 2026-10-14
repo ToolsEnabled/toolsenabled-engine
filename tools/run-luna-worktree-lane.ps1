@@ -594,8 +594,8 @@ function Get-ReparseTag {
 function Test-ReparseTagIsNameSurrogate {
   param([uint32]$Tag)
   # Windows sets bit 0x20000000 on name-surrogate tags such as symbolic links
-  # and mount points.  Cloud-filter placeholders (such as cloud-synced
-  # ancestor folders of a checkout) are reparse points too, but
+  # and mount points.  Cloud-filter placeholders (including the fixed OneDrive
+  # ancestors of the canonical Machine-B checkout) are reparse points too, but
   # do not redirect pathname resolution and therefore do not set this bit.
   return (($Tag -band [uint32]0x20000000) -ne 0)
 }

@@ -65,7 +65,7 @@ function load() {
   // deliberately ignored rather than migrated or used as a fallback.
   const cwsLoginAccount = data && Object.prototype.hasOwnProperty.call(data, 'cwsLoginAccount')
     ? data.cwsLoginAccount : null;
-  // Duo sign-in identity, same shape as cwsLoginAccount: an institutional
+  // Institutional sign-in identity, same shape as cwsLoginAccount: an institutional
   // SSO account is a distinct role from the default personal account and is
   // never inferred from it.
   const duoAccount = data && Object.prototype.hasOwnProperty.call(data, 'duoAccount')
@@ -103,7 +103,7 @@ function validateCwsLoginConfig({ accounts, cwsLoginAccount }) {
 
 function cwsLoginAccount() { return validateCwsLoginConfig(load()); }
 
-// Duo sign-in identity: same "configuration-only, never inferred" shape
+// Institutional sign-in identity: same "configuration-only, never inferred" shape
 // as validateCwsLoginConfig above, for the same reasons -- an institutional
 // SSO account is not interchangeable with the default personal account.
 function validateDuoAccountConfig({ accounts, duoAccount }) {

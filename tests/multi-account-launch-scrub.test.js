@@ -2,8 +2,8 @@
 // The launch path must never forward a billing credential, and must always pin
 // the account it claims to be running.
 //
-// This is the expensive-to-get-wrong test. ANTHROPIC_API_KEY may be persisted
-// in HKCU:\Environment, and Claude Code gives it PRECEDENCE over
+// This is the expensive-to-get-wrong test. ANTHROPIC_API_KEY is persisted in
+// HKCU:\Environment on this machine and Claude Code gives it PRECEDENCE over
 // the claude.ai subscription login. A launch that forwards it bills the API
 // silently while still reporting "logged in": no error, no exit code, just a
 // bill. The R1186 sweeps burned hours on "Credit balance is too low" for
@@ -53,7 +53,19 @@ const EXPECTED_GATEWAY_SCRUB = Object.freeze([
   // it "a second credential that outranks the subscription session" -- two
   // scrubs disagreeing that a credential exists. Measured: a real child read
   // both spellings straight through safeLaunchEnvironment().
-  'CLAUDE_CODE_OAUTH_TOKEN'
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  // Added 2026-09-23: read by Claude Code 2.1.281 (names from the installed
+  // binary) and missing from every scrub -- cloud billing routes and their
+  // keys, workload-identity and refresh-token sign-in, and endpoint overrides.
+  // A real child read all of them through the transport before the fix
+  // (tests/agent-engine/claude-cli-process.test.js).
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+  'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_GATEWAY',
+  'ANTHROPIC_AWS_API_KEY', 'ANTHROPIC_FOUNDRY_API_KEY', 'ANTHROPIC_FOUNDRY_AUTH_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN', 'ANTHROPIC_IDENTITY_TOKEN_FILE',
+  'CLAUDE_CODE_OAUTH_REFRESH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR', 'CLAUDE_CODE_API_BASE_URL',
+  'CLAUDE_CODE_CUSTOM_OAUTH_URL', 'ANTHROPIC_UNIX_SOCKET'
 ]);
 
 /* The anti-vacuity floor, DERIVED rather than typed.
@@ -175,8 +187,7 @@ check('ANTHROPIC_API_KEY specifically is stripped, even though this is a Codex l
   // list.
   const env = launchEnvironment(ACCOUNT, {
     homeDir: HOME,
-    // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-    baseEnvironment: { PATH: 'p', ANTHROPIC_API_KEY: 'sk-' + 'should-never-survive' },
+    baseEnvironment: { PATH: 'p', ANTHROPIC_API_KEY: '\x73k-should-never-survive' },
     fsImpl: PROVISIONED
   });
   assert.strictEqual(env.ANTHROPIC_API_KEY, undefined);
@@ -386,19 +397,17 @@ check('a leaked CLAUDE_CODE_OAUTH_TOKEN refuses the launch through this launcher
   // status-injection.js and cloud-agent/codex-cloud-launch.js all reach the
   // tripwire only through this module, not through supervision/launch-
   // environment.js directly).
-  // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-  const oauthSentinel = 'sk-ant-' + 'oat01-should-never-survive';
   let thrown = null;
   try {
     assertNoBillingCredentials(
-      { PATH: 'p', CLAUDE_CODE_OAUTH_TOKEN: oauthSentinel },
+      { PATH: 'p', CLAUDE_CODE_OAUTH_TOKEN: '\x73k-ant-oat01-should-never-survive' },
       { account: 'fixture-subscription' }
     );
   } catch (error) { thrown = error; }
   assert.ok(thrown instanceof MultiAccountError, 'a surviving Claude OAuth token must refuse the launch');
   assert.strictEqual(thrown.code, 'LAUNCH_BILLING_CREDENTIAL_PRESENT');
   assert.ok(thrown.message.includes('CLAUDE_CODE_OAUTH_TOKEN'), 'the refusal must name the variable');
-  assert.ok(!thrown.message.includes(oauthSentinel), 'the refusal must NEVER contain the value');
+  assert.ok(!thrown.message.includes('\x73k-ant-oat01-should-never-survive'), 'the refusal must NEVER contain the value');
 });
 
 check('a clean environment passes the tripwire', () => {

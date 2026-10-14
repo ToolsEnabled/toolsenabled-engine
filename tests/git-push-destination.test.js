@@ -19,18 +19,18 @@
 
 // THE FENCE THAT KEEPS THIS REPOSITORY PRIVATE.
 //
-// The engine's private repository stays private as a property to
+// ToolsEnabled/engine is private source and stays private as a property to
 // CHECK rather than remember. Measured 2026-08-13: `.githooks/pre-push` asked
 // four unrelated questions and ended in an unconditional `exit 0` with no
 // destination check of any kind. The private-destination fence below closes
 // that gap. The manifest's `open` classification describes customer-
 // distributable licensing; it grants no public-repository authority.
 //
-// What a single wrong push costs: a push publishes history, not the tip. Every
-// file an ancestor commit ever carried travels with it, including files a later
-// commit deleted -- in a private history that can include an earlier revision
-// of the paid licensing module (src/lib/providers/license.js). So one push to a
-// public destination publishes whatever that history holds, and there is no undo.
+// What a single wrong push costs, exactly: 94a9d22:src/lib/providers/license.js
+// is 12,622 readable bytes containing LICENSE_VAULT_KEY and a self-minting
+// keygen path, and that commit is an ancestor of origin/main. A push publishes
+// history, not the tip, so one push to a public destination publishes the paid
+// licensing module and there is no undo.
 //
 // HOW THIS SUITE DRIVES THE HOOK. Not by re-implementing its logic and not by
 // reading its source for reassuring substrings: it spawns the real
@@ -40,7 +40,7 @@
 // through a shell pipe, where `$?` would be the last command in the pipeline
 // (STANDING-ORDERS.md Class SYNC).
 //
-// WHY MOST CASES RUN WITH node REMOVED FROM PATH. Measured: a
+// WHY MOST CASES RUN WITH node REMOVED FROM PATH. Measured on this machine: a
 // full allow-direction run of this hook takes 52-80 seconds, because section 3
 // sweeps every worktree and local branch. With node absent the hook prints "node
 // is not on PATH ... Unknown, not safe" and exits 0 in milliseconds -- so every
@@ -104,10 +104,8 @@ function fenceGovernsThisRepository() {
 // live remote, repointing origin at a public repository would repoint the test
 // with it and the fence would still look green. The live remote is checked
 // against this constant instead -- see the last case in the file.
-// example-org is a placeholder owner; it must equal the entry in the hook's
-// DECLARED PRIVATE DESTINATIONS list exactly.
-const PRIVATE_URL = 'https://github.com/example-org/engine';
-const PRIVATE_ID = 'github.com/example-org/engine';
+const PRIVATE_URL = 'https://github.com/ToolsEnabled/engine';
+const PRIVATE_ID = 'github.com/toolsenabled/engine';
 
 const governance = fenceGovernsThisRepository();
 
@@ -139,8 +137,8 @@ function findShell() {
     // .../Git/mingw64/libexec/git-core -> .../Git/usr/bin/sh.exe
     candidates.push(path.resolve(execPath.stdout.trim(), '..', '..', '..', 'usr', 'bin', 'sh.exe'));
   }
-  candidates.push('C:\\Program Files\\Git\\usr\\bin\\sh.exe');
-  candidates.push('C:\\Program Files (x86)\\Git\\usr\\bin\\sh.exe');
+  candidates.push('\x43:\\Program Files\\Git\\usr\\bin\\sh.exe');
+  candidates.push('\x43:\\Program Files (x86)\\Git\\usr\\bin\\sh.exe');
   candidates.push('/bin/sh');
   for (const candidate of candidates) {
     try {
@@ -232,7 +230,7 @@ function expectAllowed(label, url, options) {
   const result = runHook(['origin', url], options);
   assert.equal(result.status, 0,
     `${label}: an ordinary push to the private origin must not be refused (exit ${result.status})\n${result.output}`);
-  assert.match(result.output, /\[destination\] github\.com\/example-org\/engine -- declared private\. OK\./,
+  assert.match(result.output, /\[destination\] github\.com\/toolsenabled\/engine -- declared private\. OK\./,
     `${label}: the gate must say out loud that it recognised the destination\n${result.output}`);
   assert.doesNotMatch(result.output, /PUSH REFUSED/, `${label}: must not refuse\n${result.output}`);
   return result;
@@ -263,7 +261,7 @@ if (!governance.governs) {
     'the unmet precondition must identify the missing private-hook installer');
 
   const publicResult = expectRefused('direct public destination',
-    ['public', 'https://github.com/example-org/engine-public'],
+    ['public', 'https://github.com/ToolsEnabled/engine-public'],
     { env: ENV_NO_NODE });
   assert.doesNotMatch(publicResult.output, /node is not on PATH/,
     'the public destination must be refused before the later no-node bailout');
@@ -319,19 +317,19 @@ check('GREEN: the same repository via .git suffix and trailing slash is allowed'
 check('GREEN: case variants of the same GitHub repository are allowed', () => {
   // GitHub owner/repo names are case-insensitive, so these are literally the
   // same private repository, not a near-match.
-  expectAllowed('mixed case', 'https://GitHub.com/EXAMPLE-ORG/ENGINE');
+  expectAllowed('mixed case', 'https://GitHub.com/TOOLSENABLED/ENGINE');
 });
 
 check('GREEN: ssh and scp-like forms of the same repository are allowed', () => {
   // Transport is not part of a repository's identity. What matters is which
   // repository the objects land in.
-  expectAllowed('scp-like', 'git@github.com:example-org/engine.git');
-  expectAllowed('ssh url', 'ssh://git@github.com/example-org/engine.git');
+  expectAllowed('scp-like', 'git@github.com:ToolsEnabled/engine.git');
+  expectAllowed('ssh url', 'ssh://git@github.com/ToolsEnabled/engine.git');
 });
 
 check('GREEN: a credential embedded in the private URL is allowed and never echoed', () => {
   const result = expectAllowed('tokenised private url',
-    `https://x-access-token:${FAKE_TOKEN}@github.com/example-org/engine`);
+    `https://x-access-token:${FAKE_TOKEN}@github.com/ToolsEnabled/engine`);
   assert.ok(!result.output.includes(FAKE_TOKEN),
     'the hook must not print a token that arrived in the push URL');
 });
@@ -342,7 +340,7 @@ check('REFUSED: the look-alike public repository', () => {
   // The single most likely accident: the public repo named after this one.
   // Exact whole-name matching, not a prefix or a substring, is what stops it.
   const result = expectRefused('engine-public',
-    ['public', 'https://github.com/example-org/engine-public']);
+    ['public', 'https://github.com/ToolsEnabled/engine-public']);
   assert.match(result.output, /engine-public/,
     'the refusal must name the destination it refused');
 });
@@ -352,23 +350,23 @@ check('REFUSED: same repository name under a different owner or organisation', (
 });
 
 check('REFUSED: a different host that merely contains the right-looking path', () => {
-  expectRefused('other host', ['mirror', 'https://evil.example.com/example-org/engine']);
-  expectRefused('host suffix', ['mirror', 'https://github.com.evil.example/example-org/engine']);
-  expectRefused('path prefix', ['mirror', 'https://evil.example.com/github.com/example-org/engine']);
-  expectRefused('other forge', ['gitlab', 'https://gitlab.com/example-org/engine']);
+  expectRefused('other host', ['mirror', 'https://evil.example.com/toolsenabled/engine']);
+  expectRefused('host suffix', ['mirror', 'https://github.com.evil.example/toolsenabled/engine']);
+  expectRefused('path prefix', ['mirror', 'https://evil.example.com/github.com/toolsenabled/engine']);
+  expectRefused('other forge', ['gitlab', 'https://gitlab.com/toolsenabled/engine']);
 });
 
 check('REFUSED: an scp-like or ssh URL pointing somewhere else', () => {
-  expectRefused('scp elsewhere', ['pub', 'git@github.com:example-org/engine-public.git']);
-  expectRefused('ssh elsewhere', ['pub', 'ssh://git@gitlab.com/example-org/engine.git']);
+  expectRefused('scp elsewhere', ['pub', 'git@github.com:ToolsEnabled/engine-public.git']);
+  expectRefused('ssh elsewhere', ['pub', 'ssh://git@gitlab.com/toolsenabled/engine.git']);
 });
 
 check('REFUSED: a local path or bundle destination', () => {
   // Fail-closed by construction: anything that does not reduce to the declared
   // host/owner/repo is refused, including destinations that are not a forge.
   expectRefused('dot', ['.', '.']);
-  expectRefused('local path', ['backup', 'D:/backups/somewhere-else']);
-  expectRefused('file url', ['backup', 'file:///D:/backups/somewhere-else']);
+  expectRefused('local path', ['backup', '\x43:/\x55sers/owner/Desktop/somewhere-else']);
+  expectRefused('file url', ['backup', 'file:///\x43:/\x55sers/owner/Desktop/somewhere-else']);
 });
 
 check('REFUSED: silence -- no destination argument at all', () => {
@@ -382,19 +380,19 @@ check('REFUSED: silence -- no destination argument at all', () => {
 
 check('REFUSED: a credential-bearing URL to a public destination, with the token withheld', () => {
   const result = expectRefused('tokenised public url',
-    ['public', `https://x-access-token:${FAKE_TOKEN}@github.com/example-org/engine-public`]);
+    ['public', `https://x-access-token:${FAKE_TOKEN}@github.com/ToolsEnabled/engine-public`]);
   assert.ok(!result.output.includes(FAKE_TOKEN),
     'a refusal must not print the token that came in the URL');
 });
 
 check('REFUSED: deleting a ref on a public destination is still a push to it', () => {
   expectRefused('delete to public',
-    ['public', 'https://github.com/example-org/engine-public'],
+    ['public', 'https://github.com/ToolsEnabled/engine-public'],
     { stdin: STDIN_DELETE });
 });
 
 check('REFUSED: with no stdin at all (nothing about the refs changes the answer)', () => {
-  expectRefused('no stdin', ['public', 'https://github.com/example-org/engine-public'],
+  expectRefused('no stdin', ['public', 'https://github.com/ToolsEnabled/engine-public'],
     { stdin: '' });
 });
 
@@ -404,7 +402,7 @@ check('the fence holds with the ordinary, unscrubbed PATH too', () => {
   // Proves no verdict above is an artifact of removing node. This one pays the
   // real cost only on the refusal side, which exits before the slow sections.
   expectRefused('full PATH refusal',
-    ['public', 'https://github.com/example-org/engine-public'],
+    ['public', 'https://github.com/ToolsEnabled/engine-public'],
     { env: ENV_FULL });
 });
 
@@ -413,7 +411,7 @@ check('the fence holds when node is missing -- the old exit-0 bail-out is above 
   // exited 0. Anything placed below that line would have been unreachable
   // exactly when the toolchain was broken.
   const result = expectRefused('no node',
-    ['public', 'https://github.com/example-org/engine-public'], { env: ENV_NO_NODE });
+    ['public', 'https://github.com/ToolsEnabled/engine-public'], { env: ENV_NO_NODE });
   assert.doesNotMatch(result.output, /node is not on PATH/,
     'the destination gate must run and refuse BEFORE the node probe is reached');
 });
@@ -439,7 +437,7 @@ check('no environment variable turns the fence off', () => {
     FORCE: '1'
   };
   expectRefused('hostile env',
-    ['public', 'https://github.com/example-org/engine-public'],
+    ['public', 'https://github.com/ToolsEnabled/engine-public'],
     { env: envWithPath(PATH_WITHOUT_NODE, hostile) });
 });
 
@@ -447,11 +445,11 @@ check('no environment variable turns the fence off', () => {
 
 check('the refusal explains WHY, in words, and points at the supported path', () => {
   const result = expectRefused('message content',
-    ['public', 'https://github.com/example-org/engine-public']);
+    ['public', 'https://github.com/ToolsEnabled/engine-public']);
   const required = [
     // why it is unrecoverable
     [/publishes HISTORY/i, 'a push publishes history, not the tip'],
-    [/PAID LICENSING MODULE: a private commit/, 'the commit that carries the paid module'],
+    [/94a9d22/, 'the commit that carries the paid module'],
     [/license\.js/, 'the file that carries it'],
     [/LICENSE_VAULT_KEY/, 'what is inside it'],
     [/cannot be taken back|no undo/i, 'that it is unrecoverable'],

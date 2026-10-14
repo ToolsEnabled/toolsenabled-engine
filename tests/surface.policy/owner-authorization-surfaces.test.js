@@ -2,10 +2,10 @@
 
 // DOES AN AGENT RUNNING PREFLIGHT ACTUALLY SEE THE AUTHORIZATION, AND ITS LIMITS.
 //
-// Product rule: agents must read the owner's authorization
-// clearly from settings -- act under their authorized name, with only a short
-// reserved list, such as accepting the purchase list and pressing post on a
-// social post, left waiting on them.
+// Owner directive 2026-08-11: "Literally this has to be read off from settings
+// or something to agents clearly, my settings are do it under my authorized
+// name - ive authorized you ... the only thing that should be waiting on me is
+// accepting the purchase list and pressing post on instagram".
 //
 // The measured failure was agents reaching an identity-bearing action, finding
 // no machine-readable authorization, and stopping -- one lane stopped 18 times
@@ -21,8 +21,8 @@
 // BOTH DIRECTIONS ARE PINNED, because this feature has two opposite failure
 // modes and only one of them is obvious:
 //
-//   remove the grant       -> agents stop again on work they authorized.
-//   remove a reservation   -> agents do something they kept for themselves.
+//   remove the grant       -> agents stop again on work he authorized.
+//   remove a reservation   -> agents do something he kept for himself.
 //
 // The second is the dangerous half: a record that grants without reserving is a
 // blank cheque. Both are covered below, and both were mutation-tested.
@@ -40,7 +40,7 @@ const RECORD = path.join(REPO, 'config', 'owner-authorization.json');
 // The reservations the owner named, by id. This is an INSTALLATION pin, not a
 // product rule: the shipped product lets any user configure their own reserved
 // list, so src/lib/owner-authorization.js deliberately does not hardcode these.
-// This checkout is theirs, so their three are pinned here -- which is what makes
+// This checkout is his, so his three are pinned here -- which is what makes
 // "delete a reservation from the record" fail a NAMED test rather than sail
 // through as a structurally valid record.
 const OWNER_RESERVED_IDS = ['purchase-approval', 'instagram-post', 'government-identity-document'];
@@ -105,14 +105,14 @@ test('preflight output carries every reservation the record makes', () => {
   }
 });
 
-test('the record still reserves each of the three things the owner kept for themselves', () => {
+test('the record still reserves each of the three things the owner kept for himself', () => {
   const record = readRecord();
   const ids = record.reserved.map(item => item.id);
   for (const id of OWNER_RESERVED_IDS) {
     assert.ok(
       ids.includes(id),
       `reservation "${id}" is gone from config/owner-authorization.json. The owner reserved approving the purchase `
-      + 'list, pressing post on Instagram, and anything needing their passport or government ID. Removing one does not '
+      + 'list, pressing post on Instagram, and anything needing his passport or government ID. Removing one does not '
       + 'make the record invalid -- it makes it wrong, and agents would act on it.'
     );
   }

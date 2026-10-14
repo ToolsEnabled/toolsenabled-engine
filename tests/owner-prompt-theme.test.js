@@ -95,9 +95,13 @@ const METRIC_TOKEN_SOURCE = Object.freeze({
 
 function stylesheetCandidates() {
   const fromEnv = process.env.MISSION_CONTROL_STYLES;
+  const home = process.env.USERPROFILE || process.env.HOME || '';
   return [
     ...(fromEnv ? [fromEnv] : []),
-    path.join(__dirname, '..', '..', 'app', 'src', 'styles.css')
+    path.join(home, 'Desktop', 'wt-installer', 'src', 'styles.css'),
+    path.join(home, 'Desktop', 'mission-control', 'src', 'styles.css'),
+    path.join(__dirname, '..', '..', 'wt-installer', 'src', 'styles.css'),
+    path.join(__dirname, '..', '..', 'mission-control', 'src', 'styles.css')
   ];
 }
 

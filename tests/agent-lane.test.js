@@ -97,11 +97,11 @@ test('console tail distinguishes "no verdict happened" from "the read could not 
 // the lane-local block, in that order. Only the shape matters here.
 function laneBuiltEnvironment(extra = {}) {
   return {
-    PATH: 'C:\\ambient\\path',
+    PATH: '\x43:\\ambient\\path',
     TOOLSENABLED_AGENT_ID: 'luna',
     TOOLSENABLED_AGENT_ROLE: 'builder',
     TOOLSENABLED_AGENT_TIER: 'opus',
-    TOOLSENABLED_PROJECT_ROOT: 'C:\\worktrees\\lane',
+    TOOLSENABLED_PROJECT_ROOT: '\x43:\\worktrees\\lane',
     TOOLSENABLED_ONBOARDING_PACKET_VERSION: 'v1',
     TOOLSENABLED_ONBOARDING_PACKET_HASH: 'a'.repeat(64),
     TOOLSENABLED_ONBOARDING_LAUNCHER_PROVENANCE: 'launcher-bound',
@@ -125,7 +125,7 @@ function dispatchAndCaptureChildEnvironment(cleanEnvironment, callerEnvironment,
   let captured = null;
   const runLane = (laneOptions, laneDependencies) => {
     laneDependencies.spawnImpl('claude.exe', ['-p'], {
-      cwd: 'C:\\worktrees\\lane',
+      cwd: '\x43:\\worktrees\\lane',
       env: callerEnvironment,
       stdio: ['pipe', 1, 2]
     });
@@ -150,22 +150,22 @@ function dispatchAndCaptureChildEnvironment(cleanEnvironment, callerEnvironment,
 }
 
 test('every launcher-built provenance variable survives app dispatch', async () => {
-  const run = dispatchAndCaptureChildEnvironment({ PATH: 'C:\\app\\path' }, laneBuiltEnvironment());
+  const run = dispatchAndCaptureChildEnvironment({ PATH: '\x43:\\app\\path' }, laneBuiltEnvironment());
   await run.completion;
   const childEnv = run.captured().env;
 
   assert.equal(childEnv.TOOLSENABLED_AGENT_ID, 'luna');
   assert.equal(childEnv.TOOLSENABLED_AGENT_ROLE, 'builder', 'role reached the child');
   assert.equal(childEnv.TOOLSENABLED_AGENT_TIER, 'opus', 'tier reached the child');
-  assert.equal(childEnv.TOOLSENABLED_PROJECT_ROOT, 'C:\\worktrees\\lane', 'project root reached the child');
+  assert.equal(childEnv.TOOLSENABLED_PROJECT_ROOT, '\x43:\\worktrees\\lane', 'project root reached the child');
   assert.equal(childEnv.TOOLSENABLED_ONBOARDING_PACKET_VERSION, 'v1', 'packet version reached the child');
   assert.equal(childEnv.TOOLSENABLED_ONBOARDING_PACKET_HASH, 'a'.repeat(64), 'packet hash reached the child');
   assert.equal(childEnv.TOOLSENABLED_ONBOARDING_LAUNCHER_PROVENANCE, 'launcher-bound', 'launcher provenance reached the child');
   assert.equal(childEnv.TOOLSENABLED_LANE_SCOPE, 'lane-scope-document', 'the lane scope fence reached the child');
 
   // The app's own scrubbed base is still the base for everything else.
-  assert.equal(childEnv.PATH, 'C:\\app\\path', 'the app-scrubbed environment remains the base');
-  assert.equal(run.captured().cwd, 'C:\\worktrees\\lane', 'the caller spawn options are still spread');
+  assert.equal(childEnv.PATH, '\x43:\\app\\path', 'the app-scrubbed environment remains the base');
+  assert.equal(run.captured().cwd, '\x43:\\worktrees\\lane', 'the caller spawn options are still spread');
   assert.equal(run.captured().windowsHide, true);
   assert.equal(run.captured().shell, false);
 });
@@ -192,7 +192,7 @@ test('a credential-shaped variable supplied through options.env never reaches th
   });
   // The app deliberately removed these names before dispatch; the merge must
   // not put them back through the caller side.
-  const run = dispatchAndCaptureChildEnvironment({ PATH: 'C:\\app\\path' }, callerEnvironment);
+  const run = dispatchAndCaptureChildEnvironment({ PATH: '\x43:\\app\\path' }, callerEnvironment);
   await run.completion;
   const childEnv = run.captured().env;
 
@@ -208,22 +208,22 @@ test('a credential-shaped variable supplied through options.env never reaches th
 
 test('a Codex identity pin in the app environment outranks the ambient one the lane carried', () => {
   const childEnv = laneDispatch.laneChildEnvironment(
-    { PATH: 'C:\\app\\path', CODEX_HOME: 'C:\\owner\\designated-codex' },
-    laneBuiltEnvironment({ CODEX_HOME: 'C:\\whatever\\ambient-codex' })
+    { PATH: '\x43:\\app\\path', CODEX_HOME: '\x43:\\owner\\designated-codex' },
+    laneBuiltEnvironment({ CODEX_HOME: '\x43:\\whatever\\ambient-codex' })
   );
-  assert.equal(childEnv.CODEX_HOME, 'C:\\owner\\designated-codex', 'the owner pin must win over the ambient value');
+  assert.equal(childEnv.CODEX_HOME, '\x43:\\owner\\designated-codex', 'the owner pin must win over the ambient value');
 });
 
 test('the launcher wins on a provenance collision, in every casing', () => {
   const childEnv = laneDispatch.laneChildEnvironment(
     {
-      PATH: 'C:\\app\\path',
-      TOOLSENABLED_PROJECT_ROOT: 'C:\\dispatcher\\root',
+      PATH: '\x43:\\app\\path',
+      TOOLSENABLED_PROJECT_ROOT: '\x43:\\dispatcher\\root',
       toolsenabled_lane_scope: 'dispatcher-scope'
     },
     laneBuiltEnvironment()
   );
-  assert.equal(childEnv.TOOLSENABLED_PROJECT_ROOT, 'C:\\worktrees\\lane', "the child's own root, not the dispatcher's");
+  assert.equal(childEnv.TOOLSENABLED_PROJECT_ROOT, '\x43:\\worktrees\\lane', "the child's own root, not the dispatcher's");
   const scopeSpellings = [];
   for (const key in childEnv) {
     if (key.toLowerCase() === laneScope.ENV_VAR.toLowerCase()) scopeSpellings.push([key, childEnv[key]]);
@@ -268,7 +268,8 @@ test('the forwarding contract covers every lane-local variable agent-lane.js set
     'agent-lane.js sets a lane-local variable that agent-lane-dispatch.js would discard');
 });
 
-/* The R-ledger lineage for a lane child (product design: a tree is every agent connected below that agent): the child is its
+/* The owner's R-ledger lineage for a lane child (owner design 2026-08-15,
+ * "tree is every agent connected below that agent period"): the child is its
  * own session and thread; its tree ancestors are the launcher's chain plus the
  * launcher, oldest first, and never a sibling or anything above the launcher.
  * The three TOOLSENABLED_{SESSION_ID,THREAD_ID,TREE_ANCESTORS} names must

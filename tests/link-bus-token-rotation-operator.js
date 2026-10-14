@@ -95,8 +95,8 @@ function testExactLauncherIsShellFreeAndEnvironmentPinned() {
   };
   process.env.LINK_BUS_HOST = '0.0.0.0';
   process.env.LINK_BUS_PORT = '9999';
-  process.env.LINK_BUS_STATE_DIR = 'C:\\poisoned-state';
-  process.env.TOOLSENABLED_VAULT_PATH = 'C:\\poisoned-vault.json';
+  process.env.LINK_BUS_STATE_DIR = '\x43:\\poisoned-state';
+  process.env.TOOLSENABLED_VAULT_PATH = '\x43:\\poisoned-vault.json';
   try {
     const env = childEnvironment(path.resolve('synthetic-fixed-state'), {
       serviceRegistryOptions: SERVICE_REGISTRY_OPTIONS
@@ -186,7 +186,7 @@ function testRestartScriptUsesExactIdentityOnly() {
   assert.equal(/Get-Process\s+-Name/i.test(source), false);
   assert.equal(source.includes('ExpectedCreationDate'), true);
   // This used to require the literal string "LocalAddress '203.0.113.2'".
-  // An earlier commit deliberately replaced that hardcoded address with
+  // Commit 6653bef deliberately replaced that hardcoded address with
   // $MachineAAddress, derived from the service registry, so the literal check
   // went red for a change that made the script BETTER -- and, worse, it would
   // have pushed a maintainer to hardcode the address again to get green.

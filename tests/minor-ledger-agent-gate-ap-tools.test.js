@@ -1,10 +1,10 @@
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
-// L3d -- a_ledger.answer, a_ledger.decline, p_ledger.decide (asks and
-// purchases are agent-closable, the owner's ruling). Verified against the REAL
-// store (Worker's L1h, an earlier engine build): answerAsk, declineAsk and
+// L3d -- a_ledger.answer, a_ledger.decline, p_ledger.decide ("asks and
+// purchases: agent closable", the owner's ruling). Verified against the REAL
+// store (Worker's L1h, engine 7fe768b2): answerAsk, declineAsk and
 // decidePurchase drop their person-only gate and journal the real actor via
 // normalizeFiledBy; removeAsk and removePurchase still call assertPerson.
 
@@ -16,7 +16,7 @@ const test = require('node:test');
 
 const gate = require('../src/lib/minor-ledger-agent-gate');
 const store = require('../src/lib/owner-request-store');
-// Since an earlier change ("Make Basic runtime audit optional") these doors audit only
+// Since a6c70ac6 ("Make Basic runtime audit optional") these doors audit only
 // when the person turned audit on; Basic skips the record. The audited cases
 // state that choice exactly as tests/minor-ledger-agent-gate.test.js does.
 const settingsWith = values => () => ({ values, provenance: Object.fromEntries(Object.keys(values).map(id => [id, { source: 'user' }])) });

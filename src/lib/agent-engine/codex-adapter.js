@@ -11,6 +11,13 @@ const {
   validateThreadOptions
 } = require('./engine-contract');
 const { createEventBackpressure } = require('./event-backpressure');
+const { validateNativeModelId, validateNativeModelEffort, MAX_MODEL_ID_LENGTH } = require('../model-dispatch-tiers');
+
+function codexThreadOptions(options) {
+  const validated = validateThreadOptions(options);
+  if (validated.model !== undefined) validateNativeModelEffort(validated.model, validated.effort, { provider: 'codex' });
+  return validated;
+}
 
 // Generated locally from codex-cli 0.146.0 with:
 //   codex app-server generate-json-schema --out <temporary directory>
@@ -56,18 +63,64 @@ const COMMAND_DECISIONS = Object.freeze([
 const FILE_DECISIONS = Object.freeze(['accept', 'acceptForSession', 'decline', 'cancel']);
 const TERMINAL_TURN_STATUSES = Object.freeze(['completed', 'interrupted', 'failed']);
 
+/* SERVER REQUESTS THIS HOST CANNOT PUT TO A PERSON, ANSWERED WITH THE
+   PROTOCOL'S OWN REFUSAL INSTEAD OF ENDING THE SESSION.
+
+   MEASURED 2026-09-23 against codex-cli 0.156.0 (its generated schema and the
+   binary's own text): MCP tool approval is asked through
+   `item/tool/requestUserInput` ("MCP tool approval via request_user_input
+   requires the root thread"), and MCP servers may elicit input through
+   `mcpServer/elicitation/request`. Both can arrive in an ordinary session
+   that has the ToolsEnabled MCP servers configured. Treating them as unknown
+   host actions failed the whole adapter closed: every turn reported failed
+   and the session was gone, over a question nobody was shown.
+
+   Each answer is one the schema defines and grants nothing: no answers (the
+   model's own instructions: "If `request_user_input` returns no answers,
+   continue with best judgment"), and `decline` for an elicitation. Every
+   other unrecognised request still fails closed below. */
+const DECLINED_SERVER_REQUESTS = Object.freeze({
+  'item/tool/requestUserInput': Object.freeze({ answers: Object.freeze({}) }),
+  'mcpServer/elicitation/request': Object.freeze({ action: 'decline' })
+});
+
 // Codex turn.error uses the app-server's camel-case error enum, not the
 // snake-case names persisted in native rollout files. Translate recognized
 // codes into bounded customer copy; provider message/additionalDetails can
 // contain account URLs, paths or credentials and must not cross this boundary.
 const TURN_FAILURE_TEXT = Object.freeze({
-  usageLimitExceeded: 'This Codex account has reached its usage limit. Wait for its allowance to reset or choose another account.',
+  usageLimitExceeded: 'This Codex account has reached its usage limit. Wait for its allowance to reset, or use Switch and continue to move this agent to another account. In a New agent tab, use Add to tree first.',
   contextWindowExceeded: "This Codex conversation has reached the model's context limit.",
   sessionBudgetExceeded: 'This Codex session has reached its budget limit.',
   unauthorized: 'Codex could not authenticate this account. Check its sign-in.',
   rateLimitExceeded: 'Codex is temporarily rate limited. Wait before trying again.',
-  serverOverloaded: 'Codex is temporarily overloaded. Try again later.'
+  serverOverloaded: 'Codex is temporarily overloaded. Try again later.',
+  misalignmentPolicyViolation: 'Codex blocked this turn through its safety policy. The request did not complete.'
 });
+/* The sentence for a turn that lost its provider connection (see the reconnect
+   window below). A product constant, so it also rides payload.failure. */
+const CONNECTION_FAILURE_TEXT = "Codex lost its connection to the provider before this turn finished. Check this computer's network, then try again.";
+/* HOW LONG A TURN MAY SIT RECONNECTING BEFORE THE PERSON IS TOLD (T-codex4).
+   MEASURED 2026-09-23, codex-cli 0.156.0 app-server with its DEFAULT retry
+   settings (the product sets none), provider port refused, loopback only:
+   "Reconnecting... waiting for network" (`error`, willRetry:true) arrived at
+   +3.6, 11.7, 24.5, 49.0, 92.1, 155.3, 218.2 and 281.3 s after turn/start --
+   gaps of 8, 13, 25, 43 and then a steady 63 s -- and the turn was still open
+   at 300 s. Codex does not give up, and the engine contract has no event that
+   renders as a transient status, so the person saw nothing until they pressed
+   Stop. When the provider came back (+20 s) Codex recovered on its next retry
+   and finished normally; turn/interrupt during the wait was answered in 130 ms
+   with turn/completed(interrupted).
+   The window runs from the FIRST reconnect notice and is not extended by later
+   ones: 120 s spans the first failed attempt and four retries (+8, +21, +45,
+   +88.5 s -- five attempts, Codex's own default stream budget) and ends ~31 s
+   after the last of them, well before the next (+152 s). Any real progress of
+   the turn cancels it. On expiry the turn is interrupted cleanly and reported
+   as failed with the connection sentence; if Codex does not settle the
+   interrupt within the grace below, the turn is ended here so it can never
+   stay open silently. */
+const CODEX_RECONNECT_WINDOW_MS = 120_000;
+const CODEX_RECONNECT_INTERRUPT_GRACE_MS = 15_000;
 
 /* A DEAD PROVIDER MUST NOT LOOK LIKE A BROKEN PRODUCT (T1552).
  *
@@ -113,11 +166,82 @@ const TURN_FAILURE_TEXT = Object.freeze({
  */
 const PROVIDER_FAILURE_CODE = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 function providerFailureCode(info) {
+  if (info === 'misalignment_policy_violation') return 'misalignmentPolicyViolation';
   if (typeof info === 'string') return PROVIDER_FAILURE_CODE.test(info) ? info : null;
   if (info === null || typeof info !== 'object' || Array.isArray(info)) return null;
   let names;
   try { names = Object.getOwnPropertyNames(info); } catch { return null; }
+  if (names.length === 1 && names[0] === 'misalignment_policy_violation') return 'misalignmentPolicyViolation';
   return names.length === 1 && PROVIDER_FAILURE_CODE.test(names[0]) ? names[0] : null;
+}
+// Only the refusal sentence crosses; additional diagnostic fields stay private.
+function policyRefusalSummary(message) {
+  if (typeof message !== 'string') return TURN_FAILURE_TEXT.misalignmentPolicyViolation;
+  const sentence = message.split(/[\r\n]/, 1)[0].trim();
+  if (sentence.length <= 260 && /^This request was blocked by our safety systems\. Reason: [\x20-\x7e]+$/.test(sentence)
+      && !/[\\/]|\b(?:token|password|secret|api[_-]?key)\s*[=:]/i.test(sentence)
+      && !require('../secret-patterns').plaintextCredentialPattern().test(sentence)) return sentence;
+  return TURN_FAILURE_TEXT.misalignmentPolicyViolation;
+}
+/* A MODEL THE ACCOUNT CANNOT RUN (1.0.50 exact model IDs). A typed model name Codex does not serve is refused by
+   Codex with a one-line reason; that line crosses so the person reads the provider's own words. Only a short single
+   printable line that is about a model crosses, and nothing shaped like a link, an address or a credential.
+
+   THE NAME THE PERSON TYPED IS NOT THE PROVIDER'S PROSE (1.0.50 review CM-3). Codex quotes the refused name back
+   ("The 'accounts/fireworks/models/llama-v3p1-8b' model is not supported when using Codex with a ChatGPT account",
+   measured in Gate B as one JSON line). A name with two slashes, an "@" version or a word such as "token" tripped
+   the filter below, the whole line was withheld, and the person was told to check a sign-in that was fine. So
+   each exact occurrence of a model this turn ran on, between a matching pair of quotes the way Codex quotes it, is
+   set aside before the line is judged, and the line crosses as Codex wrote it. Only the provider's own words are
+   judged; the name was shown on the chip already. An unquoted name is judged with the rest of the line, so a model
+   called "password" or "home" cannot carry a credential or a path through.
+
+   THE SAVED CONVERSATION KEEPS A NARROWER LINE. `summary` is what the durable record stores, and it must pass the
+   same rules with the name in it (app node-transcript-capture: 260 characters, no path made of two separators, no
+   URL scheme). When it cannot, it says what happened in the product's words. A line that names the model but can
+   cross in no form gets those words live as well, never the sign-in advice below. */
+const MODEL_REFUSAL_PREFIX = 'Codex refused this model: ';
+const MODEL_NOT_RUN_TEXT = 'Codex did not run the model this agent is set to use. Check the model name, or choose another model.';
+// The quotes Codex puts around a model name it refuses ('name', `name`, "name"); the same one on both sides.
+const MODEL_NAME_QUOTES = new Set(['\'', '"', '`']);
+function withoutModelNames(line, models) {
+  const names = [...new Set(models.filter(model => typeof model === 'string' && model.trim().length > 0))]
+    .sort((a, b) => b.length - a.length);
+  let rest = line;
+  let named = false;
+  for (const name of names) {
+    let kept = '';
+    let from = 0;
+    for (let at = rest.indexOf(name); at !== -1; at = rest.indexOf(name, from)) {
+      const before = at === 0 ? null : rest[at - 1];
+      if (MODEL_NAME_QUOTES.has(before) && rest[at + name.length] === before) {
+        kept += `${rest.slice(from, at)}x`;
+        from = at + name.length;
+        named = true;
+      } else {
+        kept += rest.slice(from, at + 1);
+        from = at + 1;
+      }
+    }
+    rest = kept + rest.slice(from);
+  }
+  return { rest, named };
+}
+function crossableModelLine(line) {
+  if (!line || MODEL_REFUSAL_PREFIX.length + line.length > 260 || !/^[\x20-\x7e]+$/.test(line)) return false;
+  if (/:\/\/|\bwww\.|@|\\|[\\/][^\s\\/]*[\\/]|\b(?:token|password|secret|api[_-]?key|bearer)\b/i.test(line)) return false;
+  return !require('../secret-patterns').plaintextCredentialPattern().test(line);
+}
+function providerModelRefusalSummary(message, models = []) {
+  if (typeof message !== 'string') return null;
+  const sentence = message.split(/[\r\n]/, 1)[0].trim();
+  if (!sentence) return null;
+  const { rest, named } = withoutModelNames(sentence, models);
+  if (/\bmodel\b/i.test(rest) && crossableModelLine(rest)) {
+    const text = `${MODEL_REFUSAL_PREFIX}${sentence}`;
+    return { text, summary: crossableModelLine(sentence) ? text : MODEL_NOT_RUN_TEXT, named };
+  }
+  return named ? { text: MODEL_NOT_RUN_TEXT, summary: MODEL_NOT_RUN_TEXT, named } : null;
 }
 /* The sentence for a failure this product has no copy for. It names the
    provider, quotes the provider's own code when there is one, and ends in the
@@ -140,9 +264,9 @@ function adapterFailureSummary(code) {
 }
 
 /* WHEN A USAGE LIMIT ENDS, AS AN INSTANT AND NOTHING ELSE (T1509).
-   When thirty-seven Codex turns ended on a weekly limit, every
+   On 2026-09-22 thirty-seven Codex turns ended on a weekly limit and every
    card said only that the turn failed: the provider's message named the reset
-   ("... or try again at Jun 8th, 2026 3:00 AM.") but the whole message is
+   ("... or try again at Sep 29th, 2026 2:13 AM.") but the whole message is
    withheld here, rightly, because it also carries account URLs. The reset is
    the one part a person can act on, so it is read out of the message with a
    pattern that can only match a month abbreviation, digits and AM/PM, checked
@@ -385,12 +509,12 @@ const RESTORE_HISTORY_LIMIT_MESSAGE = 'This saved Codex conversation is too larg
 
 /* A SAVED CONVERSATION IS LOADED IN A WINDOW; ITS SIZE NEVER REFUSES THE RESUME.
  *
- * MEASURED 2026-09-24 on a live tree: seven Codex agents, the tree's only
+ * MEASURED 2026-09-24 on the owner's tree: seven Codex agents, the tree's only
  * integrator among them, would not resume -- "This saved Codex conversation is
  * too large to restore safely". Their saved speech was 0.19 to 0.40 million
  * characters, far under MAX_RESUMED_TEXT. What stopped them was ONE turn each
  * whose full items (mostly tool results) were over 8 MB, which
- * `thread/turns/list` answers as one line: one Builder's only turn held 21.1 MB
+ * `thread/turns/list` answers as one line: Builder 4's only turn held 21.1 MB
  * of completed items, 172 person messages and 11 compactions. Codex had
  * already resumed the thread; only this reader's copy of the history was too
  * big, and the history crosses into a UI that shows speech alone.
@@ -578,7 +702,9 @@ class CodexAdapter {
     clientInfo = { name: 'toolsenabled', title: 'ToolsEnabled', version: '1' },
     maxBackpressureRetries = 2,
     retryDelayMs = 25,
-    now = Date.now
+    now = Date.now,
+    reconnectWindowMs = CODEX_RECONNECT_WINDOW_MS,
+    reconnectInterruptGraceMs = CODEX_RECONNECT_INTERRUPT_GRACE_MS
   } = {}) {
     this.transport = validateTransport(transport);
     this.codexVersion = assertPinnedVersion(codexVersion);
@@ -598,6 +724,11 @@ class CodexAdapter {
       fail('CODEX_ADAPTER_INVALID', 'retryDelayMs must be a bounded integer');
     }
     if (typeof now !== 'function') fail('CODEX_ADAPTER_INVALID', 'now must be a clock function');
+    for (const [label, value] of [['reconnectWindowMs', reconnectWindowMs], ['reconnectInterruptGraceMs', reconnectInterruptGraceMs]]) {
+      if (!Number.isInteger(value) || value < 1 || value > 3_600_000) fail('CODEX_ADAPTER_INVALID', `${label} must be a bounded integer`);
+    }
+    this.reconnectWindowMs = reconnectWindowMs;
+    this.reconnectInterruptGraceMs = reconnectInterruptGraceMs;
     this.maxBackpressureRetries = maxBackpressureRetries;
     this.retryDelayMs = retryDelayMs;
     this.now = now;
@@ -626,6 +757,9 @@ class CodexAdapter {
     // child telemetry is not a host turn and never acquires approval authority.
     this.subAgentThreads = new Map();
     this.hostThreads = new Set();
+    // The model names each thread was started or restored on, requested and resolved. A refusal that quotes one
+    // back is judged without it (see providerModelRefusalSummary).
+    this.threadModels = new Map();
     // A fresh process can bind an explicit restore override. A later or
     // concurrent start/restore may rejoin an already-running thread, whose
     // settings are not confirmed by merely acknowledging resume options.
@@ -705,16 +839,79 @@ class CodexAdapter {
     return this.initialized ? Object.freeze(jsonData(this.initialized, 'stored server info')) : null;
   }
 
+  // CLI -c table assignments merge in Codex 0.161. Admission checks the
+  // official client's effective configuration before any MCP server/thread
+  // can start. Never include config values in a refusal: env may hold secrets.
+  async configuredMcpServerNames(cwd) {
+    this._assertInitialized();
+    try {
+      const result = ownRecord(await this._request('config/read',
+        { includeLayers: false, ...(cwd ? { cwd } : {}) }), 'config/read result');
+      const config = ownRecord(result.config?.value, 'configured MCP names');
+      const servers = ownRecord(config.mcp_servers?.value, 'configured MCP servers');
+      return Object.freeze(Object.keys(servers));
+    } catch {
+      fail('AGENT_CODEX_CONFINEMENT_UNAVAILABLE',
+        'Codex could not discover the configured MCP server names, so no assistant thread was started.');
+    }
+  }
+
+  async assertConfinement(expected, cwd) {
+    this._assertInitialized();
+    let effective;
+    try {
+      const result = await this._request('config/read', { includeLayers: false, ...(cwd ? { cwd } : {}) });
+      effective = jsonData(ownRecord(result, 'config/read result').config?.value, 'effective confinement');
+    } catch {
+      fail('AGENT_CODEX_CONFINEMENT_UNAVAILABLE',
+        'Codex could not confirm the required session restrictions, so no assistant thread was started.');
+    }
+    const same = (a, b) => {
+      if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => same(v, b[i]));
+      if (a && typeof a === 'object') return b && typeof b === 'object'
+        && Object.keys(a).length === Object.keys(b).length
+        && Object.entries(a).every(([key, v]) => Object.hasOwn(b, key) && same(v, b[key]));
+      return a === b;
+    };
+    const matches = (a, b) => a && typeof a === 'object' && !Array.isArray(a)
+      ? b && typeof b === 'object' && Object.entries(a).every(([key, v]) => matches(v, b[key]))
+      : same(a, b);
+    if (!effective || typeof effective !== 'object' || !matches(expected, effective)) {
+      fail('AGENT_CODEX_CONFINEMENT_MISMATCH',
+        'Codex inherited configuration that does not match this session’s required restrictions. No assistant thread was started.');
+    }
+    const wanted = expected.mcp_servers || {}, actual = effective.mcp_servers || {};
+    for (const [name, server] of Object.entries(actual)) {
+      if (Object.hasOwn(wanted, name)) continue;
+      if (!server || server.enabled !== false) {
+        fail('AGENT_CODEX_CONFINEMENT_MISMATCH',
+          'Codex kept an MCP server outside this session’s permitted tool surface enabled. No assistant thread was started.');
+      }
+    }
+    for (const [name, required] of Object.entries(wanted)) {
+      const server = actual[name];
+      // Codex materializes these defaults even when the argv omitted them.
+      const normalized = { ...server };
+      if (normalized.environment_id === 'local') delete normalized.environment_id;
+      if (normalized.enabled === true && !Object.hasOwn(required, 'enabled')) delete normalized.enabled;
+      if (normalized.tool_timeout_sec === null) delete normalized.tool_timeout_sec;
+      if (!same(required, normalized)) {
+        fail('AGENT_CODEX_CONFINEMENT_MISMATCH',
+          'Codex merged account MCP settings into the required tool surface, so no assistant thread was started.');
+      }
+    }
+  }
+
   async startThread(options = {}) {
     this._assertInitialized();
-    return parseThreadResponse(await this._request(METHOD.threadStart, validateThreadOptions(options)), METHOD.threadStart);
+    return parseThreadResponse(await this._request(METHOD.threadStart, codexThreadOptions(options)), METHOD.threadStart);
   }
 
   // Bind effective config explicitly before a fresh start. config/read is
   // not a snapshot of a resumed thread and must never recover one implicitly.
   async startThreadWithNativeModeSettings(options = {}, { configTimeoutMs = 1500 } = {}) {
     this._assertInitialized();
-    const params = { ...validateThreadOptions(options) };
+    const params = { ...codexThreadOptions(options) };
     if (!Number.isInteger(configTimeoutMs) || configTimeoutMs < 1 || configTimeoutMs > 10_000) {
       fail('CODEX_ADAPTER_INVALID', 'Config read timeout must be between 1 and 10000 milliseconds');
     }
@@ -753,7 +950,7 @@ class CodexAdapter {
 
   async resumeThread(threadId, options = {}) {
     this._assertInitialized();
-    const params = { threadId: validateThreadId(threadId), ...validateThreadOptions(options) };
+    const params = { threadId: validateThreadId(threadId), ...codexThreadOptions(options) };
     const previousVersion = this.threadEstablishmentVersion;
     const { raw, result } = await this._resumeWithHistory(params);
     this._assertOpen();
@@ -765,7 +962,7 @@ class CodexAdapter {
     if (typeof sourcePath !== 'string' || sourcePath.length > 32768 || !path.isAbsolute(sourcePath) || sourcePath.includes('\0')) {
       fail('CODEX_ADAPTER_INVALID', 'Resume requires a validated absolute rollout path');
     }
-    const params = { threadId: validateThreadId(threadId), path: sourcePath, ...validateThreadOptions(options) };
+    const params = { threadId: validateThreadId(threadId), path: sourcePath, ...codexThreadOptions(options) };
     const previousVersion = this.threadEstablishmentVersion;
     const { raw, result } = await this._resumeWithHistory(params);
     this._assertOpen();
@@ -923,7 +1120,7 @@ class CodexAdapter {
     if (previousVersion !== 0 || this.threadEstablishmentVersion !== 1
         || result.threadId !== params.threadId || typeof params.developerInstructions !== 'string') return result;
     const effortKnown = Object.hasOwn(raw, 'reasoningEffort') || Object.hasOwn(raw.thread, 'reasoningEffort');
-    const modelKnown = typeof result.model === 'string' && result.model.length > 0 && result.model.length <= 512;
+    const modelKnown = typeof result.model === 'string' && result.model.length > 0 && result.model.length <= MAX_MODEL_ID_LENGTH;
     const effortValid = result.reasoningEffort === null || typeof result.reasoningEffort === 'string'
       && result.reasoningEffort.length > 0 && result.reasoningEffort.length <= 32;
     const nativeModeSettings = modelKnown && effortKnown && effortValid
@@ -934,7 +1131,7 @@ class CodexAdapter {
 
   async forkThread(threadId, options = {}) {
     this._assertInitialized();
-    const normalized = validateThreadOptions(options);
+    const normalized = codexThreadOptions(options);
     const params = { threadId: validateThreadId(threadId), ...normalized };
     const result = parseThreadResponse(await this._request(METHOD.threadFork, params), METHOD.threadFork);
     this._assertOpen();
@@ -950,7 +1147,7 @@ class CodexAdapter {
       fail('CODEX_ADAPTER_INVALID', 'An editor fork requires its validated absolute rollout path');
     }
     const params = { threadId: validateThreadId(threadId), path: sourcePath,
-      ...validateThreadOptions(options), deferGoalContinuation: true };
+      ...codexThreadOptions(options), deferGoalContinuation: true };
     const forked = parseThreadResponse(await this._request(METHOD.threadFork, params), METHOD.threadFork);
     this._assertOpen();
     if (forked.threadId === threadId) fail('CODEX_EDITOR_FORK_INVALID', 'Codex did not create a different conversation for this copy.');
@@ -1014,11 +1211,14 @@ class CodexAdapter {
     if (!retainedSettings || typeof retainedSettings !== 'object') fail('CODEX_MODE_SETTINGS_REQUIRED', 'Retained model, effort, and developer instructions are required');
     const fields = ownRecord(retainedSettings, 'retained collaboration settings');
     if (Object.keys(fields).length !== 3 || !['model', 'effort', 'developerInstructions'].every(key => Object.hasOwn(fields, key)) ||
-        typeof fields.model.value !== 'string' || !fields.model.value || fields.model.value.length > 512 ||
+        typeof fields.model.value !== 'string' || !fields.model.value || fields.model.value.length > MAX_MODEL_ID_LENGTH ||
         (fields.effort.value !== null && (typeof fields.effort.value !== 'string' || !fields.effort.value || fields.effort.value.length > 32)) ||
         typeof fields.developerInstructions.value !== 'string' || fields.developerInstructions.value.length > 1_000_000) {
       fail('CODEX_MODE_SETTINGS_REQUIRED', 'Supply the retained model, nullable effort, and explicit developer instructions');
     }
+    try { validateNativeModelId(fields.model.value); }
+    catch { fail('CODEX_MODE_SETTINGS_REQUIRED', 'Supply a valid retained native model ID'); }
+    validateNativeModelEffort(fields.model.value, fields.effort.value, { provider: 'codex' });
     const settings = { model: fields.model.value, reasoning_effort: fields.effort.value,
       developer_instructions: fields.developerInstructions.value };
     if (this.activeTurns.has(id) || this.settingsSelections.has(id) ||
@@ -1134,14 +1334,18 @@ class CodexAdapter {
       if (Object.hasOwn(normalized.options, key)) turnOptions[key] = normalized.options[key];
     }
     const params = { threadId: normalized.threadId, input, ...turnOptions };
-    if (this.pendingTurnEffort.has(normalized.threadId)) {
+    if (Object.hasOwn(normalized.options, 'effort')) {
+      params.effort = normalized.options.effort;
+    } else if (this.pendingTurnEffort.has(normalized.threadId)) {
       params.effort = this.pendingTurnEffort.get(normalized.threadId);
     }
+    if (params.model !== undefined) validateNativeModelEffort(params.model, params.effort, { provider: 'codex' });
     if (this.activeTurns.has(normalized.threadId)) {
       fail('CODEX_TURN_ACTIVE', `Codex thread ${normalized.threadId} already has an active turn`);
     }
     this._rememberHostThread(normalized.threadId);
-    const active = { threadId: normalized.threadId, turnId: null, acknowledged: false, completed: false, assistantItems: new Set() };
+    const active = { threadId: normalized.threadId, turnId: null, acknowledged: false, completed: false, assistantItems: new Set(),
+      model: typeof params.model === 'string' ? params.model : null };
     this.activeTurns.set(normalized.threadId, active);
     try {
       const accepted = parseTurnResponse(await this._request(METHOD.turnStart, params));
@@ -1509,7 +1713,9 @@ class CodexAdapter {
       return;
     }
     if (pending.method === METHOD.threadStart) {
-      this._rememberHostThread(parseThreadResponse(fields.result.value, pending.method).threadId);
+      const started = parseThreadResponse(fields.result.value, pending.method);
+      this._rememberHostThread(started.threadId);
+      this._rememberThreadModels(started.threadId, pending.params?.model, started.model);
     }
     if ([METHOD.threadResume, METHOD.threadFork].includes(pending.method)) {
       // Native restore reports saved token usage, sometimes before its reply,
@@ -1524,6 +1730,7 @@ class CodexAdapter {
         fail('CODEX_RESUME_IDENTITY_MISMATCH', 'The saved rollout restored a different conversation.');
       }
       this._rememberHostThread(restored.threadId);
+      this._rememberThreadModels(restored.threadId, pending.params?.model, restored.model);
       for (const turn of restored.turns) {
         this.retiredTurns.add(JSON.stringify([restored.threadId, turn.id]));
         if (this.retiredTurns.size > 1024) this.retiredTurns.delete(this.retiredTurns.values().next().value);
@@ -1548,6 +1755,13 @@ class CodexAdapter {
 
   _handleServerRequest(fields) {
     const method = requiredString(fields, 'method', 'Codex server request');
+    if (Object.hasOwn(DECLINED_SERVER_REQUESTS, method)) {
+      const rpcId = fields.id.value;
+      if ((typeof rpcId !== 'number' || !Number.isInteger(rpcId)) && typeof rpcId !== 'string') fail('CODEX_PROTOCOL_INVALID', 'Codex server request id is invalid');
+      ownRecord(fields.params ? fields.params.value : undefined, `${method} params`);
+      this._write({ jsonrpc: '2.0', id: rpcId, result: DECLINED_SERVER_REQUESTS[method] });
+      return;
+    }
     if (![METHOD.commandApproval, METHOD.fileApproval, METHOD.permissionsApproval].includes(method)) {
       fail('CODEX_PROTOCOL_UNSUPPORTED_REQUEST', `Codex app-server requested unsupported host action ${method}`);
     }
@@ -1590,6 +1804,7 @@ class CodexAdapter {
   _handleNotification(fields) {
     const method = requiredString(fields, 'method', 'Codex notification');
     const params = fields.params ? fields.params.value : undefined;
+    if (method === 'error') return this._handleErrorNotification(params);
     if ([METHOD.agentMessageDelta, METHOD.reasoningSummaryDelta, METHOD.reasoningSummaryPart, METHOD.itemStarted, METHOD.itemCompleted, METHOD.tokenUsageUpdated, METHOD.turnCompleted].includes(method)) {
       const data = ownRecord(params, method);
       const threadId = requiredString(data, 'threadId', method);
@@ -1668,45 +1883,74 @@ class CodexAdapter {
       const threadId = requiredString(data, 'threadId', method);
       const turn = ownRecord(data.turn ? data.turn.value : undefined, `${method}.turn`);
       const turnId = requiredString(turn, 'id', `${method}.turn`);
-      const status = requiredString(turn, 'status', `${method}.turn`);
+      const wireStatus = requiredString(turn, 'status', `${method}.turn`);
       const active = this._turnEvent(threadId, turnId, method);
       if (!active) return;
-      if (!TERMINAL_TURN_STATUSES.includes(status)) {
+      if (!TERMINAL_TURN_STATUSES.includes(wireStatus)) {
         fail('CODEX_PROTOCOL_INVALID', `${method}.turn.status must be a terminal status`);
       }
+      const terminalError = active.policyError ?? turn.error?.value ?? active.terminalError;
+      const policyFailure = terminalError && providerFailureCode(ownRecord(terminalError, 'terminal error').codexErrorInfo?.value) === 'misalignmentPolicyViolation';
+      const status = policyFailure || wireStatus === 'completed' && terminalError != null ? 'failed' : wireStatus;
       let text = null;
+      let summary = null;
       let resetsAt = null;
       let limit = null;
       let failure = null;
       if (status === 'failed') {
-        const error = turn.error?.value != null ? ownRecord(turn.error.value, `${method}.turn.error`) : null;
+        const error = terminalError != null ? ownRecord(terminalError, `${method}.turn.error`) : null;
+        let modelRefused = false;
         const code = providerFailureCode(error ? error.codexErrorInfo?.value : undefined);
         if (code && Object.hasOwn(TURN_FAILURE_TEXT, code)) text = TURN_FAILURE_TEXT[code];
+        if (code === 'misalignmentPolicyViolation') text = policyRefusalSummary(error.message?.value);
         if (code === 'usageLimitExceeded') {
           const clock = Number(this.now());
           resetsAt = Number.isFinite(clock) ? usageLimitResetsAt(error.message?.value, clock) : null;
           limit = resetsAt ? { limit: 'usage', resetsAt } : { limit: 'usage' };
-          if (resetsAt) text = `This Codex account has reached its usage limit. The limit resets ${resetWords(resetsAt, clock)}. Until then, choose another account in the Accounts menu.`;
+          // 1.0.50 review, accounts E: the Accounts menu cannot move a running or
+          // stopped agent; Switch and continue does (a New agent tab offers it
+          // after Add to tree). 1.0.50 review #14: this sentence is shown live
+          // in a New agent tab too, where Switch and continue is disabled until
+          // Add to tree, so it says so (as the saved transcript line does).
+          if (resetsAt) text = `This Codex account has reached its usage limit. The limit resets ${resetWords(resetsAt, clock)}. Until then, use Switch and continue to move this agent to another account. In a New agent tab, use Add to tree first.`;
         }
         // Every OTHER failure used to end here with `text` still null, which is
         // the silence the whole T1552 note above is about. It ends with a
         // sentence now, whatever Codex called the failure.
+        if (!text && code !== 'usageLimitExceeded') {
+          const refusal = providerModelRefusalSummary(error?.message?.value, this._turnModels(active));
+          if (refusal) ({ text, summary } = refusal);
+          // Codex named the model this turn asked for: a model refusal, which the host holds automatic sends on
+          // until a turn on this session succeeds (1.0.50 review CM-2).
+          if (refusal?.named) modelRefused = true;
+        }
         if (!text) text = unrecognizedTurnFailureText(code);
-        failure = { provider: 'codex', source: 'turn', ...(code ? { code } : {}), summary: text };
+        failure = { provider: 'codex', source: 'turn', ...(code ? { code } : {}), summary: summary || text,
+          ...(code === 'misalignmentPolicyViolation' ? { category: 'safety-policy', retryable: false } : {}),
+          ...(modelRefused ? { category: 'model-refused' } : {}) };
       }
-      active.completed = true;
-      this._retireTurnApprovals(active);
-      this.retiredTurns.add(JSON.stringify([threadId, turnId]));
-      if (this.retiredTurns.size > 1024) this.retiredTurns.delete(this.retiredTurns.values().next().value);
-      for (const itemId of active.assistantItems) this.assistantParts.delete(itemId);
-      for (const [key, summary] of this.reasoningParts) if (summary.threadId === threadId && summary.turnId === turnId) this.reasoningParts.delete(key);
-      if (active.acknowledged && this.activeTurns.get(threadId) === active) this.activeTurns.delete(threadId);
+      /* A turn this adapter interrupted because its reconnect window ran out
+         ended for that reason, whatever terminal status the interrupt drew. A
+         turn that completed after all keeps its own outcome. */
+      let reported = status;
+      if (active.connectionLost && status !== 'completed') {
+        reported = 'failed';
+        // The interrupt normally draws 'interrupted', which has no sentence. A
+        // failure Codex named with a code this file has words for keeps them;
+        // anything else is the lost connection this adapter measured.
+        const named = status === 'failed' && typeof failure?.code === 'string'
+          && (Object.hasOwn(TURN_FAILURE_TEXT, failure.code) || failure.code === 'usageLimitExceeded');
+        if (!named) {
+          text = CONNECTION_FAILURE_TEXT;
+          failure = { provider: 'codex', source: 'turn', summary: text };
+        }
+      }
       // The payload is the same fact for a machine reader: a usage limit, and
       // when it resets if the provider said; and, on any failure, the sentence
       // this file just wrote, marked as one the product owns. Nothing else of
       // the message.
-      this._emit({ type: 'turn_completed', threadId, turnId, status, ...(text ? { text } : {}),
-        ...(limit || failure ? { payload: { ...limit, ...(failure ? { failure } : {}) } } : {}) });
+      this._settleTurn(active, { status: reported, text,
+        payload: limit || failure ? { ...limit, ...(failure ? { failure } : {}) } : null });
     }
     // Unknown notifications are ignored: they have no host authority. Unknown
     // requests are rejected above so a new server action cannot be trusted.
@@ -1818,6 +2062,19 @@ class CodexAdapter {
     this.hostThreads.add(threadId);
   }
 
+  // Bounded like hostThreads: one short list per host thread, newest first.
+  _rememberThreadModels(threadId, ...models) {
+    if (!this.hostThreads.has(threadId)) return;
+    const named = models.filter(model => typeof model === 'string' && model.length > 0 && model.length <= MAX_MODEL_ID_LENGTH);
+    if (named.length === 0) return;
+    this.threadModels.set(threadId, [...new Set([...named, ...(this.threadModels.get(threadId) || [])])].slice(0, 4));
+  }
+
+  // The model this turn asked for, then the ones its thread was started or restored on.
+  _turnModels(active) {
+    return [active?.model, ...(this.threadModels.get(active?.threadId) || [])];
+  }
+
   _rememberSubAgent(parentThreadId, item) {
     if (requiredString(item, 'type', 'Codex worker item') !== 'subAgentActivity') return;
     requiredString(item, 'id', 'Codex worker item');
@@ -1855,7 +2112,80 @@ class CodexAdapter {
     if (this.retiredTurns.has(JSON.stringify([threadId, turnId]))) return null;
     const active = this.activeTurns.get(threadId);
     if (!active) fail('CODEX_PROTOCOL_INVALID', `${label} did not match an active Codex thread`);
-    return this._bindTurn(active, turnId, label);
+    const bound = this._bindTurn(active, turnId, label);
+    /* Every turn-bound packet and request passes here, so this is where a
+       recovered connection is seen: real progress cancels a reconnect window
+       that has not yet run out. */
+    if (bound.outage) { clearTimeout(bound.outage); bound.outage = null; }
+    return bound;
+  }
+
+  /* `error` notifications were ignored, and still grant nothing: a malformed
+     one is dropped rather than failing the session closed. A valid nonretry diagnostic is retained for the terminal. A policy refusal
+     never opens a reconnect window or asks for another attempt. */
+  _handleErrorNotification(params) {
+    let fields;
+    try { fields = ownRecord(params, 'error notification'); } catch { return; }
+    const threadId = fields.threadId?.value;
+    const turnId = fields.turnId?.value;
+    if (typeof threadId !== 'string' || typeof turnId !== 'string') return;
+    const active = this.activeTurns.get(threadId);
+    if (active && !active.completed && active.turnId === turnId) {
+      let diagnostic;
+      try { diagnostic = ownRecord(fields.error?.value, 'error diagnostic'); } catch { /* no valid diagnostic */ }
+      if (providerFailureCode(diagnostic?.codexErrorInfo?.value) === 'misalignmentPolicyViolation') {
+        active.policyError = fields.error.value;
+        this._clearOutage(active);
+        if (fields.willRetry?.value === true && !active.policyInterruptRequested) {
+          active.policyInterruptRequested = true;
+          this._request(METHOD.turnInterrupt, { threadId, turnId }).catch(() => {});
+        }
+        return;
+      }
+    }
+    if (fields.willRetry?.value === false && active && !active.completed && active.turnId === turnId) {
+      try { ownRecord(fields.error?.value, 'terminal error'); active.terminalError = fields.error.value; } catch { /* malformed diagnostics confer no terminal state */ }
+      return;
+    }
+    if (fields.willRetry?.value !== true) return;
+    if (!active || active.completed || active.turnId !== turnId || active.connectionLost || active.outage) return;
+    active.outage = setTimeout(() => this._reconnectWindowExpired(active), this.reconnectWindowMs);
+  }
+
+  _reconnectWindowExpired(active) {
+    active.outage = null;
+    if (this.closed || active.completed || this.activeTurns.get(active.threadId) !== active) return;
+    active.connectionLost = true;
+    this._request(METHOD.turnInterrupt, { threadId: active.threadId, turnId: active.turnId }).catch(() => {});
+    active.outageGrace = setTimeout(() => {
+      active.outageGrace = null;
+      if (this.closed || active.completed || this.activeTurns.get(active.threadId) !== active) return;
+      // Codex never settled the interrupt. The turn ends here; a completion
+      // that arrives later names a retired turn and is dropped.
+      this._settleTurn(active, { status: 'failed', text: CONNECTION_FAILURE_TEXT,
+        payload: { failure: { provider: 'codex', source: 'turn', summary: CONNECTION_FAILURE_TEXT } } });
+    }, this.reconnectInterruptGraceMs);
+  }
+
+  _clearOutage(active) {
+    if (active.outage) { clearTimeout(active.outage); active.outage = null; }
+    if (active.outageGrace) { clearTimeout(active.outageGrace); active.outageGrace = null; }
+  }
+
+  /* The one way a turn ends, from the wire's turn/completed or from the
+     reconnect window: retire it, release what it held, and emit its terminal. */
+  _settleTurn(active, { status, text = null, payload = null }) {
+    const { threadId, turnId } = active;
+    active.completed = true;
+    this._clearOutage(active);
+    this._retireTurnApprovals(active);
+    this.retiredTurns.add(JSON.stringify([threadId, turnId]));
+    if (this.retiredTurns.size > 1024) this.retiredTurns.delete(this.retiredTurns.values().next().value);
+    for (const itemId of active.assistantItems) this.assistantParts.delete(itemId);
+    for (const [key, summary] of this.reasoningParts) if (summary.threadId === threadId && summary.turnId === turnId) this.reasoningParts.delete(key);
+    if (active.acknowledged && this.activeTurns.get(threadId) === active) this.activeTurns.delete(threadId);
+    return this._emit({ type: 'turn_completed', threadId, turnId, status, ...(text ? { text } : {}),
+      ...(payload ? { payload } : {}) });
   }
 
   _retireTurnApprovals(active) {
@@ -1875,6 +2205,7 @@ class CodexAdapter {
     const interrupted = terminateTurns
       ? [...this.activeTurns.values()].filter(active => !active.completed && typeof active.turnId === 'string')
       : [];
+    for (const active of this.activeTurns.values()) this._clearOutage(active);
     if (this.unsubscribe) {
       try { this.unsubscribe(); } catch { /* Transport cleanup is best effort. */ }
     }
@@ -1904,12 +2235,17 @@ class CodexAdapter {
       const closedCode = ADAPTER_FAILURE_CODE.test(String(this.closed.code || '')) ? this.closed.code : null;
       const closedFailure = { provider: 'codex', source: 'transport',
         ...(closedCode ? { code: closedCode } : {}), summary: adapterFailureSummary(closedCode) };
+      /* Each notice passes validateEngineEvent like every _emit() does: the
+         boundary's own emitSequence() neither validates nor freezes. The text
+         is bounded first so validation cannot throw here -- a throw inside
+         this generator would strand every pending request below. */
       const terminalWait = this.eventBoundary.emitSequence((function* () {
         for (const active of interrupted) {
-          yield {
+          yield validateEngineEvent({
             type: 'turn_completed', threadId: active.threadId, turnId: active.turnId,
-            status: 'failed', text: this.closed.message, payload: { failure: closedFailure },
-          };
+            status: 'failed', text: String(this.closed.message).slice(0, 1_000_000) || 'Codex protocol failed closed',
+            payload: { failure: closedFailure },
+          });
         }
       }).call(this));
       if (terminalWait) {
@@ -1943,6 +2279,8 @@ function createCodexAdapter(options) {
 module.exports = {
   CODEX_CLI_VERSION,
   CODEX_PROTOCOL_COMPATIBILITY_LINE,
+  CODEX_RECONNECT_WINDOW_MS,
+  CODEX_RECONNECT_INTERRUPT_GRACE_MS,
   METHOD,
   COMMAND_DECISIONS,
   FILE_DECISIONS,

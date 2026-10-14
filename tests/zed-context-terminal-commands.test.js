@@ -141,14 +141,14 @@ assert.throws(
 );
 
 const exportWithSpaces = parseCommand(
-  '//export-context "C:\\Work Space\\context-only.txt"',
+  '//export-context "\x43:\\Work Space\\context-only.txt"',
   stable
 );
 assert.equal(exportWithSpaces.operation, 'export-context');
-assert.equal(exportWithSpaces.targetPath, 'C:\\Work Space\\context-only.txt');
+assert.equal(exportWithSpaces.targetPath, '\x43:\\Work Space\\context-only.txt');
 assert.equal(exportWithSpaces.includeRaw, false);
-assert.equal(parseCommand('//export-context C:\\Work\\context-only.txt extra', stable).errorCode, 'EXPORT_PATH_ARGUMENTS');
-assert.equal(parseCommand('//export-context "C:\\Work\\logs\\context.txt"', stable).errorCode, 'EXPORT_TARGET_RAW_LOG');
+assert.equal(parseCommand('//export-context \x43:\\Work\\context-only.txt extra', stable).errorCode, 'EXPORT_PATH_ARGUMENTS');
+assert.equal(parseCommand('//export-context "\x43:\\Work\\logs\\context.txt"', stable).errorCode, 'EXPORT_TARGET_RAW_LOG');
 assert.equal(parseCommand('//export-context "unterminated', stable).errorCode, 'COMMAND_QUOTE_UNTERMINATED');
 
 const unknownWrapper = parseCommand('//not-a-control secret-looking-value', stable);
@@ -161,9 +161,9 @@ assert.equal(parseCommand('//help now', stable).errorCode, 'HELP_ARGUMENTS');
 const singleSlashNative = parseCommand('/status', cleanSingleSlash);
 assert.equal(singleSlashNative.kind, 'native', 'known native-looking input remains native under the clean inventory');
 assert.deepEqual(singleSlashNative.forward, bytes('/status'));
-const singleSlashWrapper = parseCommand('/export-context "C:\\Work Space\\out.txt"', cleanSingleSlash);
+const singleSlashWrapper = parseCommand('/export-context "\x43:\\Work Space\\out.txt"', cleanSingleSlash);
 assert.equal(singleSlashWrapper.kind, 'wrapper');
-assert.equal(singleSlashWrapper.targetPath, 'C:\\Work Space\\out.txt');
+assert.equal(singleSlashWrapper.targetPath, '\x43:\\Work Space\\out.txt');
 const malformedSingleSlashWrapper = parseCommand('/export-context "unterminated', cleanSingleSlash);
 assert.equal(malformedSingleSlashWrapper.kind, 'invalid-wrapper');
 assert.equal(malformedSingleSlashWrapper.errorCode, 'COMMAND_QUOTE_UNTERMINATED');
@@ -216,9 +216,9 @@ assert.throws(
   error => error.code === 'INPUT_ROUTER_NAMESPACE_UNSAFE'
 );
 
-assert.deepEqual(tokenize(`//export-context "C:\\Work Space\\a\\\"b.txt"`), [
+assert.deepEqual(tokenize(`//export-context "\x43:\\Work Space\\a\\\"b.txt"`), [
   '//export-context',
-  'C:\\Work Space\\a"b.txt'
+  '\x43:\\Work Space\\a"b.txt'
 ]);
 assert.deepEqual(discoverableCommands(stable).map(item => item.command), [
   '//help', '//preview [on|off|milliseconds]', '//context', '//session', '//logs', '//new', '//export-context [path]'

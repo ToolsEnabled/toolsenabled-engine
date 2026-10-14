@@ -168,11 +168,11 @@ done      the report states each audited file with its measured line count, ever
 report    {report}
 """
 
-APP_DESC = ("app repository as published at its cloud mirror, branch "
+APP_DESC = ("app repository as published at mirror ToolsEnabled/app, branch "
             "`cloud-mirror/app` (the source checkout some documents call desktop-app).")
-ENGINE_DESC = ("engine repository as published at its cloud mirror, branch "
+ENGINE_DESC = ("engine repository as published at mirror ToolsEnabled/engine, branch "
                "`cloud-mirror/engine`.")
-WEB_DESC = ("website repository as published at its cloud mirror, branch "
+WEB_DESC = ("website repository as published at mirror ToolsEnabled/Website, branch "
             "`cloud-mirror/website`. The clone root contains `website/`, `server/`, "
             "`deploy/`, `tools/` and `config/` as siblings; resolve every path in "
             "this brief against that clone root.")

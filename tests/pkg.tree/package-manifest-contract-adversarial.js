@@ -41,8 +41,8 @@ for (const id of ['__proto__', 'kernel.constructor', 'prototype.tools', 'Kernel.
 }
 
 for (const value of [
-  '../src/lib/index.js', 'src/../lib/index.js', '/src/lib/index.js', 'C:/src/lib/index.js',
-  'C:\\src\\lib\\index.js', 'src\\lib\\index.js', 'src/lib/index.ts', 'node_modules/pkg/index.js'
+  '../src/lib/index.js', 'src/../lib/index.js', '/src/lib/index.js', '\x43:/src/lib/index.js',
+  '\x43:\\src\\lib\\index.js', 'src\\lib\\index.js', 'src/lib/index.ts', 'node_modules/pkg/index.js'
 ]) {
   rejects(() => normalizeRepoRelativePath(value, 'path'), 'PACKAGE_MANIFEST_INVALID_PATH');
 }

@@ -67,7 +67,7 @@ function readWave(journalFile, fsImpl) {
     raw = fsImpl.readFileSync(journalFile, 'utf8');
   } catch (error) {
     fail('CLOUD_HARVEST_NO_JOURNAL',
-      `the batch journal at ${journalFile} could not be read (${error && error.code}): ${error && error.message}. `
+      'The batch journal could not be read. '
       + 'The journal is the only complete record of a wave -- the provider list caps at 20 rows -- so nothing can be harvested without it.');
   }
   let declared = null;
@@ -235,7 +235,7 @@ async function harvestBatch({ journalFile, outDir, fetchTask, fsImpl = fs, concu
                reason a task that found nothing has no diff, and telling those
                two apart is the whole point: one is an answer about the code,
                the other is an answer about the run. */
-            record = { verdict: 'ERRORED', files: [], note: String(fetched.detail || 'the provider reports this task as failed').slice(0, 200) };
+            record = { verdict: 'ERRORED', files: [], note: 'The provider reports this task as failed. Check its task page for details.' };
           } else {
             const diffText = fetched && typeof fetched.diff === 'string' ? fetched.diff : '';
             if (diffText.trim()) fsImpl.writeFileSync(path.join(outDir, `${slug}.diff`), diffText);
@@ -252,7 +252,8 @@ async function harvestBatch({ journalFile, outDir, fetchTask, fsImpl = fs, concu
           record = {
             verdict: throttled ? 'THROTTLED' : 'FETCH_ERROR',
             files: [],
-            note: message.slice(0, 200)
+            note: throttled ? '429 Too Many Requests: the provider still throttles this task.'
+              : 'The provider task could not be fetched. Check the selected account in the official CLI.'
           };
           break;
         }

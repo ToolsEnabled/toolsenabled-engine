@@ -491,10 +491,10 @@ async function helperBootstrapStaysOutOfProcessMetadata() {
   child.kill = () => {};
   const result = await launchPowerShellHelper({
     executable: 'powershell.exe',
-    helperPath: 'C:\\private-helper.ps1',
+    helperPath: '\x43:\\private-helper.ps1',
     pipeName,
     pipeAuthenticator: authenticator,
-    repoRoot: 'C:\\private-root',
+    repoRoot: '\x43:\\private-root',
     timeoutMs: 1000,
     spawnImpl: (executable, args, options) => {
       observedArgs = [executable, ...args];

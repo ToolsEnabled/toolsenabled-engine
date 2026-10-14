@@ -7,7 +7,7 @@
 // (where it is listening) and state/mission-bridge-token.json (the bearer).
 // The local UI obtains that bearer through GET /v1/bootstrap with a proof read
 // from a third owner-only file, because a BROWSER cannot read files. This is
-// not a browser. It is a process running as the owner on a development machine,
+// not a browser. It is a process running as the owner on the owner's machine,
 // and the files ARE the authorization model: whoever can read them is the
 // owner, by the bridge's own design ("the same per-boot ACL pattern as the
 // bearer token file"). So it reads the bearer and uses it, and sends no

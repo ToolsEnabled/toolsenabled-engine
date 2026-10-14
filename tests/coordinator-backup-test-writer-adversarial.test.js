@@ -69,7 +69,7 @@ function run() {
     withZeroHostWrites(() => {
       const result = writer.writeTestOnlyBackup({
         ...input(store),
-        backupRoot: 'C:\\untrusted\\backup-root',
+        backupRoot: '\x43:\\untrusted\\backup-root',
         fsImpl: fs,
         stageToken: 'not accepted'
       });

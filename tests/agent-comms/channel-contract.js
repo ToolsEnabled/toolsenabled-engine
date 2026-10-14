@@ -184,7 +184,7 @@ const wrongReply = contract.post(submit({
 }), auth(charlie));
 actionableRefusal(wrongReply, 'AGENT_MESSAGE_CAUSAL_PARENT_INVALID', /does not belong to that question/i);
 
-/* BOTH SIDES KEPT. An earlier sweep added the case below -- a message history that
+/* BOTH SIDES KEPT. The w20 sweep added the case below -- a message history that
  * cannot be READ must refuse rather than be scored as "no such parent" -- and a
  * later wave added the census-count guard, which stops the reason check passing
  * vacuously over an empty or truncated refusal list. They are independent and

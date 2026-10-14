@@ -38,7 +38,7 @@ function validateManifest(manifest = readJson(MANIFEST_PATH)) {
 
 // Until 2026-08-22 this file also refused a manifest naming Discord and
 // carried a "public Discord community" allowance for labels. Discord was
-// removed from the product entirely (product decision), including its
+// removed from the product entirely (owner ruling, O4), including its
 // reserved provider namespace in config/toolsenabled.policy.json, so neither
 // special case has anything left to guard; collisions come only from the
 // namespaces the policy still declares.

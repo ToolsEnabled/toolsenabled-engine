@@ -32,8 +32,9 @@ const AGENT_OR_RELAY_ORIGINS = new Set(['agent', 'assistant', 'peer', 'relay', '
 // declaration and never enters the owner spool. The owner typing the token
 // deliberately is the owner declaring the same thing. A QUOTED occurrence
 // later in a turn ("the sentinel is [machine-scheduled]") does not match and
-// is preserved -- only a leading token excludes. This exclusion was reviewed
-// and approved as the fix for a spool-pollution finding.
+// is preserved -- only a leading token excludes. Owner authorization for this
+// exclusion: in-session, 2026-08-12, "ok fix it" on the shadow cycle-3
+// pollution finding.
 const MACHINE_SCHEDULED_SENTINEL = '[machine-scheduled]';
 
 // Harness-injected notification wrappers, detected structurally. The

@@ -3,7 +3,7 @@
 // Q116.5 spawn-on-timer fix: src/lib/service-control.js#defaultProbe() paid
 // for a full elevated powershell.exe/WMI spawn on every single listener
 // probe, including every probe of a port that was not listening at all --
-// the same defect SHAPE as an earlier commit (a DPAPI vault read shelling out
+// the same defect SHAPE as commit 48598d3 (a DPAPI vault read shelling out
 // every 2s). probeListenerCheap() tries a native node:net TCP connect first
 // and only calls through to defaultProbe() when something is actually there
 // to identify. These tests prove: (1) the empty case never spawns anything,

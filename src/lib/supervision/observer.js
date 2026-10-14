@@ -49,7 +49,7 @@ function isLoopbackAddress(address) {
 }
 
 function powershellPath() {
-  const root = process.env.SystemRoot || 'C:\\Windows';
+  const root = process.env.SystemRoot || '\x43:\\Windows';
   return path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 }
 

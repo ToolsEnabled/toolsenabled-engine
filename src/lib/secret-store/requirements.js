@@ -72,6 +72,10 @@ const BASE_REQUIREMENTS = Object.freeze([
     alternatives: [['tavily_api_key']], sources: ['providers/web.js']
   },
   {
+    id: 'institution-browser-helper', label: 'Institution browser helper', criticality: 'conditional',
+    alternatives: [['institution_netid', 'institution_password']], sources: ['institution-sso.js']
+  },
+  {
     id: 'internal-audit', label: 'Audit signing', criticality: 'self-managed',
     alternatives: [['toolsenabled_audit_signing_key_v1', 'toolsenabled_audit_head_v1']], sources: ['audit.js']
   },

@@ -13,8 +13,8 @@
 // The --check mode is the part that closes the original failure. A lane on
 // 2026-08-11 hit a contended ledger, wrote the owner's directive somewhere else,
 // and moved on; nothing alerted anyone, so the loss was discovered only when the
-// owner noticed their instruction had not been carried out. An outstanding capture
-// is now a red check with a file path and their verbatim words in it.
+// owner noticed his instruction had not been carried out. An outstanding capture
+// is now a red check with a file path and his verbatim words in it.
 //
 // It replays through owner-capture.js's own exported ledger functions rather
 // than reimplementing the write, so the append-only verbatim invariant, the

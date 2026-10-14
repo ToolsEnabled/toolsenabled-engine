@@ -1,4 +1,4 @@
-# tools-coverage-0826 -- 21 test files recovered from a stranded harvest branch, a
+# tools-coverage-0826 -- 21 test files recovered from harvest/wave4-engine, a
 # branch stranded on a base far behind main. Rebasing it was not the cheap move:
 # 71 files, and the five test-can-fail waves have since asked every one of the
 # 860 TRACKED files whether it can fail -- so anything already in main was
@@ -17,6 +17,7 @@
 #
 tests/agent-msg.js
 tests/agent-parity.js
+tests/canvas-session-preflight.test.js
 tests/check-chain-runner.test.js
 tests/check-comms-names.test.js
 tests/check-cross-repo-boundaries.test.js

@@ -69,7 +69,7 @@ function measuredDependencies(extra = {}) {
     }),
     readStateHealth: () => ({
       ok: true, schemaVersion: 20, expectedSchemaVersion: 20,
-      integrity: { ok: true }, path: 'C:/private/state.sqlite3'
+      integrity: { ok: true }, path: '\x43:/private/state.sqlite3'
     }),
     readAuditDurability: () => {
       auditStore.status();
@@ -208,7 +208,7 @@ test('rendered block is bounded to safe aggregate fields', async () => {
     for (const forbidden of [
       'sk_live_must_not_render', 'private@example.com', 'private-account-name',
       'private-account-uuid', 'owner private words', 'Bearer must-not-render',
-      'C:/private/state.sqlite3'
+      '\x43:/private/state.sqlite3'
     ]) assert.equal(block.includes(forbidden), false, `render leaked ${forbidden}`);
     assert.ok(Buffer.byteLength(block, 'utf8') < 2048);
   } finally {
@@ -386,7 +386,7 @@ test('automatic hook wrapper awaits status prepend for text and hook output', ()
   assert.match(source, /await prependStatus\(onboarding\.renderPacket\(packet\)/);
   /* WHAT THIS PINS IS THAT `rendered` REACHES THE ENVELOPE, not how it is
      punctuated on the way. The older spelling matched the exact argument
-     `hookEnvelope(event.hook_event_name, rendered)`, so when an earlier commit began
+     `hookEnvelope(event.hook_event_name, rendered)`, so when f8f58c1 began
      prefixing a launch note -- a deliberate, correct change -- this test went
      red over formatting while the behaviour it exists to protect was intact.
      A source-grep test earns its keep only when it greps for the thing that

@@ -10,7 +10,7 @@
 // installation's key, not that the bytes sitting in audit-archive.jsonl
 // between genesis and that boundary still match what was actually signed.
 // Nothing before this flag existed ever opened that file
-// (an internal archive review, method 1-3 + a scheduler
+// (W4/REPORT-archive-verify-exposure-20260907.md, method 1-3 + a scheduler
 // scan, all agreeing: zero production callers of verifyArchiveSegment).
 //
 // includeArchive is opt-in and off by default specifically so the

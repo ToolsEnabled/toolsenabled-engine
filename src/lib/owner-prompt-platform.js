@@ -1,4 +1,5 @@
 'use strict';
+const { powerShellSingleQuoted } = require('./powershell-quote');
 
 const fs = require('node:fs');
 const os = require('node:os');
@@ -20,7 +21,7 @@ function assertAvailable({ platform = process.platform, environment = process.en
 }
 function windowsBinary(name, environment) {
   const key = Object.keys(environment).find(key => /^(?:SystemRoot|windir)$/i.test(key));
-  const root = key ? environment[key] : 'C:\\Windows';
+  const root = key ? environment[key] : '\x43:\\Windows';
   if (!path.win32.isAbsolute(root) || /^[a-z]:\\users(?:\\|$)/i.test(root)) throw failure('OWNER_PROMPT_RUNNER_UNAVAILABLE');
   return name === 'powershell.exe' ? path.win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', name)
     : path.win32.join(root, 'System32', name);
@@ -29,13 +30,13 @@ function legacyRunnerIsAlive(queueFile, { platform = process.platform, environme
   if (platform !== 'win32') return false;
   // Preserve an already-open pre-migration Windows form. New native-ui hosts
   // do not carry wait-and-run and cannot match this compatibility observation.
-  const target = path.win32.resolve(queueFile).replace(/'/g, "''");
+  const target = powerShellSingleQuoted(path.win32.resolve(queueFile));
   const query = [
     "$ErrorActionPreference='Stop'",
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
     "$session=(Get-Process -Id $PID).SessionId",
     "$count=0",
-    `$target='${target}'`,
+    `$target=${target}`,
     String.raw`$queuePattern='(?i)(?:^|\s)-QueueFile\s+(?:"'+[regex]::Escape($target)+'"|'+[regex]::Escape($target)+')(?=\s|$)'`,
     String.raw`$invokePattern='(?i)(?:^|\s)-File\s+(?:"[^"]*[\\/]owner-prompt-queue\.ps1"|[^\s"]*[\\/]owner-prompt-queue\.ps1)\s+wait-and-run(?=\s|$)'`,
     // Read only identity metadata first. Do not fetch another account's argv.

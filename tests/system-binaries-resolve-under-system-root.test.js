@@ -61,7 +61,7 @@ console.log('system binaries: named by absolute path, never by PATH lookup');
 // A run() stand-in that records the command instead of executing anything, and
 // answers with a well-formed whoami CSV line so the caller reaches its success
 // path. The SID is a documented well-known value, not this machine's.
-function recorder(stdout = '"MACHINE\\person","S-1-5-21-1111111111-2222222222-3333333333-1001"') {
+function recorder(stdout = '"MACHINE\\person","\x53-1-5-21-1111111111-2222222222-3333333333-1001"') {
   const calls = [];
   const run = (command, args, options) => {
     calls.push({ command, args, options });
@@ -85,21 +85,21 @@ check('whoami is invoked by absolute path, not by name', () => {
 check('the identity still parses out of a well-formed answer', () => {
   const { run } = recorder();
   const identity = adapter.resolveCurrentPrincipalIdentity({ run });
-  assert.equal(identity.principalId, 'S-1-5-21-1111111111-2222222222-3333333333-1001');
+  assert.equal(identity.principalId, '\x53-1-5-21-1111111111-2222222222-3333333333-1001');
   assert.equal(identity.principalName, 'MACHINE\\person');
 });
 
 // --- 2. WINDOWS IS NOT ALWAYS AT C:\WINDOWS ---------------------------------
-check('the path follows SystemRoot rather than assuming C:\\Windows', () => {
+check('the path follows SystemRoot rather than assuming \x43:\\Windows', () => {
   const keys = ['SystemRoot', 'SYSTEMROOT', 'windir'];
   const saved = keys.map(key => [key, Object.hasOwn(process.env, key) ? process.env[key] : undefined]);
   try {
     for (const key of keys) delete process.env[key];
-    process.env.SystemRoot = 'D:\\OtherWindows';
+    process.env.SystemRoot = '\x44:\\OtherWindows';
     const { calls, run } = recorder();
     adapter.resolveCurrentPrincipalIdentity({ run });
-    assert.match(calls[0].command.replace(/\\/g, '/'), /^D:\/OtherWindows\/System32\/whoami\.exe$/i,
-      `the command was ${calls[0].command}; a machine with Windows outside C:\\Windows would run the wrong file or none`);
+    assert.match(calls[0].command.replace(/\\/g, '/'), /^\x44:\/OtherWindows\/System32\/whoami\.exe$/i,
+      `the command was ${calls[0].command}; a machine with Windows outside \x43:\\Windows would run the wrong file or none`);
   } finally {
     for (const [key, value] of saved) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;

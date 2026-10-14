@@ -167,13 +167,13 @@ function buildLedger(test, count) {
       //
       // This used to pin `cached === false`. The refusal above is the
       // fail-closed part and is unchanged; what changed is what the refusal
-      // COSTS. MEASURED 2026-09-04 on a copy of a live ledger
+      // COSTS. MEASURED 2026-09-04 on a copy of the owner's Live ledger
       // (10,053 live events): one admission verification is 3.2-3.5 ms with
       // the trusted prefix kept and 3.1-4.4 s with it dropped -- and because a
       // refused admission spools and the NEXT tool call hits the same
       // unchanged file, dropping it made every following call pay that full
       // O(N) Ed25519 walk, which is the 100% CPU period the install kept dying
-      // in (the crash investigation evidence). Keeping the prefix changes what
+      // in (REPORT-crash-20260903/F-REPORT.md). Keeping the prefix changes what
       // is recomputed, never what is proven: every consumer re-proves it
       // against a freshly read fingerprint before it may be used.
       assert.equal(test.store.verificationCacheStatus().cached, true,
@@ -465,7 +465,7 @@ function buildLedger(test, count) {
   {
     // AN ARCHIVE BOUNDARY MUST NOT BE ABLE TO HIDE BEHIND A STALE CACHE.
     //
-    // Bounding the audit ledger (product rule: minimal cost
+    // Bounding the audit ledger (owner directive 2026-08-17: minimal cost
     // beyond system start, no unbounded growth) means the oldest events
     // eventually leave the live table, and audit-store roots the chain at a
     // signed boundary instead of genesis. verifyWithEvents/_verifyWithCache

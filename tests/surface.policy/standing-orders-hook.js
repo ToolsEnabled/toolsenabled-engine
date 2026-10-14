@@ -42,7 +42,7 @@
 // as "block before execution" and exit 0 as "allow"; Codex also consumes the
 // same hookSpecificOutput.additionalContext advisory shape.
 //
-// Anchor cases: the exact incident strings (the upload filename, the delegation
+// Anchor cases: the exact incident strings (scholarship filename, the delegation
 // bypass, the grep-drift reminder) are pinned so a regression that reopens
 // any of the three real incidents this hook exists to prevent fails loudly.
 
@@ -78,7 +78,7 @@ function runHook(payload, extraEnv) {
 /* WHAT THE HOOK RECORDED WHILE THIS CALL WENT THROUGH.
  *
  * Needed because STANDING-ORDERS.md class BROWSER rule 1 no longer BLOCKS
- * (retired on 2026-08-10). Its enforcement now
+ * (retired by the owner on 2026-08-10, commit 49263c2). Its enforcement now
  * lives entirely in the record: the hook still recognises a browser-driving
  * command and writes `allow-rule1-retired`, or `allow-delegated` when the
  * caller marked itself. Asserting only "exit 0" after the retirement would be
@@ -209,9 +209,9 @@ try {
   });
 
   check('a BOM-prefixed payload that would otherwise be BLOCKED is still blocked, not fail-open', () => {
-    const input = writeJson('req-bom-incident.json', {
+    const input = writeJson('req-bom-scholarship.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Brief 2.10 (agent-reviewed).pdf', to: 'partner@example.com' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/scholarship Draft 7.28 (agent-reviewed).pdf', to: 'advisor\x40example.edu' }
     });
     const payload = `\uFEFF${JSON.stringify(bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`))}`;
     const result = runHook(payload);
@@ -233,10 +233,10 @@ try {
      RECONCILED 2026-08-11 AGAINST THE CURRENT ORDERS, which is what these
      checks had drifted from rather than a bug in the hook.
 
-     STANDING-ORDERS.md class BROWSER rule 1 was RETIRED on 2026-08-10 --
-     agents may drive the browsers as needed; it had been a
-     thread-specific rule that needed cleaning up -- and
-     tools/standing-orders-hook.js was changed to match at an earlier commit. The
+     STANDING-ORDERS.md class BROWSER rule 1 was RETIRED by the owner on
+     2026-08-10 in his own words -- "literally you can drive the browsers as
+     needed that was a thread specific rule and needs to be cleaned up" -- and
+     tools/standing-orders-hook.js was changed to match at commit 49263c2. The
      three checks below still demanded exit 2 and the literal "Class BROWSER,
      rule 1", so they asserted a rule the product had deliberately removed.
      Reading them as a regression would have argued for putting back the block
@@ -340,9 +340,9 @@ try {
   // --- OUTWARD class: filename/metadata provenance -------------------------
 
   check('the real incident filename, submitted via mcp-call.js gmail.send, is BLOCKED', () => {
-    const input = writeJson('req-incident-leak.json', {
+    const input = writeJson('req-scholarship-leak.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Brief 2.10 (agent-reviewed).pdf', to: 'partner@example.com' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/scholarship Draft 7.28 (agent-reviewed).pdf', to: 'advisor\x40example.edu' }
     });
     const result = runHook(bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`));
     assert.equal(result.status, 2);
@@ -353,7 +353,7 @@ try {
   check('a clean filename via mcp-call.js is ALLOWED', () => {
     const input = writeJson('req-clean.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Current.pdf', to: 'partner@example.com' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/Draft Current.pdf', to: 'advisor\x40example.edu' }
     });
     const result = runHook(bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`));
     assert.equal(result.status, 0);
@@ -362,7 +362,7 @@ try {
   check('dirty document metadata (clean filename) via mcp-call.js is BLOCKED', () => {
     const input = writeJson('req-dirty-metadata.json', {
       tool: 'drive.upload',
-      arguments: { filePath: 'C:/Drafts/Product Current.pdf', metadata: { author: 'Claude' } }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/Draft Current.pdf', metadata: { author: 'Claude' } }
     });
     const result = runHook(bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`));
     assert.equal(result.status, 2);
@@ -372,27 +372,27 @@ try {
   check('a non-outward mcp-call.js tool (e.g. system.status) is NOT inspected', () => {
     const input = writeJson('req-not-outward.json', {
       tool: 'system.status',
-      arguments: { filePath: 'C:/Drafts/anything (agent-reviewed).pdf' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/anything (agent-reviewed).pdf' }
     });
     const result = runHook(bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`));
     assert.equal(result.status, 0);
   });
 
   check('a direct curl upload with a dirty filename (spaces + parens) to an external host is BLOCKED', () => {
-    const command = 'curl -X POST https://portal.example.com/upload -F "file=@C:/Drafts/Product Brief 2.10 (agent-reviewed).pdf"';
+    const command = 'curl -X POST \x68ttps://canvas.example.edu/upload -F "file=@\x43:/\x55sers/owner/Desktop/scholarship Draft 7.28 (agent-reviewed).pdf"';
     const result = runHook(bashCall(command));
     assert.equal(result.status, 2);
     assert.match(result.stderr, /AGENT_PROVENANCE/);
   });
 
   check('a direct curl POST to localhost is not treated as an outward candidate', () => {
-    const command = 'curl -X POST http://localhost:3000/upload -F "file=@C:/Drafts/x (agent-reviewed).pdf"';
+    const command = 'curl -X POST http://localhost:3000/upload -F "file=@\x43:/\x55sers/owner/Desktop/x (agent-reviewed).pdf"';
     const result = runHook(bashCall(command));
     assert.equal(result.status, 0);
   });
 
   check('Invoke-RestMethod -InFile upload with a dirty filename to an external host is BLOCKED', () => {
-    const command = 'Invoke-RestMethod -Uri https://portal.example.com/upload -Method Post -InFile "C:/Drafts/Proposal (ai-generated).docx"';
+    const command = 'Invoke-RestMethod -Uri \x68ttps://canvas.example.edu/upload -Method Post -InFile "\x43:/\x55sers/owner/Desktop/Essay (ai-generated).docx"';
     const result = runHook(powershellCall(command));
     assert.equal(result.status, 2);
   });
@@ -403,12 +403,12 @@ try {
     const ledger = writeJson('ledger-unmet.json', {
       requests: [{
         id: 'R-TEST-UNMET',
-        gates: [{ instruction: 'fetch the last published copy and compare it', met: false, evidence: '' }]
+        gates: [{ instruction: 'pull the previous week submission and check', met: false, evidence: '' }]
       }]
     });
     const input = writeJson('req-gated-unmet.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Current.pdf', requestId: 'R-TEST-UNMET' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/Draft Current.pdf', requestId: 'R-TEST-UNMET' }
     });
     const result = runHook(
       bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`),
@@ -416,19 +416,19 @@ try {
     );
     assert.equal(result.status, 2);
     assert.match(result.stderr, /Class OUTWARD, rule 4/);
-    assert.match(result.stderr, /fetch the last published copy and compare it/);
+    assert.match(result.stderr, /pull the previous week submission and check/);
   });
 
   check('a met gate (with evidence) on the request is ALLOWED', () => {
     const ledger = writeJson('ledger-met.json', {
       requests: [{
         id: 'R-TEST-MET',
-        gates: [{ instruction: 'fetch the last published copy and compare it', met: true, evidence: 'verified against the team wiki page history' }]
+        gates: [{ instruction: 'pull the previous week submission and check', met: true, evidence: 'verified against rweb 2026-07-28' }]
       }]
     });
     const input = writeJson('req-gated-met.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Current.pdf', requestId: 'R-TEST-MET' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/Draft Current.pdf', requestId: 'R-TEST-MET' }
     });
     const result = runHook(
       bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`),
@@ -441,7 +441,7 @@ try {
     const ledger = writeJson('ledger-empty.json', { requests: [] });
     const input = writeJson('req-unknown-id.json', {
       tool: 'gmail.send',
-      arguments: { filePath: 'C:/Drafts/Product Current.pdf', requestId: 'R-DOES-NOT-EXIST' }
+      arguments: { filePath: '\x43:/\x55sers/owner/Desktop/Draft Current.pdf', requestId: 'R-DOES-NOT-EXIST' }
     });
     const result = runHook(
       bashCall(`node tools/mcp-call.js --input "${relFromRoot(input)}"`),
@@ -578,7 +578,7 @@ try {
     assert.equal(result.status, 0);
   });
 
-  console.log(`Standing-orders hook tests passed (${checks} checks; the incident filename still blocks at the shipped policy boundary, and BROWSER rule 1's retirement is pinned by its RECORD -- allow-rule1-retired vs allow-delegated -- rather than by an exit code that no longer distinguishes anything).`);
+  console.log(`Standing-orders hook tests passed (${checks} checks; the scholarship filename still blocks at the shipped policy boundary, and BROWSER rule 1's retirement is pinned by its RECORD -- allow-rule1-retired vs allow-delegated -- rather than by an exit code that no longer distinguishes anything).`);
 } finally {
   fs.rmSync(scratchRoot, { recursive: true, force: true });
 }

@@ -119,7 +119,7 @@ const FIELD_LINE = /^(?:([A-Za-z][A-Za-z0-9_-]{0,31}):\s*(.*)|([a-z]+)\s+(.*))$/
  * missing required field: target; missing required field: do; missing required
  * field: because" -- for ONE mistake, and none of the four were true: every
  * field was sitting right there, unread, because the parse stopped before it
- * looked. MEASURED 2026-09-03 on a live ledger: that exact five-part
+ * looked. MEASURED 2026-09-03 on the owner's ledger: that exact five-part
  * sentence is the single commonest agent.spawn refusal.
  *
  * So the header's absence is now REPAIRED rather than reported, and only on
@@ -186,15 +186,33 @@ function parse(text) {
  * agent to fix something that is not broken. Numbers, a comparison, a named
  * failing check or a quoted output all count; an adjective does not.
  *
- * A QUOTED OUTPUT IS LOOKED FOR (found in a real-window run). The refusal itself says
- * "or quoted output", and a Controller that quoted the person's request in
- * double quotes was refused six times for it. Quoted means several words in
- * double quotes, curly quotes or backticks: an apostrophe or a one-word scare
- * quote ("slow") is still an adjective. */
-const QUOTED_OUTPUT = /"([^"\n]{8,})"|\u201c([^\u201d\n]{8,})\u201d|`([^`\n]{8,})`/g;
+ * A QUOTATION COUNTS BECAUSE THE REFUSAL SAYS IT DOES. The sentence below names
+ * "quoted output", and nothing here looked for a quotation. Two real runs were
+ * refused six times each for it: in the 1.0.49 real-Claude walk a Controller
+ * quoted the reply it wanted ("answers \"KIWI\""), and in the 1.0.48 candidate 5
+ * real-window run a Controller quoted the person's request in double quotes.
+ *
+ * A quotation is two or more characters between a matching pair of double quotes,
+ * curly quotes or backticks, or between single quotes that open after a space and
+ * close before punctuation -- so the apostrophes in "the person's request" never
+ * pair up into one. It counts when it holds several words, or one token that is
+ * not a plain lowercase word (KIWI, ENOENT, exit_code). A lone lowercase word in
+ * quotes ("slow", 'off') is a scare quote, and a scare-quoted adjective is still
+ * an adjective -- UNLESS the words in front of it say it is a reply: answers
+ * "pong", replies 'yes', prints "ok", the output: "done". The KIWI fix covered
+ * capitals only, so a helper that answers "hello" was refused exactly as KIWI
+ * had been (1.0.50 release review, release-ops F6). The cue must sit directly
+ * before the quote, so "the answer is "fine"" is still an adjective. */
+const QUOTED_OUTPUT = /"([^"\n]{2,})"|\u201c([^\u201d\n]{2,})\u201d|`([^`\n]{2,})`|(?:^|[\s(])'([^'\n]{2,})'(?=$|[\s.,;:!?)])/g;
+const REPLY_CUE = /\b(?:answer(?:s|ed)?|repl(?:y|ies|ied)|respon(?:d|ds|ded|se)|says?|said|print(?:s|ed)?|outputs?|output(?:ted)?|echo(?:es|ed)?|return(?:s|ed)?)(?:\s+(?:back|with))?\s*:?\s*$/i;
 function quotesAnOutput(value) {
-  for (const match of String(value).matchAll(QUOTED_OUTPUT)) {
-    if (/\S\s+\S/.test(match[1] ?? match[2] ?? match[3])) return true;
+  const text = String(value);
+  for (const match of text.matchAll(QUOTED_OUTPUT)) {
+    const quoted = (match[1] ?? match[2] ?? match[3] ?? match[4]).trim();
+    if (!/[\p{L}\p{N}]/u.test(quoted)) continue;
+    if (/\s/.test(quoted) || !/^\p{Ll}+$/u.test(quoted)) return true;
+    const opening = match.index + match[0].search(/["\u201c`']/);
+    if (REPLY_CUE.test(text.slice(0, opening))) return true;
   }
   return false;
 }

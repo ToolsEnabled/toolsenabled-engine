@@ -10,7 +10,7 @@ const { createAuditStore } = require('../../src/lib/audit-store');
 const laneScope = require('../../src/lib/lane-scope');
 const actionGuards = require('../../src/lib/action-guards');
 const { executeTool, registeredTools } = require('../helpers/dispatch');
-// Since an earlier change ("Make Basic runtime audit optional") the refusal note is
+// Since a6c70ac6 ("Make Basic runtime audit optional") the refusal note is
 // written only when the person turned audit on. The audited refusal runs under
 // that choice through the trusted policy seam; Basic is asserted beside it.
 const operationAudit = require('../../src/lib/operation-audit');

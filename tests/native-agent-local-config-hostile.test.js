@@ -11,7 +11,7 @@ const generatorFile = path.join(ROOT, 'tools', 'generate-mirrors.js');
 const retiredDescriptor = path.join(ROOT, 'sidecars', 'native-agent', 'native-agent-mcp.json');
 const launcher = require(launcherFile);
 const generator = require(generatorFile);
-const hostileProfile = path.win32.join('C:\\', 'Users', 'foreign-user', 'stale');
+const hostileProfile = path.win32.join('\x43:\\', 'Users', 'foreign-user', 'stale');
 
 function makeRuntimeFixture(parent, name, interpreterName) {
   const root = path.join(parent, name);

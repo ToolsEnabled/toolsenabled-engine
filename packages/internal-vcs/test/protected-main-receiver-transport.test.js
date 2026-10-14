@@ -27,7 +27,7 @@ function scriptedRunner(results) {
 
 function createTransport(runner) {
   return createFilekeeperProtectedMainReceiverTransport({
-    repositoryLocator: 'C:\\worktree', remoteName: 'origin', branchName: 'main', runner,
+    repositoryLocator: '\x43:\\worktree', remoteName: 'origin', branchName: 'main', runner,
   });
 }
 
@@ -55,7 +55,7 @@ test('receiver transport uses Filekeeper-owned explicit argv for every allowed r
     ['rev-list', '--count', 'HEAD..origin/main'],
     ['merge', '--ff-only', 'origin/main'],
   ]);
-  assert.ok(scripted.calls.every(call => call.executable === 'git' && call.cwd === 'C:\\worktree'));
+  assert.ok(scripted.calls.every(call => call.executable === 'git' && call.cwd === '\x43:\\worktree'));
 });
 
 test('receiver transport preserves failure and indeterminate results without treating them as clean', () => {

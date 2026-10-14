@@ -56,6 +56,22 @@ async function main() {
   try { parsed = parseArgs(process.argv.slice(2)); }
   catch (error) { process.stderr.write(`${error.message}\n${usage()}\n`); process.exitCode = 2; return; }
   if (parsed.help) { process.stdout.write(`${usage()}\n`); return; }
+  // PLUGINS COME UP BEFORE ANYTHING REACHES THE TOOL REGISTRY.
+  //
+  // This is the second payload entrypoint (src/mcp-server.js is the other), and
+  // src/lib/mission-bridge/actions.js requires the registry for executeTool(). An
+  // activated plugin's tools arrive through src/lib/tool-pack-registry.js, which
+  // freezes at module load, so a pack registered after the registry is built
+  // THROWS rather than silently producing a tool that does not exist. Hence: here,
+  // before the first require that can pull the registry in, and after argument
+  // parsing so that `--help` still costs nothing.
+  //
+  // activate() is idempotent, so a process that is both bridge and server does not
+  // register twice, and it never throws for a plugin's own fault -- a broken
+  // package lands in status() and the bridge starts. plugin-activation.js also
+  // checks require.cache and refuses with a sentence naming the entrypoint, so
+  // moving this line below cannot be a quiet mistake.
+  require('../src/lib/plugin-activation').activate();
   const { getResearchWorkerSupervisor } = require('../src/lib/research/worker-supervisor');
   const { installResearchLifecycle } = require('../src/lib/research/lifecycle-channel');
   const researchHost = getResearchWorkerSupervisor();

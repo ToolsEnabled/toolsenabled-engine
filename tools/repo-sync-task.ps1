@@ -1,7 +1,7 @@
 # Registers the scheduled task that keeps this clone converged on the canonical
 # GitHub trunk.
 #
-# WHY THIS EXISTS. Product rule: canonical ToolsEnabled
+# WHY THIS EXISTS. Owner directive R1120 (2026-08-04): canonical ToolsEnabled
 # lives on the private GitHub origin and "the sync fully happens" there, so all
 # agents on all computers work on one trunk. Before this keeper existed, the two
 # machines diverged 30-vs-13 commits and both minted DIFFERENT owner requests
@@ -98,7 +98,7 @@ $repeating = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionDuration (New-TimeSpan -Days 9999)
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeating -OwnerUser ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -IncludeStartup -IncludeLogon
 
 $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Limited

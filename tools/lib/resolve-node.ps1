@@ -3,7 +3,7 @@
 # tunnel/bridge supervisor and control surface).
 #
 # WHY THIS EXISTS. Five of these scripts each independently picked between
-# a hardcoded machine-specific Node path and 'C:\Program Files\nodejs\node.exe'
+# 'C:\agent-apps\node-v22.19.0\node.exe' and 'C:\Program Files\nodejs\node.exe'
 # with nothing but Test-Path -- no check that the Program Files fallback is
 # actually new enough. Two of the five (bridge-session-supervisor.ps1,
 # tunnel-bridge-control.ps1) had no fallback logic at all: a single hardcoded
@@ -62,6 +62,7 @@ function Resolve-ToolsEnabledNode {
         Add-BootstrapCandidate $env:TOOLSENABLED_NODE
     }
     Add-BootstrapCandidate (Join-Path $resolvedRoot 'node.exe')
+    Add-BootstrapCandidate 'C:\agent-apps\node-v22.19.0\node.exe'
     if ([IO.Path]::IsPathRooted([string]$env:ProgramFiles)) {
         Add-BootstrapCandidate (Join-Path $env:ProgramFiles 'nodejs\node.exe')
     }

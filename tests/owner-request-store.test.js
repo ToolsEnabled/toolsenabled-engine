@@ -1,6 +1,6 @@
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // THE ONE OWNER REQUEST STORE. What must hold: reads never create a file;
 // ensure writes a valid empty ledger once; ids are one R counter over every
@@ -462,10 +462,18 @@ const failBeforeSave = {
       return write(file, value, ...rest);
     };
   },
+  // The .bak is taken by link first and written by path only when the link
+  // cannot be made, so both must fail for the .bak to be impossible.
   'the .bak cannot be written': f => {
     const write = f.memory.writeFileSync;
+    const link = f.memory.linkSync;
+    const restore = () => { f.memory.writeFileSync = write; f.memory.linkSync = link; };
+    f.memory.linkSync = (from, to) => {
+      if (to === `${f.ledgerFile}.bak`) throw Object.assign(new Error('EIO'), { code: 'EIO' });
+      return link(from, to);
+    };
     f.memory.writeFileSync = (file, ...rest) => {
-      if (file === `${f.ledgerFile}.bak`) { f.memory.writeFileSync = write; throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
+      if (file === `${f.ledgerFile}.bak`) { restore(); throw Object.assign(new Error('EIO'), { code: 'EIO' }); }
       return write(file, ...rest);
     };
   },
@@ -1390,11 +1398,11 @@ test('fileTask supersedes: one transaction files the new task AND marks the earl
   assert.equal(final.status, 'open');
 });
 
-// CHANGED DELIBERATELY (L1h, product rule: asks and purchases are
-// agent-closable): answerAsk and declineAsk are no longer owner-only --
-// inverted below to prove an agent actor now succeeds. removeAsk stays
-// owner-only and that half of this test is UNCHANGED: closable, not
-// removable; agent removal applies only to T.
+// CHANGED DELIBERATELY (L1h, owner ruling relayed by Controller 3, 2026-09-07:
+// "asks and purchases: agent closable"): answerAsk and declineAsk are no
+// longer owner-only -- inverted below to prove an agent actor now succeeds.
+// removeAsk stays owner-only and that half of this test is UNCHANGED: his
+// word was "closable", not "removable"; he named agent-removal only for T.
 test('fileAsk/answerAsk/declineAsk: an agent may answer or decline; removeAsk stays owner-only and refuses any other actor', () => {
   const { opts, readJson, chainLines } = sandbox();
   const asked = store.fileAsk({ scope: 'global', words: 'may I restart the service?', filedBy: 'codex' }, opts);
@@ -1422,8 +1430,8 @@ test('fileAsk/answerAsk/declineAsk: an agent may answer or decline; removeAsk st
   assert.deepEqual(chainLines().map(line => JSON.parse(line).kind), ['file', 'answer', 'file', 'decline', 'remove']);
 });
 
-// CHANGED DELIBERATELY (L1h, product rule: asks and purchases are
-// agent-closable): decidePurchase is no longer
+// CHANGED DELIBERATELY (L1h, owner ruling relayed by Controller 3, 2026-09-07:
+// "asks and purchases: agent closable"): decidePurchase is no longer
 // owner-only -- inverted below to prove an agent actor now succeeds and is
 // journalled verbatim, never PERSON. removePurchase stays owner-only and
 // that half is UNCHANGED. recordPurchase was already ungated.
@@ -1453,8 +1461,8 @@ test('filePurchase/decidePurchase/recordPurchase/removePurchase: proposed -> app
   assert.deepEqual(chainLines().map(line => JSON.parse(line).kind), ['file', 'approve', 'record', 'file', 'decline', 'remove']);
 });
 
-// PRODUCT RULE: asks and purchases are
-// agent-closable. An agent actor can now answer/decline an ask and decide a
+// OWNER RULING, relayed by Controller 3 (2026-09-07): "asks and purchases:
+// agent closable." An agent actor can now answer/decline an ask and decide a
 // purchase; each writer journals the REAL actor, never PERSON, in the
 // history row and (declineAsk, decidePurchase) decisions[].
 test('answerAsk, declineAsk and decidePurchase are agent-usable: an agent actor answers, declines and decides, each journalled with the real actor', () => {
@@ -1483,7 +1491,7 @@ test('answerAsk, declineAsk and decidePurchase are agent-usable: an agent actor 
   assert.equal(purchaseRecord.history[purchaseRecord.history.length - 1].actor, 'codex');
 });
 
-// ADDITIVE (L3, 2026-09-07): findRecord and findPurchaseByRequestId
+// ADDITIVE (L3, Worker 3, 2026-09-07): findRecord and findPurchaseByRequestId
 // are new, read-only compositions of readAll/idKind added to the end of
 // owner-request-store.js. Neither changes an existing function, the record
 // shape or a vocabulary.
@@ -1518,8 +1526,8 @@ test('findPurchaseByRequestId: the one P record for a promptId, or null when non
   assert.deepEqual(store.findRecord(direct.id, opts).purchase.requestId, null);
 });
 
-// CHANGED DELIBERATELY (L1h, product rule: asks and purchases are
-// agent-closable): decidePurchase's own actor gate is
+// CHANGED DELIBERATELY (L1h, owner ruling relayed by Controller 3, 2026-09-07:
+// "asks and purchases: agent closable"): decidePurchase's own actor gate is
 // gone -- the former badActor refusal loop and the answerAsk assertion below
 // are INVERTED to prove it. removePurchase (P's own remove) and R's decide
 // stay owner-only and are UNCHANGED.
@@ -1576,7 +1584,8 @@ test('decidePurchase accepts any actor including the owner\'s standing outward-s
     { code: 'R_LEDGER_PERSON_REQUIRED' }, 'R stays owner-only');
 });
 
-// ADDITIVE (L3, 2026-09-07, updated per the FINDING 2 ruling once L1's assertPurchaseDecider/decidePurchase above accepted
+// ADDITIVE (L3, Worker 3, 2026-09-07, updated per Controller 3's FINDING 2
+// ruling once L1's assertPurchaseDecider/decidePurchase above accepted
 // OUTWARD_RESERVED_SETTING_ACTOR): recordDirectPurchase is the pay.record
 // tool's own composition of filePurchase -> decidePurchase -> recordPurchase
 // for the direct, no-cart, auto-approved spend path. It never journals the
@@ -2024,7 +2033,7 @@ test('previewUnconfirmedHistory binds adoptUnconfirmedHistory to one exact docum
   assert.equal(secondPreview.count, 0);
   assert.deepEqual(store.adoptUnconfirmedHistory({ actor: 'owner', revision: secondPreview.revision, token: secondPreview.token }, adopted.opts).adopted, []);
 
-  // Exactly the stated review concern: a document that keeps the SAME
+  // Exactly Builder 2's stated concern: a document that keeps the SAME
   // revision number as a stale preview, with different bytes, still refuses.
   const other = sandbox();
   store.fileRequest({ scope: 'global', words: 'other' }, other.opts);
@@ -2645,4 +2654,26 @@ test('ledger continuation composition uses the verified default reader and an in
     defaults.close();
     injected.close();
   }
+});
+
+
+test('missing history records distinguish lost tombstones from an unrecorded disappearance', () => {
+  const s = sandbox();
+  const input = { scope: 'global', words: 'Synthetic recovery case.', actor: 'owner', filedBy: 'owner' };
+  const first = store.fileRequest(input, s.opts);
+  const second = store.fileRequest({ ...input, words: 'Synthetic removed case.' }, s.opts);
+  store.removeRequest({ id: second.id, actor: 'owner' }, s.opts);
+  const before = s.readJson();
+  before.requests = [];
+  fs.writeFileSync(s.ledgerFile, JSON.stringify(before));
+  const result = store.verifyHistory(s.opts);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'R_LEDGER_CHAIN_MISSING');
+  assert.deepEqual(result.missingDetails.map(row => [row.id, row.cause, row.lastEventKind, row.recordContentsAvailable]), [
+    [first.id, 'record-missing-without-terminal-event', 'file', false],
+    [second.id, 'removal-tombstone-missing', 'remove', false]
+  ]);
+  assert.ok(result.missingDetails.every(row => Number.isInteger(row.lastSequence) && row.lastSequence > 0));
+  assert.match(result.message, /hashes.*not.*record contents/i);
+  assert.equal(s.readJson().requests.length, 0, 'verification must not manufacture missing records');
 });

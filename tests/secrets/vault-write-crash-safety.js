@@ -3,8 +3,8 @@
 // THE VAULT MUST SURVIVE A CRASH MID-WRITE, ON BOTH HALVES THAT CAN WRITE IT.
 //
 // tools/secrets.ps1 Write-Vault was made crash-safe on 2026-09-02 (commit
-// an earlier change, "make the vault and session config writes crash-safe"): a hard
-// power loss on a development machine, caught mid-write, had already left
+// 9a6c79c, "make the vault and session config writes crash-safe"): a hard
+// power loss on the owner's machine, caught mid-write, had already left
 // vault/secrets.json as 4,352 bytes of NUL. The temp file's data pages were
 // never flushed to disk before the write-through rename replaced the real
 // vault with them -- MOVEFILE_WRITE_THROUGH (used by Move-VaultFileAtomically,
@@ -13,8 +13,8 @@
 // FileStream.Write + Flush($true) (FlushFileBuffers) before that rename.
 //
 // That fix touched exactly one of the two scripts that write this same vault
-// file (verified against the commit itself: it touches tools/secrets.ps1 and
-// nothing under tools/secrets-manager.ps1).
+// file (verified against the commit itself: `git show --stat 9a6c79c` touches
+// tools/secrets.ps1 and nothing under tools/secrets-manager.ps1).
 // tools/secrets-manager.ps1 -- the lifecycle half: add, replace, rotate,
 // remove -- still called [System.IO.File]::WriteAllText with no flush at all
 // before the identical Move-VaultFileAtomically rename. Every lifecycle

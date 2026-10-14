@@ -1,7 +1,7 @@
 // THE SAME SESSION, IN THE BROWSER. A byte-exact port of online-fra-e2e-session.js
 // to WebCrypto, so a signed-in person's browser can hold an end-to-end session
-// with their machine that the relay cannot open -- the owner's goal that a
-// person gets exactly the app on the website today, working, with the privacy
+// with their machine that the relay cannot open -- the owner's "they get exactly
+// the app that is on the website right now, but working", with the privacy
 // policy's "it cannot read what it carries" still true of the relay.
 //
 // WHAT "BYTE-EXACT" MEANS HERE, and why it is the whole point: the lease the

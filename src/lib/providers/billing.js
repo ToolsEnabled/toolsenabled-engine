@@ -47,6 +47,13 @@ const { request } = require('../http');
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 const MAX_WEBHOOK_BYTES = 1024 * 1024;
+// THE ONLY VAULT RECORDS webhookVerify MAY DECRYPT (1.0.50 security L2). With a
+// free name the HMAC comparison below was a guess oracle over every record in
+// the vault: the caller supplies the payload, timestamp and up to ~60 candidate
+// signatures per call, so a low-entropy owner secret could be brute-forced and a
+// suspected token confirmed. The schema in tool-registry.js carries the same
+// closed list; this copy holds for direct callers and refuses before any read.
+const STRIPE_WEBHOOK_VAULT_KEYS = Object.freeze(['stripe_webhook_secret']);
 
 function readKey(readSecret = getSecret) {
   try {
@@ -169,7 +176,11 @@ function webhookVerify({
   if (typeof payload !== 'string' || Buffer.byteLength(payload, 'utf8') > MAX_WEBHOOK_BYTES) {
     throw new Error(`payload must be a raw UTF-8 string no larger than ${MAX_WEBHOOK_BYTES} bytes.`);
   }
-  if (typeof vaultKey !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(vaultKey)) throw new Error('vaultKey is invalid.');
+  if (!STRIPE_WEBHOOK_VAULT_KEYS.includes(vaultKey)) {
+    const error = new Error(`vaultKey must be one of: ${STRIPE_WEBHOOK_VAULT_KEYS.join(', ')}.`);
+    error.code = 'BILLING_WEBHOOK_VAULT_KEY_INVALID';
+    throw error;
+  }
   if (!Number.isInteger(toleranceSeconds) || toleranceSeconds < 0 || toleranceSeconds > 3600) {
     throw new Error('toleranceSeconds must be an integer from 0 through 3600.');
   }
@@ -213,6 +224,7 @@ function webhookVerify({
 
 module.exports = {
   MAX_WEBHOOK_BYTES,
+  STRIPE_WEBHOOK_VAULT_KEYS,
   checkoutStatus,
   parseStripeSignature,
   readKey,

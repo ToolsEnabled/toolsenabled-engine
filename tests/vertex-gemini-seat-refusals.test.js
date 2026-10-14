@@ -8,9 +8,9 @@ const Module = require('node:module');
 
 const identity = { alias: 'seat-test', email: 'seat-test@example.com', projectId: 'seat-test-project' };
 const committedDigests = new Map([
-  [identity.alias, '150bbf5203aaf810f0306acaa2a008d63cfdd2a5e5015529fd9316da9fe9cbe2'],
-  [identity.email, '023dfa5844a5daaacb668a85c0d6b4cd519e9bafb481a065312d3c5abcd32df0'],
-  [identity.projectId, 'd4caf6830ed036b2cbee5fba5d71d1bb2547de88c9b0fd8372b5bc05a2026a50']
+  [identity.alias, 'cb22ca177814c1fcc43afbe3b37ff7ff875099d6c116169781ca503bdd81be07'],
+  [identity.email, 'cdeb46d7d4fa662874dd4e760d8f48440f0314fda733f9d9696f3ad95732e0b8'],
+  [identity.projectId, '5747bffb641d35270b5ae4ceda65752a6c9213f315fde02ae7ab691b92b4ff56']
 ]);
 const realCreateHash = crypto.createHash;
 crypto.createHash = function createHash(algorithm, options) {

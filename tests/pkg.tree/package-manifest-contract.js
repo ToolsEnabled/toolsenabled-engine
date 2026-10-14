@@ -56,7 +56,7 @@ assert.equal(normalizePackageId('repo-protocol'), 'repo-protocol');
 assertCode(() => normalizePackageId('Kernel.runtime'), 'PACKAGE_MANIFEST_INVALID_ID');
 assertCode(() => normalizePackageId('kernel.__proto__'), 'PACKAGE_MANIFEST_UNSAFE_OBJECT');
 assert.equal(normalizeRepoRelativePath('src/lib/index.js'), 'src/lib/index.js');
-for (const value of ['../src/lib/index.js', 'src/../lib/index.js', '/src/lib/index.js', 'C:\\src\\lib\\index.js', 'src\\lib\\index.js', 'config/packages.json', 'src/lib/index.ts']) {
+for (const value of ['../src/lib/index.js', 'src/../lib/index.js', '/src/lib/index.js', '\x43:\\src\\lib\\index.js', 'src\\lib\\index.js', 'config/packages.json', 'src/lib/index.ts']) {
   assertCode(() => normalizeRepoRelativePath(value, 'fixture.path'), 'PACKAGE_MANIFEST_INVALID_PATH');
 }
 

@@ -4,7 +4,7 @@ require('./helpers/isolated-state-root'); // Redirect TOOLSENABLED_STATE_ROOT of
 
 // A PERSON STOP DESCRIBED AS A STORAGE FAULT.
 //
-// The person stopped a Codex Terra circle. Its saved row went to
+// The person stopped Codex Terra circle node-8-0dbad425. Its saved row went to
 // status 'stopped', fence 9, reason person_stopped. The Controller later
 // resumed that node into a NEW session; it used tools and sent real work, and
 // its chat then said:
@@ -368,7 +368,7 @@ test('storage that is genuinely unavailable is still reported as a fault', async
 // So Autonomous+ stopped permanently at the first poll after the first
 // completed turn, silently, with no pause and no error.
 //
-// Before an earlier change both numbers were 5000 and the first poll was always exactly
+// Before b591f18d both numbers were 5000 and the first poll was always exactly
 // due, which is why this never showed. Raising the durability delay to 15000
 // exposed it, and advancing a fixture straight to 15000 hides it again. These
 // cases poll at the real interval, so every dispatch is reached THROUGH the

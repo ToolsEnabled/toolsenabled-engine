@@ -5,15 +5,18 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const production = require('../src/lib/online-fra-device-claim');
-async function invoke(args, response) {
+async function invoke(args, response, environment = {}) {
   const requests = [];
   const writes = [];
   let output = '';
+  let stderr = '';
+  let runtimeLoads = 0;
+  let runtimeEnvironment;
   let finish;
   const completed = new Promise(resolve => { finish = resolve; });
   const processFixture = {
-    argv: ['node', 'claim-cli', ...args], env: {},
-    stdout: { write(value) { output += value; } }, stderr: { write() {} },
+    argv: ['node', 'claim-cli', ...args], env: { ...environment },
+    stdout: { write(value) { output += value; } }, stderr: { write(value) { stderr += value; } },
     set exitCode(value) { finish(value); }
   };
   const runtime = {
@@ -23,7 +26,11 @@ async function invoke(args, response) {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../tools/online-fra-claim-cli.js'), 'utf8'), {
     process: processFixture, setTimeout,
     require(name) {
-      if (name === '../src/lib/runtime') return runtime;
+      if (name === '../src/lib/runtime') {
+        runtimeLoads += 1;
+        runtimeEnvironment = { ...processFixture.env };
+        return runtime;
+      }
       if (name === '../src/lib/device-credential-clear-outcome') return require(name);
       assert.equal(name, '../src/lib/online-fra-device-claim');
       return { ...production, createDeviceClaimClient(options) {
@@ -35,9 +42,41 @@ async function invoke(args, response) {
     }
   }, { timeout: 1000 });
   const exitCode = await completed;
-  return { exitCode, output: JSON.parse(output), requests, writes };
+  return { exitCode, output: JSON.parse(output), requests, writes, runtimeLoads, runtimeEnvironment, stderr, environment: processFixture.env };
 }
 const token = 'fixture-poll-token';
+const tokenName = 'TOOLSENABLED_CLAIM_POLL_TOKEN';
+for (const verb of ['poll', 'wait']) {
+  test(`CLI ${verb} reads its private environment token and removes it before runtime loading`, async () => {
+    const args = [verb, '--token-env', tokenName];
+    const result = await invoke(args, { status: 200, body: { state: 'reserved', account: { email: 'fixture@example.invalid' }, intervalSeconds: 5 } }, { [tokenName]: token });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.requests.length, 1);
+    assert.equal(result.requests[0].pollToken === token, true, 'the token reaches the request');
+    assert.equal(Object.hasOwn(result.requests[0], 'accept'), false);
+    assert.equal(Object.hasOwn(result.runtimeEnvironment, tokenName), false, 'runtime must load without the private token');
+    assert.equal(Object.hasOwn(result.environment, tokenName), false, 'later credential helpers cannot inherit the token');
+    assert.equal(JSON.stringify([args, result.output, result.stderr]).includes(token), false);
+  });
+  for (const [name, environment] of [
+    ['absent', {}], ['empty', { [tokenName]: '' }], ['blank', { [tokenName]: '   ' }],
+  ]) test(`CLI ${verb} refuses a missing or empty environment token (${name}) before runtime or requests`, async () => {
+    const result = await invoke([verb, '--token-env', tokenName], { status: 200, body: { state: 'reserved', account: { email: 'fixture@example.invalid' }, intervalSeconds: 5 } }, environment);
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.output.error.code, 'CLI_USAGE');
+    assert.equal(result.runtimeLoads, 0);
+    assert.deepEqual(result.requests, []);
+    assert.deepEqual(result.writes, []);
+  });
+  test(`CLI ${verb} refuses competing token sources without exposing either value`, async () => {
+    const result = await invoke([verb, '--token', token, '--token-env', tokenName], { status: 200, body: { state: 'reserved', account: { email: 'fixture@example.invalid' }, intervalSeconds: 5 } }, { [tokenName]: token });
+    assert.equal(result.exitCode, 2);
+    assert.equal(result.output.error.code, 'CLI_USAGE');
+    assert.equal(result.runtimeLoads, 0);
+    assert.deepEqual(result.requests, []);
+    assert.equal(JSON.stringify([result.output, result.stderr]).includes(token), false);
+  });
+}
 test('CLI preserves reserved account for the local consent screen', async () => {
   const result = await invoke(['poll', '--token', token], { status: 200, body: { state: 'reserved', account: { email: 'fixture@example.invalid' }, intervalSeconds: 5 } });
   assert.equal(result.exitCode, 0);

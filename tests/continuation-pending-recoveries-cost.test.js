@@ -4,15 +4,15 @@ require('./helpers/isolated-state-root'); // Redirect TOOLSENABLED_STATE_ROOT of
 
 // ONE SAVED-CONTINUATION READ LISTED THE WHOLE CUSTODY STORE ONCE PER DUE ROW.
 //
-// OBSERVED on a Linux profile, 2026-09-21, first session after
-// history verification became opt-in: the window's five-second
+// OBSERVED on the owner's Linux profile, 2026-09-21, first session after
+// history verification became opt-in (a6c70ac6): the window's five-second
 // `continuations { action: 'read' }` poll held the Electron main thread for
 // 2.4-3.0 s on EVERY call (main-lag rows name `await:mc-agent:continuations`),
 // 57% of one core with no agent running. The store held 345 rows, 195 of them
 // due. pendingRecoveries() filters the due rows through actionableTasks(), and
 // actionableTasks() listed every saved row again for each of them: one SQLite
 // read, hash check and JSON parse per row per due row, 195 x 345 per poll.
-// Before an earlier change the same read threw "history cannot be verified" before it
+// Before a6c70ac6 the same read threw "history cannot be verified" before it
 // reached the filter, which is why nothing measured it.
 //
 // The custody rows cannot change inside one synchronous filter pass, so one

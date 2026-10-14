@@ -291,7 +291,7 @@ function Initialize-ProtectedVaultStore {
 # HERE, at dot-source scope -- so it ran on every single spawn of
 # tools/secrets.ps1 and tools/secrets-manager.ps1, whatever the verb.
 #
-# MEASURED 2026-09-03 on a development machine, this file's Add-Type in
+# MEASURED 2026-09-03 on the owner's machine, this file's Add-Type in
 # isolation: 208.5 / 213.8 / 252.7 ms. Against the same private scratch vault,
 # one `powershell.exe -File tools/secrets.ps1 get <key>` was 851.8 ms median,
 # and it breaks down as ~188 ms powershell.exe start, ~147 ms parse and
@@ -318,7 +318,7 @@ function Initialize-ProtectedVaultStore {
 # external-write tool call pays through audit.requireRecord -- spawned csc.exe
 # to compile these 20 lines of static C# again, inside the vault lock.
 #
-# MEASURED 2026-09-03 on a development machine, tracing the phases of one
+# MEASURED 2026-09-03 on the owner's machine, tracing the phases of one
 # `set-monotonic-stdin` against a private scratch vault (three runs): the
 # Move-VaultFileAtomically step was 465 / 349 / 369 ms of a 1,575 / 1,548 /
 # 1,615 ms script body, the single largest phase, and every other phase was

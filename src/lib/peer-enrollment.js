@@ -2,7 +2,7 @@
 
 // CONNECTING A SECOND COMPUTER MUST NOT REQUIRE A HUMAN TO CARRY A SECRET.
 //
-// Product rule: once the program is installed, token
+// The owner's instruction, paraphrased: once the program is installed, token
 // rotation should happen automatically -- no human in the loop.
 //
 // That describes a real gap. Until this module, every transport in this repo

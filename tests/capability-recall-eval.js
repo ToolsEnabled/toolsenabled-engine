@@ -28,8 +28,9 @@
 //   node tests/capability-recall-eval.js --tune     search, report, write tuned constants
 //   node tests/capability-recall-eval.js --ratchet  fail if any headline metric regressed
 //
-// THE RESEARCH RAG THIS DESIGN LEARNED FROM REFUSED THIS STEP ON PURPOSE: its
-// specification freezes retrieval after a sanity check, because there it is a
+// THE RESEARCH RAG THIS DESIGN LEARNED FROM REFUSED THIS STEP ON PURPOSE:
+// lean_rag/ROSLYN_DATASTORE_SPEC.md says "Do NOT optimize retrieval... Build it,
+// freeze it, sanity-check it, never touch it again", because there it is a
 // controlled instrument and tuning it would be a confound. Here it is a
 // product feature and NOT tuning it is the defect.
 //
@@ -42,7 +43,7 @@
 //
 // tools/grepsaver-orient.js had the first three in spirit and not the fourth,
 // and its own comments record the result: "'gmail thread read' returned
-// three unrelated project cards". A recommender is
+// openclaw-gateway + companion-app + servercontrol". A recommender is
 // judged on what it says when it has nothing to say.
 //
 // HELD-OUT SPLIT, BECAUSE 85 POSITIVES AND 12 KNOBS IS AN OVERFITTING MACHINE.

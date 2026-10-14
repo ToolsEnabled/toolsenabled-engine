@@ -3,7 +3,7 @@
 // THE ROLL IS THE ONLY OPERATION IN THE AUDIT SYSTEM THAT DELETES EVIDENCE.
 //
 // Everything else in this subsystem only ever appends. Bounding the ledger
-// (product rule: a customer machine must not be taxed forever,
+// (owner directive 2026-08-17: a customer machine must not be taxed forever,
 // and the ledger must stay fully auditable) requires the oldest event to
 // physically leave audit_events -- so this is the one path where a bug loses
 // an audit record permanently rather than merely reporting one wrongly.

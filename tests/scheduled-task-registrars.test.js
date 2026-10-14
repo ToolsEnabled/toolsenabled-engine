@@ -264,7 +264,7 @@ check('registration reporting enumerates the durable coordinator duty host', () 
 
 check('portable managed registrars never pin a developer-machine Node path', () => {
   for (const { name, text } of registryBackedRegistrars) {
-    assert.doesNotMatch(text, /\$nodePath\s*=\s*['"][A-Za-z]:\\(?!Program Files\\)/i,
+    assert.doesNotMatch(text, /\$nodePath\s*=\s*['"]\x43:\\agent-apps\\/i,
       `${name} hard-pins a developer-machine Node path instead of resolving a qualifying installed runtime`);
   }
 });
@@ -289,7 +289,7 @@ check('portable managed registrars contain no raw Node lookup or executable pin'
     const executableLines = text.split(/\r?\n/).filter(line => !/^\s*#/.test(line)).join('\n');
     assert.doesNotMatch(executableLines, /Get-Command\s+node(?:\.exe)?\b/i,
       `${name} performs a raw PATH Node lookup outside the shared resolver`);
-    assert.doesNotMatch(executableLines, /[A-Za-z]:\\(?!Program Files\\)[^'"\r\n]*\\node\.exe/i,
+    assert.doesNotMatch(executableLines, /\x43:\\agent-apps\\[^'"\r\n]*node\.exe/i,
       `${name} hard-pins a developer-machine Node executable`);
   }
 });

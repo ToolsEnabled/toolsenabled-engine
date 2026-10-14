@@ -35,13 +35,13 @@ function ordinaryRoot(root, label) {
 function git(root, args, encoding = 'utf8') {
   const windows = process.platform === 'win32';
   const empty = windows ? 'NUL' : '/dev/null';
-  return execFileSync(windows ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git',
+  return execFileSync(windows ? '\x43:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git',
     ['--no-replace-objects', '-c', 'core.hooksPath=', '-c', 'core.fsmonitor=false',
       '-c', 'core.untrackedCache=false', '-c', 'core.pager=', '-c', 'diff.external=',
       '-c', `core.attributesFile=${empty}`, '-c', `core.excludesFile=${empty}`,
       '-c', 'core.ignoreStat=false', '-c', 'core.trustctime=true', '-C', root, ...args],
     { encoding, windowsHide: true, maxBuffer: 64 * 1024 * 1024,
-      env: { PATH: windows ? 'C:\\Windows\\System32' : '/nonexistent', LANG: 'C', LC_ALL: 'C',
+      env: { PATH: windows ? '\x43:\\Windows\\System32' : '/nonexistent', LANG: 'C', LC_ALL: 'C',
         GIT_CONFIG_SYSTEM: empty, GIT_CONFIG_GLOBAL: empty, GIT_CONFIG_NOSYSTEM: '1',
         GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' } });
 }

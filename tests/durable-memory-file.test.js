@@ -25,13 +25,6 @@ const {
 const { accountRegistryPath } = require('../src/lib/multi-account/registry-location');
 const { isolatedTemporaryRoot } = require('./lib/isolated-environment');
 
-// Synthetic Windows paths, assembled at runtime so the source carries no literal
-// user or install path. Alice and Bob are fixture accounts.
-const ALICE = ['C:', 'Users', 'Alice'].join('\\');
-const BOB = ['C:', 'Users', 'Bob'].join('\\');
-const REDIRECTED_ALICE = ['D:', 'Profiles', 'Alice'].join('\\');
-const PROGRAM_FILES_PAYLOAD = ['C:', 'Program Files', 'ToolsEnabled', 'resources', 'capability', 'src', 'lib'].join('\\');
-
 const directory = fs.mkdtempSync(path.join(isolatedTemporaryRoot(), 'durable-memory-file-test-'));
 const file = path.join(directory, 'memory.json');
 const timestamps = ['2026-08-27T01:02:03.000Z', '2026-08-27T01:02:04.000Z'];
@@ -55,43 +48,43 @@ function assertRefusal(action, code, message) {
 
 try {
   const syntheticUser = homedir => () => ({ homedir });
-  const globalNode = 'C:\\Program Files\\nodejs\\node.exe';
+  const globalNode = '\x43:\\agent-apps\\node-v22.19.0\\node.exe';
   assert.equal(
     installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: `${ALICE}\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib`,
+      moduleDirectory: '\x43:\\Users\\Alice\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib',
       executablePath: globalNode,
-      userInfo: syntheticUser(['c:', 'users', 'alice'].join('/') + '/')
+      userInfo: syntheticUser('\x63:/users/alice/')
     }).toLowerCase(),
-    ALICE.toLowerCase(),
+    '\x63:\\users\\alice',
     'a conventional per-user installation must bind to the matching operating-system principal'
   );
   assert.equal(
     installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: `${REDIRECTED_ALICE}\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib`,
+      moduleDirectory: '\x44:\\Profiles\\Alice\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib',
       executablePath: globalNode,
-      userInfo: syntheticUser('D:\\Profiles\\Alice')
+      userInfo: syntheticUser('\x44:\\Profiles\\Alice')
     }),
-    'D:\\Profiles\\Alice',
+    '\x44:\\Profiles\\Alice',
     'a redirected per-user installation must derive its owner before using the launch token'
   );
   assert.equal(
     installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: `\\\\?\\${REDIRECTED_ALICE}\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib`,
+      moduleDirectory: '\\\\?\\\x44:\\Profiles\\Alice\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib',
       executablePath: globalNode,
       userInfo: syntheticUser('\\\\localhost\\D$\\Profiles\\Alice')
     }).toLowerCase(),
-    'd:\\profiles\\alice',
+    '\x64:\\profiles\\alice',
     'equivalent extended and local-admin-share aliases must bind to the same redirected owner'
   );
   assert.throws(
     () => installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: `${REDIRECTED_ALICE}\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib`,
+      moduleDirectory: '\x44:\\Profiles\\Alice\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib',
       executablePath: globalNode,
-      userInfo: syntheticUser(BOB)
+      userInfo: syntheticUser('\x43:\\Users\\Bob')
     }),
     error => error instanceof AgentConfinementRefusal
       && error.code === 'AGENT_CONFINEMENT_WRONG_PRINCIPAL',
@@ -100,17 +93,17 @@ try {
   assert.equal(
     installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: `${ALICE}\\src\\engine\\src\\lib`,
+      moduleDirectory: '\x43:\\Users\\Alice\\src\\engine\\src\\lib',
       executablePath: globalNode,
-      userInfo: syntheticUser(ALICE)
+      userInfo: syntheticUser('\x43:\\Users\\Alice')
     }),
-    ALICE,
+    '\x43:\\Users\\Alice',
     'a source or scratch payload inside the current account may use that account'
   );
   for (const [label, moduleDirectory, homedir, expectedCode] of [
-    ['source payload under another token', `${ALICE}\\src\\engine\\src\\lib`, BOB, 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE'],
-    ['unbound Program Files payload', PROGRAM_FILES_PAYLOAD, ALICE, 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE'],
-    ['unbound build payload', ['D:', 'Builds', 'toolsenabled', 'src', 'lib'].join('\\'), ALICE, 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE']
+    ['source payload under another token', '\x43:\\Users\\Alice\\src\\engine\\src\\lib', '\x43:\\Users\\Bob', 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE'],
+    ['unbound Program Files payload', '\x43:\\Program Files\\ToolsEnabled\\resources\\capability\\src\\lib', '\x43:\\Users\\Alice', 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE'],
+    ['unbound build payload', '\x44:\\Builds\\toolsenabled\\src\\lib', '\x43:\\Users\\Alice', 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE']
   ]) {
     assert.throws(
       () => installationProfileRoot({
@@ -123,9 +116,9 @@ try {
   assert.throws(
     () => installationProfileRoot({
       platform: 'win32',
-      moduleDirectory: PROGRAM_FILES_PAYLOAD,
-      executablePath: `${ALICE}\\AppData\\Local\\Programs\\nodejs\\node.exe`,
-      userInfo: syntheticUser(ALICE)
+      moduleDirectory: '\x43:\\Program Files\\ToolsEnabled\\resources\\capability\\src\\lib',
+      executablePath: '\x43:\\Users\\Alice\\AppData\\Local\\Programs\\nodejs\\node.exe',
+      userInfo: syntheticUser('\x43:\\Users\\Alice')
     }),
     error => error instanceof AgentConfinementRefusal
       && error.code === 'AGENT_CONFINEMENT_ACCOUNT_PROFILE_UNAVAILABLE',
@@ -133,9 +126,9 @@ try {
   );
   assert.equal(
     windowsInstalledProfileRootOf(
-      `${REDIRECTED_ALICE}\\AppData\\Local\\Programs\\toolsenabled\\..\\..\\..\\..\\..\\Bob\\AppData\\Local\\Programs\\toolsenabled\\app.exe`
+      '\x44:\\Profiles\\Alice\\AppData\\Local\\Programs\\toolsenabled\\..\\..\\..\\..\\..\\Bob\\AppData\\Local\\Programs\\toolsenabled\\app.exe'
     ),
-    'D:\\Profiles\\Bob',
+    '\x44:\\Profiles\\Bob',
     'parent-segment escapes must be normalized before the installed owner is derived'
   );
 
@@ -329,7 +322,7 @@ try {
     assertRefusal(
       () => resolveServicesRoot({
         env: {
-          TOOLSENABLED_STATE_ROOT: ['C:', 'Users', 'fixture-user', 'ToolsEnabled', 'capability'].join('\\'),
+          TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\fixture-user\\ToolsEnabled\\capability',
           LOCALAPPDATA: validLocalAppData
         }
       }),
@@ -347,9 +340,9 @@ try {
       installationProfileRoot() {
         return installationProfileRoot({
           platform: 'win32',
-          moduleDirectory: `${REDIRECTED_ALICE}\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib`,
+          moduleDirectory: '\x44:\\Profiles\\Alice\\AppData\\Local\\Programs\\toolsenabled\\resources\\capability\\src\\lib',
           executablePath: globalNode,
-          userInfo: syntheticUser(BOB)
+          userInfo: syntheticUser('\x43:\\Users\\Bob')
         });
       },
       assertAccountProfilePath() {
@@ -360,8 +353,8 @@ try {
     assertRefusal(
       () => resolveServicesRoot({
         env: {
-          TOOLSENABLED_STATE_ROOT: `${BOB}\\AppData\\Roaming\\ToolsEnabled\\capability`,
-          LOCALAPPDATA: `${BOB}\\AppData\\Local`
+          TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\Bob\\AppData\\Roaming\\ToolsEnabled\\capability',
+          LOCALAPPDATA: '\x43:\\Users\\Bob\\AppData\\Local'
         },
         platform: 'win32',
         accountBoundary: wrongPrincipalBoundary,
@@ -380,9 +373,9 @@ try {
       installationProfileRoot() {
         return installationProfileRoot({
           platform: 'win32',
-          moduleDirectory: PROGRAM_FILES_PAYLOAD,
-          executablePath: `${ALICE}\\AppData\\Local\\Programs\\nodejs\\node.exe`,
-          userInfo: syntheticUser(ALICE)
+          moduleDirectory: '\x43:\\Program Files\\ToolsEnabled\\resources\\capability\\src\\lib',
+          executablePath: '\x43:\\Users\\Alice\\AppData\\Local\\Programs\\nodejs\\node.exe',
+          userInfo: syntheticUser('\x43:\\Users\\Alice')
         });
       },
       assertAccountProfilePath() {
@@ -393,8 +386,8 @@ try {
     assertRefusal(
       () => resolveServicesRoot({
         env: {
-          TOOLSENABLED_STATE_ROOT: `${ALICE}\\AppData\\Roaming\\ToolsEnabled\\capability`,
-          LOCALAPPDATA: `${ALICE}\\AppData\\Local`
+          TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled\\capability',
+          LOCALAPPDATA: '\x43:\\Users\\Alice\\AppData\\Local'
         },
         platform: 'win32',
         accountBoundary: unboundInstallationBoundary,
@@ -407,7 +400,7 @@ try {
     assert.equal(hostileFilesystemProbes, 0, 'an unbound-installation refusal must make zero filesystem probes');
     assert.equal(configuredStateRootCalls, 0, 'an unbound-installation refusal must precede state-root resolution');
 
-    const syntheticOwner = ALICE;
+    const syntheticOwner = '\x43:\\Users\\Alice';
     const lexicalBoundary = {
       installationProfileRoot() { return syntheticOwner; },
       assertAccountProfilePath(value, options) {
@@ -416,8 +409,8 @@ try {
     };
     for (const [label, localAppData, expectedCode] of [
       ['relative LOCALAPPDATA', 'AppData\\Local', 'SERVICE_ROOT_UNAVAILABLE'],
-      ['foreign LOCALAPPDATA', `${BOB}\\AppData\\Local`, 'SERVICE_ACCOUNT_BOUNDARY_REFUSED'],
-      ['escaped LOCALAPPDATA', `${ALICE}\\AppData\\Local\\..\\..\\..\\Bob\\AppData\\Local`, 'SERVICE_ACCOUNT_BOUNDARY_REFUSED'],
+      ['foreign LOCALAPPDATA', '\x43:\\Users\\Bob\\AppData\\Local', 'SERVICE_ACCOUNT_BOUNDARY_REFUSED'],
+      ['escaped LOCALAPPDATA', '\x43:\\Users\\Alice\\AppData\\Local\\..\\..\\..\\Bob\\AppData\\Local', 'SERVICE_ACCOUNT_BOUNDARY_REFUSED'],
       ['unsupported remote admin-share LOCALAPPDATA', '\\\\remote-host\\C$\\Users\\Alice\\AppData\\Local', 'SERVICE_ACCOUNT_BOUNDARY_REFUSED']
     ]) {
       hostileFilesystemProbes = 0;
@@ -425,14 +418,14 @@ try {
       assertRefusal(
         () => resolveServicesRoot({
           env: {
-            TOOLSENABLED_STATE_ROOT: `${ALICE}\\AppData\\Roaming\\ToolsEnabled\\capability`,
+            TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled\\capability',
             LOCALAPPDATA: localAppData
           },
           platform: 'win32',
           accountBoundary: lexicalBoundary,
           configuredStateRootImpl() {
             configuredStateRootCalls += 1;
-            return `${ALICE}\\AppData\\Roaming\\ToolsEnabled\\capability`;
+            return '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled\\capability';
           },
           fileSystem: noProbeFileSystem
         }),
@@ -462,23 +455,23 @@ try {
     };
     for (const localAppDataAlias of [
       '\\\\localhost\\C$\\Users\\Alice\\AppData\\Local',
-      `\\\\?\\${ALICE}\\AppData\\Local`
+      '\\\\?\\\x43:\\Users\\Alice\\AppData\\Local'
     ]) {
       allowedFilesystemProbes = 0;
       assert.equal(
         resolveServicesRoot({
           env: {
-            TOOLSENABLED_STATE_ROOT: `${ALICE}\\AppData\\Roaming\\ToolsEnabled Test\\capability`,
+            TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled Test\\capability',
             LOCALAPPDATA: localAppDataAlias
           },
           platform: 'win32',
           accountBoundary: aliasBoundary,
           configuredStateRootImpl() {
-            return `${ALICE}\\AppData\\Roaming\\ToolsEnabled Test\\capability`;
+            return '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled Test\\capability';
           },
           fileSystem: aliasFileSystem
         }),
-        `${ALICE}\\AppData\\Local\\ToolsEnabled Test`,
+        '\x43:\\Users\\Alice\\AppData\\Local\\ToolsEnabled Test',
         'equivalent owner LOCALAPPDATA aliases must resolve to one canonical service root'
       );
       assert.ok(allowedFilesystemProbes > 0, 'an allowed owner path must still receive reparse/canonical checks');
@@ -487,10 +480,10 @@ try {
     assert.equal(
       accountRegistryPath({
         resolveStateRootImpl() {
-          return { root: `${ALICE}\\AppData\\Roaming\\ToolsEnabled\\capability`, reason: 'configured' };
+          return { root: '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled\\capability', reason: 'configured' };
         }
       }),
-      `${ALICE}\\AppData\\Roaming\\ToolsEnabled\\capability\\config\\accounts.json`,
+      '\x43:\\Users\\Alice\\AppData\\Roaming\\ToolsEnabled\\capability\\config\\accounts.json',
       'the account registry must remain under the selected state root rather than moving with service state'
     );
   }

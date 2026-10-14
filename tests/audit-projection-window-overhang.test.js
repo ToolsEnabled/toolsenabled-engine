@@ -2,13 +2,17 @@
 
 // A PROJECTION FILE THAT DURABLY LEADS THE COMMITTED HEAD IS NOT CORRUPTION.
 //
-// MEASURED against a read-only copy of a development install's ledger (an
-// earlier engine build). tests/fixtures/audit-live-projection-divergence-
-// sanitized.json records that state's shape. capability\logs\audit-durability.json
-// on the same install still reported AUDIT_PROJECTION_DIVERGED -- on a build
-// that already contains an earlier change, the third fix for this bug family.
+// MEASURED 2026-09-04 against a read-only copy of the owner's Live ledger
+// (%APPDATA%\ToolsEnabled-Live\capability, engine 3d920d8 -- the build the
+// owner actually runs). tests/fixtures/audit-live-projection-divergence-
+// sanitized.json records that state's shape: archive boundary 8356, live
+// window 10,053 events, head 18409, both sink cursors 18409, actions.jsonl
+// 12.0 MB and actions.log 7.0 MB. capability\logs\audit-durability.json on the
+// same install held totalBreachCount 389 with AUDIT_PROJECTION_DIVERGED still
+// firing at 2026-09-04T04:11:36Z -- on a build that already contains 96fc6ec,
+// the third fix for this bug family.
 //
-// WHY an earlier change DID NOT COVER IT. projectSinks() appends a sink's line with a
+// WHY 96fc6ec DID NOT COVER IT. projectSinks() appends a sink's line with a
 // plain durable fs append and only then marks the cursor, both inside the one
 // writer transaction record() holds; the in-lock anchor reconciliation then
 // reads the vault, which on this install spawns powershell.exe and can hold
@@ -18,14 +22,14 @@
 // holds it STABLY, long enough that the retry guards (fresh external digest,
 // trustedVerificationMatches) see nothing move and let the refusal through.
 //
-// an earlier change loosened the CURSOR comparison to `rows.length < cursor -
-// boundarySequence`. Replayed on that recorded state with the head rolled
+// 96fc6ec loosened the CURSOR comparison to `rows.length < cursor -
+// boundarySequence`. Replayed on the owner's own state with the head rolled
 // back by one, that is `10053 < 10052` -- false, so the loosened check passes.
 // The refusal simply moved one clause to the right: projectionMatches()
 // requires `rows.length <= events.length`, the same "durably ahead" condition
 // re-tested absolutely, and it still threw
 //   AUDIT_PROJECTION_DIVERGED { sink: 'jsonl', projectionLines: 10053, sinkCursor: 18408 }
-// (the crash investigation evidence).
+// (evidence/F/lab-cases-before-after.txt).
 //
 // COST. On that same copy, one admission verification costs 3.2-3.5 ms with
 // the store's trusted prefix intact and 3.1-4.4 s without it. The refusal path

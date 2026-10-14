@@ -9,7 +9,7 @@ const { StateStore } = require('../src/lib/state-store');
 const video = require('../src/lib/providers/video');
 
 const SECRET = 'fixture-fal-key-not-a-real-credential';
-const REQUEST_ID = '78c0e2a4-6d8f-4c0e-a2b4-6d8f0a2c4e6b';
+const REQUEST_ID = '764cabcf-b745-4b3e-ae38-1200304cf45b';
 const input = extra => ({ model: 'seedance-2.5', prompt: 'A small boat on a quiet lake.\nThe camera moves slowly.',
   idempotencyKey: 'video-fixture-0001', ...extra });
 const response = (body, status = 200) => ({ status, body });

@@ -24,7 +24,7 @@ for (const result of [
   { status: null }
 ]) {
   assert.throws(() => workstation.resolvePinnedNode({
-    env: {}, resolveCommand: () => 'C:\\node.exe', spawnProbe: () => result
+    env: {}, resolveCommand: () => '\x43:\\node.exe', spawnProbe: () => result
   }), error => error && error.code === 'WORKSTATION_NODE_RESOLUTION_INDETERMINATE'
     && /does NOT claim that Node\.js is absent/.test(error.message));
 }
@@ -45,16 +45,16 @@ const options = {
   resolveCommand: () => {
     lookups += 1;
     if (lookups === 1) throw Object.assign(new Error('busy'), { code: 'EMFILE' });
-    return 'C:\\good-node.exe';
+    return '\x43:\\good-node.exe';
   },
   spawnProbe: safeProbe
 };
 assert.throws(() => workstation.pinnedNode(options),
   error => error && error.code === 'WORKSTATION_NODE_RESOLUTION_INDETERMINATE');
-assert.equal(workstation.pinnedNode(options), 'C:\\good-node.exe');
+assert.equal(workstation.pinnedNode(options), '\x43:\\good-node.exe');
 assert.equal(lookups, 2, 'the could-not-tell result must be retried');
 assert.equal(workstation.pinnedNode({
-  env: {}, resolveCommand: () => { lookups += 1; return 'C:\\other-node.exe'; }, spawnProbe: safeProbe
-}), 'C:\\good-node.exe');
+  env: {}, resolveCommand: () => { lookups += 1; return '\x43:\\other-node.exe'; }, spawnProbe: safeProbe
+}), '\x43:\\good-node.exe');
 assert.equal(lookups, 2, 'a successful answer must remain cached');
 workstation.resetPinnedNodeCache();

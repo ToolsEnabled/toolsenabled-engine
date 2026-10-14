@@ -3,7 +3,7 @@
 // A DEFINITE PRESENCE ANSWER MAY BE REMEMBERED. AN UNCERTAIN ONE MAY NOT.
 //
 // vaultRecordPresence() spawns a full powershell.exe per call -- measured
-// ~600-770 ms on a development machine. google-accounts.oauthKeysFor() asks twice
+// ~600-770 ms on the owner's machine. google-accounts.oauthKeysFor() asks twice
 // per call (client id, client secret) and list() asks once per registered
 // account, so one Google tool call or one system.status poll paid several of
 // them back to back for an answer that could not have changed in between.

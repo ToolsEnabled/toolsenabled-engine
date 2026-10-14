@@ -3,9 +3,9 @@
 Disable the machine-wide autostart entries named in config\vendor-autostart.local.json.
 
 .DESCRIPTION
-Product requirement: nothing should start automatically at sign-in, apart
-from an explicit keep-set of entries the machine owner chooses. The keep-set
-and the entries to disable are configured in config\vendor-autostart.local.json.
+OWNER DIRECTIVE 2026-08-13: "i dont want ANYTHING started on startup i fucking
+hate startup[ programs", then the exact keep-set: "turn all these off except
+ghelper, powertoys, lidtoggletray, duo, audio. and defender".
 
 WHY THIS IS A SCRIPT AND NOT A COMMAND I HANDED OVER. The entries below live in
 HKLM, the all-users Startup folder, and tasks registered by SYSTEM, so an
@@ -43,7 +43,7 @@ $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
 
 # The keep-set is enforced, not just documented. An entry the owner named as
 # KEPT must never be disabled by a later edit to the target list -- a typo in a
-# gitignored file should not be able to take out an authenticator or audio.
+# gitignored file should not be able to take out his 2FA or his audio.
 $keep = @()
 if ($config.PSObject.Properties.Name -contains 'keep') { $keep = @($config.keep) }
 function Test-Protected([string]$name) {

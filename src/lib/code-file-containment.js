@@ -7,7 +7,7 @@
 // reader (src/lib/search.js#indexPath).
 //
 // MEASURED (memory key code-intel-abs-path-escape-20260906): at engine commit
-// an earlier change, resolveFilePath ran `path.resolve(rootPath(), value)` then
+// b7149aeb, resolveFilePath ran `path.resolve(rootPath(), value)` then
 // `fs.statSync(resolved)` with zero containment checks and zero audit calls,
 // so an absolute `file` argument read any file the process could open.
 // search.js#indexPath had the identical shape for its `root` argument --

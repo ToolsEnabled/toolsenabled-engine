@@ -150,10 +150,10 @@ function dashboardListener(overrides = {}) {
     pid: 7777,
     localAddress: '127.0.0.1',
     loopbackListenerCount: 1,
-    startTime: '2026-07-29T05:50:00.2500000Z',
+    startTime: '2026-07-29T05:52:49.1570000Z',
     elevatedPid: 7777,
-    elevatedStartedAt: '2026-07-29T05:50:00.250Z',
-    elevatedCommandLine: 'C:\\Program Files\\nodejs\\node.exe server/index.js --host 127.0.0.1 --port 3889',
+    elevatedStartedAt: '2026-07-29T05:52:49.157Z',
+    elevatedCommandLine: '\x43:\\Program Files\\nodejs\\node.exe server/index.js --host 127.0.0.1 --port 3889',
     ...overrides
   };
 }
@@ -214,7 +214,7 @@ function dynamicBridgeRecord(overrides = {}) {
 
 function dynamicBridgeListener(overrides = {}) {
   return dashboardListener({
-    elevatedCommandLine: 'C:\\Program Files\\nodejs\\node.exe tools/mission-bridge.js',
+    elevatedCommandLine: '\x43:\\Program Files\\nodejs\\node.exe tools/mission-bridge.js',
     ...overrides
   });
 }
@@ -324,9 +324,9 @@ check('INCIDENT 2: bridge ALIVE but NOT LISTENING -> DEGRADED, not OK', () => {
     getScheduledTask: () => ({ state: 'Running', arguments: '--serve --quiet' }),
     fileExists: () => true,
     readJsonFile: file => String(file).includes('pid.lock')
-      ? { pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' }
+      ? { pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' }
       : { lastPollAtMs: 1785299999000, counts: { accepted: 17 }, lastAckFailureAtMs: 1785299990000 },
-    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' })
+    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' })
   }));
   assert.equal(verdict.state, health.STATE.DEGRADED,
     'a bridge that polls but cannot ack must never read healthy');
@@ -365,9 +365,9 @@ check('INCIDENT 5: registered argv missing --project -> DEGRADED at correct', ()
     getScheduledTask: () => ({ state: 'Running', arguments: '"...\\fleet-supervisor.js" --serve --quiet --concurrency 4' }),
     fileExists: file => !String(file).includes('.stop'),
     readJsonFile: file => String(file).includes('pid.lock')
-      ? { pid: 4243, startedAt: '2026-07-29T05:55:08.500Z' }
-      : { supervisor: { heartbeatAt: '2026-07-29T05:55:08.503Z' } },
-    getProcessInfo: () => ({ pid: 4243, startedAt: '2026-07-29T05:55:08.500Z' })
+      ? { pid: 25832, startedAt: '2026-07-29T05:55:08.825Z' }
+      : { supervisor: { heartbeatAt: '2026-07-29T05:55:08.828Z' } },
+    getProcessInfo: () => ({ pid: 25832, startedAt: '2026-07-29T05:55:08.825Z' })
   }));
   assert.equal(verdict.state, health.STATE.DEGRADED);
   assert.equal(verdict.failedRung, 'correct');
@@ -378,7 +378,7 @@ check('INCIDENT 6 consequence: a wedged process reads DOWN', () => {
   const verdict = health.evaluateSubsystem(telegramBridgeEntry(), ctxWith({
     getScheduledTask: () => ({ state: 'Ready', arguments: '--serve --quiet' }),
     fileExists: () => true,
-    readJsonFile: () => ({ pid: 34500, startedAt: '2026-07-29T05:50:00.250Z' }),
+    readJsonFile: () => ({ pid: 34500, startedAt: '2026-07-29T05:52:49.157Z' }),
     getProcessInfo: () => null                            // wedged then died
   }));
   assert.equal(verdict.state, health.STATE.DOWN);
@@ -386,7 +386,7 @@ check('INCIDENT 6 consequence: a wedged process reads DOWN', () => {
 
 check('DASHBOARD ORPHAN: port open but wrong process -> DEGRADED, NOT OK', () => {
   const verdict = dashboardIdentityVerdict(dashboardListener({
-    elevatedCommandLine: 'C:\\Program Files\\nodejs\\node.exe some-other-thing.js'
+    elevatedCommandLine: '\x43:\\Program Files\\nodejs\\node.exe some-other-thing.js'
   }));
   assert.equal(verdict.state, health.STATE.DEGRADED,
     'an open port with the WRONG process behind it must not read OK');
@@ -422,7 +422,7 @@ check('listener identity rejects expected text present only in a later argument'
 
 check('listener identity accepts quoted Windows and POSIX entrypoint path tokens', () => {
   for (const elevatedCommandLine of [
-    '"C:\\Program Files\\nodejs\\node.exe" "C:\\fixture dashboard\\server\\index.js" --host 127.0.0.1',
+    '"\x43:\\Program Files\\nodejs\\node.exe" "\x43:\\agent apps\\server\\index.js" --host 127.0.0.1',
     '"/usr/local/bin/node" "/opt/agent app/server/index.js" --host 127.0.0.1'
   ]) {
     const verdict = dashboardIdentityVerdict(dashboardListener({ elevatedCommandLine }));
@@ -457,7 +457,7 @@ check('the observer counts a pid:0 second loopback row as identity ambiguity', (
   const context = observer.buildSystemContext({
     processVisibilityFile: path.join(os.tmpdir(), `missing-q39-visibility-${process.pid}.json`),
     listenerProbe: () => ({ listeners: [
-      { pid: 7777, localAddress: '127.0.0.1', startTime: '2026-07-29T05:50:00.2500000Z' },
+      { pid: 7777, localAddress: '127.0.0.1', startTime: '2026-07-29T05:52:49.1570000Z' },
       { pid: 0, localAddress: '127.0.0.1', startTime: null }
     ] })
   });
@@ -470,7 +470,7 @@ check('the observer counts a pid:0 second loopback row as identity ambiguity', (
 
 check('listener identity rejects a PID-equal start-time mismatch as non-healthy', () => {
   const verdict = dashboardIdentityVerdict(dashboardListener({
-    elevatedStartedAt: '2026-07-29T05:50:30.250Z'
+    elevatedStartedAt: '2026-07-29T05:53:19.157Z'
   }));
   assert.equal(verdict.state, health.STATE.DEGRADED);
   assert.equal(verdict.failedRung, 'correct');
@@ -505,8 +505,8 @@ check('listener identity fails closed for malformed direct or elevated start tim
 
 check('listener identity rejects unzoned timestamps even when Date.parse would accept them', () => {
   for (const listener of [
-    dashboardListener({ startTime: '2026-07-29T05:50:00.2500000' }),
-    dashboardListener({ elevatedStartedAt: '2026-07-29T05:50:00.250' })
+    dashboardListener({ startTime: '2026-07-29T05:52:49.1570000' }),
+    dashboardListener({ elevatedStartedAt: '2026-07-29T05:52:49.157' })
   ]) {
     const verdict = dashboardIdentityVerdict(listener);
     assert.equal(verdict.state, health.STATE.UNKNOWN);
@@ -516,12 +516,12 @@ check('listener identity rejects unzoned timestamps even when Date.parse would a
 
 check('listener identity requires exact normalized milliseconds and rejects an exact 2s mismatch', () => {
   const sameNormalizedMillisecond = dashboardIdentityVerdict(dashboardListener({
-    startTime: '2026-07-29T05:50:00.2509999Z'
+    startTime: '2026-07-29T05:52:49.1579999Z'
   }));
   assert.equal(sameNormalizedMillisecond.state, health.STATE.OK,
     '100ns direct precision must normalize to the elevated millisecond representation');
   const mismatch = dashboardIdentityVerdict(dashboardListener({
-    elevatedStartedAt: '2026-07-29T05:50:02.250Z'
+    elevatedStartedAt: '2026-07-29T05:52:51.157Z'
   }));
   assert.equal(mismatch.state, health.STATE.DEGRADED);
   assert.match(mismatch.reason, /PID reuse or observation mismatch/);
@@ -552,12 +552,12 @@ check('the passive observer binds direct listener time to elevated PID/time/argv
     capturedAtMs: nowMs - 1_000,
     reader: { kind: 'toolsenabled-uac-process-reader', privilege: 'elevated-read-only' },
     tasks: visibilityTargets.TASK_NAMES.map(taskName => ({
-      taskName, state: 'Running', executable: 'C:\\Program Files\\nodejs\\node.exe', argv: ['--serve'],
+      taskName, state: 'Running', executable: '\x43:\\Program Files\\nodejs\\node.exe', argv: ['--serve'],
       workingDirectory: managedProcesses.ROOT
     })),
     processes: [{
       pid: 7777, imageName: 'node.exe', startedAtMs: nowMs - 10_000,
-      argv: ['C:\\fixture\\agent-dashboard\\server\\index.js', '--host', '127.0.0.1']
+      argv: ['\x43:\\agent-apps\\AgentActivityVisualizer\\server\\index.js', '--host', '127.0.0.1']
     }]
   }), 'utf8');
   try {
@@ -585,8 +585,8 @@ check('pid RECYCLING is caught by the start-time comparison', () => {
   const verdict = health.evaluateSubsystem(entryFor('fleet-supervisor'), ctxWith({
     getScheduledTask: () => ({ state: 'Running', arguments: '--serve --project p --backend vertex' }),
     fileExists: file => !String(file).includes('.stop'),
-    readJsonFile: () => ({ pid: 4243, startedAt: '2026-07-29T05:55:08.500Z' }),
-    getProcessInfo: () => ({ pid: 4243, startedAt: '2026-07-29T18:00:00.000Z' })
+    readJsonFile: () => ({ pid: 25832, startedAt: '2026-07-29T05:55:08.825Z' }),
+    getProcessInfo: () => ({ pid: 25832, startedAt: '2026-07-29T18:00:00.000Z' })
   }));
   assert.equal(verdict.state, health.STATE.DOWN);
   assert.match(verdict.reason, /RECYCLED/);
@@ -603,8 +603,8 @@ check('pid-lock tolerance is bounded to timestamp precision and honors explicit 
     } }
   }, 'alive', ctxWith({
     fileExists: () => true,
-    readJsonFile: () => ({ pid: 4243, startedAt }),
-    getProcessInfo: () => ({ pid: 4243, startedAt: actual })
+    readJsonFile: () => ({ pid: 25832, startedAt }),
+    getProcessInfo: () => ({ pid: 25832, startedAt: actual })
   }));
 
   assert.equal(evaluate('2026-07-29T05:55:09.000Z').state, 'pass', 'the exact 1000ms precision boundary passes');
@@ -868,20 +868,20 @@ check('MUTATION 5x4xN: no broken probe can ever produce OK', () => {
     }),
     fileExists: file => !String(file).includes('.stop'),
     readJsonFile: file => String(file).includes('pid.lock') || String(file).includes('.lock')
-      ? { pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' }
+      ? { pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' }
       : {
         lastPollAtMs: 1785299999000, counts: { accepted: 17 }, lastAckFailureAtMs: null,
         supervisor: { heartbeatAt: '2026-07-29T05:59:00.000Z' },
         agent_digest_last_fired: 1785299000000
       },
-    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' }),
+    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' }),
     getListener: () => ({
       pid: 4242,
       localAddress: '127.0.0.1',
       loopbackListenerCount: 1,
-      startTime: '2026-07-29T05:50:00.2500000Z',
+      startTime: '2026-07-29T05:52:49.1570000Z',
       elevatedPid: 4242,
-      elevatedStartedAt: '2026-07-29T05:50:00.250Z',
+      elevatedStartedAt: '2026-07-29T05:52:49.157Z',
       elevatedCommandLine: 'node.exe server/index.js sidecars/local-coder/bin/server.js'
     }),
     listNamedPipes: () => ['ToolsEnabled.OwnerHost.V1']
@@ -917,9 +917,9 @@ check('the same context WITHOUT mutation does produce OK verdicts', () => {
     getScheduledTask: taskName => ({ state: 'Running', arguments: registeredArguments(taskName) }),
     fileExists: file => !String(file).includes('.stop'),
     readJsonFile: file => String(file).includes('lock')
-      ? { pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' }
+      ? { pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' }
       : { supervisor: { heartbeatAt: '2026-07-29T05:59:00.000Z' } },
-    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:50:00.250Z' })
+    getProcessInfo: () => ({ pid: 4242, startedAt: '2026-07-29T05:52:49.157Z' })
   });
   const verdict = health.evaluateSubsystem(entryFor('fleet-supervisor'), healthyCtx);
   assert.equal(verdict.state, health.STATE.OK,

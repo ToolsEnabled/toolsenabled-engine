@@ -58,7 +58,7 @@ A builtin import census only identifies candidates. Before enabling a program,
 review its actual assertion authority and skip/reporting paths, declare its
 fixture module scope, and preserve hybrid/custom gaps. The checked-in manifest
 currently enables four programs. The cloud CommonJS import graphs were reviewed
-at an earlier engine build; the exercised role-library graph was reviewed at an earlier revision:
+at engine `99d3e302`; the exercised role-library graph was reviewed at `2aa1f372`:
 
 | Program | Expected outer calls | Actual contract exercised |
 | --- | ---: | --- |

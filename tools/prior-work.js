@@ -7,11 +7,11 @@
 //   4  UNKNOWN  the corpus could not be read, so this tool DOES NOT KNOW.
 //   2  usage    no topic given.
 //
-// Why three codes and not two: `grepsaver-orient.js "licensing"` printed
-// "No carded system matched" and exited **0**. Six documents of licensing
+// Why three codes and not two: `grepsaver-orient.js "trademark"` printed
+// "No carded system matched" and exited **0**. Six documents of trademark
 // research were on disk. Exit 0 is what a caller — a shell script, a hook, a
 // CI gate, an agent skimming output — reads as "fine, carry on", so the fleet
-// carried on and re-derived launch research it already owned.
+// carried on and re-derived four nights of launch research it already owned.
 //
 // A tool that cannot distinguish "nothing exists" from "I could not look"
 // forces every caller to guess, and the cheap guess is always "nothing exists".
@@ -19,7 +19,7 @@
 // nine times, and it is why MISS and UNKNOWN are different numbers here.
 //
 // Usage:
-//   node tools/prior-work.js "licensing"
+//   node tools/prior-work.js "trademark"
 //   node tools/prior-work.js --json "delaware incorporation"
 //   node tools/prior-work.js --limit 15 "domain names"
 //   node tools/prior-work.js --rebuild "spend cap"     (force a fresh index)

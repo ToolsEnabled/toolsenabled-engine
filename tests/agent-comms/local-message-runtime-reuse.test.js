@@ -39,7 +39,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 /* The LONG form of the temp directory. On Windows os.tmpdir() answers the 8.3
-   short name of the profile ("SAMPLE~1"), and runtime-state-root.js reads a
+   short name of the profile ("TOOLSE~1"), and runtime-state-root.js reads a
    state root that does not spell the signed-in account as a crossing into
    another Windows account -- and then refuses to read or write any state at
    all. A test that silently ran somewhere else would be worse than this one

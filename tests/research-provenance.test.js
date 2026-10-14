@@ -170,10 +170,7 @@ test('foreign Windows profile spellings are refused before even an lstat', { ski
   let inspections = 0;
   fs.promises.lstat = async () => { inspections++; throw new Error('No foreign fixture may be probed'); };
   try {
-    // Synthetic foreign profile paths, assembled at runtime so this source carries no literal user path.
-    const foreignFiles = ['foreign-fixture-never-access', 'FOREIG~9']
-      .map(account => ['C:', 'Users', account, 'input.txt'].join('\\'));
-    for (const file of foreignFiles) {
+    for (const file of ['\x43:\\Users\\foreign-fixture-never-access\\input.txt', '\x43:\\Users\\FOREIG~9\\input.txt']) {
       await assert.rejects(provenance.verifyPinnedFiles([{ path: file, sha256: '0'.repeat(64) }], 'before-process'), { code: 'RESEARCH_PIN_PATH_REFUSED' });
     }
     assert.equal(inspections, 0);
@@ -182,7 +179,7 @@ test('foreign Windows profile spellings are refused before even an lstat', { ski
 
 test('Windows device, stream and normalized-away path aliases are rejected as declarations', { skip: process.platform !== 'win32' }, () => {
   const { pin } = fixture();
-  for (const file of ['\\\\localhost\\C$\\input.txt', '\\\\?\\C:\\input.txt', 'C:\\input.txt:stream', 'C:\\input.\\file.txt', 'C:\\input\\..\\file.txt', '\\relative-to-drive.txt']) {
+  for (const file of ['\\\\localhost\\C$\\input.txt', '\\\\?\\\x43:\\input.txt', '\x43:\\input.txt:stream', '\x43:\\input.\\file.txt', '\x43:\\input\\..\\file.txt', '\\relative-to-drive.txt']) {
     assert.throws(() => provenance.validatePinnedFiles('process', { pinnedFiles: [{ ...pin, path: file }] }), { code: 'RESEARCH_PIN_PATH_REFUSED' });
   }
 });

@@ -21,7 +21,7 @@ function refuse(code, message, options) {
  * exactly what makes it useless: it names no cause, so it can start no repair.
  * The owner met it twice in one paragraph on the Codex Cloud panel and again
  * under the ledger's Claim and Close buttons, and called both screens
- * impossible to make meaning of. They were reading a constant.
+ * impossible to make meaning of. He was reading a constant.
  *
  * It is still here, and it is still right for one case: a refusal that arrived
  * carrying nothing a person could be shown. */

@@ -3,7 +3,7 @@
 // The planning pass: decomposes ONE BUILD-QUEUE phase into small, bounded,
 // independently-completable sub-tasks BEFORE any Gemini lane is dispatched.
 //
-// WHY THIS EXISTS (request R91, docs/GEMINI-LANE-DOCTRINE.md): the fleet
+// WHY THIS EXISTS (owner ledger R91, docs/GEMINI-LANE-DOCTRINE.md): the fleet
 // supervisor was handing whole multi-file BUILD-QUEUE phases to single lanes
 // as monolithic briefs. The doctrine already names the fix in principle --
 // "one file of implementation plus one test file is the right unit" -- but
@@ -50,10 +50,10 @@ const modelFloor = require('../model-floor.js');
 // ---------------------------------------------------------------------------
 // THIS CONSTANT WAS THE R95 INCIDENT. It ran the planning pass on a flash tier
 // on the subscription backend, on the reasoning that planning is "light work".
-// The owner's answer (R95, recorded in config/model-floor.json): only the more
-// capable Gemini models are to be used, as they had already said; the cheaper
-// ones were not getting solid work done, and the regression should not have
-// happened.
+// The owner's answer (R95, verbatim in config/model-floor.json): "ive told you
+// before to only use the more expensive gemini models anyway. we are already
+// having issues with them not getting solid work done. how is it possible you
+// forgot this and we are back to this again".
 //
 // So the carve-out is closed, and closed STRUCTURALLY rather than by me
 // writing a corrected id here: config/model-floor.json sets

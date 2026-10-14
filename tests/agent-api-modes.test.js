@@ -47,30 +47,30 @@ try {
       assert.deepEqual(Object.keys(refused).sort(), Object.keys(success).sort(),
         'successful and refused plans must carry the same policy metadata');
     }
-    const config = fs.readFileSync(path.join(codex.codexHome, 'config.toml'), 'utf8');
+    const config = codex.codexConfig;
     const mcp = JSON.parse(fs.readFileSync(claude.mcpConfig, 'utf8'));
     if (expected === 'Disabled') {
       assert.deepEqual(codex.servers, []);
       assert.deepEqual(mcp.mcpServers, {});
-      assert.doesNotMatch(config, /\[mcp_servers\./);
+      assert.deepEqual(config.mcp_servers, {});
     } else {
       assert.ok(codex.servers.includes('toolsenabled'));
       assert.ok(mcp.mcpServers.toolsenabled);
     }
     if (expected === 'Only') {
       assert.equal(codex.threadOptions.sandbox, 'read-only');
-      assert.match(config, /shell_tool = false/);
-      assert.match(config, /web_search = "disabled"/);
-      assert.match(config, /^developer_instructions = .*native Codex tools.*separate server-enforced permission boundary/m,
+      assert.equal(config.features.shell_tool, false);
+      assert.equal(config.web_search, 'disabled');
+      assert.match(config.developer_instructions, /native Codex tools.*separate server-enforced permission boundary/,
         'Only must distinguish the native sandbox from the API permission checks without changing either');
       /* ONE SCRIPT, AT MOST 8 CALLS AT ONCE. Codex 0.156 runs a model's script
          in its code-mode host, and above about 130 tool calls in flight that
          host fails or stops dispatching with no event and no timeout (lane
-         mcp-hang: N>=132 failed 42/42 offline, 6 as silent hangs; a Controller
+         mcp-hang: N>=132 failed 42/42 offline, 6 as silent hangs; Controller 1
          wedged on 206 ledger_read calls, 2026-09-24). The Controller runs in
          Only, so this is where it is told the cap and the one-call way to read
          many Ledger records (ledger.read ids). */
-      const developer = config.match(/^developer_instructions = (.*)$/m)[1];
+      const developer = config.developer_instructions;
       assert.match(developer, /Run at most 8 ToolsEnabled calls at once per script, since more can stall it; for many Ledger records, pass ids to one ledger\.read\./,
         'Only must cap the calls one Codex script starts and name the batched Ledger read');
       assert.equal((developer.match(/at most 8 ToolsEnabled calls/g) || []).length, 1, 'the cap is said once');
@@ -79,8 +79,8 @@ try {
       assert.equal(JSON.parse(fs.readFileSync(claude.settings, 'utf8')).disableAllHooks, true);
     } else {
       assert.equal(codex.threadOptions.sandbox, 'danger-full-access');
-      assert.doesNotMatch(config, /shell_tool = false/);
-      assert.doesNotMatch(config, /^developer_instructions =/m);
+      assert.notEqual(config.features.shell_tool, false);
+      assert.equal(config.developer_instructions, '');
     }
     for (const build of [adapter.claudeArgs, adapter.claudeResumeArgs]) {
       const args = build({ threadId: '11111111-1111-4111-8111-111111111111', agentApi: expected,
@@ -99,7 +99,7 @@ try {
     assert.equal(fs.readFileSync(valuesPath, 'utf8'), before, 'reading legacy choices must not rewrite settings');
   }
   // T1031, all eight boolean/alias pairs through the real settings reader. The
-  // established reconciliation stays authoritative (release-candidate review): legacy true means
+  // established reconciliation stays authoritative (rc-0922): legacy true means
   // Only, so any other alias conflicts; legacy false means "not Only", so the
   // explicit alias refines it exactly as it already did for Disabled
   // (tests/agent-api-mode-compatibility.test.js covers every mode the same way).
@@ -253,6 +253,24 @@ try {
     root, tier: { model: 'fixture', effort: 'low' },
     permissionSession: require('../src/lib/permission-tier-policy').installTierSession('unrestricted')
   }), error => error.code === 'AGENT_OPTIMIZED_TOOLS_UNSUPPORTED' && error.agentApiMode === 'Optimized');
+  /* 1.0.50 SECURITY REVIEW M1: a confined Claude lane never reads the dispatch
+     root's own .claude settings (hooks, helper commands, permission rules).
+     Outside Only a guided or standard lane names the person's own `user`
+     source; Only keeps its stricter empty list, once; the unrestricted lane is
+     unchanged in every mode. Read through the saved setting, as a dispatch does. */
+  const tierSession = require('../src/lib/permission-tier-policy').installTierSession;
+  const settingSourcesOf = argv => argv.flatMap((value, index) => value === '--setting-sources' ? [argv[index + 1]] : []);
+  for (const mode of ['Only', 'Optimized', 'Enabled', 'Disabled']) {
+    writeMode(mode);
+    for (const [level, expected] of [
+      ['guided', mode === 'Only' ? [''] : ['user']],
+      ['standard', mode === 'Only' ? [''] : ['user']],
+      ['unrestricted', mode === 'Only' ? [''] : []]
+    ]) {
+      const argv = lane.claudeArgs({ root, tier: { cliModel: 'sonnet' }, permissionSession: tierSession(level) });
+      assert.deepEqual(settingSourcesOf(argv), expected, `the ${level} Claude lane under ${mode} must name ${JSON.stringify(expected)} setting sources`);
+    }
+  }
   console.log('agent-api-modes: settings migration, Codex/Claude surfaces, start/resume, lane, invalid values, and role limits passed');
 } finally {
   if (!retainTestStateRequested()) fs.rmSync(root, { recursive: true, force: true });

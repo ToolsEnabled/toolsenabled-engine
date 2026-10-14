@@ -115,11 +115,11 @@ function nativeToolCensus(observedNames) {
 // census or Enabled-all. MCP configuration and provider permissions remain
 // independent: --tools controls native availability, not permission grants.
 //
-// DECISION (release-candidate review): Optimized is Claude-only in this release. Claude
+// DECISION (rc-0922, T1031): Optimized is Claude-only in this release. Claude
 // takes an exact native allowlist (--tools). The installed Codex 0.155.1 has no
 // native allowlist: its enabled_tools/disabled_tools filter MCP servers, and its
 // feature switches cannot keep a small read-only set without also dropping or
-// admitting the shell and apply_patch. Gemini and Grok run
+// admitting the shell and apply_patch (see CODEX-W20.md). Gemini and Grok run
 // over ACP with no native surface. Every non-Claude start therefore refuses with
 // AGENT_OPTIMIZED_TOOLS_UNSUPPORTED instead of silently widening or narrowing,
 // and every row below says so in plain words.

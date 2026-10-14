@@ -45,7 +45,7 @@
 // THE ARCHIVE BOUNDARY IS THE ONLY THING STANDING BETWEEN COLD STORAGE AND
 // UNDETECTABLE TRUNCATION.
 //
-// The audit ledger is unbounded: 1,527 events/day measured on a development
+// The audit ledger is unbounded: 1,527 events/day measured on the owner's
 // install, ~557,000 after a year, and every short-lived process re-verifies all
 // of it -- ~110 scheduled process starts an hour, each paying a full pass. A
 // measured no-op keeper decision costs 8,924 ms and 34,951 signature checks.

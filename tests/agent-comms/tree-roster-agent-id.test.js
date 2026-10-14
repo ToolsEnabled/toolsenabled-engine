@@ -1,7 +1,7 @@
 'use strict';
 /* A ROSTER ROW A SENDER CAN ACTUALLY ADDRESS.
  *
- * THE DEFECT, measured 2026-09-16 and filed as T138: circles
+ * THE DEFECT, measured 2026-09-16 03:47Z-05:05Z and filed as T138: circles
  * started through `agent.spawn` with surface "tree" registered under bare role
  * names -- four "Manager" rows and sixteen "Worker" rows on one computer.
  * `agent_comms.local_roster` then answered with rows that were identical apart
@@ -9,7 +9,7 @@
  * a manager and a report never carried one. So the only handle a caller had was
  * the name, `agent_comms.send_local` to "Manager" answered
  * TREE_RECIPIENT_AMBIGUOUS, and sending to the TREE NODE ID a spawn returns
- * (node-4-00000004-...) answered TREE_RECIPIENT_UNKNOWN because that is a
+ * (node-4-5ef0084f-...) answered TREE_RECIPIENT_UNKNOWN because that is a
  * different identifier entirely. No manager could reach its own workers.
  *
  * WHAT THIS FILE PINS, and why each half is here:
@@ -150,11 +150,11 @@ test('two live circles sharing one name refuse by name and still deliver by addr
 test('a tree node id is not an agent address, and is refused by name rather than delivered somewhere', t => {
   const directory = fixture(t);
   register(directory, { session: 's-controller', name: 'Controller' });
-  register(directory, { session: 's-m1', name: 'Manager', manager: 'Controller', nodeKey: 'node-4-00000004' });
+  register(directory, { session: 's-m1', name: 'Manager', manager: 'Controller', nodeKey: 'node-4-5ef0084f' });
 
   const refused = directory.resolveDelivery({
     from: 'Controller',
-    to: 'node-4-00000004-0000-4000-8000-000000000004',
+    to: 'node-4-5ef0084f-a232-4dfa-92c4-0430881176e0',
     senderSessionId: 's-controller',
   });
 

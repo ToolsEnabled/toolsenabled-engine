@@ -132,7 +132,7 @@ test('ambient Grok tools and malformed inspections cannot open a root', async t 
    start passes as CODEX_VERSION_DETECTION_FAILED ("run codex --version"). The
    fakes below are real child processes on the production reader and
    transport; their refusals are Grok 1.0.40's own words for an unknown option
-   (recorded 2026-09-22 from a local probe). No version is
+   (recorded 2026-09-22, lanes/f-providers/grok-grok-/probe). No version is
    pinned: what decides is whether this Grok accepts what the start passes. */
 function fakeGrok(t, body) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'toolsenabled-fake-grok-'));
@@ -241,31 +241,32 @@ for (const provider of ['grok','gemini']) {
   test(`${provider}: exact advertised model and effort are selected before any prompt, including resume`, async t => {
     const {plan}=fixture(t,provider);
     const rpc=protocol(catalog());let invocation;
-    const options={provider,plan,threadOptions:{model:`${provider}/strong`,effort:'xhigh'},
+    const options={provider,plan,threadOptions:{model:'strong',effort:'xhigh'},
       inspect:async()=>JSON.stringify({hooks:[],plugins:[],mcpServers:[],lspServers:[]}),
       transportFactory:args=>{invocation=args;return rpc.transport;}};
     const session=await startAcpSession(options);
-    assert.equal(session.model,`${provider}/strong`);assert.equal(session.reasoningEffort,'xhigh');
+    assert.equal(session.model,'strong');assert.equal(session.reasoningEffort,'xhigh');
     assert.deepEqual(rpc.requests.filter(r=>r.method==='session/set_config_option').map(r=>r.params),[
       {sessionId:'session-one',configId:'model',value:'strong'},
       {sessionId:'session-one',configId:'reasoning_effort',value:'xhigh'}]);
     assert(!rpc.requests.some(r=>r.method==='session/prompt'));
     if(provider==='gemini')assert.deepEqual(invocation.args.slice(-2),['--model','strong']);
     const models=await session.adapter.listModels();
-    assert.equal(models.models.find(m=>m.id===`${provider}/strong`).defaultEffort,'xhigh');
+    assert.equal(models.models.find(m=>m.id==='strong').defaultEffort,'xhigh');
     session.close();
     const resumed=await resumeAcpSession({...options,threadId:'original'});
-    assert.equal(resumed.model,`${provider}/strong`);assert.equal(resumed.reasoningEffort,'xhigh');resumed.close();
+    assert.equal(resumed.model,'strong');assert.equal(resumed.reasoningEffort,'xhigh');resumed.close();
   });
 }
 test('unsupported explicit model, unsupported effort and an unconfirmed selection never become ready or send',async t=>{
   const {plan}=fixture(t,'grok');
   for(const [threadOptions,selectionMismatch,code] of [
-    [{model:'grok/missing'},false,'ACP_MODEL_UNAVAILABLE'],
-    [{model:'grok/strong',effort:'ultra'},false,'ACP_EFFORT_UNAVAILABLE'],
-    [{model:'grok/strong'},true,'ACP_MODEL_SELECTION_UNCONFIRMED'],
-    [{model:'grok/weak',effort:'xhigh'},true,'ACP_EFFORT_SELECTION_UNCONFIRMED']]){
-    const rpc=protocol({...catalog(),selectionMismatch});
+    [{model:'missing'},false,'ACP_MODEL_UNAVAILABLE'],
+    [{model:'strong',effort:'ultra'},false,'ACP_EFFORT_UNAVAILABLE'],
+    [{model:'strong'},true,'ACP_MODEL_SELECTION_UNCONFIRMED'],
+    [{model:'weak',effort:'xhigh'},true,'ACP_EFFORT_SELECTION_UNCONFIRMED']]){
+    const rpc=protocol({...catalog(),selectionMismatch,
+      ...(threadOptions.model==='missing'?{rejectMethod:'session/set_config_option',rejectMessage:'Requested model unavailable'}:{})});
     await assert.rejects(startAcpSession({provider:'grok',plan,threadOptions,
       inspect:async()=>JSON.stringify({hooks:[],plugins:[],mcpServers:[],lspServers:[]}),transportFactory:()=>rpc.transport}),{code});
     assert(!rpc.requests.some(r=>r.method==='session/prompt'));assert.equal(rpc.transport.cleanup,1);
@@ -323,19 +324,29 @@ test('the Gemini individual-account retirement wording points at Antigravity, st
 });
 test('a later provider model fallback invalidates an explicit selection before another prompt',async t=>{
   const {plan}=fixture(t,'grok'),rpc=protocol(catalog());
-  const session=await startAcpSession({provider:'grok',plan,threadOptions:{model:'grok/strong'},
+  const session=await startAcpSession({provider:'grok',plan,threadOptions:{model:'strong'},
     inspect:async()=>JSON.stringify({hooks:[],plugins:[],mcpServers:[],lspServers:[]}),transportFactory:()=>rpc.transport});
   rpc.transport.update(session.threadId,{sessionUpdate:'config_option_update',configOptions:catalog().configOptions});
   await assert.rejects(session.adapter.sendTurn({threadId:session.threadId,text:'must not send'}),{code:'ACP_MODEL_SELECTION_UNCONFIRMED'});
   assert(!rpc.requests.some(r=>r.method==='session/prompt'));session.close();
 });
-test('model-only ACP providers receive the exact advertised setter while foreign provider IDs refuse before spawn',async t=>{
-  const {plan}=fixture(t,'gemini'),rpc=protocol({models:catalog().models});let invocation;
-  const session=await startAcpSession({provider:'gemini',plan,threadOptions:{model:'gemini/strong'},transportFactory:request=>{invocation=request;return rpc.transport;}});
-  assert.deepEqual(invocation.args.slice(-2),['--model','strong']);
-  assert.deepEqual(rpc.requests.find(r=>r.method==='session/set_model').params,{sessionId:session.threadId,modelId:'strong'});
-  assert.equal(session.adapter.getSessionModels(session.threadId).currentModelId,'strong');session.close();
-  await assert.rejects(startAcpSession({provider:'gemini',plan,threadOptions:{model:'grok/strong'},transportFactory:()=>assert.fail('must not spawn')}),{code:'ACP_MODEL_UNAVAILABLE'});
+test('model-only ACP forwards exact slash IDs on the explicit route and provider refusal confirms cleanup',async t=>{
+  const {plan}=fixture(t,'gemini');
+  for(const model of ['gemini/strong','grok/strong']){
+    const rpc=protocol({models:catalog().models});let invocation;
+    const session=await startAcpSession({provider:'gemini',plan,threadOptions:{model},
+      transportFactory:request=>{invocation=request;return rpc.transport;}});
+    assert.deepEqual(invocation.args.slice(-2),['--model',model]);
+    assert.deepEqual(rpc.requests.find(r=>r.method==='session/set_model').params,{sessionId:session.threadId,modelId:model});
+    assert.equal(session.model,model);
+    assert.equal(session.adapter.getSessionModels(session.threadId).currentModelId,model);session.close();
+  }
+  const rpc=protocol({models:catalog().models,rejectMethod:'session/set_model',rejectMessage:'Requested model unavailable'});
+  await assert.rejects(startAcpSession({provider:'gemini',plan,threadOptions:{model:'grok/strong'},
+    transportFactory:()=>rpc.transport}),{code:'ACP_MODEL_UNAVAILABLE'});
+  assert.equal(rpc.requests.find(r=>r.method==='session/set_model').params.modelId,'grok/strong');
+  assert.equal(rpc.transport.cleanup,1);
+  assert(!rpc.requests.some(r=>r.method==='session/prompt'));
 });
 
 // Antigravity is another official Gemini client, with a distinct stream
@@ -348,7 +359,7 @@ function agyFixture({ init = {}, cleanup = async () => {} } = {}) {
   let listener;
   let invocation;
   const writes = [];
-  const nativeId = '00000250-0000-4000-8000-000000000250';
+  const nativeId = 'a7206e0d-b8b0-44cb-9fb7-1b05a454d250';
   const model = 'gemini-fixture-advertised-model';
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-owned-fixture-'));
   agyDirectories.push(cwd);
@@ -368,7 +379,7 @@ function agyFixture({ init = {}, cleanup = async () => {} } = {}) {
   };
   const options = {
     plan: { ok: true, agentApiMode: 'Only', ...surface },
-    threadOptions: { model: `gemini/antigravity/${model}`, effort: 'high' },
+    threadOptions: { model, effort: 'high' },
     env: { PATH: '/fixture', GOOGLE_API_KEY: 'fixture-secret-never-forward', ANTIGRAVITY_ENDPOINT: 'fixture-redirect-never-forward' },
     transportFactory(request) { invocation = request; return transport; }
   };
@@ -604,7 +615,7 @@ test('Antigravity error results reject with typed codes and keep the conversatio
 // mirroring the Claude change; a silent turn still times out and is closed.
 test('Antigravity productive turns outlive the silence limit while an idle turn still times out', async t => {
   const { AntigravityCliAdapter } = require('../../src/lib/agent-engine/antigravity-cli-adapter');
-  const nativeId = '00000251-0000-4000-8000-000000000251';
+  const nativeId = 'b7206e0d-b8b0-44cb-9fb7-1b05a454d251';
   let listener;
   let closed = 0;
   const send = value => listener?.(JSON.stringify(value) + '\n');

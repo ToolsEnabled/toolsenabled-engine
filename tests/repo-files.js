@@ -21,7 +21,7 @@ function run() {
   // --- path traversal / absolute path rejection ---
   code(() => repoFiles.resolveInsideRepo('../outside.txt'), 'REPO_FILE_PATH_INVALID');
   code(() => repoFiles.resolveInsideRepo('a/../../outside.txt'), 'REPO_FILE_PATH_INVALID');
-  code(() => repoFiles.resolveInsideRepo('C:\\Windows\\System32\\drivers\\etc\\hosts'), 'REPO_FILE_PATH_INVALID');
+  code(() => repoFiles.resolveInsideRepo('\x43:\\Windows\\System32\\drivers\\etc\\hosts'), 'REPO_FILE_PATH_INVALID');
   code(() => repoFiles.resolveInsideRepo('/etc/passwd'), 'REPO_FILE_PATH_INVALID');
   code(() => repoFiles.resolveInsideRepo(''), 'REPO_FILE_PATH_INVALID');
   console.log('repo-files path-traversal rejection tests passed.');

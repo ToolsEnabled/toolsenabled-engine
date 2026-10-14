@@ -3,9 +3,9 @@
 // Agent-roster allotment loader (owner request R103, gates 4, 7, 8).
 //
 // config/agent-allotment.json is the OWNER-EDITABLE ceiling of what the roster
-// MAY select from. It is a ceiling, never a target (R103 amendment: being
-// allotted does not mean it must be used, only that it is allowed). Idle
-// allotment is a correct state, not a defect.
+// MAY select from. It is a ceiling, never a target (R103 amendment, verbatim:
+// "...just because its allotted doesnt mean it needs to be used, its just
+// allowed"). Idle allotment is a correct state, not a defect.
 //
 // FAIL-DORMANT is the load contract: a missing file, unparseable JSON, a wrong
 // schemaVersion, or a forbidden entry all produce an EMPTY allotment

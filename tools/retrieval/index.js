@@ -16,12 +16,12 @@
 // THE ONLY RULE THAT MATTERS: `miss` IS EXPENSIVE TO BE WRONG ABOUT.
 // -----------------------------------------------------------------
 // A false MISS is the most costly answer this codebase produces. It is the
-// message that made licensing research get redone, and it is the
+// message that made four nights of trademark research get redone, and it is the
 // reason tools/grepsaver-orient.js now carries its own exit-code table. So MISS
 // is the NARROWEST outcome here, not the default. If one enabled source failed,
 // the answer is UNKNOWN. If one source was withheld by settings, the answer is
 // UNKNOWN -- because "you turned off the ledger and I found nothing in the
-// board" is not, and must never be rendered as, "they never asked for that".
+// board" is not, and must never be rendered as, "he never asked for that".
 //
 // And no outcome except `hit` is ever exit 0. See RECALL_EXIT.
 //

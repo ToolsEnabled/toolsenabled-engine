@@ -5,7 +5,7 @@
  * (path.resolve(String(args.root || '.'))) and query's
  * (path.resolve(String(args.root))) -- see src/lib/code-file-containment.js,
  * mirroring the same fix in src/lib/providers/code-intel.js#resolveFilePath.
- * Before this fix neither had any containment call (measured at an earlier revision:
+ * Before this fix neither had any containment call (measured at b7149aeb:
  * zero hits for assertInsideRoots, workspaceRoots, realpath or OUTSIDE in
  * search.js), the exact escape src/lib/workspace-boundary.js's own header
  * names as unpatched: "search.index root -> a secrets dir outside it

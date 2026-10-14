@@ -33,7 +33,7 @@
 // instead of booting healthy and failing one lane at a time.
 //
 // THE VERIFIED FAILURE, 2026-07-29:
-//   live supervisor = node tools/fleet-supervisor.js --serve --quiet
+//   live pid 21556 = node tools/fleet-supervisor.js --serve --quiet
 //   laneModels.DEFAULT_BACKEND is 'vertex', so omitting --backend means vertex.
 //   lane-runner.js:104 throws FLEET_VERTEX_PROJECT_MISSING for a vertex lane
 //   with no project -- but ONLY once a lane is already being launched.
@@ -86,7 +86,7 @@ function skip(name, why) {
 }
 
 // argv as node hands it over: [execPath, script, ...rest].
-function argvOf(...rest) { return ['C:/node.exe', ENTRY, ...rest]; }
+function argvOf(...rest) { return ['\x43:/node.exe', ENTRY, ...rest]; }
 
 // An env with the fleet variables explicitly absent, so an ambient
 // TOOLSENABLED_FLEET_PROJECT on the developer's machine cannot make a
@@ -257,7 +257,7 @@ check('END TO END: the refusal is recorded in logs/fleet-supervisor.log', () => 
 (() => {
   const name = 'END TO END: a correct argv gets past the refusal';
   // stateStore.pidAlive, NOT a bare process.kill(pid, 0). Measured here: the
-  // S4U-launched supervisor makes kill(0) throw EPERM, which means
+  // S4U-launched supervisor (pid 36128) makes kill(0) throw EPERM, which means
   // "it exists and you may not signal it" -- the opposite of dead. Treating
   // EPERM as dead is the same false-DOWN mistake the health observer made, and
   // here it would have decided a safety question on a wrong answer.

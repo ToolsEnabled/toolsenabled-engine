@@ -440,7 +440,7 @@ check('a lane report whose subject file changed later is retired as superseded',
 });
 
 check('a lane report with no decodable subject makes no supersession claim', () => {
-  const report = path.join('reports', 'lanes', 'review-notes.md');
+  const report = path.join('reports', 'lanes', 'team4-d9.md');
   const root = scratch({ 'state/test-runs/latest.json': SUITE, [report]: 'VERDICT: COMPLETE\n' });
   fs.utimesSync(path.join(root, report), new Date(NOW - 10 * HOUR), new Date(NOW - 10 * HOUR));
   const feed = collectRecentWork({ root, now: NOW, scope: 'task', git: fakeGit(BUSY) });
@@ -686,6 +686,35 @@ check('a rendered packet carries the headline as prose, not buried in JSON', () 
   assert.match(out, /priorityOrder|Priority order.*recent/);
   // The headline is lifted OUT of the JSON, so it must appear exactly once.
   assert.equal((out.match(/RECENT WORK \(mechanical/g) || []).length, 1, 'the headline must not be printed twice');
+});
+
+// SECURITY REVIEW 1.0.50 U1/M4: the feed root is never git's working directory.
+// Windows searches the child's working directory before PATH; on POSIX a "."
+// PATH entry does the same, so the REAL default runner (no options.git) is
+// driven through that search with a git planted at the top of the root. The
+// simulation needs a runnable POSIX script, hence the one platform guard.
+check('a git planted at the top of the root is never what runs', () => {
+  if (process.platform === 'win32') {
+    process.stdout.write('NOTE planted-git check not run on Windows (POSIX "." PATH simulation)\n');
+    return;
+  }
+  const root = scratch();
+  const markerRoot = scratch();
+  const marker = path.join(markerRoot, 'planted-git-ran');
+  fs.writeFileSync(path.join(root, 'git'), `#!/bin/sh\necho "$*" >> '${marker}'\nexit 0\n`, { mode: 0o755 });
+  const savedPath = process.env.PATH;
+  process.env.PATH = `.${path.delimiter}${savedPath}`;
+  let feed;
+  try {
+    feed = collectRecentWork({ root, now: NOW, scope: 'task' });
+  } finally {
+    process.env.PATH = savedPath;
+  }
+  const ran = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : '';
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(markerRoot, { recursive: true, force: true });
+  assert.equal(ran, '', `a git planted in the feed root ran: ${ran}`);
+  assert.ok(feed && typeof feed.headline === 'string', 'the feed is still produced');
 });
 
 process.stdout.write(`agent-recent-work: ${checks - failures}/${checks} checks passed\n`);

@@ -92,6 +92,30 @@ function testRequireStillCounts() {
   console.log('   ✓ require edge preserved');
 }
 
+function testDesktopOwnerHostCarriesStartupCleanup() {
+  console.log('The desktop owner-host root carries its inline startup cleanup require...');
+  const from = 'src/owner-host.js';
+  const target = 'src/lib/legacy-signin-cleanup.js';
+  // Exercise the inline await spelling as input, without requiring product
+  // code to retain this spelling if its implementation improves later.
+  const inline = ['async function listen() { await ', 'require(',
+    "'./lib/legacy-signin-cleanup'", ').cleanupLegacySignIns({}); }'].join('');
+  assert.ok(extractReferences(path.join(ROOT, from), inline, 'js').files.includes(target),
+    'an inline awaited static relative require must carry its module edge');
+
+  const registry = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'invocation-registry.json'), 'utf8'));
+  const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
+  const production = computeReachable(registry, scripts, { expandTests: false });
+  assert.ok(production.reachableFiles.has(from), 'the desktop-loaded owner host must be a production root');
+  assert.ok(production.reachableFiles.has(target), 'startup cleanup must follow the owner host in the production graph');
+  const withoutRoots = computeReachable({
+    roots: [], entries: {}, productionEdges: []
+  }, scripts, { expandTests: false });
+  assert.ok(!withoutRoots.reachableFiles.has(target),
+    'test imports and package membership cannot replace a real runtime root');
+  assert.ok(!registry.entries[target], 'startup cleanup must not be exempted or baselined');
+}
+
 function testExecutedConfigCarriesHookEdges() {
   console.log('An installer-loaded JSON hook template carries only its executable fields...');
   const installer = [
@@ -321,11 +345,15 @@ function testStrictReleaseRootNeedsItsRealExternalDeclaration() {
 function testHistoricalFindingsSurviveProgramRetirement() {
   console.log('Retiring a program does not erase the original invocation audit...');
   const record = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'invocation-production-classification.json'), 'utf8'));
-  // Measured before an earlier removal accidentally deleted two historical rows
-  // without updating counts. Re-pinned for one deliberate rename: the retired
-  // dashboard launcher is listed as tools/start-agent-dashboard.ps1.
+  // Measured from fe640324f6b882aa12b75333c1c5029d3bda7f1e^ before that
+  // removal accidentally deleted two historical rows without updating counts
+  // (19dd0dbe71bc9071161e68f8c1edc058dd181dc239d2f989fb9bdf343fd2a4bf).
+  // Re-pinned 2026-09-27 for one deliberate rename and nothing else: the
+  // 1.0.48 de-institution work renamed the institutional sign-in program to
+  // tools/institution-login.js, because a file name in a distributable path is
+  // published too. The same 242 findings, one renamed, in sorted order.
   const historicalDigest = createHash('sha256').update(JSON.stringify(record.evidence.original242)).digest('hex');
-  assert.strictEqual(historicalDigest, '31e2768c4256d67b2a4d6fce54302ca0f264eb45250598a177a8780d99705a78',
+  assert.strictEqual(historicalDigest, '4a7f3dccfcc4e8c389ceb061d5a1cb0fcce4dbfb6855bfb5b853666f3b1d9fbd',
     'the original finding must preserve identities, not merely a 242-row count');
   for (const file of ['tools/Start-ToolsEnabled-Background.ps1', 'tools/coordinator-runs.js']) {
     assert.ok(record.evidence.original242.includes(file), `${file} must remain in the historical finding`);
@@ -909,7 +937,7 @@ function testReleaseExclusionsAreExactAndFailClosed() {
   assert.deepStrictEqual([...RELEASE_EXCLUDED_PAYMENT_LIBRARIES], payments,
     'the payment exclusion must remain the same inspectable exact set');
   // Emptied 2026-09-06 with the constant it pins. The four iPhone prototype
-  // paths this listed were deleted by an earlier change, which made every one of these
+  // paths this listed were deleted by ebd6447, which made every one of these
   // exclusions stale and exited the guard 1. The set stays pinned, and pinned
   // as EXACT, so that an empty owner-deferred scope cannot quietly grow into a
   // mobile-prefix blanket exclusion later.
@@ -959,13 +987,13 @@ function testReleaseExclusionsAreExactAndFailClosed() {
   // paths would otherwise leave the measured tree unchecked entirely. Assert the
   // retirement directly instead: they must be gone, and their exclusion must not
   // reappear to re-create the stale entry this commit removed.
-  const retiredIphoneHandoffFiles = [
+  const retiredByEbd6447 = [
     'src/lib/iphone-handoff-contract.js',
     'src/lib/iphone-handoff-controller-adapter.js',
     'src/lib/iphone-handoff-controller-route.js',
     'src/lib/iphone-handoff-observation.js'
   ];
-  for (const file of retiredIphoneHandoffFiles) {
+  for (const file of retiredByEbd6447) {
     assert.ok(!measured.releaseExcludedLibraries.includes(file),
       `${file} was retired; a re-added exclusion for it would be stale on arrival`);
     assert.ok(!measured.testOnlyLibraries.includes(file),
@@ -985,6 +1013,7 @@ function main() {
   console.log(`  node ${process.version} on ${os.platform()}`);
   testProseInStringsIsNotInvocation();
   testRequireStillCounts();
+  testDesktopOwnerHostCarriesStartupCleanup();
   testExecutedConfigCarriesHookEdges();
   testExplorerLaunchersCarryOnlyExecutableEdges();
   testDeclaredRootsMustExist();

@@ -9,9 +9,9 @@
  * DISPATCH lane spawns for it. Neither is an interactive engine: nothing spoke
  * engine-contract.js for a local model, so the desktop shell listed the `local`
  * tier in its start menu and refused it by name at press
- * (AGENT_TIER_NO_LAUNCHER, "this copy carries no launcher for it"). A local
- * model still could not be started as of 2026-09-04. This
- * module is the launcher.
+ * (AGENT_TIER_NO_LAUNCHER, "this copy carries no launcher for it"). The owner's
+ * words, 2026-09-04: "why can i still not start a local model". This module is
+ * the launcher.
  *
  * WHAT IT SPEAKS. Ollama's native chat route, POST /api/chat with stream:true,
  * MEASURED against Ollama 0.33.3 on this machine 2026-09-04 and against
@@ -67,6 +67,18 @@ const { createLocalToolView, wireTool } = require('./local-tool-discovery');
    that stalls without closing the stream cannot leave a promise pending for
    the life of the application. */
 const DEFAULT_TURN_TIMEOUT_MS = 30 * 60 * 1000;
+
+/* What counts as the turn working, as the Claude adapter's admitEvent() reads
+   it: spoken or reasoned text, and tool calls and their results. Acceptance,
+   usage and the terminal are bookkeeping and cannot keep a stalled turn alive. */
+function isTurnActivity(event) {
+  if (['assistant_text_delta', 'assistant_text', 'thinking'].includes(event.type)) {
+    return typeof event.text === 'string' && event.text.length > 0;
+  }
+  if (event.type === 'tool_call') return Boolean(event.toolCallId && event.tool);
+  if (event.type === 'tool_result') return Boolean(event.toolCallId);
+  return false;
+}
 /* How long interrupt() waits for the aborted request to actually settle. */
 const INTERRUPT_ANSWER_MS = 10_000;
 /* Conversations this process remembers at once, oldest forgotten first. */
@@ -332,7 +344,20 @@ class LocalNodeAdapter {
       this.emitDiagnostic(error);
       return;
     }
+    const turn = this.activeTurn;
+    if (turn && validated.turnId === turn.turnId && isTurnActivity(validated)) this.noteActivity(turn);
     return this.eventBoundary.emit(validated);
+  }
+
+  /* THE TURN TIMER MEASURES SILENCE, NOT DURATION -- the Claude engine's rule,
+     which DEFAULT_TURN_TIMEOUT_MS's own note promises. It used to be armed once
+     at turn start and never refreshed, so a productive tool-and-reasoning turn
+     longer than turnTimeoutMs was aborted mid-work and its answer discarded.
+     Real text, reasoning and tool activity restart the window; a runtime that
+     stops sending is still ended by it. A fired or settled turn is left alone. */
+  noteActivity(turn) {
+    if (!turn || turn !== this.activeTurn || turn.settled || turn.timedOut || !turn.timer) return;
+    if (typeof turn.timer.refresh === 'function') turn.timer.refresh();
   }
 
   emitDiagnostic(error) {
@@ -638,6 +663,11 @@ class LocalNodeAdapter {
     }
     const message = packet.message;
     if (message && typeof message === 'object') {
+      /* Reasoning is held until the round speaks or commits, so it emits
+         nothing yet -- but it is the model working, and counts as activity. */
+      if ((typeof message.thinking === 'string' && message.thinking)
+        || (typeof message.content === 'string' && message.content)
+        || (Array.isArray(message.tool_calls) && message.tool_calls.length)) this.noteActivity(turn);
       if (typeof message.thinking === 'string' && message.thinking) turn.thinking += message.thinking;
       if (typeof message.content === 'string' && message.content) {
         this.flushThinking(turn, base);

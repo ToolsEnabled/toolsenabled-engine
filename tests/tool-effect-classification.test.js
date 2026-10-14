@@ -164,8 +164,12 @@ check('the equivalent array with every entry declaring effect builds without thr
 
 check('the reviewed historical identity snapshot and explicit membership changes remain consistent', () => {
   assert.equal(coreContract.schemaVersion, 1);
+  // The snapshot of historicalSource, with one deliberate rename and nothing
+  // else (2026-09-27): the 1.0.48 de-institution work renamed the institutional
+  // sign-in tool to duo.institution_login in the registry and here, so the
+  // snapshot's digest is no longer the source's (historicalSource.coreNamesSha256).
   assert.equal(createHash('sha256').update(JSON.stringify(coreContract.historicalCoreNames)).digest('hex'),
-    '6dba27fac5a193cb3362eef5b95af18ed8eb6561efaf8e8dcf043855604c26d1');
+    '8b52c970f13aeec4590412b9473c11ccf9ed05b304de83926168219cdbe7c070');
   for (const list of [coreContract.historicalCoreNames, coreContract.retiredCoreNames, coreContract.addedCoreNames, requiredCoreNames]) {
     assert.deepEqual(list, [...new Set(list)].sort(), 'identity lists must be unique and sorted');
   }

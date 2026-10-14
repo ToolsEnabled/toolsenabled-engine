@@ -105,9 +105,9 @@ function contendedCaptureKeepsTheWords() {
   const { ledger } = workspace('contended');
   const held = holdLock(ledger);
   try {
-    const words = 'File the quarterly report before the deadline';
+    const words = 'DO THE TRADEMARK FILING, I already told you this';
     const result = runCapture(ledger, [
-      '--new-id', 'R7001', '--interpretation', 'file the quarterly report', '--actor', 'coordinator', '--text', words
+      '--new-id', 'R7001', '--interpretation', 'file the trademark', '--actor', 'coordinator', '--text', words
     ]);
 
     check(result.status === 1, 'a capture that did not reach the ledger must use the capture failure status');
@@ -131,7 +131,7 @@ function contendedCaptureKeepsTheWords() {
 //    drain puts the exact words in the ledger.
 function reconcileReplaysTheDirective() {
   const { ledger } = workspace('reconcile');
-  const words = 'Keep the daily spend cap at the number I set, not one an agent picked';
+  const words = 'And again who put a $100 day cap? Literally not something I did';
   const held = holdLock(ledger);
   try {
     runCapture(ledger, ['--new-id', 'R7002', '--interpretation', 'no agent-set caps', '--actor', 'coordinator', '--text', words]);
@@ -141,7 +141,7 @@ function reconcileReplaysTheDirective() {
 
   const red = runReconcile(ledger, ['--check']);
   check(red.status === 1, '--check must FAIL while an owner directive is outstanding');
-  check(red.stdout.includes(words), '--check must show the owner their actual words, not just a count');
+  check(red.stdout.includes(words), '--check must show the owner his actual words, not just a count');
 
   const drained = runReconcile(ledger);
   check(drained.status === 0, 'the drain must succeed once the ledger is free');
@@ -213,7 +213,7 @@ function tenConcurrentLanesLoseNothing() {
 function refusedAgentTextIsNotSpooled() {
   const { ledger } = workspace('refused');
   const result = runCapture(ledger, [
-    '--new-id', 'R7004', '--interpretation', 'a build lane brief', '--actor', 'build-lane-fixture',
+    '--new-id', 'R7004', '--interpretation', 'a build lane brief', '--actor', 'build-lane-s10',
     '--text', 'an agent-authored brief wearing the owner\'s name'
   ]);
   check(result.status === 1, 'an agent-authored brief must use the capture refusal status');
@@ -290,7 +290,7 @@ function directlyDrivenSpoolRefusals() {
 
 // 8. AN AGENT'S SILENCE IS NOT THE PERSON'S VERDICT.
 //
-//    Measured 2026-09-03 on a live spool: 228 of 231 settled records
+//    Measured 2026-09-03 on the owner's live spool: 228 of 231 settled records
 //    read ledgerOutcome 'discarded' with the reason "agent read it and filed
 //    nothing" and an agent's name, while the canonical ledger held one request.
 //    Those bytes were kept and out of listPending, so the review tool and the
@@ -392,7 +392,7 @@ function simulateMisdiscardedRecord(ledger, { name, text, actor = 'claude', now 
 
 // 9. A DISCARD FROM BEFORE THE GUARD IS NOT A SETTLEMENT EITHER.
 //
-//    MEASURED 2026-09-03 on a live spool: 228 records already sit in
+//    MEASURED 2026-09-03 on the owner's live spool: 228 records already sit in
 //    reconciled/ in exactly the shape section 8's guard now refuses to create
 //    -- ledgerOutcome 'discarded', an agent's name, no decidedBy. The guard
 //    stops new ones; by itself it does nothing for the ones already on disk,

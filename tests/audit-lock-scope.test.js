@@ -84,8 +84,8 @@ const audit = require('../src/lib/audit');
 // into a scratch root. Called once, unconditionally, here -- immediately
 // after the one `require('../src/lib/audit')` above and before any check()
 // registers -- so every check in this file is covered by construction,
-// rather than depending on each check remembering to call its own copy (an
-// internal exposure census found four of this file's eight
+// rather than depending on each check remembering to call its own copy (see
+// REPORT-audit-test-exposure-census-20260907.md: four of this file's eight
 // checks used to reach audit.record()/audit.verify()/audit.resetForTests()
 // before the file's only two calls to assertIsolatedLedger() ever ran).
 assertIsolatedLedger();

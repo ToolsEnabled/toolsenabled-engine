@@ -13,7 +13,7 @@ an empty object and returns only device, pairing, and handoff readiness enums.
 
 The inactive broker, record-store, grant, companion, notification, and active
 controller modules were retired after their personal controller caller was
-extracted in an earlier change. Their prior source-module API and tests remain in Git
+extracted in `fe640324`. Their prior source-module API and tests remain in Git
 history; they are not a supported runtime handoff or an iOS data channel.
 
 ## Allowed dependencies

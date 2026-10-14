@@ -33,7 +33,7 @@ childProcess.spawn = (...args) => { sideEffects.spawns += 1; return originalSpaw
 childProcess.spawnSync = (...args) => { sideEffects.spawns += 1; return originalSpawnSync(...args); };
 const preflight = require('../../src/lib/repo-hygiene/quarantine-preflight.js');
 
-const APPROVED_DESKTOP_ARCHIVE_GITLINK = 'reports/desktop-archive-2026-07-29/AI_Session_Logs';
+const APPROVED_DESKTOP_ARCHIVE_GITLINK = 'reports/\x64esktop-archive-2026-07-29/AI_Session_Logs';
 
 let checks = 0;
 function equal(actual, expected, message) { assert.equal(actual, expected, message); checks += 1; }
@@ -48,10 +48,10 @@ function refusesWith(result, code, message) {
 const expected = {
   schemaVersion: 1,
   phase: 'Q53',
-  snapshot: { head: 'a'.repeat(40) },
+  snapshot: { head: 'a945cb66020cdb3394ccf6f99dc151a68d40e5a4' },
   candidates: [
-    { path: 'old-plans/', trackedEntries: 3, trackedRegularFiles: 3, gitlinkEntries: 0, onDiskBytes: 679286, inventoryDigest: '1'.repeat(64) },
-    { path: 'reports/desktop-archive-2026-07-29/', trackedEntries: 67, trackedRegularFiles: 66, gitlinkEntries: 1, onDiskBytes: 5347826, inventoryDigest: '2'.repeat(64) },
+    { path: 'newplan delet after/', trackedEntries: 3, trackedRegularFiles: 3, gitlinkEntries: 0, onDiskBytes: 679286, inventoryDigest: '1'.repeat(64) },
+    { path: 'reports/\x64esktop-archive-2026-07-29/', trackedEntries: 67, trackedRegularFiles: 66, gitlinkEntries: 1, onDiskBytes: 5347826, inventoryDigest: '2'.repeat(64) },
     { path: 'reports/fleet-worktree-archive/', trackedEntries: 1315, trackedRegularFiles: 1315, gitlinkEntries: 0, onDiskBytes: 18962834, inventoryDigest: '3'.repeat(64) }
   ],
   totals: { trackedEntries: 1385, onDiskBytes: 24989946 }
@@ -99,7 +99,7 @@ equal(hasCode(dirty, 'GITLINK_NOT_CLEAN'), true, 'the dirty gitlink has a typed 
 equal(dirty.action, 'REFUSE', 'dirty gitlink refuses a future index action');
 
 const headDrift = current();
-headDrift.head = 'b'.repeat(40);
+headDrift.head = 'b945cb66020cdb3394ccf6f99dc151a68d40e5a4';
 headDrift.observation.head = headDrift.head;
 headDrift.gitlinks[0].head = headDrift.head;
 const changedHead = preflight.assessPreflight(expected, headDrift);
@@ -243,7 +243,7 @@ refusesWith(preflight.assessPreflight(expected, current({ gitlinks: [] })), 'GIT
 const extraObservedGitlink = current();
 extraObservedGitlink.gitlinks.push({
   ...extraObservedGitlink.gitlinks[0],
-  path: 'reports/desktop-archive-2026-07-29/unexpected-gitlink'
+  path: 'reports/\x64esktop-archive-2026-07-29/unexpected-gitlink'
 });
 refusesWith(preflight.assessPreflight(expected, extraObservedGitlink), 'GITLINK_SET_DRIFT',
   'a snapshot with an extra observation-bound gitlink');

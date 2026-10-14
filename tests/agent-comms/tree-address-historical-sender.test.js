@@ -2,12 +2,12 @@
 
 // THE NAME AN AGENT WAS GIVEN STOPS BEING THE NAME IT IS REGISTERED UNDER.
 //
-// MEASURED on a development install, by a manager that could not message
+// MEASURED 2026-09-12, by a manager on this computer that could not message
 // anyone. Its brief said, verbatim, that it was "Manager". Both
 // agent_comms.local_roster({ from: 'Manager' }) and a send under that name
 // answered TREE_SENDER_UNKNOWN, "No agent called "Manager" is registered on
 // this computer's tree." It got through only by reading the directory file and
-// finding its row under "Manager (0000a001)".
+// finding its row under "Manager (51094ae6)".
 //
 // WHY THE TWO DIVERGE, measured in the app worktree: the tree brief is written
 // ONCE, from a name computed against the peers that existed at that moment, and
@@ -99,7 +99,7 @@ test('a peer-set rename leaves the historical name working, and the message carr
   /* The second Manager arrives, the app's namer qualifies the first, and its
      next registration stores the qualified name. This is the whole defect. */
   directory.registerNode({
-    sessionId: 'session-manager', nodeName: 'Manager (0000a001)', pid: process.pid,
+    sessionId: 'session-manager', nodeName: 'Manager (51094ae6)', pid: process.pid,
     treeKey: 'tree-1', nodeKey: 'node-manager'
   });
   const { provider, sent } = providerOver(directory);
@@ -109,15 +109,15 @@ test('a peer-set rename leaves the historical name working, and the message carr
   /* THE RECEIPT AND THE MESSAGE BOTH NAME THE CURRENT IDENTITY. A reply
      addressed to the historical name would refuse in turn, so echoing it back
      would hand the reader an address that does not work. */
-  assert.equal(answer.from, 'Manager (0000a001)');
-  assert.equal(sent[0].body, 'Manager (0000a001): hello', 'the courier framing must carry the current sender name');
+  assert.equal(answer.from, 'Manager (51094ae6)');
+  assert.equal(sent[0].body, 'Manager (51094ae6): hello', 'the courier framing must carry the current sender name');
 });
 
 test('the roster answers a circle that asks under the name its brief gave it', async t => {
   const directory = directoryFor(t);
   treeWith(directory, { managerName: 'Manager' });
   directory.registerNode({
-    sessionId: 'session-manager', nodeName: 'Manager (0000a001)', pid: process.pid,
+    sessionId: 'session-manager', nodeName: 'Manager (51094ae6)', pid: process.pid,
     treeKey: 'tree-1', nodeKey: 'node-manager'
   });
   const { provider } = providerOver(directory);
@@ -134,20 +134,20 @@ test('a resumed session that re-registers under a new name keeps answering to th
   /* A resume is a NEW sessionId replacing the old row, which is how the app
      registers one (replacesSessionId). The brief it replays is the original. */
   directory.registerNode({
-    sessionId: 'session-manager-2', nodeName: 'Manager (0000a002)', pid: process.pid,
+    sessionId: 'session-manager-2', nodeName: 'Manager (7f0c2a11)', pid: process.pid,
     treeKey: 'tree-1', nodeKey: 'node-manager', replacesSessionId: 'session-manager'
   });
   /* The worker's own next registration re-points it at the resumed session,
      which is what the app does on its courier round. */
   directory.registerNode({
     sessionId: 'session-worker', nodeName: 'Worker 1', managerSessionId: 'session-manager-2',
-    managerName: 'Manager (0000a002)', pid: process.pid, treeKey: 'tree-1', nodeKey: 'node-worker'
+    managerName: 'Manager (7f0c2a11)', pid: process.pid, treeKey: 'tree-1', nodeKey: 'node-worker'
   });
   const { provider, sent } = providerOver(directory);
 
   const answer = await provider.send({ from: 'Manager', to: 'Worker 1', body: 'after resume' }, bound('session-manager-2'));
   assert.equal(answer.accepted, true, `${answer.code} ${answer.reason || ''}`);
-  assert.equal(sent[0].body, 'Manager (0000a002): after resume');
+  assert.equal(sent[0].body, 'Manager (7f0c2a11): after resume');
 });
 
 /* A RESUME MUST NOT COST A PARENT ITS CHILDREN.
@@ -279,7 +279,7 @@ test('a caller nobody vouched for gets the same refusal it always got', async t 
   const directory = directoryFor(t);
   treeWith(directory, { managerName: 'Manager' });
   directory.registerNode({
-    sessionId: 'session-manager', nodeName: 'Manager (0000a001)', pid: process.pid,
+    sessionId: 'session-manager', nodeName: 'Manager (51094ae6)', pid: process.pid,
     treeKey: 'tree-1', nodeKey: 'node-manager'
   });
   const { provider, sent } = providerOver(directory);
@@ -296,7 +296,7 @@ test('a caller whose own row is not running cannot send under a historical name'
   const directory = directoryFor(t);
   treeWith(directory, { managerName: 'Manager' });
   directory.registerNode({
-    sessionId: 'session-manager', nodeName: 'Manager (0000a001)', pid: process.pid,
+    sessionId: 'session-manager', nodeName: 'Manager (51094ae6)', pid: process.pid,
     treeKey: 'tree-1', nodeKey: 'node-manager'
   });
   directory.unregisterNode({ sessionId: 'session-manager' });

@@ -196,7 +196,7 @@ function Write-Vault {
         # of NUL (directory entry durable, pages not). Flush($true) is
         # FlushFileBuffers; the rename's MOVEFILE_WRITE_THROUGH (in
         # Move-VaultFileAtomically below) covers only the name, never the bytes.
-        # That fix landed in tools/secrets.ps1 (an earlier commit) but was never
+        # That fix landed in tools/secrets.ps1 (commit 9a6c79c) but was never
         # ported here, so every lifecycle mutation -- add, replace, rotate,
         # remove -- still risked leaving the exact same all-NUL vault behind on
         # a crash mid-write.

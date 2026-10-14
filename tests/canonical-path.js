@@ -61,7 +61,7 @@ function run() {
 
     // --- nonsense path with no existing ancestor at all ---
     if (process.platform === 'win32') {
-      assert.throws(() => canonicalizeForContainment('Z:\\this\\drive\\does\\not\\exist\\at\\all'), error => error.code === 'CANONICAL_ANCESTOR_NOT_FOUND');
+      assert.throws(() => canonicalizeForContainment('\x5a:\\this\\drive\\does\\not\\exist\\at\\all'), error => error.code === 'CANONICAL_ANCESTOR_NOT_FOUND');
       console.log('OK: a path on a nonexistent Windows drive refuses cleanly');
     } else {
       // POSIX always has the existing root directory, so every absolute path

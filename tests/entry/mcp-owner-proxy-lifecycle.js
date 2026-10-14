@@ -611,7 +611,7 @@ async function testConnectOwnerHostDirectly() {
   assert.equal(whoamiCall.file, ownerHostModule.WINDOWS_WHOAMI);
   assert.deepEqual(whoamiCall.args, ['/user', '/fo', 'csv', '/nh']);
   assert.deepEqual(whoamiCall.options.env, {});
-  assert.equal(ownerHostModule.systemIcacls({ SystemRoot: 'C:\\hostile-bin' }), ownerHostModule.WINDOWS_ICACLS,
+  assert.equal(ownerHostModule.systemIcacls({ SystemRoot: '\x43:\\hostile-bin' }), ownerHostModule.WINDOWS_ICACLS,
     'ambient SystemRoot selected the ACL executable');
   assert.throws(() => ownerHostModule.createOwnerHost({
     principals: { ownerPrincipal: 'TESTHOST\\owner', clientPrincipal: 'TESTHOST\\other' }
@@ -1042,11 +1042,11 @@ async function testConnectOwnerHostDirectly() {
     assert.equal(otherStillLive.status, 200,
       'revoking one session revoked a different agent/provider session');
     /* A ROLE EDIT REBINDS THE RUNNING SESSION IN PLACE; IT IS NOT A REVOCATION.
-       MEASURED 2026-09-19 on a live tree: services/custom-roles.json moved
+       MEASURED 2026-09-19 on the owner's tree: services/custom-roles.json moved
        default:controller to rev 10 and default:manager to rev 9 while both
        ran, and capability/logs/owner-host-retirements.jsonl records six
-       controller/manager sessions retired with reason per-line-recheck within
-       ten minutes -- "MCP server is not connected" for every one of them
+       controller/manager sessions retired with reason per-line-recheck between
+       03:03Z and 03:12Z -- "MCP server is not connected" for every one of them
        from that line on. The session below is authorized, its role is edited
        under it -- the revision moves AND its function sheet is narrowed -- and
        it must keep serving, with the EDITED sheet applied to its very next

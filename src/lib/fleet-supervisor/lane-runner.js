@@ -33,7 +33,9 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+// git is started by absolute path, never found in the worktree it acts on
+// (../git-command.js; platform review 1.0.50 E3).
+const { execGitFileSync } = require('../git-command');
 const { runHarnessCommand } = require('./evidence.js');
 const { executableFor } = require('../providers/cli-provider-gateway.js');
 const { subscriptionLaunchEnvironment } = require('../providers/subscription-launch-env.js');
@@ -43,7 +45,7 @@ const { DEFAULT_LANE_MODEL } = require('./lane-models.js');
 const onboarding = require('../agent-onboarding.js');
 
 // ---------------------------------------------------------------------------
-// Vertex lane environment (R58)
+// Vertex lane environment (owner order R58: burn the standing Vertex credit)
 // ---------------------------------------------------------------------------
 // THE CONSTRAINT THAT SHAPES ALL OF THIS: the operator's interactive gemini CLI
 // is logged in as their own personal Google account with a PERSISTED
@@ -75,7 +77,7 @@ const onboarding = require('../agent-onboarding.js');
 // THE BILLED ACCOUNT IS OPERATOR CONFIGURATION, NOT A PRODUCT CONSTANT.
 // This was a hardcoded personal Gmail address until 2026-08-13. Two things
 // were wrong with that at once: it published the operator's identity with the
-// source, and a fork of the published tree would default to looking for THEIRS
+// source, and a fork of the published tree would default to looking for HIS
 // credential rather than its own -- a lane that cannot work for anybody else.
 // It is now read at load time from the environment first, then from
 // config/vertex-gemini.json#accountEmail, which is operator-local and is
@@ -140,7 +142,7 @@ function laneEnvironment({
   // Start from the cross-provider scrub, not the raw ambient environment. The
   // gemini-only list below never removed ANTHROPIC_API_KEY, so a lane
   // inherited the owner's machine-wide key and any claude CLI it reached
-  // billed the API instead of their subscription. The vertex branch below
+  // billed the API instead of his subscription. The vertex branch below
   // deliberately re-adds the Google routing variables after this point; that
   // is an explicit, audited choice to bill credits, which is exactly why the
   // scrub has to happen first rather than be skipped.
@@ -237,7 +239,7 @@ function parseReportedFiles(responseText) {
   return { filesRead: filesRead || [], filesChanged: filesChanged || [] };
 }
 
-function changedFileCount(cwd, exec = execFileSync) {
+function changedFileCount(cwd, exec = execGitFileSync) {
   try {
     const out = String(exec('git', ['status', '--porcelain'], {
       cwd, encoding: 'utf8', windowsHide: true, shell: false
@@ -284,7 +286,7 @@ function runLane({
   // packaged-QA fence that is supposed to stop provider spend must reach it
   // the same as codex/claude. See src/lib/proc/hidden-spawn.js.
   spawnImpl = spawnHidden,
-  execImpl = execFileSync,
+  execImpl = execGitFileSync,
   resolveExecutable = executableFor
 } = {}) {
   return new Promise(resolve => {

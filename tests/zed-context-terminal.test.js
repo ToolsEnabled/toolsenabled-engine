@@ -53,8 +53,8 @@ assert.equal(defaultDisplay.transientMs, 500);
 assert.equal(defaultDisplay.maxPreviewMs, 500);
 defaultDisplay.finish();
 
-const codexSessionId = '019f0000-0000-7000-8000-000000000001';
-const claudeSessionId = '39e1d3c5-7a9f-4b1d-8e3f-5a7c9e1b3d5f';
+const codexSessionId = '019fbaaf-3e2d-7960-9c78-820d7e67e4ad';
+const claudeSessionId = '3603b824-9a1f-4ce4-af25-a2e2880df2c5';
 const recoveredRootSessionId = '11111111-1111-4111-8111-111111111111';
 const rejectedSubagentSessionId = '22222222-2222-4222-8222-222222222222';
 function codexSessionMeta(sessionId, cwd = process.cwd()) {

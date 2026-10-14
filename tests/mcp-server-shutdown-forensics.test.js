@@ -1,11 +1,11 @@
 'use strict';
 
-// THE TWO THINGS THE CRASHED MCP SERVER PAIR DID NOT HAVE.
+// THE TWO THINGS THE 2026-09-04T04:11:56Z CRASH PAIR DID NOT HAVE.
 //
-// Two MCP servers of one circle (started together)
+// Two MCP servers of one circle (pids 20204 and 11012, both started 03:56:20Z)
 // aborted in the same second and left two minidumps and nothing else. The
 // CONTEXT-based stack walk of both dumps
-// (the crash investigation evidence) is identical:
+// (REPORT-crash-20260903/evidence/D/walk-*.txt) is identical:
 //
 //   KERNELBASE!DebugBreak                                    <- EXCEPTION_BREAKPOINT
 //   electron.exe!uv_fatal_error                              <- rsi=6, rdi="PostQueuedCompletionStatus"
@@ -74,7 +74,7 @@ function installTreeWithServers(dir) {
   return dir;
 }
 
-test('a run-as-node MCP server is started with the V8 flag that removes the task both crash dumps aborted inside', () => {
+test('a run-as-node MCP server is started with the V8 flag that removes the task both 04:11:56Z dumps aborted inside', () => {
   resetProbeCache();
   const install = installTreeWithServers(scratchDirectory('guard-accepted'));
   const runtime = path.join(install, 'ToolsEnabled.exe');
@@ -226,7 +226,7 @@ test('the exit stamp is what tells a teardown abort apart from a death mid-call'
     assert.equal(midCall.lastRequest.tool, 'cloud.account_list',
       'the tool name is the one thing a reader needs and the dumps did not have');
 
-    // process.on('exit') cannot catch a V8/libuv abort -- but the recorded abort
+    // process.on('exit') cannot catch a V8/libuv abort -- but the 04:11:56Z abort
     // happened AFTER the JS exit hooks ran, in the native destructor chain. So
     // this stamp is exactly the discriminator that was missing. Emitting the
     // event directly is how a unit test observes the hook the server installs.

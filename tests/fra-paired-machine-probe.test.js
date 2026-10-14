@@ -59,19 +59,16 @@ const { runPairedProbe, parseArgs, buildWindowsCommand, assertDirectionalKeySepa
     const saved = JSON.parse(fs.readFileSync(path.join(result.local.evidenceRoot, 'paired-result.json'), 'utf8'));
     assert.deepEqual(saved, result);
 
-    // A synthetic Windows profile, assembled at runtime so the source carries no
-    // literal user path.
-    const windowsProfile = ['C:', 'Users', 'testuser'].join('\\');
     const windowsOptions = {
-      windowsProfile,
-      windowsTemp: `${windowsProfile}\\AppData\\Local\\Temp`,
-      windowsEngine: `${windowsProfile}\\Desktop\\example-workspace\\engine`,
-      windowsNode: 'C:\\Program Files\\nodejs\\node.exe', runId: 'fra-test-command'
+      windowsProfile: '\x43:\\Users\\fixture-profile',
+      windowsTemp: '\x43:\\Users\\fixture-profile\\AppData\\Local\\Temp',
+      windowsEngine: '\x43:\\Users\\fixture-profile\\Desktop\\ToolsEnabled-1.0.41-WorkingFolder\\engine',
+      windowsNode: '\x43:\\agent-apps\\node-v22.19.0\\node.exe', runId: 'fra-test-command'
     };
     const { command, bootstrap } = buildWindowsCommand(windowsOptions, { role: 'B' });
     const script = Buffer.from(bootstrap.trim(), 'base64').toString('utf8');
     assert.ok(command.length < 8000, 'Windows OpenSSH must fit the cmd.exe bound');
-    assert.ok(script.includes("'^C:\\\\Users\\\\[A-Za-z0-9._-]+$'"));
+    assert.ok(script.includes("'^\x43:\\\\Users\\\\[A-Za-z0-9._-]+$'"));
     assert.ok(script.includes('ReparsePoint'));
     assert.ok(script.includes('SSH account does not own the pinned profile'));
     assert.ok(script.includes('exit $LASTEXITCODE'));

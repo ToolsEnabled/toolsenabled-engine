@@ -16,8 +16,8 @@ const {
 const registry = {
   schemaVersion: 1,
   machines: {
-    left: { address: '203.0.113.1', root: 'C:\\left', role: 'development-host' },
-    right: { address: '203.0.113.2', root: 'C:\\right', role: 'disconnected-peer' }
+    left: { address: '203.0.113.1', root: '\x43:\\left', role: 'development-host' },
+    right: { address: '203.0.113.2', root: '\x43:\\right', role: 'disconnected-peer' }
   },
   services: {}
 };

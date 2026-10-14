@@ -27,7 +27,7 @@
 //   production transformations they check.
 // - Preconditions not met: none.
 // - Restoration: production source hashes in the working tree remained
-//   unchanged; after mutation testing, the untouched
+//   affa857c...f28f8 and 419b4db...fa27d; after mutation testing, the untouched
 //   working tree was GREEN: "online-fra-device-claim: 71 assertions passed".
 
 'use strict';

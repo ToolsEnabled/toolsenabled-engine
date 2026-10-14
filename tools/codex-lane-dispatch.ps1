@@ -2,9 +2,7 @@
 # Claude directs; Codex executes (R1187). Every lane gets its own worktree so
 # concurrent lanes cannot collide on files (SPAWN 0a anti-collision rule).
 #
-#   powershell -File tools/codex-lane-dispatch.ps1 -Lane example-lane -Model gpt-5.6-terra -Brief scratch/briefs/example-lane.md
-#
-# -Base <ref> is the commit the lane branch starts from (default: main).
+#   powershell -File tools/codex-lane-dispatch.ps1 -Lane p0-authf03 -Model gpt-5.6-terra -Brief scratch/briefs/p0-authf03.md -Base r1162/integration
 #
 # Output: the lane's last message at logs/codex-lanes/<Lane>.last.txt, full
 # stream at logs/codex-lanes/<Lane>.jsonl, stderr at <Lane>.err.log.
@@ -14,7 +12,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Lane,
   [Parameter(Mandatory = $true)][string]$Model,
   [Parameter(Mandatory = $true)][string]$Brief,
-  [string]$Base = 'main',
+  [string]$Base = 'r1162/integration',
   [string]$Effort = 'max'
 )
 
@@ -23,18 +21,22 @@ $repo = Split-Path -Parent $PSScriptRoot
 
 # WHERE LANE WORKTREES GO, AND WHY NOT BESIDE THE REPO.
 #
-# This used to walk a fixed number of levels up from the checkout and append a
-# folder name, which resolved to a directory that does not exist as soon as the
-# checkout moved. A path built by counting levels breaks the day anything moves.
+# This was:
+#   Join-Path (Split-Path -Parent (Split-Path -Parent $repo)) "Desktop\wt-$Lane"
+# which walked two levels up from the checkout and then appended "Desktop"
+# again. From the current layout that resolves to
+# <profile-root><Lane> -- a directory that does not exist,
+# because the checkout no longer sits one level deeper than it did when this
+# was written. A path built by counting levels breaks the day anything moves.
 #
-# And the intended path was wrong too: the folder above a checkout can ITSELF be
-# a git repository, so a worktree placed beside the checkout lands INSIDE another
-# repo, where its files show up in that repo's status and one `git add -A` sweeps
-# a whole lane into an unrelated commit.
+# And the intended path was wrong too: Desktop is ITSELF a git repository, so
+# a worktree placed beside the checkout lands INSIDE another repo, where its
+# files show up in that repo's status and one `git add -A` sweeps a whole lane
+# into an unrelated commit.
 #
 # So lanes live at a root that is deliberately outside every checkout, and the
 # guard below refuses rather than trusting that it still is.
-$LaneRoot = if ($env:TOOLSENABLED_LANE_ROOT) { $env:TOOLSENABLED_LANE_ROOT } else { Join-Path $env:LOCALAPPDATA 'ToolsEnabled\lanes' }
+$LaneRoot = if ($env:TOOLSENABLED_LANE_ROOT) { $env:TOOLSENABLED_LANE_ROOT } else { 'C:\lanes' }
 # NO `2>$null` HERE. This file already explains the trap twelve lines above and
 # the guard walked straight into it: in PowerShell 5.1, redirecting a NATIVE exe's
 # stderr wraps each line in an ErrorRecord, which under $ErrorActionPreference =
@@ -122,7 +124,7 @@ $psi.Arguments = @(
   '--output-last-message', ('"' + $lastMsg + '"'), '-'
 ) -join ' '
 
-# Subscription lane only, never an API key (owner R1178: CLI only).
+# Subscription lane only, never an API key (owner R1178: "cli only").
 $env:OPENAI_API_KEY = $null
 $env:CODEX_API_KEY = $null
 

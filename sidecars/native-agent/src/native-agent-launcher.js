@@ -468,6 +468,15 @@ function runNativeAgent(options = {}, dependencies = {}) {
     '--strict-mcp-config',
     '--max-turns', String(maxTurns),
     '--append-system-prompt', SYSTEM_PROMPT_APPENDIX,
+    /* THE OBJECTIVE IS UNTRUSTED TEXT, SO IT GOES AFTER `--`. Without the
+       terminator the CLI parses an objective that begins with a dash as its
+       own option. Measured on claude 2.1.281: an objective of
+       `--model=haiku` or `--permission-mode=acceptEdits` was taken as that
+       flag and the run refused with "Input must be provided ... when using
+       --print"; after `--` the same text is the prompt and every flag above
+       stands. Any single-word option (--mcp-config=..., --settings=...,
+       --add-dir=...) could otherwise be supplied by the objective. */
+    '--',
     objective
   ];
 

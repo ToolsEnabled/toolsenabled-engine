@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// ONE-SHOT, THROWAWAY bootstrap for the remote-agent-bridge token
-// (request R117: remote-agent bridge between paired computers). Same pattern already proven for the link bus bridge token
+// ONE-SHOT, THROWAWAY bootstrap for the remote-agent-bridge token (owner
+// request R117, "get the other computer complete access to the toolsenabled
+// system"). Same pattern already proven for the link bus bridge token
 // (tools/link-bus-enroll-token.js), but for a SEPARATE, dedicated secret:
 // the bridge grants full ToolsEnabled tool execution to Codex on machine B,
 // so it gets its own credential rather than reusing the lower-stakes chat

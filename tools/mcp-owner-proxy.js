@@ -41,8 +41,9 @@ const REFUSAL = 'REFUSING TO SERVE: cannot reach this ToolsEnabled app instance.
  *   - the agent read a transport-level "MCP server disconnected" with no
  *     product reason and no recovery;
  *   - the owner read nothing.
- * On two occasions lanes "worked on then idled unreachable"; later the
- * Controller could still only say "MCP is still down".
+ * 2026-09-16 08:15:26Z and 2026-09-18 09:30:24Z: lanes "worked on then idled
+ * unreachable"; 2026-09-19 01:50Z the Controller could still only say "MCP is
+ * still down".
  *
  * So a lost transport is now ANSWERED IN THE PROTOCOL, with a named reason the
  * agent reads as a tool result in its own transcript. The three reasons are

@@ -1,6 +1,6 @@
 'use strict';
 
-/* One provider toolchain for every agent program (providers review).
+/* One provider toolchain for every agent program (rc-0922, providers lane).
  * Holds: the table's fixed shape, the owned folder, every copy found with its
  * channel/owner/version and no program started, one choice shared by the app
  * and the engine (executableFor), feature states from a recorded --help,
@@ -71,11 +71,29 @@ test('every row has the fixed shape and every feature list names required and op
 
 test('the Claude row checks every option the Claude adapter passes, and only --effort is optional', () => {
   const adapter = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'agent-engine', 'claude-cli-adapter.js'), 'utf8');
-  const passed = new Set([...adapter.matchAll(/'(--[a-z][a-z-]+)'/g)].map(match => match[1]));
+  /* The Agent API "Only" mode adds its own Claude options (agent-api-policy.js), so both sources of Claude
+     options are read. (The adapter itself passes --setting-sources user on confined launches, 1.0.50 M1.) */
+  const apiPolicy = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'agent-api-policy.js'), 'utf8');
+  const passed = new Set([...`${adapter}\n${apiPolicy}`.matchAll(/'(--[a-z][a-z-]+)'/g)].map(match => match[1]));
   const listed = toolchain.PROVIDER_TOOLCHAIN.claude.features.list;
   assert.deepEqual([...passed].sort(), listed.map(entry => entry.name).sort(),
     'an option added to claude-cli-adapter.js must be added to the Claude feature list');
   assert.deepEqual(listed.filter(entry => !entry.required).map(entry => entry.name), ['--effort']);
+});
+
+test('only a whole Claude help listing can prove an option missing', () => {
+  /* MEASURED on claude 2.1.281: --help read through a shell pipe ended after
+     exactly 16384 bytes with exit 0, and every option after the cut read as
+     absent. The same cut of the 2.1.280 listing is the fixture. */
+  const cut = HELP_2_1_280.slice(0, 16384);
+  assert.equal(toolchain.helpListingComplete('claude', HELP_2_1_280), true);
+  assert.equal(toolchain.helpListingComplete('claude', HELP_2_1_280.replace(/\n/g, '\r\n')), true, 'a Windows listing is whole too');
+  assert.equal(toolchain.helpListingComplete('claude', cut), false, 'a listing cut before its Commands table is not whole');
+  assert.equal(toolchain.helpListingComplete('claude', HELP_2_1_280.replace(/^ {2}--tools .*$/m, '')), true,
+    'a whole listing that lacks an option is still whole -- that is a genuinely old CLI');
+  assert.equal(toolchain.helpListingComplete('claude', 'Commands:\n  mcp\nOptions:\n  --print\n'), false, 'the tables must come in commander\'s order');
+  assert.equal(toolchain.helpListingComplete('claude', null), false);
+  assert.equal(toolchain.helpListingComplete('gemini', '  --acp\n'), null, 'a row that declares no listing shape cannot be judged');
 });
 
 test('feature states come from what the program says it supports, never from its version number', () => {
@@ -101,18 +119,16 @@ test('feature states come from what the program says it supports, never from its
 });
 
 test('the owned folder is ToolsEnabled\'s own, per platform, and never guessed', () => {
-  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: {}, loginHome: '/home/person' }),
-    '/home/person/.local/share/ToolsEnabled/providers');
-  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: { XDG_DATA_HOME: '/data' }, loginHome: '/home/person' }),
+  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: {}, loginHome: '/\x68ome/person' }),
+    '/\x68ome/person/.local/share/ToolsEnabled/providers');
+  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: { XDG_DATA_HOME: '/data' }, loginHome: '/\x68ome/person' }),
     '/data/ToolsEnabled/providers');
-  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: { XDG_DATA_HOME: 'relative' }, loginHome: '/home/person' }),
-    '/home/person/.local/share/ToolsEnabled/providers');
-  // A synthetic LOCALAPPDATA, assembled at runtime so this source carries no literal user path.
-  const localAppData = ['C:', 'Users', 'person', 'AppData', 'Local'].join('\\');
-  assert.equal(toolchain.ownedProvidersRoot({ platform: 'win32', env: { LOCALAPPDATA: localAppData } }),
-    `${localAppData}\\ToolsEnabled\\providers`);
+  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: { XDG_DATA_HOME: 'relative' }, loginHome: '/\x68ome/person' }),
+    '/\x68ome/person/.local/share/ToolsEnabled/providers');
+  assert.equal(toolchain.ownedProvidersRoot({ platform: 'win32', env: { LOCALAPPDATA: '\x43:\\Users\\person\\AppData\\Local' } }),
+    '\x43:\\Users\\person\\AppData\\Local\\ToolsEnabled\\providers');
   assert.equal(toolchain.ownedProvidersRoot({ platform: 'win32', env: {} }), null);
-  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: {}, loginHome: 'C:\\x' }), null);
+  assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: {}, loginHome: '\x43:\\x' }), null);
   assert.equal(toolchain.ownedProvidersRoot({ platform: 'linux', env: { TOOLSENABLED_PROVIDERS_ROOT: '/staged/providers' }, loginHome: '/h' }),
     '/staged/providers');
 });
@@ -121,7 +137,7 @@ test('two Codex copies: both are found with channel, owner and version, and the 
   const root = scratch(t);
   const home = path.join(root, 'home');
   const usrLocal = path.join(root, 'usr-local');
-  // A root-owned npm copy, the way /usr/local/bin/codex is on a typical Linux install.
+  // A root-owned npm copy, the way /usr/local/bin/codex 0.153.4 is on this laptop.
   const npmDir = path.join(usrLocal, 'lib', 'node_modules', '@openai', 'codex');
   npmPackage(npmDir, '@openai/codex', '0.153.4', { codex: 'bin/codex.js' });
   writeFile(path.join(npmDir, 'bin', 'codex.js'), '#!/usr/bin/env node\n', 0o755);
@@ -268,7 +284,7 @@ test('versions are read from files and folder names without starting any program
   const home = path.join(root, 'home');
   const first = path.join(home, '.grok', 'downloads', 'grok-linux-x86_64');
   writeFile(first, 'native', 0o755);
-  // version.json is Grok's last update CHECK, not the installed copy.
+  // version.json is Grok's last update CHECK, not the installed copy (Grok lane).
   writeFile(path.join(home, '.grok', 'version.json'), JSON.stringify({ version: '1.0.99' }));
   link(first, path.join(home, '.grok', 'bin', 'grok'));
   const unversioned = toolchain.providerCandidates('grok', { platform: 'linux', loginHome: home, env: {}, root: null, searchDirectories: [] });

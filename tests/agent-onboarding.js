@@ -223,7 +223,7 @@ const dependencies = {
   readClaims: () => [{
     key: 'claim/r1175-other',
     actor: 'other-worker',
-    checkout: 'C:/fixture/other',
+    checkout: '\x43:/fixture/other',
     paths: ['src/lib/agent-onboarding.js'],
     scope: 'Other worker owns the packet source.',
     expiresAt: '2026-08-09T00:00:00.000Z',
@@ -444,6 +444,36 @@ try {
   assert.ok(payloadPacket.unknowns.some(entry => entry.code === 'live-mutation-context-not-required'),
     'a payload-hosted builder boots and the packet records that the checkout context was not required');
   assert.equal(payloadPacket.coordination.presence.revision, null, 'no presence was invented for the payload root');
+
+  /* SECURITY REVIEW 1.0.50 U1: the project root is never git's working
+     directory. The same packet is built again with the REAL git runners (no
+     deps.git, so gitIdentity and the recent-work feed both spawn), and a git
+     planted at the top of the root must not be what runs. Windows searches the
+     child's working directory before PATH; on POSIX a "." PATH entry does the
+     same, which is how this drives that search through the real spawn. That
+     simulation needs a runnable POSIX script, so it is this file's one
+     platform guard; Windows keeps the call-shape and resolver coverage in
+     tests/setup-workspace.test.js. */
+  if (process.platform === 'win32') {
+    console.log('NOTE: planted-git check not run on Windows (POSIX "." PATH simulation); see tests/setup-workspace.test.js');
+  } else {
+    const { git: _injectedGit, ...realGitDependencies } = payloadDependencies;
+    const markerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toolsenabled-onboarding-planted-'));
+    const marker = path.join(markerRoot, 'planted-git-ran');
+    fs.writeFileSync(path.join(payloadRoot, 'git'), `#!/bin/sh\necho "$*" >> '${marker}'\nexit 0\n`, { mode: 0o755 });
+    const savedPath = process.env.PATH;
+    process.env.PATH = `.${path.delimiter}${savedPath}`;
+    let plantedPacket;
+    try {
+      plantedPacket = onboarding.buildPacket({ ...mutationInput, runtimeRoot: payloadRoot, projectRoot: payloadRoot }, realGitDependencies);
+    } finally {
+      process.env.PATH = savedPath;
+    }
+    const ran = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : '';
+    fs.rmSync(markerRoot, { recursive: true, force: true });
+    assert.equal(ran, '', `a git planted in the project root ran while the packet was built: ${ran}`);
+    assert.equal(plantedPacket.project.root, payloadRoot, 'the packet still describes the project root');
+  }
   fs.rmSync(payloadRoot, { recursive: true, force: true });
 
   const rendered = onboarding.renderPacket(first);
@@ -831,7 +861,7 @@ try {
 
   // The owner's R ledgers ride PINNED in every packet, in obey-order, and a
   // thread rule comes back after a compaction with nothing but the harness's
-  // own session_id. Product design: four /Request* commands.
+  // own session_id. Owner design 2026-08-15 (four /Request* commands).
   resetSources();
   const rLedger = require('../src/lib/r-ledger');
   // The isolated runner deliberately configures a separate writable state

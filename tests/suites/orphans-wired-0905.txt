@@ -37,12 +37,12 @@ tests/memory-audit-off-thread.test.js
 # so a future failure is binding. The nearest subject-matching suites --
 # ledger-and-evidence-orphans for the ledger tests and test:fra for the FRA one --
 # are both baselined FAIL, which would have absorbed every regression these files
-# are meant to catch. That is the same reasoning an earlier change applied when it moved
+# are meant to catch. That is the same reasoning 6fb2e444 applied when it moved
 # memory-audit-off-thread.test.js out of ledger-and-evidence-orphans, one line above.
 tests/agent-comms/broker-state-retention.test.js
 tests/helpers/isolated-state-root.test.js
 tests/minor-ledger-agent-gate.test.js
-# 2026-09-07, second round: an earlier change (a_ledger.answer /
+# 2026-09-07, second round: e5878cac (Worker 3's 97771721, a_ledger.answer /
 # a_ledger.decline / p_ledger.decide) added this file with no invocation path either.
 # Run on this head before wiring: # tests 9, # pass 9, # fail 0.
 tests/minor-ledger-agent-gate-ap-tools.test.js

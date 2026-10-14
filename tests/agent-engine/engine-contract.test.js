@@ -79,9 +79,9 @@ function main() {
     approvalId: 'approval-1', response: { value: Number.POSITIVE_INFINITY }
   }));
 
-  /* turn_accepted and thinking, added 2026-09-03 (product decision: more event
-     types are fine, and the user should be shown when the model is
-     thinking). Neither is assistant speech -- see engine-contract.js's own
+  /* turn_accepted and thinking, added 2026-09-03 (owner: "more event types
+     are fine we should be showing the user when the model is thinking
+     anyway"). Neither is assistant speech -- see engine-contract.js's own
      comment on the two entries for why each exists. */
   assert.deepEqual(contract.EVENT_TYPES, [
     'assistant_text_delta', 'assistant_text', 'tool_call', 'tool_result',

@@ -12,6 +12,13 @@ const {
   normalizeRoleCapabilities
 } = require('./agent-org');
 const { roleRules } = require('./agent-roles');
+// PROJECTED ROLES: what an activated plugin contributes, added to what was read
+// from disk and never written to it. src/lib/plugin-role-projection.js argues why
+// at length; the short version is that this file's backing store is the PERSON'S
+// authority document, a revoked plugin must take its roles with it, and neither
+// property survives durable writes by a third party. With no plugin activated the
+// projected list is empty and every read below is exactly what it was before.
+const projection = require('./plugin-role-projection');
 const { defaultFunctionPolicy, normalizeFunctionPolicy } = require('./role-functions');
 
 const NAMESPACE = 'custom-roles';
@@ -111,6 +118,36 @@ const DEFAULT_ROLE_DEFINITIONS = deepFreeze(ROLES.map(id => {
 
 const DEFAULTS_BY_ID = new Map(DEFAULT_ROLE_DEFINITIONS.map(definition => [definition.id, definition]));
 
+/* A projected role in this file's own definition shape, so nothing downstream can
+   tell it from a stored one by looking. It carries the default custom-role
+   capabilities and function policy: a plugin does not choose either -- those are
+   decisions the product makes, which is also why a plugin's role FILE may not
+   carry them (see rolesFor() in src/lib/plugin-host/index.js). */
+function projectedDefinition(role) {
+  return frozenClone({
+    id: role.id,
+    baseDefaultRole: null,
+    rules: role.rules,
+    capabilities: DEFAULT_ROLE_CAPABILITIES.worker,
+    ...defaultFunctionPolicy('worker')
+  });
+}
+
+/* A durable row with a projected id would shadow the projection from then on, and
+   the two would disagree about the role's wording with nothing to say which is in
+   force. So the write is refused, and the refusal says which package holds the id
+   and what to do instead. */
+function assertNotProjected(id, verb) {
+  const supplied = projection.projectedRole(id);
+  if (!supplied) return;
+  fail('CUSTOM_ROLE_PROJECTED',
+    `"${id}" is a role supplied by the plugin ${supplied.plugin ? `"${supplied.plugin}"` : 'you have allowed'}, `
+    + `so it cannot be ${verb} here. Its wording comes from the package and changes when the package does. `
+    + 'To write your own role, give it a different name; to stop this one existing, withdraw that plugin\'s '
+    + 'permission to add roles.',
+    { id, plugin: supplied.plugin });
+}
+
 function normalizeDefinition(input, { custom }) {
   if (!plain(input) || !Object.hasOwn(input, 'id') || !Object.hasOwn(input, 'rules')
     || Object.keys(input).some(key => !['id', 'baseDefaultRole', 'rules', 'capabilities', 'functions', 'requiresDirectUserAuthorization'].includes(key))) {
@@ -164,9 +201,9 @@ function normalizeDefinition(input, { custom }) {
   } catch (error) {
     fail('CUSTOM_ROLE_INVALID', error.message, { field: 'definition.capabilities' });
   }
-  // Stored/custom roles without a function field retain their previous normal
-  // surface. Only the shipped definitions above deliberately gain new controls.
-  const functionPolicy = normalizeFunctionPolicy(input, defaultFunctionPolicy(custom ? baseDefaultRole : input.id, { includeSlotConfiguration: false }));
+  // A saved default directions sheet inherits installed task hand-out defaults.
+  // Explicit function choices and custom-role grants remain authoritative.
+  const functionPolicy = normalizeFunctionPolicy(input, defaultFunctionPolicy(custom ? baseDefaultRole : input.id, { includeSlotConfiguration: false, includeTaskHandout: !custom }));
   return Object.freeze({ id: input.id, baseDefaultRole, rules: normalizeRules(input.rules), capabilities, ...functionPolicy });
 }
 
@@ -234,7 +271,11 @@ class CustomRoleStore {
       return frozenClone(override ? override.definition : DEFAULTS_BY_ID.get(id));
     }
     const custom = this._readEntry('custom', id);
-    return custom ? frozenClone(custom.definition) : null;
+    if (custom) return frozenClone(custom.definition);
+    // The person's own role wins, which is why this is checked LAST. A plugin
+    // cannot take over an id somebody is already using.
+    const supplied = projection.projectedRole(id);
+    return supplied ? projectedDefinition(supplied) : null;
   }
 
   getRoleRecord(id) {
@@ -247,14 +288,36 @@ class CustomRoleStore {
       });
     }
     const custom = this._readEntry('custom', id);
-    return custom ? Object.freeze({ definition: frozenClone(custom.definition), revision: custom.revision }) : null;
+    if (custom) return Object.freeze({ definition: frozenClone(custom.definition), revision: custom.revision });
+    const supplied = projection.projectedRole(id);
+    // Revision 0: there is no stored row, so there is nothing an edit could hold a
+    // revision against. editRole() refuses a projected id for exactly that reason.
+    return supplied ? Object.freeze({ definition: projectedDefinition(supplied), revision: 0 }) : null;
   }
 
   hasRole(id) {
     return this.getRole(id) !== null;
   }
 
-  listRoles() {
+  /* WHICH PLUGIN SUPPLIES THIS ROLE, WHILE ITS ROLE IS THE ONE IN FORCE, or null:
+     for a default, for a stored role of the person's own (which wins any
+     collision), and for an id nothing projects. Two readers need it and neither
+     can tell by looking, because a projected definition is shaped exactly like a
+     stored one: a screen that names the package a role came from, and
+     src/lib/agent-org-store.js, which records the plugin roles its seats hold so
+     that a role which goes away with its plugin leaves a Worker rather than an
+     organisation that no longer loads. */
+  suppliedBy(id) {
+    if (typeof id !== 'string' || !ROLE_ID.test(id) || DEFAULT_ROLE_IDS.has(id)) return null;
+    const supplied = projection.projectedRole(id);
+    if (!supplied || this._readEntry('custom', id)) return null;
+    return Object.freeze({ plugin: supplied.plugin, pluginId: supplied.pluginId });
+  }
+
+  /* The person's own stored custom roles, validated, and nothing projected. Both
+     listRoles() and the allowance check in createCustomRole() read this, so they
+     cannot disagree about what is stored. */
+  _storedCustomDefinitions() {
     const entries = this.stateStore.searchMemory({ namespace: NAMESPACE, query: 'custom-role', limit: 20 });
     const custom = [];
     for (const entry of entries) {
@@ -270,18 +333,37 @@ class CustomRoleStore {
       if (value.kind === 'custom') custom.push(definition);
     }
     if (custom.length > MAX_CUSTOM_ROLES) fail('CUSTOM_ROLE_LIMIT_REACHED', 'Too many custom roles are stored.');
+    return custom;
+  }
+
+  listRoles() {
+    const custom = this._storedCustomDefinitions();
+    // The projected roles come last and lose every collision -- with a default id
+    // and with a stored custom one alike. A shadowed projection is reported by
+    // src/lib/plugin-activation.js rather than resolved in silence.
+    const taken = new Set([...DEFAULT_ROLE_IDS, ...custom.map(definition => definition.id)]);
+    const supplied = projection.projectedRoles()
+      .filter(role => !taken.has(role.id))
+      .map(projectedDefinition);
     return Object.freeze([
       ...ROLES.map(id => this.getRole(id)),
-      ...custom.sort((left, right) => left.id.localeCompare(right.id)).map(frozenClone)
+      ...custom.sort((left, right) => left.id.localeCompare(right.id)).map(frozenClone),
+      ...supplied
     ]);
   }
 
   createCustomRole(input) {
     const definition = normalizeDefinition(input, { custom: true });
+    assertNotProjected(definition.id, 'created');
     if (this._readEntry('custom', definition.id)) {
       fail('CUSTOM_ROLE_COLLISION', `Custom role "${definition.id}" already exists.`, { id: definition.id });
     }
-    const customCount = this.listRoles().filter(role => !DEFAULT_ROLE_IDS.has(role.id)).length;
+    // ONLY THE PERSON'S OWN STORED ROLES COUNT. This counted listRoles(), which
+    // includes the roles an allowed plugin projects, so after allowing a plugin's
+    // roles a person could not create one of their own, and the refusal blamed
+    // roles they never stored (1.0.50 release review F4). A projected role is
+    // never written here, so it uses none of the allowance.
+    const customCount = this._storedCustomDefinitions().length;
     if (customCount >= MAX_CUSTOM_ROLES) fail('CUSTOM_ROLE_LIMIT_REACHED', `At most ${MAX_CUSTOM_ROLES} custom roles may be stored.`);
     try {
       return this._write('custom', definition, 0);
@@ -296,10 +378,16 @@ class CustomRoleStore {
   editRole(input) {
     requiredAndOptionalKeys(input, ['id', 'rules', 'expectedRevision'], ['capabilities', 'functions', 'requiresDirectUserAuthorization'], 'edit');
     if (typeof input.id !== 'string' || !ROLE_ID.test(input.id)) fail('CUSTOM_ROLE_INVALID', 'edit.id is invalid.', { field: 'edit.id' });
+    // A stored role of the person's own is the one in force even while a plugin
+    // projects the same id (getRole() reads it first), so it stays theirs to edit.
+    // Only an id that nothing but a plugin defines is refused. Refusing every
+    // projected id, as this once did, told a person editing their own role that
+    // it came from the plugin.
+    const existing = this._readEntry('custom', input.id);
+    if (!existing) assertNotProjected(input.id, 'edited');
     if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
       fail('CUSTOM_ROLE_INVALID', 'edit.expectedRevision must be a positive integer.', { field: 'edit.expectedRevision' });
     }
-    const existing = this._readEntry('custom', input.id);
     if (!existing) fail('CUSTOM_ROLE_NOT_FOUND', `Custom role "${input.id}" does not exist.`, { id: input.id });
     const candidate = normalizeDefinition({
       id: input.id,

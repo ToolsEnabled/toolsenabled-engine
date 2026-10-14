@@ -9,7 +9,7 @@
 // failing prepare was working on, and only when that prepare is attempted again,
 // which never happens for a retired agent or a closed session.
 //
-// MEASURED on a development machine while writing this: ~/.codex/auth.json had
+// MEASURED on the owner's machine while writing this: ~/.codex/auth.json had
 // nlink=9 -- eight links under six different profile trees, every one from an
 // agent or session that had ended. Deleting the owner's copy leaves the inode
 // alive under eight other names, each a working OAuth refresh token. This is

@@ -40,8 +40,8 @@ const QUICK_EDIT_MAX_INSTRUCTION_CHARS = 1500;
 const QUICK_EDIT_MAX_SOURCE_CHARS = 8192;
 const QUICK_EDIT_MAX_OUTPUT_TOKENS = 2048;
 const QUICK_EDIT_LANGUAGE = /^[A-Za-z][A-Za-z0-9+_.-]{0,31}$/;
-// gpt-oss has 24 transformer blocks. Eight GPU blocks were measured on a
-// development machine at a 65%/35% CPU/GPU model split, with a 2.3 GiB minimum free-VRAM
+// gpt-oss has 24 transformer blocks. Eight GPU blocks were measured on this
+// machine at a 65%/35% CPU/GPU model split, with a 2.3 GiB minimum free-VRAM
 // reserve and more than 16 GiB free system RAM. Keep these request-local so the
 // safety profile does not depend on restarting or globally reconfiguring Ollama.
 const GPT_OSS_NUM_CTX = 4096;
@@ -550,7 +550,7 @@ function localJsonRequest(pathname, payload, { timeoutMs = DEFAULT_TIMEOUT_MS, d
       if (error) reject(error);
       else resolve(value);
     };
-    const request = http.request({
+    const request = ((dependencies && dependencies.http) || http).request({
       host, port: OLLAMA_PORT, family: 4, path: pathname,
       method: data === null ? 'GET' : 'POST', agent: false, timeout: timeoutMs,
       headers: data === null ? { Accept: 'application/json' } : {
@@ -578,7 +578,17 @@ function localJsonRequest(pathname, payload, { timeoutMs = DEFAULT_TIMEOUT_MS, d
       });
     });
     request.on('error', () => finish(modelError('MODEL_OLLAMA_UNAVAILABLE', 'The local Ollama service is unavailable.')));
-    request.on('timeout', () => request.destroy(modelError('MODEL_OLLAMA_TIMEOUT', 'The local Ollama service timed out.')));
+    /* SETTLE AS A TIMEOUT BEFORE TEARING THE SOCKET DOWN. destroy(error)
+       re-emits that error through the 'error' listener above, which answers
+       UNAVAILABLE for anything, so a model that was still generating when the
+       deadline expired was reported as "The local Ollama service is
+       unavailable." -- measured against a socket that accepted and never
+       answered -- and every MODEL_OLLAMA_TIMEOUT branch downstream (the tier
+       fallback below, research-hermes, research-strong) was unreachable. */
+    request.on('timeout', () => {
+      finish(modelError('MODEL_OLLAMA_TIMEOUT', 'The local Ollama service timed out.'));
+      request.destroy();
+    });
     if (data !== null) request.write(data);
     request.end();
   });

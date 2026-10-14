@@ -74,7 +74,7 @@ test('CONTROL: the ambient key really does reach an unscrubbed child', () => {
 test('the DEFAULT apiKey does not carry the ambient key into a real child', () => {
   withAmbient({ ...cleanParent(), anthropic_api_key: MARKER }, () => {
     // The value startClaudeSession() actually runs with -- not a re-typed guess.
-    const env = claudeProcess.createSessionEnvironment(claudeProcess.defaultApiKey(), 'C:\\round2-nonexistent');
+    const env = claudeProcess.createSessionEnvironment(claudeProcess.defaultApiKey(), '\x43:\\round2-nonexistent');
     assert.equal(childResolves(env, 'anthropic_api_key'), 'ABSENT',
       'the default path put the ambient key back after the scrub removed it');
   });
@@ -91,7 +91,7 @@ test('defaultApiKey() is not derived from ambient state at all', () => {
 
 test('createSessionEnvironment honours a STATED key before the transport boundary', () => {
   withAmbient(cleanParent(), () => {
-    const env = claudeProcess.createSessionEnvironment('stated-key-value', 'C:\\round2-nonexistent');
+    const env = claudeProcess.createSessionEnvironment('stated-key-value', '\x43:\\round2-nonexistent');
     assert.equal(env.ANTHROPIC_API_KEY, 'stated-key-value');
     assert.equal(childResolves(env, 'ANTHROPIC_API_KEY'), 'PRESENT');
   });

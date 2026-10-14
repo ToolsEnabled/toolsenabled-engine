@@ -1,10 +1,11 @@
 'use strict';
 // A PROTOCOL-POISONED ACP SESSION MUST END, NOT LINGER LOOKING READY.
 //
-// A hand test found that a resumed Grok host session refused every send with
+// Owner hand test, LIVE engine 2759700d: the first resumed Grok host session
+// c15acc36-4711-4097-91d1-76f90bf53a5e refused every send with
 // ACP_PROTOCOL_INVALID, stayed registered in the host's sessionAccounts, and
-// its native CLI kept running with no further events. Only an explicit
-// mcAgent.close recovered it.
+// its native CLI (pid 800547) kept running with no further events. Only an
+// explicit mcAgent.close recovered it.
 //
 // _failClosed unsubscribed its reader, rejected pending work and cleared its
 // maps -- and stopped there. The child it owned was never closed, so the host,

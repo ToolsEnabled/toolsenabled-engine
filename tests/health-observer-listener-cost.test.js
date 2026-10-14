@@ -1,6 +1,6 @@
 'use strict';
 
-// Proves the health observer's listener
+// watcher-cost-build (session 6f84bf9b): proves the health observer's listener
 // probing is cheap-first. Before this change, buildSystemContext().getListener()
 // called serviceControl.defaultProbe() -- a full PowerShell spawn -- for every
 // declared loopback port on every sweep, whether or not anything was listening.

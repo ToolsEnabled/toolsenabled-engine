@@ -56,8 +56,8 @@ const TREE = 'tree-top-circle';
 /* The directory stores its file under path.resolve(file) (src/lib/agent-comms/tree-node-directory.js), which is
    "C:\\memory-only\\tree-nodes.json" on Windows; reads of the in-memory store use that same key. */
 const STORE = path.resolve('/memory-only/tree-nodes.json');
-const MANAGER = 'Builder 2 (0000b002)';
-const CHILD = 'Builder 6 (0000b006)';
+const MANAGER = 'Builder 2 (964cd27e)';
+const CHILD = 'Builder 6 (7a80e60d)';
 
 /** One isolated world: the shipping directory, a clock, and the exact argument shape the
  *  application host uses to register a session (shell/agent-host.cjs attemptTreeRegistration). */
@@ -82,7 +82,7 @@ function world({ managerLabel = MANAGER } = {}) {
     },
     id(session) { return api.agentIdForSession(session); }
   };
-  register({ session: 'p1', name: managerLabel, manager: 'Controller (0000c001)', node: 'node-P' });
+  register({ session: 'p1', name: managerLabel, manager: 'Controller (5a702567)', node: 'node-P' });
   w.child('a6');
   w.beat('p1', 'a6');
   return w;
@@ -142,7 +142,7 @@ test('T839 a live successor whose manager label drifted from its manager\'s regi
 
 test('T839 a drifted label is the same manager only when it names one circle here, and never crosses to another manager with the same base name', () => {
   const w = world();
-  w.register({ session: 'p2', name: 'Builder 2 (bbbbbbbb)', manager: 'Controller (0000c001)', node: 'node-P2' });
+  w.register({ session: 'p2', name: 'Builder 2 (bbbbbbbb)', manager: 'Controller (5a702567)', node: 'node-P2' });
   w.beat('p1', 'p2', 'a6');
   replaced(w, { manager: 'Builder 2' }); // "Builder 2" could now name either manager: nothing may be inherited
   w.beat('p1', 'p2', 'b6');
@@ -158,9 +158,9 @@ test('T839 a drifted label matches only its own base name plus the canvas disamb
   const cases = [
     // [how the manager is registered, the label its child's successor re-sends, does the successor keep its manager's line]
     [MANAGER, 'Builder 2', true], [MANAGER, 'builder 2  ', true], [MANAGER, 'Builder 20', false], [MANAGER, 'Builder 2 (zz)', false],
-    [MANAGER, 'Builder', false], [MANAGER, 'Builder 2 (0000b002) extra', false],
-    ['Builder 2', 'Builder 2 (0000b002)', true], ['Builder 2', 'Builder 2 (zz)', false], ['Builder 2', 'Builder 2 (12)', false],
-    ['Builder 2', 'Builder 20 (0000b002)', false], ['Builder 20 (0000b002)', 'Builder 2', false]
+    [MANAGER, 'Builder', false], [MANAGER, 'Builder 2 (964cd27e) extra', false],
+    ['Builder 2', 'Builder 2 (964cd27e)', true], ['Builder 2', 'Builder 2 (zz)', false], ['Builder 2', 'Builder 2 (12)', false],
+    ['Builder 2', 'Builder 20 (964cd27e)', false], ['Builder 20 (964cd27e)', 'Builder 2', false]
   ];
   for (const [registered, label, inherits] of cases) {
     const w = replaced(world({ managerLabel: registered }), { manager: label });

@@ -99,7 +99,7 @@ async function main() {
 
     for (const bad of [
       '', ';', 'src/**;', ';tests/**', 'src/**;;tests/**',
-      '/etc/passwd', 'C:\\work\\file.js', 'C:drive-relative.js', '\\\\peer\\share\\file.js',
+      '/etc/passwd', '\x43:\\work\\file.js', 'C:drive-relative.js', '\\\\peer\\share\\file.js',
       '../outside.js', 'src/../outside.js', 'src\\..\\outside.js'
     ]) {
       refuses(() => scopeContract.parseTerritory(bad), `territory must refuse ${JSON.stringify(bad)}`);

@@ -26,15 +26,15 @@ function fixture(capturedAtMs) {
     tasks: targets.TASK_NAMES.map(taskName => ({
       taskName,
       state: 'Running',
-      executable: 'C:\\Program Files\\nodejs\\node.exe',
-      argv: ['C:\\install-root\\tools\\worker.js', '--serve'],
-      workingDirectory: 'C:\\install-root'
+      executable: '\x43:\\Program Files\\nodejs\\node.exe',
+      argv: ['\x43:\\ToolsEnabled\\tools\\worker.js', '--serve'],
+      workingDirectory: '\x43:\\ToolsEnabled'
     })),
     processes: [{
       pid: 4812,
       imageName: 'node.exe',
       startedAtMs: capturedAtMs - 1000,
-      argv: ['C:\\install-root\\tools\\worker.js', '--serve']
+      argv: ['\x43:\\ToolsEnabled\\tools\\worker.js', '--serve']
     }]
   };
 }
@@ -65,10 +65,10 @@ check('fresh validated snapshots project scheduled tasks and process identity', 
   const loaded = consumer.loadProcessVisibility({ file, now });
   assert.equal(loaded.usable, true);
   assert.equal(loaded.getScheduledTask('ToolsEnabled Health Observer').arguments,
-    'C:\\install-root\\tools\\worker.js --serve');
-  assert.equal(loaded.getScheduledTask('ToolsEnabled Health Observer').workingDirectory, 'C:\\install-root');
+    '\x43:\\ToolsEnabled\\tools\\worker.js --serve');
+  assert.equal(loaded.getScheduledTask('ToolsEnabled Health Observer').workingDirectory, '\x43:\\ToolsEnabled');
   assert.equal(loaded.getProcessInfo(4812).commandLine,
-    'C:\\install-root\\tools\\worker.js --serve');
+    '\x43:\\ToolsEnabled\\tools\\worker.js --serve');
   assert.equal(loaded.getProcessInfo(4812).startedAt, new Date(now - 2000).toISOString());
   clean(directory);
 });
@@ -105,9 +105,9 @@ check('registered tasks bound to a different checkout fail the root-binding chec
   const now = 1785400000000;
   const value = fixture(now - 1000);
   const task = value.tasks.find(item => item.taskName === 'ToolsEnabled Health Observer');
-  task.executable = 'C:\\example\\other-checkout\\tools\\health-observer.js';
-  task.argv = ['C:\\example\\other-checkout\\tools\\health-observer.js', '--once'];
-  task.workingDirectory = 'C:\\example\\other-checkout';
+  task.executable = '\x43:\\Users\\owner\\Desktop\\ToolsEnabled\\tools\\health-observer.js';
+  task.argv = ['\x43:\\Users\\owner\\Desktop\\ToolsEnabled\\tools\\health-observer.js', '--once'];
+  task.workingDirectory = '\x43:\\Users\\owner\\Desktop\\ToolsEnabled';
   const { directory, file } = writeSnapshot(value);
   const loaded = consumer.loadProcessVisibility({ file, now });
   const verdict = health.evaluateSubsystem(
@@ -202,7 +202,7 @@ check('health context attaches identity to a port listener only from the fresh s
     processVisibilityFile: file,
     listenerProbe: () => ({ listeners: [{ pid: 4812, commandLine: 'direct-untrusted.exe', localAddress: '127.0.0.1' }] })
   });
-  assert.equal(ctx.getListener(3888).commandLine, 'C:\\install-root\\tools\\worker.js --serve');
+  assert.equal(ctx.getListener(3888).commandLine, '\x43:\\ToolsEnabled\\tools\\worker.js --serve');
   clean(directory);
 });
 

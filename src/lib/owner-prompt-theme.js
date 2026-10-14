@@ -22,7 +22,7 @@
 // unavailable", which reads like a service that is merely down rather than a
 // feature that was never connected.  Every prompt consequently fell back to
 // the native dialog, and the owner refused to type a card into it because it
-// did not look like the product.  They were right; it did not.
+// did not look like the product.  He was right; it did not.
 //
 // DRIFT IS THE REAL RISK, SO THE VALUES ARE TESTED, NOT TRUSTED
 //

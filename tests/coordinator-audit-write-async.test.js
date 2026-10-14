@@ -2,7 +2,7 @@
 
 // THE POLICY-DECISION EVENT LEAVES THE MAIN THREAD.
 //
-// MEASURED 2026-09-04 in a live main process: coordinator
+// MEASURED 2026-09-04 in the owner's Live main process: coordinator
 // audit write() ran a full synchronous admission per tool call on the main
 // thread (thirty a minute with seventeen circles), 5.4 s of PowerShell
 // execFileSync per minute among the stalls. writeAsync submits the identical

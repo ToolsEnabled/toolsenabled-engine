@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { ClaudeCliAdapter } = require('../../src/lib/agent-engine/claude-cli-adapter');
-const id = '72d4f6b8-0c2e-4a6c-9e0b-2d4f6a8c0e1f';
+const id = '7cf7c88e-6912-4388-a181-78aef262c494';
 function fixture(policy = { initialMode: 'acceptEdits', allowedModes: ['plan', 'default', 'acceptEdits'] }) {
   let receive; const sent = [];
   const adapter = new ClaudeCliAdapter({ modePolicy: policy, modeTimeoutMs: 20,

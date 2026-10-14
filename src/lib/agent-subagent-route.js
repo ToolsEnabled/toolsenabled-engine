@@ -1,15 +1,16 @@
 'use strict';
 // WHERE AN ASSISTANT'S OWN ASSISTANTS APPEAR: on the person's tree, or off it.
 //
-// The product design:
+// The owner's design, in his own words (2026-09-02):
 //
-//   When an agent spawns subagents it can spawn its own subagents as usual if
-//   it has full permissions, spawn them through the ToolsEnabled API as
-//   non-tree agents, or launch them through the API as full, user-toggled
-//   agents -- and user settings decide which.
+//   "when agent spawn subagents they can either spawn their own subagents like
+//    normal if they have full permissions, they can spawn them via toolsenabled
+//    api as non tree agents or they can launch through api as full user toggled
+//    agents. this should be all dictated via user settings"
 //
-//   These are separate settings. The API setting is one toggle that governs a
-//   whole class of the software; the SUBAGENT settings cover the specifics.
+//   "There are seperate settings. API setting should already have been built
+//    in. THAT is one toggle and effects a whole class of the software. THEN we
+//    have SUBAGENT settings which relate to the more specifics"
 //
 // So there are three ROUTES and two SEPARATE settings, and the separation is
 // the whole point of this file existing next to agent-api-policy.js rather than
@@ -40,8 +41,8 @@
 // ---------------------------------------------------------------------------
 // WHY "LET THE ASSISTANT DECIDE" IS THE SHIPPED ANSWER, AND WHAT IT DECIDES BY.
 //
-// The person is already choosing per request, in the request itself (for
-// example, asking for every agent to launch under the visible tree). Someone who has never
+// The person is already choosing per request, in the request itself ("make sure
+// the agents are all launched under your visible tree"). Someone who has never
 // opened this row should get what they asked for in the words they used.
 //
 // And when the request says nothing, the answer is NOT a coin toss: it is

@@ -105,6 +105,17 @@ its registration. ToolsEnabled does not kill it. The generated guided configurat
 exposes only `toolsenabled-readonly` with no actor binding, so a generic project client
 cannot accidentally gain a mutable agent identity.
 
+### Dashboard (Agent Activity Visualizer)
+
+A local browser dashboard at `http://127.0.0.1:3889` (start with
+`tools\start-agent-activity-visualizer.ps1`) gives the owner a read/write
+operator view over the same durable control plane: usage/cost/waste
+metrics, provider toggles, agent launches, the BUILD-QUEUE.md phase list,
+and the owner-request ledger, all sourced from the signed audit ledger and
+local files rather than a second authority. See `docs/DASHBOARD-GUIDE.md`
+for what each tab means, what its "Unavailable" states actually indicate,
+and how to launch an agent from it.
+
 ### Owner-session host
 
 The installed app owns one local named-pipe MCP host in its main-process

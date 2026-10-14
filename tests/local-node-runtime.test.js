@@ -13,6 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const {
+  CURATED_MODELS,
   authorization,
   assertModelFits,
   complete,
@@ -309,6 +310,33 @@ async function main() {
       () => assertModelFits('qwen2.5:3b-instruct', { freeVramBytes: null }),
       error => error.code === 'LOCAL_NODE_CAPACITY_UNKNOWN' && error.message.includes('qwen2.5:3b-instruct')
     );
+
+    /* The "Set up local models" popup renders this table: each suggestion's
+       download size is shown and checked against free disk space before the
+       pull, a small computer (or a first try) needs one model under 1 GB, and
+       every id must be one the Ollama library serves -- the registry answered
+       MANIFEST_UNKNOWN for llama3.1:8b-instruct (2026-09-23). */
+    /* A freshly installed Ollama, before any pull, answers /v1/models with
+       "data": null (official v0.34.3, 2026-09-23). That is a runtime that is
+       listening and holds nothing -- not a malformed reply. */
+    const emptyCalls = [];
+    const empty = await probeRuntime('ollama', {}, { http: injectedHttp({ body: '{"object":"list","data":null}' }, emptyCalls) });
+    assert.equal(empty.listening, true, 'an empty Ollama is listening');
+    assert.deepEqual(empty.models, []);
+    assert.equal(empty.reason, 'LOCAL_NODE_NO_MODELS_INSTALLED');
+    await assert.rejects(
+      () => probeRuntime('ollama', {}, { http: injectedHttp({ body: '{"object":"list","data":{}}' }, []) }),
+      error => error.code === 'LOCAL_NODE_RESPONSE_INVALID',
+      'any other non-list catalogue still refuses'
+    );
+
+    assert.ok(CURATED_MODELS.length >= 4 && CURATED_MODELS.length <= 6, 'a short list of suggestions');
+    for (const entry of CURATED_MODELS) {
+      assert.ok(Number.isSafeInteger(entry.downloadBytes) && entry.downloadBytes > 0, `${entry.id} names what its download costs`);
+      assert.ok(Number.isFinite(entry.minFreeVramBytes) && entry.minFreeVramBytes > entry.downloadBytes, `${entry.id} needs more memory than its download`);
+    }
+    assert.ok(CURATED_MODELS.some(entry => entry.downloadBytes < 1e9), 'one suggestion downloads in under 1 GB');
+    assert.equal(CURATED_MODELS.some(entry => entry.id === 'llama3.1:8b-instruct'), false, 'no suggestion names a model the library does not serve');
 
     const probe = await probeRuntime('ollama', { port, apiKey: '  local-secret  ' });
     assert.equal(probe.listening, true);

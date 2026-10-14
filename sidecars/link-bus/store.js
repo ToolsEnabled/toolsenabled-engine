@@ -4,7 +4,7 @@
 // bus. Deliberately dependency-free (matches src/mcp-server.js's own
 // no-dependency convention): one NDJSON file per channel under stateDir, plus
 // an in-memory index rebuilt from those files at boot. This is intentionally
-// a small local durable store, as the owner's contract asks, not a database --
+// a "small local durable store" per the owner's contract, not a database --
 // two trusted machines on a direct link exchanging short coordination
 // messages, nothing more.
 const fs = require('node:fs');

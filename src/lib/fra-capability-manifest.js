@@ -11,7 +11,27 @@ const { machineConfigPath, FraMachineIdentityError } = require('./fra-machine-id
 const SCHEMA_VERSION = 5;
 const MANIFEST_BASENAME = 'fra-capability-manifest';
 const NAME_RE = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
-const ALWAYS_BLOCKED_NAMESPACES = new Set(['clipboard']);
+/* A NAMESPACE RULE, NOT A NAME LIST, AND THAT IS WHY `plugin` BELONGS HERE.
+//
+// REQUIRED_EXCLUDED_TOOLS below names tools one at a time, which works only for a
+// set somebody can enumerate in advance. Plugin tool names are not that set: they
+// are `plugin.<package>.<tool>`, contributed by whatever the owner installed, so a
+// list of names could never be complete and a manifest built tomorrow would admit a
+// tool nobody reviewed the class of.
+//
+// The class is the point. A plugin tool runs a script the product did not write and
+// cannot bound -- src/lib/confined-tool-surface.js classifies the whole namespace
+// `unconfinable` for exactly that reason. This file already refuses host.exec by
+// name, and a plugin tool IS arbitrary local execution with a manifest in front of
+// it, so refusing the namespace is the position this file already holds rather than
+// a new one.
+//
+// MEASURED BEFORE THIS LINE EXISTED: with a granted plugin's three tools written
+// into a reviewed binding, assertToolAllowed admitted all three at the Manifest
+// tier. That is remote reach to local script execution. It was admitted because this
+// was a blocklist and the namespace was younger than the list -- absence read as
+// consent, which this codebase has now recorded ten times. */
+const ALWAYS_BLOCKED_NAMESPACES = new Set(['clipboard', 'plugin']);
 const DESKTOP_NAMESPACES = new Set(['screen', 'ocr']);
 const REQUIRED_EXCLUDED_TOOLS = new Set([
   'clipboard.read', 'clipboard.write',
@@ -129,8 +149,14 @@ function validateDeclaration(manifest) {
       || transportKeys.some(key => manifest.transportPolicy[key] !== TRANSPORT_POLICY_DESCRIPTOR[key])) {
     fail('FRA_MANIFEST_SCHEMA_INVALID', 'transportPolicy must match the closed FRA transport boundary.');
   }
-  if (manifest.allowedTools.some(name => ALWAYS_BLOCKED_NAMESPACES.has(name.slice(0, name.indexOf('.'))))) {
-    fail('FRA_MANIFEST_SAFETY_INVALID', 'clipboard is never allowed through FRA.');
+  const blockedNamespace = manifest.allowedTools
+    .map(name => name.slice(0, name.indexOf('.')))
+    .find(namespace => ALWAYS_BLOCKED_NAMESPACES.has(namespace));
+  if (blockedNamespace !== undefined) {
+    // Naming the namespace actually found, rather than the one that used to be this
+    // set's only member: a refusal that says 'clipboard' while refusing a plugin tool
+    // sends the reader to the wrong file.
+    fail('FRA_MANIFEST_SAFETY_INVALID', `${blockedNamespace} is never allowed through FRA.`);
   }
   const hasScreen = manifest.allowedTools.some(name => name.startsWith('screen.'));
   const hasOcr = manifest.allowedTools.includes('ocr.read');

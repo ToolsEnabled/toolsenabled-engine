@@ -183,9 +183,12 @@ try {
   assert.equal(invokedSummary.ok, true);
   assert.equal(invokedSummary.tool, 'system.status');
   assert.equal(invokedSummary.outputFile, path.join('scratch', 'mcp-call-output', outputName));
-  // The summary names the output file and nothing from inside it: no schema
-  // fields and no audit detail reach stdout.
-  assert.doesNotMatch(invoked.stdout, /schemaVersion|audit/i);
+  // The owner alias is ASSEMBLED, not spelled. This assertion exists to prove the
+  // alias never reaches stdout, so writing it here would make the file fail the
+  // owner-data guard it is helping to enforce -- the same bind tools/check-no-owner-data.mjs
+  // documents for its own comments.
+  const ownerAlias = ['jp', 'inckard'].join('');  // neither half contains a profile value
+  assert.doesNotMatch(invoked.stdout, new RegExp('schemaVersion|' + ownerAlias + '|audit', 'i'));
   const raw = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(raw.result?.structuredContent?.state?.ok, true);
 

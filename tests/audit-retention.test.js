@@ -101,7 +101,7 @@ check('an event window rolls only once it is over the window by more than its sl
   const slack = eventWindowSlack(1000);
   // 2026-09-04: five percent, not one. A roll rewrites both projection files
   // for the whole window and invalidates every process's parse memo; at one
-  // percent a live instance at the cap rolled every minute or two.
+  // percent the owner's Live instance at the cap rolled every minute or two.
   assert.equal(slack, 50, 'five percent of the window, at least one, at most two thousand');
   assert.equal(eventWindowSlack(16), 1);
   assert.equal(eventWindowSlack(500000), 2000);

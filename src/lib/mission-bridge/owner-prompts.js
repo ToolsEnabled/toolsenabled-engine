@@ -26,7 +26,7 @@
 //
 // The renderer validates with exactKeys -- unknown keys are rejected as hard
 // as missing ones, and one stray field blanks the popup in the field rather
-// than failing here. Every shape below mirrors the app repository's
+// than failing here. Every shape below mirrors wt-installer
 // src/owner-popup.js exactly, and tests/owner-public-prompts.test.js feeds a
 // real snapshot through the renderer's OWN normalizeOwnerPromptSnapshot, so
 // drift between the two halves fails a test instead of an owner.
@@ -42,7 +42,7 @@ const { statePath } = require('../runtime-state-root');
 // update replaces wholesale. See src/lib/runtime-state-root.js.
 const STATE_FILE = statePath('state', 'owner-public-prompts.json');
 
-// Mirrors of the renderer's exact bounds (the app's src/owner-popup.js).
+// Mirrors of the renderer's exact bounds (wt-installer src/owner-popup.js).
 const PROMPT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 const CURRENCY_RE = /^[A-Z]{3}$/;
 const CONTROL_RE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/;
@@ -78,7 +78,7 @@ const MAX_ITEM_PURPOSE = 500;
 // is why the enqueue bound is 236 -- 300 less the 64 characters the stamp
 // reserves.
 //
-// The wire SHAPE is deliberately unchanged. The app's src/owner-popup.js
+// The wire SHAPE is deliberately unchanged. wt-installer src/owner-popup.js
 // validates items with exactKeys; adding a seventh key would make every
 // snapshot invalid and blank the popup -- the exact defect this module's header
 // exists to prevent. Provenance travels as visible text inside an existing
@@ -388,13 +388,13 @@ function wirePrompt(record) {
 }
 
 // Stamp provenance onto the line the owner actually reads, and keep the wire
-// key set byte-identical to what the app's src/owner-popup.js validates.
+// key set byte-identical to what wt-installer src/owner-popup.js validates.
 // Records written before `ownerRequestIds` existed have no provenance, so they
 // stamp as AGENT-PROPOSED -- which is the true statement about them.
 function wireItem(item) {
   const stamp = provenanceStamp(item.ownerRequestIds);
-  // A legacy record may already sit near the cap (a legacy cart's
-  // descriptions ran 57..92, but nothing enforced a reserve before now). The
+  // A legacy record may already sit near the cap (the live 0e33e84f cart's
+  // descriptions run 57..92, but nothing enforced a reserve before now). The
   // stamp must survive: an over-long description loses its tail visibly rather
   // than the whole snapshot losing renderer validation and blanking the popup.
   const room = MAX_ITEM_DESCRIPTION - stamp.length;

@@ -1,12 +1,14 @@
 'use strict';
 
 // LEGACY ROLLBACK FIXTURE, retained only to test what an engine older than
-// the 'adopt' journal event kind (K1) actually does when it is pointed at a
-// journal a newer engine has written. This is a copy of
-// src/lib/owner-request-store.js as it stood before that event kind landed,
-// with its four relative `require('./...')` lines rewritten to reach src/lib/
-// from this fixture's own location; below this header only comments were
-// changed for the public source. No product entrypoint may import this file -- it exists only
+// the 'adopt' journal event kind (K1, landed on top of ecbf4558) actually
+// does when it is pointed at a journal a newer engine has written. This is a
+// byte-for-byte copy of src/lib/owner-request-store.js as it stood at commit
+// ecbf4558f41cf90e8adbb237ca746e086ee8d97a (sha256
+// f228639e925ea1da74afcd072311d6f6f59a3ce47d0d8bd647a4934e2ba6c095), with only
+// its four relative `require('./...')` lines rewritten to reach
+// src/lib/ from this fixture's own location; nothing else below this header
+// was changed. No product entrypoint may import this file -- it exists only
 // so tests/owner-request-store.test.js can prove the documented rollback rule
 // in packages/owner.ledger/PACKAGE.md against real code instead of prose.
 // Do not update this file when src/lib/owner-request-store.js changes: its
@@ -17,7 +19,7 @@
 // Before this module there were two stores for the same fact: the canonical
 // JSON ledger (reports/OWNER-REQUEST-LEDGER.json, written by the owner-capture
 // CLI and read by every gate, digest and projection) and four markdown files
-// behind /Request (src/lib/r-ledger.js). Product rule: one
+// behind /Request (src/lib/r-ledger.js). The owner ruled on 2026-09-02: one
 // canonical ledger with scope tiers, filed by /Request*, managed on /ledger.
 // This module is that ledger's single write API and its tier reader;
 // src/lib/r-ledger.js is now a thin adapter over it so every existing caller
@@ -134,19 +136,18 @@ const EVENT_KINDS = Object.freeze(['file', 'edit', 'remove', 'approve', 'decline
 const BOM = '\uFEFF';
 
 // ---------------------------------------------------------------------------
-// Kinds -- one ledger file holds four record families. R records are the
-// person's standing requests. T records are work items that an agent may
-// close out and delete. A records are questions or needs an agent raises
-// for the person to answer. P records are purchases: a proposed spend, the
-// decision on it, and the charge recorded once it is made. The three newer
-// families reuse R's construction rather than inventing their own. R above
-// is untouched: its ids (assertId, family 'R'), its reader (isStoreRecordId,
-// family 'R' only, still exactly as written) and its vocabulary
-// (STATUS_VOCABULARY) are exactly what they were. T, A and P are
+// Kinds -- owner's words, 2026-09-07: "ledger should have the following
+// subsets: R for rules; T for tasks ... these tasks can be completed and
+// removed by agents; Asks for things agents need from the owner; and
+// Purchases for actual purchases ... Respect how its built, build it the
+// same or similar for each." R (rules) above is untouched: its ids
+// (assertId, family 'R'), its reader (isStoreRecordId, family 'R' only,
+// still exactly as written) and its vocabulary (STATUS_VOCABULARY) are
+// exactly what they were. T (tasks), A (asks) and P (purchases) are new,
 // flat-numbered families sharing the same ledger file, the same lock, the
 // same hash chain (coreOf below is UNCHANGED -- kind is deliberately not
 // part of the hashed core, so a chain already written under the old formula,
-// including any existing R ledger, keeps verifying) and the same
+// including the live 26-record R ledger, keeps verifying) and the same
 // atomic write.
 // ---------------------------------------------------------------------------
 
@@ -377,14 +378,14 @@ function assertPerson(actor) {
 // own standing outward.reserved_from_agents setting, decided by that setting,
 // never by a person clicking. decidePurchase journals whichever actor
 // actually decided -- so a setting-approved purchase is never misrecorded as
-// an owner click, and (product rule: asks and purchases are
-// agent-closable) an agent-decided purchase is never misrecorded as this setting
+// an owner click, and (owner ruling, 2026-09-07, "asks and purchases: agent
+// closable") an agent-decided purchase is never misrecorded as this setting
 // either. R's edit/remove/decide/resolve and A/P's own remove stay
 // assertPerson-only; A's answer/decline and P's decide do not, as of that
 // ruling -- this is a scoped widening of those three writers, not a general
 // widening of who "the person" is.
 const OUTWARD_RESERVED_SETTING_ACTOR = 'setting:outward.reserved_from_agents';
-// UNCALLED since a later product rule widened decidePurchase to any
+// UNCALLED since the owner's 2026-09-07 ruling widened decidePurchase to any
 // actor: kept, not deleted, as the definition of what the OLD gate was, for
 // anyone tracing OUTWARD_RESERVED_SETTING_ACTOR's history. Nothing in this
 // file calls it any more.
@@ -1585,19 +1586,20 @@ function resolve({ id, status, reason, actor, now } = {}, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// T, A, P writes -- flat families that agents may write, within the limits
-// set out below (see "Kinds" near the top of this file for what each family
-// holds). Every one of them runs through the SAME transact() the
+// T, A, P writes -- flat families, agent-usable per the owner's words
+// (2026-09-07): "T for tasks ... these tasks can be completed and removed by
+// agents; Asks for things agents need from the owner; and Purchases for
+// actual purchases". Every one of them runs through the SAME transact() the
 // R writes use, so it gets the same lock, the same atomic write, and the
 // same hash-chained history for free, unmodified. Scope works exactly like
-// R's own (assertScope/assertKey, the same four tiers): T, A and P
-// records carry scope exactly as R records do. File/complete/remove are
-// agent-usable for T; answer/decline (A) and decide (P) are ALSO
-// agent-usable, per the product rule that asks and purchases are
-// agent-closable -- but removeAsk and removePurchase stay owner-only
+// R's own (assertScope/assertKey, the same four tiers) -- "T, A and P
+// records carry scope like R." File/complete/remove are agent-usable for T;
+// answer/decline (A) and decide (P) are ALSO agent-usable, per a second
+// owner ruling relayed by Controller 3 (2026-09-07): "asks and purchases:
+// agent closable" -- but removeAsk and removePurchase stay owner-only
 // (assertPerson below, same gate R's own edit/remove/decide/resolve use):
-// the rule makes asks and purchases closable, not removable, and agent
-// removal applies only to T.
+// his word was "closable", not "removable", and he named agent-removal only
+// for T.
 // ---------------------------------------------------------------------------
 
 /* One filed record, T/A/P alike: a per-kind flat id (never a dotted
@@ -1852,10 +1854,10 @@ function removeTask({ id, actor, now } = {}, options = {}) {
 }
 
 /** The owner answers one ask: open -> answered, carrying the owner's own words. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may answer an ask; removeAsk stays owner-only
-// (closable, not removable -- removal is the person's, as for R; agent
-// removal applies only to T). `actor` is validated and
+// OWNER RULING, relayed by Controller 3 (2026-09-07): "asks and purchases:
+// agent closable." Any actor may answer an ask; removeAsk stays owner-only
+// (his word was "closable", not "removable" -- removal is the person's, as
+// for R; he named agent-removal only for T). `actor` is validated and
 // normalized the same way filedBy already is, never assumed to be 'owner'.
 function answerAsk({ id, answer, actor, now } = {}, options = {}) {
   assertKindId('A', id);
@@ -1887,8 +1889,8 @@ function answerAsk({ id, answer, actor, now } = {}, options = {}) {
 }
 
 /** The owner declines to answer one ask: open -> declined. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decline an ask; removeAsk stays owner-only.
+// OWNER RULING, relayed by Controller 3 (2026-09-07): "asks and purchases:
+// agent closable." Any actor may decline an ask; removeAsk stays owner-only.
 function declineAsk({ id, reason, actor, now } = {}, options = {}) {
   assertKindId('A', id);
   const who = normalizeFiledBy(actor);
@@ -1924,8 +1926,8 @@ function removeAsk({ id, actor, now } = {}, options = {}) {
   return removeMinor('A', { id, actor, now }, options);
 }
 
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decide a purchase; removePurchase stays
+// OWNER RULING, relayed by Controller 3 (2026-09-07): "asks and purchases:
+// agent closable." Any actor may decide a purchase; removePurchase stays
 // owner-only. A P DECISION HERE IS A LEDGER MIRROR, NOT A SPEND AUTHORITY:
 // approving or declining a P record only updates this ledger's own status
 // and history for the record; it never moves money and never touches spend
@@ -2168,10 +2170,10 @@ function recoverHistory({ sourceHistoryFile, actor, now } = {}, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// ADDITIVE, 2026-09-07: purchase-specific store lookups only.
+// ADDITIVE, L3 (Worker 3), 2026-09-07: purchase-specific store lookups only.
 // Neither function below changes an existing function, the record shape or a
-// vocabulary; both are read-only compositions of readAll/idKind, which this
-// module already exports with the {kinds} widening this file's own header comment
+// vocabulary; both are read-only compositions of readAll/idKind, which L1
+// already exports with the {kinds} widening this file's own header comment
 // describes. Needed so the purchase tools (tool-registry.js) and the
 // mission-bridge decision pipeline can find the ONE P record a promptId
 // belongs to, and so any tool can read one T/A/P record by id without
@@ -2253,7 +2255,7 @@ function resetKind({ kind, actor, revision, token, batchId: requestedBatchId, no
 }
 
 /** The DIRECT pay.record path (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS
- * ruling): an agent calling pay.record with no cart/prompt only
+ * ruling 05:12Z): an agent calling pay.record with no cart/prompt only
  * reaches providers/pay.js's spend layer when `approval.autoApproved` is
  * true, which is itself an owner decision -- made once, in Settings
  * (outward.reserved_from_agents), rather than per purchase. This composes
@@ -2261,8 +2263,8 @@ function resetKind({ kind, actor, revision, token, batchId: requestedBatchId, no
  * recordPurchase) exactly as a person would on the Ledger page, one
  * transaction each, so the SAME hash-chained history and status gates apply;
  * it adds no new status and no new field. The decision is journalled under
- * OUTWARD_RESERVED_SETTING_ACTOR, not PERSON (FINDING 2 ruling,
- * once assertPurchaseDecider/decidePurchase accepted it): a
+ * OUTWARD_RESERVED_SETTING_ACTOR, not PERSON (Controller 3, FINDING 2 ruling,
+ * once L1's assertPurchaseDecider/decidePurchase accepted it): a
  * setting-authorized spend must never read back as an owner click on this
  * exact purchase. `reason` still names the setting in full for a reader who
  * has not seen that constant before. */

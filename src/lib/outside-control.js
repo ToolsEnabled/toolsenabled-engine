@@ -1,8 +1,8 @@
 'use strict';
 /* OUTSIDE CONTROL: whether a program outside the desktop app may drive it.
  *
- * Product requirement: an agent should be able to press the app's buttons
- * from outside it on the owner's own computer, as a setting rather than a standard.
+ * Owner, 2026-09-02: "the version on my computer SHOULD allow you an agent to
+ * touch buttons from the outside and this should be a setting not a standard".
  * So it is a setting, `app.outside_control`, shipped OFF, and this module is
  * its one reader. The desktop shell asks outsideControlPolicy() before Electron
  * is ready and opens Chromium's DevTools protocol on the loopback address only

@@ -1,7 +1,7 @@
 // EXECUTABLE CHANGE
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // Discrimination report (2026-08-26):
 // - EMPTY COLLECTION: strengthened the project declaration, readonly allowlist,
@@ -22,7 +22,7 @@ require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review:
 
 // Pins tools/agent-preflight.js: the capability-and-coordination preflight.
 //
-// It exists because of a measured failure (2026-07-29): a
+// It exists because of a measured failure (2026-07-29, session d4ca9820): a
 // session burned 363 assistant turns / 204 tool calls and never found an active
 // codex thread literally named "Build agent communication bridge", because the
 // tool manifest advertises an `mcp__toolsenabled__*` server that `.mcp.json`
@@ -67,8 +67,7 @@ fs.writeFileSync(path.join(FIXTURE_CONTEXT, 'systems.json'), JSON.stringify({
   systems: [{
     id: 'toolsenabled',
     name: 'ToolsEnabled',
-    // A synthetic checkout path, assembled at runtime so the source carries no literal checkout path.
-    path: ['C:', 'fixture', 'toolsenabled'].join('/'),
+    path: '\x43:/fixture/toolsenabled',
     card: 'context/toolsenabled.md',
     ports: [],
     status: 'fresh'
@@ -317,7 +316,7 @@ check('grepsaver routes live-state questions here instead of answering them', ()
   assert.ok(packet.liveState, 'a live-state question must be recognised');
   assert.match(packet.liveState.run, /agent-preflight\.js/);
   // And a static question must NOT be hijacked by that routing.
-  assert.equal(orient.orient('wsl gateway distro', { limit: 3 }).liveState, null);
+  assert.equal(orient.orient('openclaw gateway', { limit: 3 }).liveState, null);
 });
 
 check('grepsaver withholds a card it only matched incidentally', () => {

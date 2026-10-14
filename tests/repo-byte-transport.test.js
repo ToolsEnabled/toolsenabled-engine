@@ -14,7 +14,7 @@ const repo = require('../src/lib/providers/repo-files');
 const contexts = require('../src/lib/file-tool-context');
 const mcp = require('../src/mcp-server');
 
-/* Since an earlier change ("Make Basic runtime audit optional") durable intents and
+/* Since a6c70ac6 ("Make Basic runtime audit optional") durable intents and
    tool activity are recorded only when the person turned them on; this
    isolated run is Basic otherwise. A case about audit saves that choice in the
    isolated services root's settings file, as the Settings page does, for its

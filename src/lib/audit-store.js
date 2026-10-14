@@ -273,7 +273,7 @@ function sha256(value) {
 // _verificationFingerprint(), and one record() reaches that roughly eight
 // times -- to verify, to compare before against after, to advance the cache.
 //
-// MEASURED 2026-09-03 on a development machine, against the live ledger path:
+// MEASURED 2026-09-03 on the owner's machine, against the live ledger path:
 // 0.62 ms per JavaScript call against 0.12 ms per native call. That is about
 // 4.4 ms off every audit record, twice per consequential tool call, for no
 // change in what the identity witnesses: the same file, still paired with the
@@ -310,7 +310,7 @@ function resolveRealPath(file) {
 // `result.events` is the entire live window: ~10,000 row objects, each with a
 // nested event object carrying its own details object. The `seen` set was
 // per-call, so every remembered verification re-walked and re-froze roughly
-// 30,000 objects that were already frozen -- measured on a live ledger at
+// 30,000 objects that were already frozen -- measured on the owner's ledger at
 // 20-29 ms per record, which is most of a warm tool call now that the O(N)
 // signature walk is gone.
 //
@@ -529,8 +529,8 @@ class AuditStore {
     if (typeof selected !== 'string' || !selected || selected.length > 4096) throw auditError('AUDIT_INVALID_ARGUMENT', 'file is invalid.', { field: 'file' });
     this.file = selected === ':memory:' ? selected : path.resolve(selected);
     this._auditGeneration = maintenance.generation(this.file);
-    // busyTimeoutMs/transactionRetryMs were already caller-overridable options;
-    // this adds an operator-facing environment override at the
+    // busyTimeoutMs/transactionRetryMs were already caller-overridable options
+    // (bb8dd98); this adds an operator-facing environment override at the
     // same defaulting point so a contended write can be bounded to fail fast
     // into the existing emergency-spool path instead of blocking the whole
     // process for up to ~65s under sustained concurrent tool-call load (see
@@ -1755,7 +1755,7 @@ class AuditStore {
     // The consequence was not a wrong answer, it was a silent cost: an append
     // invalidates this process's verification cache, this advance is what puts
     // it back, and once it always returned false every following record() fell
-    // through to a full O(N) signature walk. Measured on a live install
+    // through to a full O(N) signature walk. Measured on the owner's install
     // (10,019 live rows, boundary 678): 1.7 s per record, ~2 records per tool
     // call. _verifyIncremental roots itself on the boundary for exactly this
     // reason (see its `rooted`); this is the same arithmetic, and the two must

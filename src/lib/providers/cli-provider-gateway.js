@@ -16,6 +16,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { StringDecoder } = require('node:string_decoder');
 const accountBoundary = require('../account-profile-boundary');
 const { assertActive } = require('../policy');
 const envScrub = require('../env-scrub');
@@ -37,6 +38,17 @@ const GEMINI_MODELS = modelFloor.allowedFor('subscription');
 const RELEASE_REVIEW_GEMINI_MODEL = modelFloor.defaultFor('subscription');
 const MAX_PROMPT_BYTES = 24 * 1024;
 const MAX_OUTPUT_BYTES = 48 * 1024;
+// A structured completion envelope is parsed, then its answer is bounded to
+// 24 KiB below. The envelope itself is larger than the answer: JSON escaping,
+// usage records and, for `codex exec --json`, every command the agent ran with
+// its aggregated output precede the final message. Capturing only 48 KiB of it
+// cut the final agent_message and turn.completed off a long read-only review,
+// and the unparseable prefix was then returned as the "answer".
+const MAX_STRUCTURED_OUTPUT_BYTES = 1024 * 1024;
+const OUTPUT_TRUNCATED_MARKER = '[output truncated]';
+// SIGTERM asks a CLI to stop; a child that ignores it (or is wedged in a
+// native call) would otherwise outlive its request and its deleted workspace.
+const KILL_GRACE_MS = 5_000;
 // Coding CLIs can spend well over 45 seconds on a bounded repository review,
 // especially when the selected subscription model performs its own reasoning.
 // Keep the deadline finite, but long enough that normal coding work does not
@@ -143,6 +155,28 @@ function providerMetadata(providerId) {
     throw new ProviderGatewayError('UNKNOWN_PROVIDER', 'That ToolsEnabled provider is not supported.');
   }
   return PROVIDER_METADATA[providerId];
+}
+
+/* THE PROVIDERS THIS TEXT-ONLY ROUTE HAS AN ARGV CONTRACT FOR.
+ *
+ * PROVIDER_IDS is the shared subscription list, and it grew 'grok' (a57cd698)
+ * without a commandArguments()/probeArguments() case: those fell to their
+ * default branch, which only validates the id and returns undefined, so
+ * turning Grok On here ran its version check and then crashed spreading an
+ * undefined argv (TypeError: ... is not iterable) after the saved control had
+ * already been rewritten. Grok runs as an agent session (acp-process.js); this
+ * gateway refuses it by name, before any child or state change. */
+const TEXT_ROUTE_PROVIDER_IDS = Object.freeze(['codex', 'claude', 'gemini']);
+
+function assertTextRouteProvider(providerId) {
+  const provider = providerMetadata(providerId);
+  if (!TEXT_ROUTE_PROVIDER_IDS.includes(providerId)) {
+    throw new ProviderGatewayError(
+      'PROVIDER_TEXT_ROUTE_UNSUPPORTED',
+      `${provider.label} has no text-only request route in ToolsEnabled; it runs as an agent session instead.`
+    );
+  }
+  return provider;
 }
 
 function providerControlRevision(state, providerId) {
@@ -500,14 +534,8 @@ function providerEnvironment(providerId, baseEnvironment = process.env) {
   if (providerId === 'codex') {
     deleteEnvironmentNames(environment, PROVIDER_ENVIRONMENT_NAMES.codex);
   }
-  // Claude Code gives ANTHROPIC_API_KEY precedence over its local Claude.ai
-  // login.  ToolsEnabled intentionally uses the installed CLI account and never
-  // forwards an ambient API key to a child process.
-  if (providerId === 'claude') {
-    // The shared launch-environment declaration includes every credential that
-    // can outrank the configured subscription session.
-    deleteEnvironmentNames(environment, PROVIDER_ENVIRONMENT_NAMES.claude);
-  }
+  // Native Claude Code interprets the person's auth settings itself. Its
+  // gateway route preserves them; intermediary API/ACP routes remain fenced.
   if (providerId === 'gemini') {
     // ToolsEnabled uses the Gemini CLI's Google subscription/OAuth route only. Do
     // not let an ambient API-key or Vertex configuration silently change the
@@ -522,6 +550,55 @@ function boundedText(value, maxBytes = MAX_OUTPUT_BYTES) {
   const buffer = Buffer.from(source, 'utf8');
   if (buffer.length <= maxBytes) return source;
   return buffer.subarray(0, maxBytes).toString('utf8') + '\n[output truncated]';
+}
+
+/* BYTES UNTIL THE CHILD HAS FINISHED, TEXT ONLY ONCE.
+ *
+ * A pipe read ends wherever the kernel's buffer ended, which can be inside a
+ * multi-byte UTF-8 character. Decoding each chunk on its own turned that
+ * character into U+FFFD on both sides of the boundary, so a non-ASCII answer
+ * reached the person corrupted. Chunks are kept as Buffers and decoded once.
+ *
+ * `retain: 'tail'` keeps the LAST maxBytes instead of the first. A JSONL event
+ * stream reports its final answer, usage and failure at the end, so for it the
+ * end is the part worth keeping; the cut first line simply fails to parse. */
+function createOutputCapture(maxBytes = MAX_OUTPUT_BYTES, { retain = 'head' } = {}) {
+  const limit = Number.isSafeInteger(maxBytes) && maxBytes > 0 ? maxBytes : MAX_OUTPUT_BYTES;
+  const chunks = [];
+  let bytes = 0;
+  let truncated = false;
+  return {
+    push(chunk) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+      if (buffer.length === 0) return;
+      if (retain === 'tail') {
+        chunks.push(buffer);
+        bytes += buffer.length;
+        while (bytes > limit) {
+          const excess = bytes - limit;
+          if (chunks[0].length <= excess) bytes -= chunks.shift().length;
+          else { chunks[0] = chunks[0].subarray(excess); bytes -= excess; }
+          truncated = true;
+        }
+        return;
+      }
+      const room = limit - bytes;
+      if (room <= 0) { truncated = true; return; }
+      const kept = buffer.length > room ? buffer.subarray(0, room) : buffer;
+      if (kept.length < buffer.length) truncated = true;
+      chunks.push(kept);
+      bytes += kept.length;
+    },
+    text() {
+      const body = Buffer.concat(chunks, bytes).toString('utf8');
+      if (!truncated) return body;
+      return retain === 'tail' ? `${OUTPUT_TRUNCATED_MARKER}\n${body}` : `${body}\n${OUTPUT_TRUNCATED_MARKER}`;
+    },
+    // What text() can return at most, so a later bound never re-cuts it.
+    maxTextBytes() {
+      return limit + Buffer.byteLength(OUTPUT_TRUNCATED_MARKER, 'utf8') + 1;
+    }
+  };
 }
 
 function sanitizeText(value, maxBytes = MAX_OUTPUT_BYTES) {
@@ -678,6 +755,13 @@ function normalizeCodexUsage(usage) {
   return Number.isSafeInteger(reportedTokens) ? { reportedTokens, costMicros: null } : null;
 }
 
+// The event types `codex exec --json` writes (codex-cli 0.156). A plain-text
+// answer that happens to contain a JSON line is not mistaken for the stream.
+const CODEX_EXEC_EVENT_TYPES = new Set([
+  'thread.started', 'turn.started', 'turn.completed', 'turn.failed',
+  'item.started', 'item.updated', 'item.completed', 'error'
+]);
+
 function parseProviderOutput(providerId, output) {
   const trimmed = String(output || '').trim();
   if (!trimmed) return { text: '', isError: false, errorText: '', usage: null };
@@ -717,23 +801,38 @@ function parseProviderOutput(providerId, output) {
     let text = null;
     let usage = null;
     let sawEvent = false;
+    const failures = [];
     for (const line of lines) {
       let event;
       try { event = JSON.parse(line); } catch { continue; }
-      if (!event || typeof event !== 'object' || typeof event.type !== 'string') continue;
+      if (!event || typeof event !== 'object' || !CODEX_EXEC_EVENT_TYPES.has(event.type)) continue;
       sawEvent = true;
       if (event.type === 'item.completed' && event.item && event.item.type === 'agent_message' && typeof event.item.text === 'string') {
         text = event.item.text;
       } else if (event.type === 'turn.completed') {
         usage = normalizeCodexUsage(event.usage);
+      } else if (event.type === 'turn.failed' && event.error && typeof event.error.message === 'string') {
+        failures.push(event.error.message);
+      } else if (event.type === 'error' && typeof event.message === 'string') {
+        failures.push(event.message);
       }
     }
-    if (sawEvent && text !== null) {
-      return { text, isError: false, errorText: '', usage };
+    if (sawEvent) {
+      // In --json mode codex reports a failed turn (usage limit, expired
+      // login, ...) as `turn.failed`/`error` events on STDOUT, not stderr.
+      // Their text is what classifies the failure; it never becomes the
+      // answer. And a parsed event stream that reached no agent_message has
+      // no answer: returning the raw protocol lines would present JSON
+      // events to the person as if the model had written them.
+      return {
+        text: text === null ? '' : text,
+        isError: false,
+        errorText: failures.length ? sanitizeText([...new Set(failures)].join('\n'), 512) : '',
+        usage
+      };
     }
-    // Fall through unchanged (raw bounded text, no usage) when the stream was
-    // not parseable JSONL or a truncated stream never reached a completed
-    // agent message -- never worse than codex's pre-existing plain-text path.
+    // Fall through unchanged (raw bounded text, no usage) when the output was
+    // not a codex event stream at all -- the plain-text probe path.
   }
 
   return {
@@ -749,24 +848,36 @@ function outputTextFor(providerId, output) {
   return parseProviderOutput(providerId, output).text;
 }
 
-function usableFailureReason(result, parsedOutput) {
+// Quota exhaustion in the words the installed CLIs actually print: codex
+// "You've hit your usage limit.", Claude Code "You've hit your limit · resets
+// 3pm" / "usage limit reached", Gemini CLI "You have exhausted your daily
+// quota on this model." / RESOURCE_EXHAUSTED. Matching only "rate limit",
+// "weekly" and "429" classified every one of these as a generic failure whose
+// sentence told the person to sign in again.
+const RATE_LIMITED_TEXT = /weekly|rate.?limit|\b429\b|usage.?limit|hit your (?:[a-z0-9-]+ )?limit\b|exhausted your (?:[a-z0-9-]+ )?quota|quota exceeded|exceeded (?:your |the )?(?:[a-z0-9-]+ )?quota|resource.?exhausted/;
+
+function usableFailureReason(result, parsedOutput, { operation = 'probe' } = {}) {
   const text = `${parsedOutput?.errorText || ''} ${result.stderr || ''}`.toLowerCase();
-  if (/weekly|rate.?limit|\b429\b/.test(text)) {
+  if (RATE_LIMITED_TEXT.test(text)) {
     return { status: 'rate_limited', reason: 'The authenticated provider account is currently rate limited. Try again after its usage limit resets.' };
   }
-  if (/credit balance|insufficient.?credit|billing/.test(text)) {
+  if (/credit balance|insufficient.?credit|billing|spend limit/.test(text)) {
     return { status: 'billing_required', reason: 'The provider account is authenticated but its selected billing route cannot currently serve requests.' };
   }
   if (/(?:authentication|authorization)\s+(?:required|failed)|(?:please\s+)?(?:sign.?in|log.?in)|not\s+(?:signed|logged)\s+in|unauthori[sz]ed|invalid[_ -]?grant|\b401\b|\b403\b/.test(text)) {
     return { status: 'sign_in_required', reason: 'The provider needs a valid sign-in in its own terminal.' };
   }
-  return { status: 'verification_failed', reason: safeFailureReason(result) };
+  return { status: 'verification_failed', reason: safeFailureReason(result, { operation }) };
 }
 
-function safeFailureReason(result) {
+function safeFailureReason(result, { operation = 'probe' } = {}) {
   if (result.timedOut) return 'The provider did not respond before the safety timeout.';
   if (result.cancelled) return 'The provider request was cancelled.';
   if (result.spawnError) return 'The provider command could not be started.';
+  // Only the enable-time probe is a readiness check. A completion that fails
+  // for an unclassified reason is not evidence of a lost sign-in, and telling
+  // the person to sign in again sent them to fix the wrong thing.
+  if (operation === 'complete') return 'The provider did not complete the request. Try again, or check the provider in its own terminal.';
   return 'The provider rejected the readiness check. Sign in in its own terminal and try again.';
 }
 
@@ -844,7 +955,8 @@ function commandArguments(providerId, prompt, { cwd = createExecutionDirectory()
         ...geminiIsolationArguments()
       ];
     default:
-      providerMetadata(providerId);
+      assertTextRouteProvider(providerId);
+      throw new ProviderGatewayError('PROVIDER_TEXT_ROUTE_UNSUPPORTED', 'That provider has no text-only request route.');
   }
 }
 
@@ -920,7 +1032,8 @@ function probeArguments(providerId, { cwd = createExecutionDirectory() } = {}) {
         ...geminiIsolationArguments()
       ];
     default:
-      providerMetadata(providerId);
+      assertTextRouteProvider(providerId);
+      throw new ProviderGatewayError('PROVIDER_TEXT_ROUTE_UNSUPPORTED', 'That provider has no text-only request route.');
   }
 }
 
@@ -1039,11 +1152,36 @@ function parseGeminiAboutIdentity(text) {
 // Gemini CLI itself before a model prompt is sent, so the session has no model
 // request, tools, MCP calls, or workspace access. The returned output remains
 // in memory only long enough to compare the displayed email with configuration.
+/* SIGTERM, then SIGKILL after a grace period unless the child has exited.
+   Returns the function that records the exit, which must be wired to the
+   child's own exit/close events. */
+function childTerminator(getChild, killGraceMs = KILL_GRACE_MS) {
+  let exited = false;
+  let killTimer = null;
+  const markExited = () => {
+    exited = true;
+    if (killTimer) { clearTimeout(killTimer); killTimer = null; }
+  };
+  const terminate = () => {
+    const child = getChild();
+    if (!child || exited) return;
+    try { child.kill('SIGTERM'); } catch {}
+    if (killTimer) return;
+    killTimer = setTimeout(() => {
+      killTimer = null;
+      if (!exited) { try { child.kill('SIGKILL'); } catch {} }
+    }, Math.max(1, killGraceMs));
+    killTimer.unref?.();
+  };
+  return { terminate, markExited };
+}
+
 function runGeminiAcpAbout(command, args, {
   timeoutMs = STATUS_TIMEOUT_MS,
   spawnImpl = spawn,
   cwd = createExecutionDirectory(),
-  env
+  env,
+  killGraceMs = KILL_GRACE_MS
 } = {}) {
   return new Promise(resolve => {
     const startedAt = Date.now();
@@ -1053,13 +1191,15 @@ function runGeminiAcpAbout(command, args, {
     let output = '';
     let stderr = '';
     let buffer = '';
+    const decoder = new StringDecoder('utf8');
+    const { terminate, markExited } = childTerminator(() => child, killGraceMs);
 
     const finish = fields => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       try { child?.stdin?.end(); } catch {}
-      try { child?.kill('SIGTERM'); } catch {}
+      terminate();
       resolve({
         ok: fields.ok === true,
         identity: fields.identity || null,
@@ -1110,7 +1250,7 @@ function runGeminiAcpAbout(command, args, {
       return;
     }
     child.stdout?.on('data', chunk => {
-      buffer += chunk.toString('utf8');
+      buffer += decoder.write(chunk);
       let newline;
       while ((newline = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, newline);
@@ -1120,7 +1260,9 @@ function runGeminiAcpAbout(command, args, {
     });
     child.stderr?.on('data', chunk => { stderr = boundedText(stderr + chunk.toString('utf8'), 1024); });
     child.once('error', () => finish({ ok: false }));
+    child.once('exit', markExited);
     child.once('close', () => {
+      markExited();
       if (!finished) finish({ ok: false });
     });
     send(1, 'initialize', {
@@ -1144,7 +1286,7 @@ function processResult(command, args, startedAt, fields = {}) {
     timedOut: fields.timedOut === true,
     cancelled: fields.cancelled === true,
     spawnError: fields.spawnError === true,
-    stdout: sanitizeText(fields.stdout),
+    stdout: sanitizeText(fields.stdout, Number.isSafeInteger(fields.stdoutMaxBytes) ? fields.stdoutMaxBytes : MAX_OUTPUT_BYTES),
     stderr: sanitizeText(fields.stderr),
     durationMs: Math.max(0, Date.now() - startedAt)
   };
@@ -1155,7 +1297,10 @@ function runArgv(command, args, {
   signal,
   spawnImpl = spawn,
   cwd = createExecutionDirectory(),
-  env
+  env,
+  stdoutLimitBytes = MAX_OUTPUT_BYTES,
+  stdoutRetention = 'head',
+  killGraceMs = KILL_GRACE_MS
 } = {}) {
   return new Promise(resolve => {
     const startedAt = Date.now();
@@ -1163,20 +1308,25 @@ function runArgv(command, args, {
     let timedOut = false;
     let cancelled = false;
     let child;
-    let stdout = '';
-    let stderr = '';
+    const stdoutCapture = createOutputCapture(stdoutLimitBytes, { retain: stdoutRetention === 'tail' ? 'tail' : 'head' });
+    const stderrCapture = createOutputCapture(MAX_OUTPUT_BYTES);
+    const { terminate, markExited } = childTerminator(() => child, killGraceMs);
 
     const finish = fields => {
       if (completed) return;
       completed = true;
       clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', cancel);
-      resolve(processResult(command, args, startedAt, { stdout, stderr, ...fields }));
+      resolve(processResult(command, args, startedAt, {
+        stdout: stdoutCapture.text(),
+        stdoutMaxBytes: stdoutCapture.maxTextBytes(),
+        stderr: stderrCapture.text(),
+        ...fields
+      }));
     };
 
-    const stop = () => {
-      try { child?.kill('SIGTERM'); } catch {}
-    };
+    // The request resolves at its deadline; the child is still made to stop.
+    const stop = terminate;
 
     const cancel = () => {
       cancelled = true;
@@ -1208,12 +1358,31 @@ function runArgv(command, args, {
       return;
     }
 
-    child.stdout?.on('data', chunk => { stdout = boundedText(stdout + chunk.toString('utf8')); });
-    child.stderr?.on('data', chunk => { stderr = boundedText(stderr + chunk.toString('utf8')); });
+    child.stdout?.on('data', chunk => stdoutCapture.push(chunk));
+    child.stderr?.on('data', chunk => stderrCapture.push(chunk));
     child.once('error', () => finish({ ok: false, spawnError: true }));
-    child.once('close', code => finish({ ok: code === 0, exitCode: code }));
+    child.once('exit', markExited);
+    child.once('close', code => {
+      markExited();
+      finish({ ok: code === 0, exitCode: code });
+    });
     if (signal) signal.addEventListener('abort', cancel, { once: true });
   });
+}
+
+// How much of a child's stdout the parser needs. A structured completion
+// envelope is kept up to MAX_STRUCTURED_OUTPUT_BYTES; a codex JSONL stream
+// keeps its END, where the final answer, usage and failure are reported.
+function stdoutCaptureFor(providerId, args) {
+  const list = Array.isArray(args) ? args : [];
+  if (providerId === 'codex' && list.includes('--json')) {
+    return { limitBytes: MAX_STRUCTURED_OUTPUT_BYTES, retain: 'tail' };
+  }
+  const format = list.indexOf('--output-format');
+  if (format >= 0 && list[format + 1] === 'json') {
+    return { limitBytes: MAX_STRUCTURED_OUTPUT_BYTES, retain: 'head' };
+  }
+  return { limitBytes: MAX_OUTPUT_BYTES, retain: 'head' };
 }
 
 class CliProviderGateway {
@@ -1289,7 +1458,7 @@ class CliProviderGateway {
       }
       /* A MISSING PROVIDER IS AN OLDER FILE, NOT A CORRUPT ONE, and the
        * difference is an upgrade that works versus one that does not.
-       * Measured 2026-09-11 at an earlier engine build: an earlier change added 'grok' to
+       * Measured 2026-09-11 at engine fe3c3b8c: a57cd698 added 'grok' to
        * SUBSCRIPTION_PROVIDER_IDS, and this loop required EVERY current id to
        * be present as a boolean. A state file written by 1.0.44 carries the
        * three ids that existed then, so on upgrade readState() threw
@@ -1527,12 +1696,15 @@ class CliProviderGateway {
       const selectedArgs = typeof args === 'function' ? args(cwd) : args;
       const providerArgs = providerId === 'codex'
         ? require('../provider-session-isolation').codexFileCredentialArgs(selectedArgs, environment) : selectedArgs;
+      const capture = stdoutCaptureFor(providerId, providerArgs);
       return runArgv(executable.command, [...executable.prefixArgs, ...providerArgs], {
         timeoutMs: options.timeoutMs || this.timeoutMs,
         signal: options.signal,
         spawnImpl: this.spawnImpl,
         cwd,
-        env: { ...environment, ...(executable.env || {}) }
+        env: { ...environment, ...(executable.env || {}) },
+        stdoutLimitBytes: capture.limitBytes,
+        stdoutRetention: capture.retain
       });
     });
   }
@@ -1858,6 +2030,9 @@ class CliProviderGateway {
     if (typeof enabled !== 'boolean') {
       throw new ProviderGatewayError('INVALID_ENABLED_VALUE', 'Provider enabled must be a boolean.');
     }
+    // Off is always allowed; On runs this route's probe, which only exists
+    // for the text-route providers.
+    if (enabled) assertTextRouteProvider(providerId);
 
     if (!enabled) {
       const reason = 'Turned off locally. New ToolsEnabled requests will not start this provider.';
@@ -2190,6 +2365,7 @@ class CliProviderGateway {
     if (Buffer.byteLength(prompt, 'utf8') > MAX_PROMPT_BYTES) {
       throw new ProviderGatewayError('PROMPT_TOO_LARGE', 'The provider request is too large for the local safety limit.');
     }
+    assertTextRouteProvider(providerId);
     const expectedRevision = await this.withStateLock(() => {
       const state = this.readState();
       if (state.providers[providerId] !== true) {
@@ -2283,13 +2459,13 @@ class CliProviderGateway {
     const result = await completionPromise;
     const parsedOutput = parseProviderOutput(providerId, result.stdout);
     if (parsedOutput.isError) {
-      const failure = usableFailureReason(result, parsedOutput);
+      const failure = usableFailureReason(result, parsedOutput, { operation: 'complete' });
       await observeTerminal('failed', { durationMs: result.durationMs, promptBytes });
       await this.markUnusable(providerId, failure.status, failure.reason, { expectedRevision });
       throw new ProviderGatewayError('PROVIDER_UNUSABLE', failure.reason);
     }
     if (!result.ok) {
-      const failureReason = safeFailureReason(result);
+      const failureReason = safeFailureReason(result, { operation: 'complete' });
       await observeTerminal(result.timedOut ? 'timeout' : result.cancelled ? 'cancelled' : 'failed', {
         durationMs: result.durationMs,
         promptBytes
@@ -2297,7 +2473,7 @@ class CliProviderGateway {
       // Cancellation is requester-controlled, not evidence that the account
       // stopped working. Generic exits/timeouts are likewise retryable; only
       // a definitive account classification changes the saved toggle.
-      const classified = usableFailureReason(result, parsedOutput);
+      const classified = usableFailureReason(result, parsedOutput, { operation: 'complete' });
       if (!result.cancelled && ['sign_in_required', 'rate_limited', 'billing_required'].includes(classified.status)) {
         await this.markUnusable(providerId, classified.status, classified.reason, { expectedRevision });
         throw new ProviderGatewayError('PROVIDER_UNUSABLE', classified.reason);

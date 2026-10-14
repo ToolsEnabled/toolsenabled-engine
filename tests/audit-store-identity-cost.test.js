@@ -10,7 +10,7 @@
 //
 // fs.realpathSync is a JavaScript walk that lstat()s every component of the
 // path; fs.realpathSync.native asks the operating system once. MEASURED
-// 2026-09-03 on a development machine against the live ledger path: 0.62 ms
+// 2026-09-03 on the owner's machine against the live ledger path: 0.62 ms
 // against 0.12 ms, returning the identical string -- about 4.4 ms per record
 // for nothing.
 //
@@ -77,7 +77,7 @@ check('the two resolvers name the same file, and the identity is stable', () => 
   try {
     // The STRINGS may differ: on Windows the component walk leaves an 8.3
     // short name in place (%TEMP% under this account resolves through
-    // SAMPLE~1) and the native call expands it. What must hold is that they
+    // TOOLSE~1) and the native call expands it. What must hold is that they
     // name the same file, because that is the thing the identity witnesses.
     const walked = fs.statSync(fs.realpathSync(test.file));
     const native = fs.statSync(fs.realpathSync.native(test.file));

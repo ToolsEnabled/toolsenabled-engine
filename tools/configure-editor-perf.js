@@ -4,7 +4,7 @@
 // BUILD-QUEUE Q116.5 -- the editor watcher/index fix as PRODUCT BEHAVIOUR,
 // not a repo artifact.
 //
-// THE PROBLEM THIS EXISTS TO KILL. On 2026-08-10 a development machine was
+// THE PROBLEM THIS EXISTS TO KILL. On 2026-08-10 the owner's machine was
 // crawling: two VS Code extension-host processes at 24.0% and 17.2% CPU (45.3%
 // of the whole machine's load), because the editor had no .vscode/settings.json
 // and was watching/indexing logs/ (7,340 files), state/ (7,340), .git/ (1,612),

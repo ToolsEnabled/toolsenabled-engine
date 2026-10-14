@@ -5,7 +5,7 @@
 // WHY THIS FILE EXISTS SEPARATELY FROM tests/agent-digest.js.
 // The corrected assertions also live in tests/agent-digest.js (which previously
 // PINNED the defect with `assert.equal(missing.enabled, true)`), but that suite
-// is RED at the base revision for an unrelated, pre-existing environment
+// is RED at base SHA ceae7e7f for an unrelated, pre-existing environment
 // reason: its check at line ~790 calls resolveRecipient({ account:
 // 'studenta' }) and this tree's config/google-accounts.profile.json carries
 // no accounts, so it throws "Unknown Google account 'studenta'. Known:

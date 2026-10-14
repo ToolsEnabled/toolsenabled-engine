@@ -1,8 +1,8 @@
-# an earlier change added this chain step without its list. Retain the step and bind it
+# b5322812 added this chain step without its list. Retain the step and bind it
 # to the regression updated by that commit. The same test is already in
 # orphans-wired-0826b.txt; this restores a runnable declared recipe without
 # claiming new coverage or dropping any existing file.
-# Existing independent repair an earlier change selected the same test for this reason.
+# Existing independent repair 04450d07 selected the same test for this reason.
 tests/standing-orders-hook-git-destructive.test.js
 
 # The shared API-mode change must remain in the declared product lifecycle.

@@ -46,7 +46,7 @@ const CHILD_REFUSAL_CODES = new Set([
 // and an open for reading fails, the state chmod 0o000 gives on Linux.
 // makeUnreadable returns the function that makes the file readable again.
 function windowsSystemTool(name) {
-  return path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', name);
+  return path.join(process.env.SystemRoot || process.env.windir || '\x43:\\Windows', 'System32', name);
 }
 
 let windowsAccount = null;

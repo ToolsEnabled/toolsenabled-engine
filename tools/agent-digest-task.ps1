@@ -110,7 +110,7 @@ $action = New-ScheduledTaskAction -Execute $nodePath -Argument $arguments -Worki
 
 . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
 # Boot and sign-in triggers come from the startup.services_at_logon switch
-# (product rule), never from a literal in this file.
+# (owner directive 2026-08-13), never from a literal in this file.
 $triggers = New-ToolsEnabledTaskTriggers -OwnerUser ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -IncludeStartup -IncludeLogon
 
 # S4U: run whether the owner is logged on or not, no stored password, and -- the

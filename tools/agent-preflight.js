@@ -4,9 +4,9 @@
 //
 // One bounded call, no MCP, no network, no provider. Read-only.
 //
-// WHY THIS EXISTS (measured 2026-07-29):
-// A Codex session was building a machine-to-machine bridge; the work then
-// moved to Claude, which was expected to find that work and continue it. Instead the
+// WHY THIS EXISTS (measured 2026-07-29, session d4ca9820):
+// The owner had a Codex session building a machine-to-machine bridge, switched
+// to Claude, and expected Claude to find that work and continue it. Instead the
 // session burned 363 assistant turns on 204 tool calls -- 39 greps and 41 reads
 // -- and never found it. Three separate things went wrong, and none of them
 // were the model being lazy:
@@ -84,7 +84,7 @@ const asHook = argv.includes('--hook');
 //
 // CLAUDE.md has instructed every session to run `node tools/agent-preflight.js
 // --topic <x>` — and until now this file parsed no such flag. `--topic
-// licensing` ran the default preflight, printed not one word about licensing,
+// trademark` ran the default preflight, printed not one word about trademarks,
 // and exited 0. A documented flag that is silently ignored is worse than a
 // missing one: the session believes it asked the question and got an answer.
 function readTopic(args) {
@@ -596,12 +596,13 @@ const claudeSessionMeasurement = claudeSessions(now);
 // WHICH TREE AM I IN. Computed, never written down, because writing it down is
 // what failed.
 //
-// A status report was once produced against the retired legacy ToolsEnabled
-// checkout -- days behind -- while the canonical tree was being committed to
-// that same day. Its conclusions were stale on arrival and its author did
-// nothing wrong: that checkout's README named one canonical tree, its CLAUDE.md
-// named another, and this tool printed a third answer from a hardcoded frozen
-// constant.
+// On 2026-08-10 a status report was produced against the retired legacy
+// ToolsEnabled checkout -- 353 test files, last commit 2026-08-08 -- while the canonical
+// tree had 748 test files and was being committed to that same day. Its
+// conclusions were stale on arrival and its author did nothing wrong: that
+// checkout's README said "all new development must target canonical Machine B",
+// its CLAUDE.md said the canonical source is `engine-checkout` on THIS
+// machine, and this tool printed a third answer from a hardcoded frozen constant.
 // Three hand-maintained copies of one fact, disagreeing.
 //
 // The fact is already registered: config/service-registry.json /machines carries
@@ -620,11 +621,11 @@ const { treeIdentity, NON_CANONICAL_GUIDANCE } = require('../src/lib/tree-identi
 
 // WHO MAY THIS SESSION ACT AS. Measured 2026-08-11: agents kept reaching an
 // identity-bearing action (create the org, register the account, publish under
-// their name), finding no machine-readable statement that the owner authorized
+// his name), finding no machine-readable statement that the owner authorized
 // it, and stopping -- one lane stopped 18 times on 18 attempts. The
 // authorization was real every time and lived only in conversation prose, which
-// does not survive a session boundary. The owner's fix: agents must read it
-// clearly from settings.
+// does not survive a session boundary. The owner's fix, in his words: "this has
+// to be read off from settings or something to agents clearly".
 //
 // This is the surface that carries it, because this tool is mandatory before
 // any work. The reservations ride with the grant from the same renderer, so a
@@ -632,7 +633,7 @@ const { treeIdentity, NON_CANONICAL_GUIDANCE } = require('../src/lib/tree-identi
 // reserving is the dangerous half of this feature.
 const { readAuthorization, authorizationProjection, authorizationLines, authorizationHeadline } = require('../src/lib/owner-authorization');
 
-// WHICH LEDGER HOLDS THEIR REQUIREMENTS. treeIdentity above answers "is this the
+// WHICH LEDGER HOLDS HIS REQUIREMENTS. treeIdentity above answers "is this the
 // canonical CHECKOUT". This answers the narrower question that actually bit:
 // this machine holds two owner-request ledgers, and 16 shared ids mean
 // DIFFERENT requests on the two sides (measured 2026-08-11). A session that
@@ -716,7 +717,7 @@ function queueProvenanceMessage(projection) {
   // One clause, worst first. Both facts are always in --json and in the CLI;
   // the hook only has room for the one that should change the next action.
   if (projection.phantomRids.length) {
-    return `BUILD-QUEUE: phantom authority ${projection.phantomRids.join(',')} cited by a phase; a queue R-number is not proof they asked. tools/build-queue-provenance.js`;
+    return `BUILD-QUEUE: phantom authority ${projection.phantomRids.join(',')} cited by a phase; a queue R-number is not proof he asked. tools/build-queue-provenance.js`;
   }
   if (projection.state === 'UNSOURCED') {
     return `BUILD-QUEUE: ${projection.errorCount} phase(s) claim owner authority with no checkable R-id. tools/build-queue-provenance.js`;
@@ -757,7 +758,7 @@ const report = {
   inFlight: inFlight(now),
   antiPatterns: [
     'A tool that is missing is a REPORTABLE GAP, not an invitation to require() the provider and '
-      + 'hand-roll it. One session spent 8 calls rebuilding gmail on top of authenticatedRequest() '
+      + 'hand-roll it. Session d4ca9820 spent 8 calls rebuilding gmail on top of authenticatedRequest() '
       + 'because no gmail thread-read tool exists. Say the gap out loud and stop.',
     'Before concluding a capability is unavailable, check the prefix. The readonly server is the configured '
       + 'read-only alternative in this repo; the current client must still advertise its namespace.',
@@ -928,8 +929,8 @@ if (asHook) {
   }
   L.push('');
   // Second, before anything else a session might act on: whose name it may act
-  // under, and the short list of things that are still theirs alone. Printed in
-  // every mode including --quiet, because "am I allowed to do this as them" is
+  // under, and the short list of things that are still his alone. Printed in
+  // every mode including --quiet, because "am I allowed to do this as him" is
   // the question that was silently costing whole lanes.
   const auth = report.ownerAuthorization;
   L.push(auth.state === 'AUTHORIZED'
@@ -937,7 +938,7 @@ if (asHook) {
     : `## ⚠ OWNER AUTHORIZATION — ${auth.state}`);
   L.push(...authorizationLines(auth));
   L.push('');
-  // Which ledger their requirements live in. Printed in every mode, next to the
+  // Which ledger his requirements live in. Printed in every mode, next to the
   // authorization block, because both answer "on whose authority" -- and an
   // R-id cited out of the wrong tree is a different requirement, not a typo.
   const la = report.ledgerAuthority;

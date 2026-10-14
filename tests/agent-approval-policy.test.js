@@ -19,7 +19,7 @@ function tierCheckFor(tier) {
 }
 
 // The level a real beginner installation actually gets. Lane
-// `tier-enforcement-build` (an earlier commit) moved the recorded install levels
+// `tier-enforcement-build` (commit 2984b03) moved the recorded install levels
 // onto installTierSession(), and flagged that `{tier:'guarded'}` is no longer
 // that level -- and is wrong in the PERMISSIVE direction, because Guarded is an
 // effect filter and host.read_file/repo.read_file/host.list_dir/repo.list_dir/

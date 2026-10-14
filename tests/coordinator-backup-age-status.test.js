@@ -84,7 +84,7 @@ function run() {
   });
 
   check('refuses destination-like fields and schema drift instead of redacting them after the fact', () => {
-    const withDestination = { ...observation(), destination: 'C:\\sensitive' };
+    const withDestination = { ...observation(), destination: '\x43:\\sensitive' };
     const withError = { ...observation(), error: 'raw provider detail' };
     const wrongMode = observation({ reportMode: 'execute' });
     for (const candidate of [withDestination, withError, wrongMode, { ...observation(), schemaVersion: 2 }]) {

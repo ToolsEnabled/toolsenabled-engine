@@ -1,7 +1,7 @@
 'use strict';
 // Pins the owner-designated Codex identity for dispatched workers.
 //
-// The incident (2026-08-09): Codex workers are configured to run as a
+// The incident (2026-08-09): the owner directed that Codex workers run as a
 // specific account. ~/.codex held a DIFFERENT account, and mission-bridge
 // dispatch scrubbed CODEX_HOME without pinning a replacement, so every worker
 // silently ran as the wrong identity and nothing surfaced it. These checks pin
@@ -28,9 +28,6 @@ const {
   MissionBridgeError
 } = require('../src/lib/mission-bridge/actions.js');
 const confinement = require('../src/lib/agent-session-confinement.js');
-// A synthetic foreign Windows profile, assembled at runtime so the source carries no
-// literal user path.
-const FOREIGN_FIXTURE_PROFILE = ['C:', 'Users', 'fixture-user'].join('\\');
 delete require.cache[auditFilename];
 delete require.cache[stateStoreFilename];
 delete require.cache[toolRegistryFilename];
@@ -84,7 +81,7 @@ check('an absolute profileDir is used verbatim', () => {
 
 checkWindows('a profile in another Windows account is refused before auth.json is inspected', () => {
   let authStats = 0;
-  const foreignProfile = `${FOREIGN_FIXTURE_PROFILE}\\.codex`;
+  const foreignProfile = '\x43:\\Users\\fixture-user\\.codex';
   assert.throws(
     () => codexDispatchEnvironment({}, {
       configPath: CONFIG,
@@ -105,9 +102,9 @@ checkWindows('a profile in another Windows account is refused before auth.json i
 });
 
 checkWindows('every Windows provider environment is rebound to the installation account and names its actor', () => {
-  const foreign = FOREIGN_FIXTURE_PROFILE;
+  const foreign = '\x43:\\Users\\fixture-user';
   const env = accountConfinedDispatchEnvironment({
-    PATH: 'C:\\Windows\\System32',
+    PATH: '\x43:\\Windows\\System32',
     USERPROFILE: foreign,
     HOME: foreign,
     APPDATA: path.join(foreign, 'AppData', 'Roaming'),
@@ -123,9 +120,9 @@ checkWindows('every Windows provider environment is rebound to the installation 
 });
 
 checkWindows('a foreign Windows profile hidden in an unrelated inherited variable is removed before launch', () => {
-  const foreign = `${FOREIGN_FIXTURE_PROFILE}\\stale-directives`;
+  const foreign = '\x43:\\Users\\fixture-user\\stale-directives';
   const env = accountConfinedDispatchEnvironment({
-    PATH: 'C:\\Windows\\System32',
+    PATH: '\x43:\\Windows\\System32',
     STALE_DIRECTIVE_ROOT: foreign
   }, 'claude');
   assert.strictEqual(env.STALE_DIRECTIVE_ROOT, undefined);

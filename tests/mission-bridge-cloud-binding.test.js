@@ -180,15 +180,13 @@ async function main() {
   }
 
   {
-    // An INCOMPLETE reading must say WHICH account could not be read and why,
-    // not just that the reading was partial -- same requirement as the raw
-    // cloud.task_launch tool's identical gate, because this is that same gate's
-    // second, bridge-side copy. 'second' answered fine and must not be named.
+    // A partial catalog refuses without exposing raw reader diagnostics.
+    const confidential = crypto.randomBytes(24).toString('base64url');
     const { actions, launched } = build({
       complete: false,
       accounts: [
         { name: 'work', role: 'work', canServe: false, usedPercent: null,
-          environmentsReading: 'unknown', environmentsReason: 'This account\'s environments could not be read (ETIMEDOUT).' },
+          environmentsReading: 'unknown', environmentsReason: confidential },
         { name: 'second', role: 'personal', canServe: true, usedPercent: 4,
           environmentsReading: 'authorized', environmentsReason: null }
       ]
@@ -198,9 +196,10 @@ async function main() {
     catch (error) { raised = error; }
     ok(raised && raised.code === 'BRIDGE_CLOUD_BINDING_UNVERIFIED',
       `an incomplete reading with named accounts must still refuse as unverified (got ${raised && raised.code})`);
-    ok(Boolean(raised) && typeof raised.message === 'string'
-      && raised.message.includes('work') && raised.message.includes('ETIMEDOUT'),
-      'the bridge refusal must name the unread account and its reason, not just say the reading was partial');
+    ok(Boolean(raised) && !String(raised.message).includes(confidential),
+      'raw reader diagnostics must never reach the bridge refusal');
+    ok(Boolean(raised) && /could not be confirmed/.test(raised.message),
+      'the refusal explains the unknown repository confirmation');
     ok(Boolean(raised) && typeof raised.message === 'string' && !raised.message.includes('second'),
       'an account that answered "authorized" must not be listed among the unread ones');
     equal(launched().length, 0, 'and nothing is submitted on an incomplete reading with named accounts');
@@ -284,6 +283,33 @@ async function main() {
     await rejects(() => actions.cloudLaunch(request()), 'ACCOUNTS_REGISTRY_MISSING',
       'an unreadable environment reading refuses the launch with the reason it failed');
     equal(calls.filter(tool => tool === 'cloud.task_launch').length, 0, 'and nothing is submitted');
+  }
+
+  {
+    const { actions, launched, calls } = build({ environments: [], complete: false });
+    const result = await actions.cloudLaunch(request({ environmentSource: 'person-entered' }));
+    equal(launched().length, 1, 'a person-entered ID reaches the launch with an unknown catalog');
+    equal(launched()[0].args.environmentSource, 'person-entered', 'manual provenance reaches the core');
+    equal(calls.find(call => call.tool === 'system.ask').args.arguments.environmentSource, 'person-entered', 'approval is bound to manual provenance');
+    equal(result.receipt.repositoryBinding.providerConfirmed, false, 'manual receipt never claims provider confirmation');
+    equal(result.receipt.repositoryBinding.providerRepository, null, 'manual receipt has no invented provider repository');
+    equal(result.receipt.bindingReadAt, null, 'an unknown catalog timestamp is not a binding confirmation timestamp');
+    ok(/entered by the person.*not confirmed/.test(result.receipt.message), 'the receipt shows the unconfirmed manual binding');
+  }
+  {
+    const { actions, launched } = build({ environments: [bound({ repository: 'Owner/other' })] });
+    await rejects(() => actions.cloudLaunch(request({ environmentSource: 'person-entered' })), 'BRIDGE_CLOUD_REPOSITORY_MISMATCH');
+    equal(launched().length, 0, 'a manual declaration cannot override a real provider mismatch');
+  }
+  {
+    const { actions, launched } = build({ environments: [], complete: true });
+    await rejects(() => actions.cloudLaunch(request({ environmentSource: 'person-entered' })), 'BRIDGE_CLOUD_ENVIRONMENT_NOT_AUTHORIZED');
+    equal(launched().length, 0, 'a complete provider refusal cannot be overridden by manual entry');
+  }
+  {
+    const { actions, launched } = build({ environments: [], complete: false });
+    await rejects(() => actions.cloudLaunch(request({ environmentSource: 'automatic' })), 'BRIDGE_INPUT_INVALID');
+    equal(launched().length, 0, 'unknown provenance refuses before dispatch');
   }
 
   console.log(`mission-bridge cloud binding tests passed (${checks} checks: declared-binding requirement, four kept-apart absences, provider-checked match, immutable receipt, shared binding reading, and unreadable-reading refusal).`);

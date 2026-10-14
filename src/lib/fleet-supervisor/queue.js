@@ -179,7 +179,7 @@ function extractJsShape(source) {
   }
   const signatures = [...exported].map(name => signatureFor.get(name) || name);
   // The keys this file literally WRITES into returned/emitted objects. This is
-  // the half that catches an imagined schema: one lane consumed details.messageId
+  // the half that catches an imagined schema: s09 consumed details.messageId
   // from a producer whose only emitted keys were result.id / result.error.code.
   const keys = new Set();
   for (const match of source.matchAll(/\breturn\s*\{([\s\S]{0,1200}?)\}/g)) {

@@ -301,8 +301,8 @@ check('changing the state root re-resolves rather than reusing another root', ()
 // ---------------------------------------------------------------------------
 // THE ORGANISATION ROOT: ONE SEAT, CONTROLLERS ON MORE THAN ONE PROVIDER.
 // Every Controller circle binds to this seat. A Claude Controller joining it
-// must not revoke a live Codex Controller (per-line-recheck), and must itself
-// verify. Each session is still held to
+// must not revoke a live Codex Controller (per-line-recheck of c46706be and
+// a7c05c50, 2026-09-22), and must itself verify. Each session is still held to
 // the one provider its credential names, and an owner's own edit of the seat
 // still revokes on the very next line.
 // ---------------------------------------------------------------------------

@@ -4,9 +4,9 @@
  * WITHOUT TELLING THIS DIRECTORY, AND THE DIRECTORY'S OWN SUPERSESSION
  * COVERS FOR IT ANYWAY -- TRACED END TO END, NOT ASSUMED.
  *
- * The app half of this rotation's HUNT (an earlier review pass) fixed performRewind
+ * The app half of this rotation's HUNT (page2/tree-store) fixed performRewind
  * so a rewind's forked thread reaches the durable transcript record a later
- * Resume reads (an earlier change, tools/test/rewind-thread-persists.test.mjs). Tracing
+ * Resume reads (8d4adab, tools/test/rewind-thread-persists.test.mjs). Tracing
  * where else that forked thread id goes turned up a second place that never
  * hears about it: shell/agent-host.cjs's rewindSession() --
  *

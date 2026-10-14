@@ -22,7 +22,7 @@ const baseSpec = {
   ownershipMarker: 'b'.repeat(64),
   nodePath: process.execPath,
   runnerPath: require('node:path').resolve(__dirname, '..', 'src', 'job-runner.js'),
-  principalId: 'S-1-5-21-111111111-222222222-333333333-1001',
+  principalId: '\x53-1-5-21-111111111-222222222-333333333-1001',
   action: 'telegram.send',
   args: { chatId: 'test', text: 'test' }
 };

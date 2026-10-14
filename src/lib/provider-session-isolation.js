@@ -172,12 +172,28 @@ function providerSessionEnvironment(environment = process.env, { provider = null
   const context = isolationContext(environment);
   if (!context) return environment;
   const pins = profileEnvironment(context);
-  const scrubbed = require('./supervision/launch-environment').safeLaunchEnvironment(environment);
+  // Native Claude Code owns its authentication settings. Keep those choices
+  // while pinning workspace/profile/cache paths to this private session.
+  const nativeClaude = provider === 'claude';
+  const scrubbed = nativeClaude ? { ...environment }
+    : require('./supervision/launch-environment').safeLaunchEnvironment(environment);
   const output = Object.fromEntries(Object.entries(scrubbed).filter(([name]) =>
     !Object.keys(pins).some(key => key.toUpperCase() === name.toUpperCase())
     && !/^(?:npm_config_|npm_package_config_|GIT_CONFIG|GIT_DIR$|GIT_WORK_TREE$|GIT_SSH|GIT_EXEC_PATH$|LD_|DYLD_)/i.test(name)
-    && !/^(?:NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|PERL5OPT|GOOGLE_APPLICATION_CREDENTIALS|CLAUDE_SECURESTORAGE_CONFIG_DIR|CLAUDE_CODE_PROJECT_DIR_NAME|CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR|GEMINI_CLI_TRUSTED_FOLDERS_PATH|CODEX_MANAGED_PACKAGE_ROOT)$/i.test(name)));
+    && !/^(?:NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|PYTHONPATH|PYTHONSTARTUP|RUBYOPT|PERL5OPT|CLAUDE_SECURESTORAGE_CONFIG_DIR|CLAUDE_CODE_PROJECT_DIR_NAME|GEMINI_CLI_TRUSTED_FOLDERS_PATH|CODEX_MANAGED_PACKAGE_ROOT)$/i.test(name)
+    && (nativeClaude || !/^(?:GOOGLE_APPLICATION_CREDENTIALS|CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR)$/i.test(name))));
   Object.assign(output, pins);
+  if (nativeClaude) {
+    // A native cloud sign-in may name a credential file. The method remains
+    // available inside this private profile; the app checks only its path and
+    // never opens the file or imports credentials from the owner's live home.
+    for (const name of ['GOOGLE_APPLICATION_CREDENTIALS', 'ANTHROPIC_IDENTITY_TOKEN_FILE']) {
+      const selected = valueOf(environment, name);
+      if (selected !== undefined && selected !== null && selected !== '') {
+        assertIsolatedPath(selected, context, { field: name });
+      }
+    }
+  }
   const searchPath = valueOf(environment, 'PATH') || '';
   for (const key of Object.keys(output)) if (key.toUpperCase() === 'PATH') delete output[key];
   const privateBin = process.platform === 'win32' ? pins.npm_config_prefix : path.join(pins.npm_config_prefix, 'bin');

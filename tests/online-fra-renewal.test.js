@@ -151,7 +151,7 @@ function vaultFor(privateKey, credential) {
   const store = new Map();
   store.set(DEVICE_IDENTITY_VAULT_KEY, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString());
   store.set(DEVICE_CREDENTIAL_VAULT_KEY, JSON.stringify(credential));
-  return { getSecret: (k) => { if (!store.has(k)) throw new Error('absent'); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
+  return { getSecret: (k) => { if (!store.has(k)) throw Object.assign(new Error('absent'), { code: 'SECRET_NOT_CONFIGURED' }); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
 }
 
 function bridgeNamed(name) {
@@ -554,8 +554,8 @@ function bridgeNamed(name) {
   webPeerMode = 'live';
 
   // === 3b. THE IDLE GUARD ====================================================
-  /* The owner's rule: the session lasts until the person has been inactive for
-     about 4 minutes or closes the window. Idle is not a new clock -- it is a
+  /* The owner: "the session should last until they are inactive for like 4
+     minutes or if they close the window". Idle is not a new clock -- it is a
      decision to STOP renewing, after which the sixty seconds that already
      exists does the killing. Here the budget is shorter than one lease, so the
      first renewal that comes due is declined. */

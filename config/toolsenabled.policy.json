@@ -48,7 +48,7 @@
     "allowScheduledActions": true,
     "standingAuthorizations": [],
     "timeoutSeconds": 60,
-    "$comment_standingAuthorizations": "Ships EMPTY. A standing authorization pre-approves an action so it runs without asking, so it belongs to the operator who granted it, never to the product. The shape is kept; the entries are not. This file previously carried one for an unrelated project, including that project's live cloud project id -- which is how it was found: the owner-data guard flagged the id after a hand scan for names and LAN addresses had already called the file clean."
+    "$comment_standingAuthorizations": "Ships EMPTY. A standing authorization pre-approves an action so it runs without asking, so it belongs to the operator who granted it, never to the product. The shape is kept; the entries are not. This file previously carried one for a different product of the author's, including that project's live cloud project id -- which is how it was found: the owner-data guard flagged the id after a hand scan for names and LAN addresses had already called the file clean."
   },
   "http": {
     "allowedHosts": [],

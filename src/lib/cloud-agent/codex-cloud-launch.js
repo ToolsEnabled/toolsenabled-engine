@@ -6,7 +6,7 @@
 // existed on this machine but had never been joined into one callable:
 //
 //   1. multi-account/switcher.js  -- WHICH account serves the call, with the
-//      owner's requested failover, asking the provider instead of guessing.
+//      person's explicit choice, asking the provider instead of guessing.
 //   2. multi-account/launch.js    -- the composed child environment: every
 //      billing credential scrubbed, and CODEX_HOME pinned to the chosen
 //      account's own home so the call cannot silently run as someone else.
@@ -34,8 +34,8 @@
 // provider-reported usage PERCENT.
 
 const { loadRegistry } = require('../multi-account/registry.js');
-const { STATUS, probeAccount } = require('../multi-account/health.js');
-const { commitLaunchSelection, resolveForLaunch } = require('../multi-account/switcher.js');
+const { probeAccount } = require('../multi-account/health.js');
+const { commitLaunchSelection, readState, resolveForLaunch } = require('../multi-account/switcher.js');
 const { launchEnvironment, codexExecutable } = require('../multi-account/launch.js');
 const { createCodexCliTransport } = require('./codex-cli-transport');
 const { discoverCloudEnvironments } = require('./codex-cloud-environments');
@@ -109,25 +109,9 @@ const STATUS_SEARCH_MAX_PAGES = 3;
 // why it is named for what it is rather than presented as provider output.
 const TASK_URL_PREFIX = 'https://chatgpt.com/codex/tasks/';
 
-// Submitting is the one operation where a retry can create a SECOND real cloud
-// task. These outcomes mean "the CLI never got far enough to create anything",
-// so failing over after them is safe. Anything else -- above all a timeout or
-// an output-cap kill, whose true outcome is unknown -- is never retried.
-//
-// CODEX_CLI_ENV_NOT_FOUND is in this list for a reason that is easy to get
-// backwards. MEASURED 2026-08-11 across three signed-in accounts on one
-// machine, with one binary and one environment id: a Codex Cloud environment
-// is scoped to the ACCOUNT THAT CREATED IT. The creating account resolved the
-// environment; the other two reported "not found" for that same id. So failing
-// over is not merely about who pays -- for an environment the current account
-// cannot see, another account is the only thing that can make the launch work
-// at all. Nothing is created when the CLI refuses an unknown environment, so
-// retrying elsewhere is safe.
-// (No account is named here, and none may be. This file ships inside the
-// capability payload, so a customer would receive the comment along with the
-// code; the accounts involved were the builder's own. Name the mechanism, not
-// the identity.)
-const SAFE_TO_FAILOVER_AFTER = Object.freeze([
+// These definite CLI refusals are distinct from ambiguous submission outcomes.
+// Both are reported against the selected account.
+const DEFINITE_CLI_REFUSALS = Object.freeze([
   'CODEX_CLI_SPAWN_FAILED',
   'CODEX_CLI_NONZERO_EXIT',
   'CODEX_CLI_REPORTED_ERROR',
@@ -201,7 +185,7 @@ function requireTarget(value) {
  * the repository nor the target may be left to later prose. The person's words
  * remain a distinct, verbatim body and the standing fences are always last.
  */
-function buildCloudTaskContract({ repository, target, prompt } = {}) {
+function buildCloudTaskContract({ repository, target, prompt, repositoryBinding = null } = {}) {
   const source = requireRepository(repository);
   const concreteTarget = requireTarget(target);
   const personWords = requirePrompt(prompt);
@@ -212,6 +196,9 @@ function buildCloudTaskContract({ repository, target, prompt } = {}) {
     personWords,
     '',
     'STANDING FENCES:',
+    ...(repositoryBinding?.providerConfirmed === false ? [
+      '- The environment ID was entered by the person; its repository binding is not confirmed by the provider. Verify the checked-out repository matches the declared repository before working. If it differs or cannot be checked, stop and report the mismatch.'
+    ] : []),
     `- Work only in repository "${source}" and start from "${concreteTarget}"; do not substitute a similarly named repository, directory, or component.`,
     '- Keep unrelated worktree changes intact and do not edit files outside the task.',
     '- Do not commit or push. Report the exact files changed and the tests run.'
@@ -246,7 +233,7 @@ function defaultProbe(registry) {
     homeDir,
     environmentFor: (target, options) => launchEnvironment(target, { homeDir: options.homeDir, fsImpl: options.fsImpl }),
     executable,
-    exhaustedAtPercent: registry.exhaustedAtPercent
+    exhaustedAtPercent: 100
   });
 }
 
@@ -260,18 +247,10 @@ function accountReport(account, probe) {
   });
 }
 
-/**
- * Choose the account that should serve this call.
- *
- * `excluded` carries the accounts an earlier attempt in THIS call already
- * burned. They are reported to the selector as unable to serve rather than
- * filtered out silently, so the refusal message still names every account that
- * was considered and why each one was passed over.
- */
+/** Read the person's selected account and its current provider status. */
 async function chooseAccount({
   registry,
   preferred = null,
-  excluded = new Set(),
   probeImpl,
   statePath,
   codexConfigPath,
@@ -280,22 +259,14 @@ async function chooseAccount({
 }) {
   const probe = probeImpl || defaultProbe(registry);
   const selection = await resolveForLaunch({
-    registry,
+    registry: { ...registry, accounts: registry.accounts.filter(account => account.provider === 'codex') },
+    provider: 'codex',
     preferred,
     statePath: statePath || STATE_PATH,
     codexConfigPath: codexConfigPath || CODEX_PIN_PATH,
     persistSelection,
     ...(fsImpl ? { fsImpl } : {}),
-    probe: async (account) => {
-      if (excluded.has(account.name)) {
-        return Object.freeze({
-          account: account.name, email: null, usedPercent: null, resetsAt: null, planType: null,
-          status: STATUS.EXHAUSTED, canServe: false,
-          reason: 'Already attempted during this request and it did not complete.'
-        });
-      }
-      return probe(account);
-    }
+    probe
   });
   return selection;
 }
@@ -318,48 +289,34 @@ function transportFor(account, { branch = null, prompt = null, attempts = null, 
   return factory(options);
 }
 
-function isSafeToFailoverAfter(error) {
-  return Boolean(error) && SAFE_TO_FAILOVER_AFTER.includes(error.code);
+function isDefiniteCliRefusal(error) {
+  return Boolean(error) && DEFINITE_CLI_REFUSALS.includes(error.code);
 }
 
 /**
- * VERIFY THE DECLARED SOURCE BINDING BEFORE ANY TRANSPORT CALL.
- *
- * This is the raw-MCP-tool half of the same fence the bridge action enforces in
- * src/lib/mission-bridge/actions.js (`cloudLaunch`). `cloud.task_launch` is a
- * shipped surface reachable without the bridge, so it cannot rely on the bridge
- * to have checked: it resolves the environment through the provider's own
- * account-scoped environment reader and refuses on every absence, mirroring the
- * bridge's four distinct outcomes so a person is sent to the right screen:
- *
- *   - the environments could not be read at all           -> BINDING_UNVERIFIED
- *   - the environment is absent from an INCOMPLETE reading -> BINDING_UNVERIFIED
- *   - the environment is absent from a COMPLETE reading    -> ENVIRONMENT_NOT_VISIBLE
- *   - the environment has no / a different repository       -> BINDING_UNVERIFIED / REPOSITORY_MISMATCH
- *
- * Returns the resolved, repository-matched environment row on success. Every
- * refusal happens with nothing sent, and the comparison is the point:
- * DECLARING the repository is necessary and not sufficient -- it is checked
- * against the binding the PROVIDER reports, so a wrong-but-well-formed
- * declaration is stopped, which is the case a declaration alone sails through.
+ * Preserve any real provider mismatch or authorization refusal. A manually
+ * entered ID carries an explicit unconfirmed repository declaration when the
+ * native CLI cannot supply a catalog; the receipt and worker contract say so.
  */
-async function verifyRepositoryBinding({ environment, repository, registry, dependencies = {} }) {
+async function verifyRepositoryBinding({ environment, repository, environmentSource, registry, dependencies = {} }) {
+  const enteredByPerson = environmentSource === 'person-entered';
+  const unconfirmed = () => ({ repository, repositoryBinding: Object.freeze({
+    source: 'person-entered', confirmation: 'unconfirmed', providerConfirmed: false,
+    declaredRepository: repository, providerRepository: null,
+    message: 'The environment ID was entered by the person. The provider has not confirmed its repository binding.'
+  }) });
   let discovery;
   try {
     discovery = await (dependencies.discoverEnvironmentsImpl || discoverCloudEnvironments)(
       { accounts: registry.accounts }, dependencies
     );
-  } catch (error) {
+  } catch {
+    if (enteredByPerson) return unconfirmed();
     fail('CLOUD_LAUNCH_BINDING_UNVERIFIED',
-      `The authorized Codex Cloud environments could not be read (${(error && error.code) || 'reader failed'}), so this environment's source repository could not be confirmed. Nothing was sent.`);
+      'The authorized Codex Cloud environments could not be read, so this environment\'s source repository could not be confirmed. Nothing was sent.');
   }
-  // A reader that resolves to nothing is a reader that failed, and it must
-  // land on the same typed refusal as one that threw. The line below already
-  // guarded `discovery &&` for `environments`; `discovery.complete` two lines
-  // later did not, so an injected reader resolving null answered a launch with
-  // "Cannot read properties of null (reading 'complete')" instead of a
-  // refusal -- a crash exactly where this function's whole job is to refuse.
   if (!discovery || typeof discovery !== 'object') {
+    if (enteredByPerson) return unconfirmed();
     fail('CLOUD_LAUNCH_BINDING_UNVERIFIED',
       'The authorized Codex Cloud environments reader returned no reading at all, so this environment\'s source repository could not be confirmed. Nothing was sent.');
   }
@@ -367,38 +324,27 @@ async function verifyRepositoryBinding({ environment, repository, registry, depe
   const bound = environments.find(entry => entry && entry.environmentId === environment) || null;
   if (!bound) {
     if (discovery.complete !== true) {
-      /* WHY IT COULD NOT BE READ IN FULL IS ALREADY IN HAND. This function's
-       * header promises it mirrors the bridge's four outcomes "so a person is
-       * sent to the right screen", and for this one outcome it sent them
-       * nowhere: MEASURED in capability/logs/actions.jsonl (grep -c "could not
-       * be read in full", 2026-09-03) -- 7 of 7 matches are cloud.task_launch
-       * failures, every one carrying only "could not be read in full", with no
-       * account named and nothing to do.
-       * discoverCloudEnvironments() returns `accounts`, each with a `reading`
-       * and the sentence it already wrote for a failed one ("This account's
-       * environments could not be read (<code>)."). Say which accounts those
-       * were, and give the instruction its sibling in mission-bridge/actions.js
-       * already gives for the identical condition. */
-      const unreadable = (Array.isArray(discovery.accounts) ? discovery.accounts : [])
-        .filter(entry => entry && entry.reading === 'unknown')
-        .map(entry => `${entry.account || 'an unnamed account'}: ${entry.reason || 'no reason was reported'}`);
+      if (enteredByPerson) return unconfirmed();
       fail('CLOUD_LAUNCH_BINDING_UNVERIFIED',
-        `The authorized Codex Cloud environments could not be read in full, so this environment's source repository could not be confirmed. Nothing was sent.${
-          unreadable.length ? ` Unread: ${unreadable.join('; ')}` : ''
-        } A Codex Cloud environment is scoped to the account that created it, so sign in to the account that owns ${environment} on this computer and try again.`);
+        'The authorized Codex Cloud environments could not be read in full, so this environment\'s source repository could not be confirmed. Nothing was sent. Use the official Codex CLI cloud picker to check this environment.');
     }
     fail('CLOUD_LAUNCH_ENVIRONMENT_NOT_VISIBLE',
-      `No configured Codex account is authorized for environment ${environment}, so nothing was sent. A Codex Cloud environment is scoped to the account that created it, so it must be launched from its owner's account.`);
+      'The provider does not report this environment as authorized. Nothing was sent.');
   }
   if (typeof bound.repository !== 'string' || !bound.repository) {
+    if (enteredByPerson) return unconfirmed();
     fail('CLOUD_LAUNCH_BINDING_UNVERIFIED',
-      `That Codex Cloud environment does not report exactly one source repository${bound.reason ? ` (${bound.reason})` : ''}, so a task cannot be bound to one. Nothing was sent.`);
+      'That Codex Cloud environment does not report exactly one source repository, so a task cannot be bound to one. Nothing was sent.');
   }
   if (bound.repository.toLowerCase() !== repository.toLowerCase()) {
     fail('CLOUD_LAUNCH_REPOSITORY_MISMATCH',
-      `That Codex Cloud environment is bound to ${bound.repository}, not to the declared ${repository}. Nothing was sent.`);
+      'The provider reports a different repository for this environment. Nothing was sent.');
   }
-  return bound;
+  return { repository: bound.repository, repositoryBinding: Object.freeze({
+    source: enteredByPerson ? 'person-entered' : 'provider-catalog',
+    confirmation: 'confirmed', providerConfirmed: true, declaredRepository: repository,
+    providerRepository: bound.repository, message: 'The provider confirmed this environment\'s repository binding.'
+  }) };
 }
 
 /**
@@ -413,13 +359,16 @@ async function launchCloudTask(request = {}, dependencies = {}) {
   const environment = requireEnvironment(request.environment);
   const branch = requireBranch(request.branch);
   const repository = requireRepository(request.repository);
+  const environmentSource = request.environmentSource;
+  if (environmentSource !== undefined && environmentSource !== 'person-entered') {
+    fail('CLOUD_LAUNCH_ENVIRONMENT_SOURCE_INVALID', 'An environment entry must explicitly identify person-entered provenance, or use the provider catalog.');
+  }
   // Older trusted callers predate the node/action target field. Their honest
   // concrete target is the bound repository root; action surfaces should pass
   // the selected node's target explicitly so the first line is narrower.
   const target = request.target === undefined || request.target === null
     ? `repository root (${repository})`
     : requireTarget(request.target);
-  const prompt = buildCloudTaskContract({ repository, target, prompt: request.prompt });
   const attempts = request.attempts === undefined || request.attempts === null ? null : request.attempts;
   if (attempts !== null && (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 10)) {
     fail('CLOUD_LAUNCH_ATTEMPTS_INVALID', 'attempts must be an integer between 1 and 10 when provided.');
@@ -430,32 +379,30 @@ async function launchCloudTask(request = {}, dependencies = {}) {
     dependencies.accountRegistryPathImpl || accountRegistryPath
   );
 
-  // The declared repository is verified against the provider's own binding for
-  // this environment BEFORE any transport is built or any task is created. A
-  // refusal here means nothing was ever sent. See verifyRepositoryBinding.
-  const bound = await verifyRepositoryBinding({ environment, repository, registry, dependencies });
+  // A real provider binding must match. A person-entered environment can carry
+  // an explicitly unconfirmed declaration; no native token/catalog shortcut is used.
+  const bound = await verifyRepositoryBinding({ environment, repository, environmentSource, registry, dependencies });
+  const prompt = buildCloudTaskContract({ repository, target, prompt: request.prompt, repositoryBinding: bound.repositoryBinding });
 
   /* THE FRESHNESS GATE. A launch against a mirror that is not at this
    * checkout's HEAD is refused here, before any transport is built and before
    * any task is created.
    *
    * WHY THIS IS A GATE AND NOT A WARNING, MEASURED 2026-08-24. Cloud agents on
-   * the app repository were diffing against a branch hundreds of commits behind local
+   * the app repository were diffing against a branch 467 commits behind local
    * HEAD, and their work came back as empty applies, as "fixes" already present
    * in the tree, and as citations pointing at unrelated code. The engine's
-   * branch was only a few behind and its harvests were clean the same night. Nothing in
+   * branch was 5 behind and its harvests were clean the same night. Nothing in
    * the prompt, the model or the harvest was broken -- the branch was old, and
    * nothing in this path had any reason to notice. A gate that warned would
    * have produced the same 28 wasted harvests with a line of text above them.
    *
-   * IT KEYS ON THE PROVIDER'S BINDING, NOT THE CALLER'S DECLARATION.
-   * `bound.repository` is what verifyRepositoryBinding just read back from the
-   * environment itself, so the mirror that gets checked is the one the cloud
-   * worker will actually clone. Keying on `repository` would check whichever
-   * mirror the caller named, which is the same class of defect one layer up.
+   * The repository is provider-confirmed when available. For person-entered
+   * environments it is the declared repository, with that unconfirmed status
+   * recorded in the receipt. The exact mirror and branch must still be fresh.
    *
    * INJECTED, AND THE DEFAULT IS THE REAL CHECK. Tests pass a stub because
-   * their subject is account failover and repository binding; a default that
+   * their subject is account selection and repository binding; a default that
    * did nothing would make this gate present in the file and absent in the
    * product, which is the shape of tools/repo-sync.js -- built, correct, and in
    * zero npm scripts. */
@@ -466,139 +413,109 @@ async function launchCloudTask(request = {}, dependencies = {}) {
      project this dispatch belongs to. Passing it keeps this keyed on what the
      provider will actually clone while making the answer exact. */
   await checkMirror({ cloudRepository: bound.repository, mirrorBranch: branch });
+  const bindingReceipt = Object.freeze({ repository: bound.repository,
+    repositoryBinding: bound.repositoryBinding, message: bound.repositoryBinding.message });
 
-  const excluded = new Set();
   const considered = [];
-  // Accounts that answered specifically "I cannot see that environment". Kept
-  // apart from `considered` so the final refusal can tell the two situations
-  // apart: "nobody had allowance left" and "nobody owns this environment".
-  const environmentUnseenBy = [];
+  const selection = await chooseAccount({
+    registry,
+    preferred: request.account || null,
+    probeImpl: dependencies.probeImpl,
+    statePath: dependencies.statePath,
+    codexConfigPath: dependencies.codexConfigPath,
+    persistSelection: false,
+    fsImpl: dependencies.fsImpl
+  });
+  if (!selection.ok) {
+    fail('CLOUD_LAUNCH_NO_ACCOUNT_AVAILABLE',
+      `No configured Codex account can serve this launch: ${selection.reason}`);
+  }
 
-  // Bounded by the number of configured accounts: failover never loops.
-  for (let attempt = 0; attempt < registry.accounts.length; attempt += 1) {
-    const selection = await chooseAccount({
-      registry,
-      preferred: request.account || null,
-      excluded,
-      probeImpl: dependencies.probeImpl,
-      statePath: dependencies.statePath,
-      codexConfigPath: dependencies.codexConfigPath,
-      persistSelection: false,
-      fsImpl: dependencies.fsImpl
+  const account = selection.account;
+  considered.push(account.name);
+
+  let transport;
+  try {
+    transport = transportFor(account, {
+      branch, prompt, attempts,
+      timeoutMs: dependencies.timeoutMs,
+      transportFactory: dependencies.transportFactory,
+      executableImpl: dependencies.executableImpl,
+      environmentImpl: dependencies.environmentImpl
     });
-    if (!selection.ok) {
-      fail('CLOUD_LAUNCH_NO_ACCOUNT_AVAILABLE',
-        `No configured Codex account can serve this launch: ${selection.reason}`);
-    }
+  } catch (error) {
+    fail('CLOUD_LAUNCH_TRANSPORT_UNAVAILABLE',
+      'The official Codex CLI could not be prepared for the selected account. Nothing was sent.');
+  }
 
-    const account = selection.account;
-    excluded.add(account.name);
-    considered.push(account.name);
-
-    let transport;
-    try {
-      transport = transportFor(account, {
-        branch, prompt, attempts,
-        timeoutMs: dependencies.timeoutMs,
-        transportFactory: dependencies.transportFactory,
-        executableImpl: dependencies.executableImpl,
-        environmentImpl: dependencies.environmentImpl
-      });
-    } catch (error) {
-      // A profile that is missing or signed out is this account's problem, not
-      // the request's: try the next account rather than failing the launch.
-      if (error && (error.code === 'ACCOUNT_PROFILE_UNAVAILABLE' || error.code === 'LAUNCH_BILLING_CREDENTIAL_PRESENT')) {
-        if (error.code === 'LAUNCH_BILLING_CREDENTIAL_PRESENT') throw error; // a leaked credential is never routed around
-        continue;
-      }
-      throw error;
-    }
-
-    let raw;
-    try {
-      raw = await transport.createTask({ environment });
-    } catch (error) {
-      if (!isSafeToFailoverAfter(error)) {
-        // Ambiguous: a task MAY exist on the provider side. Say so exactly.
-        return Object.freeze({
-          ok: false,
-          state: 'UNKNOWN',
-          taskId: null,
-          environment,
-          branch,
-          account: accountReport(account, selection.probe),
-          accountsConsidered: Object.freeze([...considered]),
-          code: error && error.code ? error.code : 'CLOUD_LAUNCH_FAILED',
-          message: error && error.message ? error.message : 'The launch did not complete and its real outcome is unknown.'
-        });
-      }
-      // An environment this account cannot see is not an allowance problem and
-      // never will be: no probe can change it. Move straight to the next
-      // account, which is the only thing that can resolve it.
-      if (error.code === 'CODEX_CLI_ENV_NOT_FOUND') {
-        environmentUnseenBy.push(account.name);
-        continue;
-      }
-      // Nothing was created. Ask the provider whether THIS account is spent
-      // before deciding to move on -- never pattern-match the CLI's wording.
-      const after = await (dependencies.probeImpl || defaultProbe(registry))(account);
-      if (after && after.status === STATUS.EXHAUSTED) continue;
-      throw error;
-    }
-
-    if (!raw || typeof raw.id !== 'string') {
-      // The CLI returned no error signature and no task id. Refusing to guess.
+  let raw;
+  try {
+    raw = await transport.createTask({ environment });
+  } catch (error) {
+    if (!isDefiniteCliRefusal(error)) {
+      // Ambiguous: a task MAY exist on the provider side. Say so exactly.
       return Object.freeze({
         ok: false,
         state: 'UNKNOWN',
         taskId: null,
         environment,
         branch,
+        ...bindingReceipt,
         account: accountReport(account, selection.probe),
         accountsConsidered: Object.freeze([...considered]),
-        code: 'CLOUD_LAUNCH_UNCONFIRMED',
-        message: 'The codex CLI reported neither an error nor a task id, so whether a task was created is unknown.'
+        code: ['CODEX_CLI_TIMEOUT', 'CODEX_CLI_OUTPUT_LIMIT', 'CODEX_CLI_QUERY_WRITE_FAILED'].includes(error && error.code)
+          ? error.code : 'CLOUD_LAUNCH_FAILED',
+        message: 'The launch did not complete and its real outcome is unknown. ' + bindingReceipt.message
       });
     }
+    // An invisible environment is refused on the selected account.
+    if (error.code === 'CODEX_CLI_ENV_NOT_FOUND') {
+      fail('CLOUD_LAUNCH_ENVIRONMENT_NOT_VISIBLE', 'The selected account cannot see this environment. No other account was selected.');
+    }
+    // A definite CLI refusal stops this selected-account request.
+    fail('CLOUD_LAUNCH_CLI_REFUSED', 'The official Codex CLI refused this launch. Check the selected account or wait for its limit to reset. No other account was selected.');
+  }
 
-    // Selection is a preflight, not success. Only the provider's concrete task
-    // id proves that this account actually served the launch; committing any
-    // earlier makes a refused, timed-out, or environment-invisible attempt the
-    // preferred account for the next request.
-    commitLaunchSelection({
-      selection,
-      statePath: dependencies.statePath || STATE_PATH,
-      codexConfigPath: dependencies.codexConfigPath || CODEX_PIN_PATH,
-      ...(dependencies.fsImpl ? { fsImpl: dependencies.fsImpl } : {}),
-      ...(dependencies.now ? { now: dependencies.now } : {})
-    });
-
+  if (!raw || typeof raw.id !== 'string') {
+    // The CLI returned no error signature and no task id. Refusing to guess.
     return Object.freeze({
-      ok: true,
-      state: mapStatus(raw.status),
-      taskId: raw.id,
-      taskUrl: `${TASK_URL_PREFIX}${raw.id}`,
+      ok: false,
+      state: 'UNKNOWN',
+      taskId: null,
       environment,
-      // The provider-reported binding the declaration was checked against, so
-      // the receipt records the repository the task actually landed in rather
-      // than only the one the caller asserted.
-      repository: bound.repository,
       branch,
+      ...bindingReceipt,
       account: accountReport(account, selection.probe),
-      accountsConsidered: Object.freeze([...considered])
+      accountsConsidered: Object.freeze([...considered]),
+      code: 'CLOUD_LAUNCH_UNCONFIRMED',
+      message: 'The codex CLI reported neither an error nor a task id, so whether a task was created is unknown. ' + bindingReceipt.message
     });
   }
 
-  // Name the actual wall that was hit. A Codex Cloud environment belongs to
-  // the account that created it, so "no account could see this environment" is
-  // a different problem with a different fix than "every account is spent", and
-  // telling a person the wrong one sends them to the wrong screen.
-  if (environmentUnseenBy.length > 0) {
-    fail('CLOUD_LAUNCH_ENVIRONMENT_NOT_VISIBLE',
-      `No configured Codex account can see environment ${environment}. A Codex Cloud environment is scoped to the account that created it, so it must be launched from its owner's account, or an environment for this repository must be created under one of these accounts: ${environmentUnseenBy.join(', ')}.`);
-  }
-  fail('CLOUD_LAUNCH_NO_ACCOUNT_AVAILABLE',
-    `Every configured Codex account was tried and none could serve this launch (tried: ${considered.join(', ') || 'none'}).`);
+  // Selection is a preflight, not success. Only the provider's concrete task
+  // id proves that this account actually served the launch; committing any
+  // earlier makes a refused, timed-out, or environment-invisible attempt the
+  // preferred account for the next request.
+  commitLaunchSelection({
+    selection,
+    statePath: dependencies.statePath || STATE_PATH,
+    codexConfigPath: dependencies.codexConfigPath || CODEX_PIN_PATH,
+    ...(dependencies.fsImpl ? { fsImpl: dependencies.fsImpl } : {}),
+    ...(dependencies.now ? { now: dependencies.now } : {})
+  });
+
+  return Object.freeze({
+    ok: true,
+    state: mapStatus(raw.status),
+    taskId: raw.id,
+    taskUrl: `${TASK_URL_PREFIX}${raw.id}`,
+    environment,
+    // The declaration and its actual confirmation status travel with the task.
+    ...bindingReceipt,
+    branch,
+    account: accountReport(account, selection.probe),
+    accountsConsidered: Object.freeze([...considered])
+  });
 }
 
 /**
@@ -613,7 +530,7 @@ async function launchCloudTask(request = {}, dependencies = {}) {
  * surface with a documented envelope, so it is the one used here; the raw
  * `cloud status` passthrough stays available on the transport for diagnosis.
  *
- * Read-only, so failing over between accounts here is always safe. Paging is
+ * Reads retain the explicitly chosen account. Paging is
  * bounded: a task outside the searched window is reported UNKNOWN/notFound,
  * never guessed.
  */
@@ -741,9 +658,10 @@ async function cloudTaskDiff(request = {}, dependencies = {}) {
   try {
     raw = await transport.fetchTaskDiff(taskId, attempt === null ? {} : { attempt });
   } catch (error) {
-    const code = error && typeof error.code === 'string' ? error.code : 'CLOUD_DIFF_FAILED';
-    const detail = error && error.message ? error.message : String(error);
-    fail(code, `${detail} (served by account "${selection.account.name}"; a task created by a different account is not visible to it).`);
+    const absent = ['CODEX_CLI_TASK_NOT_FOUND', 'CODEX_CLI_TASK_NOT_VISIBLE'].includes(error && error.code);
+    fail(absent ? 'CODEX_CLI_TASK_NOT_VISIBLE' : 'CLOUD_DIFF_FAILED', absent
+      ? 'This task was not found for the selected account. A task created by a different account is not visible to it.'
+      : 'The official Codex CLI could not retrieve this diff for the selected account. A task created by a different account is not visible to it.');
   }
 
   const diff = typeof raw === 'string' ? raw : '';
@@ -883,12 +801,11 @@ async function listCloudAccounts(request = {}, dependencies = {}) {
     } catch (error) {
       // An account whose probe THREW is unknown, not spent and not signed out.
       // Reporting it as either would send the person to the wrong remedy.
-      failure = error && error.code ? error.code : 'ACCOUNT_PROBE_FAILED';
+      failure = 'ACCOUNT_PROBE_FAILED';
     }
     accounts.push(Object.freeze({
       name: account.name,
       role: typeof account.role === 'string' ? account.role : null,
-      priority: account.priority,
       status: failure ? 'unknown' : (reading ? reading.status : 'unknown'),
       canServe: failure ? false : Boolean(reading && reading.canServe),
       usedPercent: !failure && reading && Number.isFinite(reading.usedPercent) ? reading.usedPercent : null,
@@ -899,11 +816,10 @@ async function listCloudAccounts(request = {}, dependencies = {}) {
         : (reading && typeof reading.reason === 'string' ? reading.reason : null)
     }));
   }
-  // The account a launch with no explicit choice would land on: the first that
-  // can serve, in registry priority order. Computed from the same readings the
-  // caller is being shown, so the UI cannot claim a default the launch would
-  // not honour.
-  const serving = accounts.find(account => account.canServe) || null;
+  // Only an explicit request or the person's recorded manual choice is a default.
+  const state = readState(dependencies.statePath || STATE_PATH, dependencies.fsImpl ? { fsImpl: dependencies.fsImpl } : {});
+  const chosen = request.account || state.manualPinByProvider?.codex || null;
+  const serving = accounts.find(account => account.name === chosen) || null;
 
   /* THE ENVIRONMENT AXIS RIDES WITH THE ACCOUNT AXIS, and that is a statement
    * about the provider rather than a convenience. A Codex Cloud environment is
@@ -943,7 +859,7 @@ async function listCloudAccounts(request = {}, dependencies = {}) {
         accounts: Object.freeze([]),
         complete: false,
         readAt: new Date().toISOString(),
-        reason: `The authorized environments could not be read (${(error && error.code) || 'reader failed'}).`
+        reason: 'The authorized environments could not be read (reader failed).'
       });
     }
   }
@@ -973,6 +889,9 @@ async function listCloudAccounts(request = {}, dependencies = {}) {
         ...account,
         environmentsReading: reading ? reading.reading : 'unknown',
         environmentsReason: reading ? reading.reason : 'This account was not asked for its environments.',
+        nativeRoute: reading ? reading.nativeRoute || null : null,
+        nativeRouteReason: reading ? reading.nativeRouteReason || null : null,
+        availability: reading ? reading.availability || null : null,
         // Guarded on provider too, for the same reason as readingFor() above:
         // environment.accounts (codex-cloud-environments.js) is a bare name
         // list that only a Codex-provider reading ever populates, so a
@@ -997,7 +916,7 @@ async function listCloudAccounts(request = {}, dependencies = {}) {
 
 module.exports = Object.freeze({
   ENVIRONMENT_ID,
-  SAFE_TO_FAILOVER_AFTER,
+  DEFINITE_CLI_REFUSALS,
   MAX_DIFF_BYTES,
   accountRegistryPath,
   buildCloudTaskContract,

@@ -2,7 +2,7 @@
 /* The organisation's root seat, and the one thing a start knows about it that
  * its shipped declaration does not: which provider it actually runs on.
  *
- * The defect this covers, measured on a live tree on 2026-09-02: a
+ * The defect this covers, measured on the owner's own tree on 2026-09-02: a
  * Controller circle could never bind an identity, so every agent.spawn it made
  * was refused. The root seat ships with provider "none" -- nobody has run it --
  * and a session's binding requires the seat's provider to equal the provider the
@@ -88,10 +88,10 @@ test('adoptProvider is not a way around the role rule', () => {
  *
  * So a start on a second provider is a second conversation of the same actor.
  * It used to REWRITE the seat's provider, and the owner host revoked every live
- * Controller on the old provider at its next line (two per-line-recheck
- * revocations, each ~40 ms after a Codex Controller resume). Once that rewrite
- * was refused instead, a Claude Controller could not start at all while a
- * Codex one ran.
+ * Controller on the old provider at its next line (per-line-recheck of
+ * c46706be at 2026-09-22 21:35:42 and a7c05c50 at 22:02:07, each ~40 ms after
+ * a Codex Controller resume). Once that rewrite was refused instead, a Claude
+ * Controller could not start at all while a Codex one ran (2026-09-23 13:14).
  * The seat now lists both. */
 test('a Codex root seat adopting Claude keeps Codex and adds Claude', () => {
   withStore(store => {

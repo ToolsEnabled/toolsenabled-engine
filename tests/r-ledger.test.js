@@ -1,6 +1,6 @@
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // THE R-LEDGER ADAPTER over src/lib/owner-request-store.js. What must hold:
 // every name the six callers require still answers with the same result keys;

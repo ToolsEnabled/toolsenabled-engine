@@ -2,9 +2,12 @@
 
 // THE RECENT-WORK FEED.
 //
-// WHY IT EXISTS. The R ledger records what the person ASKED FOR. Nothing
-// recorded what had just been DONE, so every session rediscovered the state of
-// the world from scratch whenever the request ledgers could not answer, and
+// The owner named the gap in his own words: "if R/Q wasnt failing you would
+// already know. Maybe we need a recent post q so agents can see whats been
+// recently worked on to get better context."
+//
+// The R ledger records what he ASKED FOR. Nothing recorded what had just been
+// DONE, so every session rediscovered the state of the world from scratch, and
 // two lanes an hour apart paid twice for the same measurement.
 //
 // Five properties, each of which is a rule this module is written to obey.
@@ -55,7 +58,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnGitSync } = require('./git-command');
 
 // 2: `lastSuite.standing` gained INCOMPLETE-RUN-NOT-A-RESULT, and the partial
 // run it describes now carries complete/notRun/ofFiles/batches beside it. A
@@ -114,7 +117,7 @@ const SECTION_CAPS = Object.freeze({
 //
 //   attempt 1, 800/1600/2400: the whole task budget went on the protected floor.
 //     Everything trimmable was surrendered and it STILL overran, so the feed
-//     answered "what just happened here" with nothing but a list of
+//     answered "what has recently been worked on" with nothing but a list of
 //     things that were no longer true. Correct under its own rules and useless.
 //   attempt 2, 1200 at minimal: below the floor. It reported withinLimit:false
 //     on every run -- honest, and still a number that could never be met, which
@@ -196,10 +199,13 @@ function clip(text, maximum = SUBJECT_MAX_CHARS) {
 
 function makeGit(root, deps, unknown) {
   // git runs hooks; a hook sees the child's env. Scrubbed for the same reason
-  // every other spawn here is.
+  // every other spawn here is. The root is never git's working directory: git
+  // is started by absolute path with `-C <root>`, so a git.exe planted at the
+  // top of the root cannot be what runs (see ./git-command.js; security
+  // review 1.0.50 U1/M4).
   const { safeLaunchEnvironment } = require('./providers/subscription-launch-env');
-  const run = deps.git || ((cwd, args) => spawnSync('git', args, {
-    cwd, encoding: 'utf8', windowsHide: true, shell: false,
+  const run = deps.git || ((directory, args) => spawnGitSync(directory, args, {
+    encoding: 'utf8', windowsHide: true, shell: false,
     env: safeLaunchEnvironment(process.env, { context: 'agent recent work git' }),
     timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER
   }));
@@ -303,7 +309,7 @@ function readInFlight(git, dirCap, deletedCap) {
 
 // A lane report is named after the file it examined, by convention:
 // `firstrun-src__lib__providers__web.js.md` is about `src/lib/providers/web.js`.
-// The convention is not universal -- `review-notes.md` names no file -- so a subject
+// The convention is not universal -- `team4-d9.md` names no file -- so a subject
 // is claimed ONLY when the decoded path actually resolves on disk. Guessing a
 // subject would produce confident supersession claims about files that were
 // never the report's topic, which is the exact failure mode this module exists
@@ -421,7 +427,7 @@ function readConcluded(root, fsImpl, sinceMs, nowMs, cap, unknown) {
 // agent handed those numbers with no age beside them will treat them as the
 // current state of the tree and go fix things that may already be fixed -- or,
 // worse, report them to the owner as today's status. That is precisely the
-// failure this feed exists to prevent. So the count of commits SINCE the run is
+// failure the owner is describing. So the count of commits SINCE the run is
 // carried next to the result, and the standing is computed, not left to the
 // reader: anything behind a single commit is already only a historical figure.
 // COUNTED FROM THE WALK ALREADY DONE, never with a fourth git call.

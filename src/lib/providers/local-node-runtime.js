@@ -58,7 +58,7 @@ const DEFAULT_COMPLETION_TIMEOUT_MS = 180_000;
 const MAX_PROMPT_CHARS = 32 * 1024;
 const MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
-const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,127}$/;
+const { validateNativeModelId } = require('../model-dispatch-tiers');
 
 /* The runtimes a user can plausibly already have, with the ONE command that
  * installs each. An install hint that is a documentation link is not a hint; it
@@ -125,12 +125,21 @@ const RUNTIME_ORDER = Object.freeze(['ollama', 'lm-studio', 'llama-cpp', 'vllm']
 const GiB = 1024 ** 3;
 /* Download suggestions, not bundled assets.  The requirement is the minimum
  * currently-free VRAM used for admission; setup UIs can render this same table
- * rather than maintaining a hosted-only model list of their own. */
+ * rather than maintaining a hosted-only model list of their own.
+ *
+ * `downloadBytes` is what `ollama pull <id>` fetches, summed from the Ollama
+ * registry manifest of each id (registry.ollama.ai, read 2026-09-23), so a
+ * setup screen can show the size and check free disk space before it starts.
+ * Every id here is one that registry serves: `llama3.1:8b-instruct` was not
+ * (MANIFEST_UNKNOWN), so a Download press for it could never succeed; the
+ * library's `llama3.1:8b` is that same instruction-tuned model. The 0.5B entry
+ * is the smallest model worth offering, for a first try or a small computer. */
 const CURATED_MODELS = Object.freeze([
-  Object.freeze({ id: 'qwen2.5:3b-instruct', label: 'Qwen 2.5 3B Instruct', minFreeVramBytes: 3 * GiB, capabilities: Object.freeze(['chat', 'tools']) }),
-  Object.freeze({ id: 'qwen2.5:7b-instruct', label: 'Qwen 2.5 7B Instruct', minFreeVramBytes: 6 * GiB, capabilities: Object.freeze(['chat', 'tools', 'code']) }),
-  Object.freeze({ id: 'qwen2.5-coder:7b', label: 'Qwen 2.5 Coder 7B', minFreeVramBytes: 6 * GiB, capabilities: Object.freeze(['chat', 'code']) }),
-  Object.freeze({ id: 'llama3.1:8b-instruct', label: 'Llama 3.1 8B Instruct', minFreeVramBytes: 7 * GiB, capabilities: Object.freeze(['chat', 'tools']) })
+  Object.freeze({ id: 'qwen2.5:0.5b-instruct', label: 'Qwen 2.5 0.5B Instruct', minFreeVramBytes: 1 * GiB, downloadBytes: 397821319, capabilities: Object.freeze(['chat']) }),
+  Object.freeze({ id: 'qwen2.5:3b-instruct', label: 'Qwen 2.5 3B Instruct', minFreeVramBytes: 3 * GiB, downloadBytes: 1929912432, capabilities: Object.freeze(['chat', 'tools']) }),
+  Object.freeze({ id: 'qwen2.5:7b-instruct', label: 'Qwen 2.5 7B Instruct', minFreeVramBytes: 6 * GiB, downloadBytes: 4683087332, capabilities: Object.freeze(['chat', 'tools', 'code']) }),
+  Object.freeze({ id: 'qwen2.5-coder:7b', label: 'Qwen 2.5 Coder 7B', minFreeVramBytes: 6 * GiB, downloadBytes: 4683087561, capabilities: Object.freeze(['chat', 'code']) }),
+  Object.freeze({ id: 'llama3.1:8b', label: 'Llama 3.1 8B Instruct', minFreeVramBytes: 7 * GiB, downloadBytes: 4920753328, capabilities: Object.freeze(['chat', 'tools']) })
 ]);
 
 function curatedModel(model) {
@@ -248,11 +257,19 @@ function boundedJsonRequest({ host, port, path: pathname, method = 'GET', payloa
 }
 
 function modelIds(payload) {
+  /* AN OLLAMA HOLDING NO MODELS ANSWERS `"data": null`, not an empty array
+   * (measured on the official v0.34.3 build, 2026-09-23: GET /v1/models ->
+   * {"object":"list","data":null}). Reading that as a malformed catalogue made
+   * every freshly installed Ollama look broken -- detect() and resolveNode()
+   * threw LOCAL_NODE_RESPONSE_INVALID instead of reporting the runtime as
+   * listening with no models -- which is the one state a first setup is in.
+   * Only that exact shape is accepted as empty; anything else still refuses. */
+  if (payload && typeof payload === 'object' && payload.object === 'list' && payload.data === null) return Object.freeze([]);
   if (!payload || !Array.isArray(payload.data)) {
     throw fail('LOCAL_NODE_RESPONSE_INVALID', 'The local model runtime returned an invalid model catalogue.');
   }
   const ids = payload.data.map(row => (row && typeof row.id === 'string' ? row.id : null));
-  if (ids.some(id => !id || !MODEL_ID_RE.test(id))) {
+  if (ids.some(id => { try { validateNativeModelId(id); return false; } catch { return true; } })) {
     throw fail('LOCAL_NODE_RESPONSE_INVALID', 'The local model runtime returned an invalid model identifier.');
   }
   return Object.freeze(ids);
@@ -408,12 +425,8 @@ async function resolveNode(options = {}, dependencies = {}) {
         `${probe.displayName} is not listening on ${probe.host}:${probe.port}. Start it, or install it with: ${probe.installCommand}`,
         { runtime: probe.runtime, installCommand: probe.installCommand });
     }
-    const installed = localOptions.installedModel(options.model, probe.models);
-    if (!installed) {
-      throw fail('LOCAL_NODE_MODEL_NOT_INSTALLED',
-        `${probe.displayName} does not have ${options.model}. Install it with: ${RUNTIMES[probe.runtime].pullCommand(options.model)}`,
-        { runtime: probe.runtime, model: options.model, available: probe.models });
-    }
+    // Catalogs can lag behind explicit selections. The runtime decides access at the chat request.
+    const installed = options.model;
     if (runtimeOptions.gpuPolicy === 'Require GPU' && curatedModel(options.model) && options.runtime !== 'ollama') {
       const probeResources = dependencies.probeResources || (() => require('./model').probeResources());
       assertModelFits(options.model, probeResources());
@@ -424,14 +437,11 @@ async function resolveNode(options = {}, dependencies = {}) {
     });
   }
   const detected = await detect(options, dependencies);
-  if (!detected.ready) {
+  const selected = detected.selected || (options.model ? detected.runtimes.find(entry => entry.listening) : null);
+  if (!selected) {
     throw fail('LOCAL_NODE_RUNTIME_UNAVAILABLE', `${detected.reason} Install one with: ${detected.nextCommand}`, {
       reason: detected.reason, installCommand: detected.nextCommand
     });
-  }
-  const selected = detected.selected;
-  if (options.model && !selected.models.includes(options.model)) {
-    throw fail('LOCAL_NODE_MODEL_NOT_INSTALLED', `${selected.displayName} does not have ${options.model}.`, { model: options.model, available: selected.models });
   }
   const model = options.model || preferredModel(selected.models);
   return Object.freeze({
@@ -526,9 +536,8 @@ async function complete({ prompt, model, host = DEFAULT_HOST, port, runtime = 'o
   if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > MAX_PROMPT_CHARS) {
     throw fail('LOCAL_NODE_INPUT_INVALID', `prompt must contain 1 through ${MAX_PROMPT_CHARS} characters.`);
   }
-  if (typeof model !== 'string' || !MODEL_ID_RE.test(model)) {
-    throw fail('LOCAL_NODE_INPUT_INVALID', 'model must be a bounded model identifier.');
-  }
+  try { validateNativeModelId(model); }
+  catch (error) { throw fail('LOCAL_NODE_INPUT_INVALID', error.message); }
   const tokens = Number.isInteger(maxOutputTokens) && maxOutputTokens > 0 && maxOutputTokens <= MAX_OUTPUT_TOKENS
     ? maxOutputTokens
     : DEFAULT_MAX_OUTPUT_TOKENS;
@@ -565,11 +574,18 @@ async function complete({ prompt, model, host = DEFAULT_HOST, port, runtime = 'o
      * This is more than a wording nit. Reading `content` alone made the lane
      * child exit 1 with "returned an empty completion", so a local circle
      * started, connected, loaded the model, got an answer and died -- which is
-     * exactly the failure to start that the owner reported. The remedy
+     * exactly the "it literally does not start" the owner reported. The remedy
      * is the one thing the old sentence never named. */
-    const reasoning = choice && choice.message && typeof choice.message[native ? 'thinking' : 'reasoning'] === 'string'
-      ? choice.message[native ? 'thinking' : 'reasoning']
-      : '';
+    /* Only LM Studio, llama.cpp and vLLM take the OpenAI-compatible branch
+     * (Ollama always speaks /api/chat here), and they do not agree on the
+     * field: llama-server returns `reasoning_content` ("similar to Deepseek
+     * API", its server README), vLLM returns `reasoning` and documents that it
+     * "used to be called `reasoning_content`". Reading `reasoning` alone sent
+     * a llama.cpp reasoning model that ran out of room down the "empty
+     * completion" path this block exists to replace. */
+    const fields = native ? ['thinking'] : ['reasoning', 'reasoning_content'];
+    const reasoning = (choice && choice.message && fields.map(field => choice.message[field])
+      .find(value => typeof value === 'string' && value.trim())) || '';
     if (choice && choice.finish_reason === 'length' && reasoning.trim()) {
       throw fail('LOCAL_NODE_OUTPUT_BUDGET_SPENT',
         'The local model spent its whole output budget on reasoning and never reached an answer. '

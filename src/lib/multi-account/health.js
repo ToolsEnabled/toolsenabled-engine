@@ -60,11 +60,6 @@ const STATUS = Object.freeze({
   NOT_PROVISIONED: 'not_provisioned'
 });
 
-// Only these may be failed over. `transient` may not: we do not know that the
-// account is spent, and spending a second one on that guess is the costly
-// mistake. `account_mismatch` may not either: the wrong identity is a
-// configuration fault the owner must see, not something to route around.
-const FAILOVER_STATUSES = Object.freeze(new Set([STATUS.EXHAUSTED, STATUS.SIGNED_OUT, STATUS.NOT_PROVISIONED]));
 
 /* WHICH LIMIT SAID NO. `exhausted` is one word for two different facts, and a
  * person can only act on one of them:
@@ -112,8 +107,7 @@ function exhaustedByLimit(limit) {
  * account than "work" expects." Nothing had been compared -- the probe never
  * learned which account it was -- so all four accused a person whose sign-in
  * may be perfectly right, and sent them to redo a sign-in that was never the
- * fault. `account_mismatch` is deliberately not in FAILOVER_STATUSES, so it
- * also pinned that account in a state nothing routes around. The Claude leg
+ * fault. An identity mismatch prevents a start on that account. The Claude leg
  * (rotation.js's claudeIdentityFault) already answered this case TRANSIENT.
  *
  * FOUR ANSWERS, AND THE TWO EASY TO COLLAPSE ARE THE LAST TWO.
@@ -307,8 +301,8 @@ function classifyProbe({
     // deliberately not named anywhere in here -- an account address is an
     // identity, and this file ships.
     // That home is signed OUT in every sense that matters, and the difference
-    // is load-bearing: signed_out is a failover state, transient is not, so
-    // misfiling it would let one permanently dead account block failover to
+    // distinguishes a sign-in that needs attention from an unread reading.
+    // These states tell the person what happened to
     // the healthy accounts behind it.
     const authFault = authFaultFrom(rateLimitsError);
     if (authFault) {
@@ -396,13 +390,13 @@ function classifyProbe({
      told it was fine. So the threshold is compared against the most
      constrained window that was read. When only the short one was read this
      is the same test it always was. */
-  /* AND EACH WINDOW IS JUDGED AGAINST ITS OWN LIMIT (product note: separate
-     sliders for the weekly and the 5-hour window).
+  /* AND EACH WINDOW IS JUDGED AGAINST ITS OWN LIMIT (owner, 2026-09-03: "that
+     should be a weekly and 5h and slider (seperate)").
 
      One number for both was always a compromise. A weekly allowance is spent
      over days and is worth moving away from early, while a five-hour window
      refills so fast that the same figure would park an account that is about
-     to be fine again. Measured on a development machine the day this was
+     to be fine again. Measured on the owner's own machine the day this was
      written: two accounts sat at 90% and 91% of the WEEK with 96% and 65% of
      the five-hour window still free, and a single 90% threshold stopped both
      of them on the strength of the slow window alone.
@@ -418,9 +412,10 @@ function classifyProbe({
   /* THE RESET TIME IS A FIELD, NOT PROSE.
    *
    * These sentences are printed under a row in the accounts menu, and each one
-   * used to end "; resets <ISO>". MEASURED in an installed copy's
-   * accounts-usage-cache.json, the healthy Codex row read "Signed in at N% of
-   * its allowance; resets <ISO timestamp>." -- a machine value on a screen a person reads,
+   * used to end "; resets <ISO>". MEASURED 2026-09-03 in the installed copy's
+   * accounts-usage-cache.json (%APPDATA%/ToolsEnabled-Live), the healthy Codex
+   * row read "Signed in at 52% of its allowance; resets
+   * 2026-09-07T02:29:34.000Z." -- a machine value on a screen a person reads,
    * beside the row's own line saying the same instant in words. NOTHING IS
    * LOST: `resetsAt` on the record and `resetsAt` on each window in
    * `measured.windows` still carry the time, and the menu builds its own
@@ -597,7 +592,7 @@ const PROVIDER_WORD = Object.freeze({ codex: 'Codex', claude: 'Claude', gemini: 
  * Codex, and it is not enough here either -- so the answer is honest about
  * its limits. A present sign-in is `healthy` with canServe true and NO
  * windows, so a surface says "not measured" and never draws 0%; an absent one
- * is `signed_out`, which failover may move past; a check that could not be
+ * is `signed_out`; a check that could not be
  * made is `transient`, which stops the cascade rather than guessing.
  *
  * NOTHING IS OPENED. profileProvisioned() is registry.js's own statSync
@@ -761,8 +756,8 @@ async function runOwnedProbe({ command, args, cwd, env, signal = null, timeoutMs
  * agy 1.2.0's own changelog says `-p "/usage"`, `/quota` ... "emit ... a
  * structured payload under `--output-format json` ... without starting an
  * agent turn, spending quota, or leaving a conversation behind". MEASURED
- * 2026-09-10 on a current Antigravity sign-in (a captured provider
- * response): status
+ * 2026-09-10 on this computer's current Antigravity sign-in (evidence
+ * claude-finish-20260910/usage/evidence/agy-quota-json.stdout): status
  * SUCCESS, num_turns 0, total_tokens 0, and `command.data.groups` held
  *   "Gemini Models"         bucket gemini-weekly, window weekly, remaining_fraction 0.962
  *   "Claude and GPT models" bucket 3p-weekly,     window weekly, remaining_fraction 1
@@ -892,13 +887,14 @@ const ANTIGRAVITY_CATALOG_ARGS = Object.freeze(['models']);
  * "Usage limit" through the ACP agent's `_x.ai/billing` extension (the agent
  * advertises `x.ai/*` extensions and sends `_x.ai/...` notifications; the
  * handler fetches `/billing?format=credits`). MEASURED 2026-09-10 against
- * Grok CLI 1.0.25 (a captured provider response):
+ * Grok CLI 1.0.25 on this computer (evidence
+ * claude-finish-20260910/usage/evidence/grok-billing-probe-result-underscore.json):
  * initialize, the advertised headless `cached_token` authenticate, then
  * `_x.ai/billing` answered
  *   { config: { currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start, end },
  *               onDemandCap: { val: 0 }, onDemandUsed: { val: 0 }, prepaidBalance: { val: 0 },
  *               isUnifiedBillingUser: true, billingPeriodStart, billingPeriodEnd },
- *     subscription_tier: '<tier name>' }
+ *     subscription_tier: 'X Premium+' }
  * and the authenticate reply named the signed-in address. No session/new and
  * no prompt are ever sent, so no model turn runs and no allowance is spent.
  *
@@ -1105,54 +1101,25 @@ async function probeGrokAccount(account, { homeDir, fsImpl, signal = null, comma
 }
 
 async function probeGeminiAccount(account, options = {}) {
+  options.signal?.throwIfAborted();
   const presence = await probeSignInPresence(account, options);
-  if (account?.provider !== 'gemini' || account?.client || presence.status !== STATUS.HEALTHY) return presence;
-  let home;
-  try { home = resolveProfileDir(account, { homeDir: options.homeDir }); }
-  catch { return presence; }
-  const probe = options.quotaProbe || require('../providers/gemini-quota-probe').probeGeminiQuota;
-  const result = await probe({ home, signal: options.signal, timeoutMs: options.timeoutMs,
-    ...(options.baseEnvironment ? { baseEnvironment: options.baseEnvironment } : {}) });
-  const observed = result?.status === 'observed';
-  const buckets = observed ? result.allowanceBuckets : null;
-  const { validEmail } = require('../providers/gemini-quota-protocol');
-  const email = validEmail(result?.email) ? result.email : null;
-  const mismatch = account.expectEmail && email && email.toLowerCase() !== account.expectEmail.toLowerCase();
-  const identityMissing = Boolean(account.expectEmail && !email);
-  // Verified identity and quota availability are independent. A known service
-  // eligibility/project refusal still prevents serving, even with that identity.
-  // Google no longer serves this account through Gemini CLI. That is known and
-  // permanent, so it is not left as an unknown that stops Start on this account.
-  const retired = !observed && result?.code === 'GEMINI_CLIENT_RETIRED';
-  const serviceRefusal = !observed && ({
-    GEMINI_CLIENT_RETIRED: require('../agent-engine/acp-adapter').GEMINI_INDIVIDUAL_RETIREMENT_MESSAGE,
-    GEMINI_VALIDATION_REQUIRED: 'Gemini requires account validation before this connection can serve.',
-    GEMINI_NOT_PROVISIONED: 'Gemini has not provisioned this connection for service.',
-    GEMINI_PROJECT_UNAVAILABLE: 'Gemini could not establish a usable project for this connection.',
-    GEMINI_PROJECT_CHANGED: 'Gemini returned a different project from the one requested.',
-  })[result?.code];
-  const measured = !mismatch && !identityMissing && ['measured', 'partial'].includes(buckets?.status);
-  const unsupported = ['GEMINI_AUTH_MODE_UNSUPPORTED', 'GEMINI_AUTH_FILE_UNSUPPORTED'].includes(result?.code);
-  const reading = Object.freeze({ ...presence,
-    email,
-    status: mismatch ? STATUS.ACCOUNT_MISMATCH : retired ? STATUS.NOT_PROVISIONED
-      : identityMissing || serviceRefusal ? STATUS.TRANSIENT : presence.status,
-    canServe: mismatch || identityMissing || serviceRefusal ? false : presence.canServe,
-    allowanceBuckets: mismatch || identityMissing || serviceRefusal ? null : buckets,
-    readAt: buckets?.observedAt || null,
-    usageStatus: measured ? 'measured' : unsupported ? 'unsupported' : observed ? 'not_reported' : 'unavailable',
-    usageSource: observed ? 'gemini-cli-core/retrieveUserQuota' : null,
-    usageCode: mismatch ? 'ACCOUNT_USAGE_IDENTITY_MISMATCH' : serviceRefusal ? result.code : identityMissing ? 'GEMINI_IDENTITY_UNAVAILABLE'
-      : measured ? null : result?.code || 'GEMINI_USAGE_NOT_REPORTED',
-    usageReason: measured ? null : unsupported
-      ? 'This Gemini connection does not use the supported personal OAuth file storage. No allowance was estimated.'
-      : serviceRefusal || 'Gemini allowance could not be measured for this connection. This does not establish that its sign-in expired.',
-    reason: mismatch ? `The Gemini sign-in for "${account.name}" does not match the expected account.`
-      : serviceRefusal || (identityMissing ? `Gemini did not verify the expected identity for "${account.name}".`
-      : observed ? 'Gemini verified this sign-in. Allowance is reported separately for each model and token type.'
-      : email ? 'Gemini verified this sign-in, but its allowance could not be measured.' : presence.reason)
+  if (account?.provider !== 'gemini' || account?.client) return presence;
+  const identityUnknown = presence.status === STATUS.HEALTHY && Boolean(account.expectEmail);
+  return Object.freeze({ ...presence,
+    status: identityUnknown ? STATUS.TRANSIENT : presence.status,
+    canServe: identityUnknown ? false : presence.canServe,
+    allowanceBuckets: null,
+    readAt: null,
+    usageStatus: 'not_reported',
+    usageSource: null,
+    usageCode: 'GEMINI_USAGE_NOT_REPORTED',
+    usageReason: 'Gemini allowance is unknown. Start an agent to let the official Gemini CLI check whether it can serve.',
+    reason: identityUnknown
+      ? `The expected Gemini account for "${account.name}" could not be confirmed. Check the sign-in in the official Gemini CLI.`
+      : presence.status === STATUS.HEALTHY
+        ? 'Gemini sign-in data is present. Its allowance is unknown; the official CLI checks whether it can serve.'
+        : presence.reason
   });
-  return probeLifecycleOf(result) === 'closed' ? withProbeLifecycle(reading, 'closed') : reading;
 }
 
 module.exports = Object.freeze({
@@ -1160,7 +1127,6 @@ module.exports = Object.freeze({
   probeGeminiAccount,
   DEFAULT_PROBE_TIMEOUT_MS,
   EXHAUSTED_BY,
-  FAILOVER_STATUSES,
   STATUS,
   antigravityQuotaWindows,
   appServerRequest,

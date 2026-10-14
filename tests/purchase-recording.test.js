@@ -24,7 +24,7 @@
 // reach the capped spend ledger, denied lines never do, and this module never
 // claims to have completed a purchase.
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 const assert = require('node:assert');
 const os = require('node:os');
@@ -249,7 +249,7 @@ check('recordedCents sums only the recorded lines, not the full batch total', ()
   assert.strictEqual(result.recordedCents, 7999 + 3499);
 });
 
-// LEDGER-KINDS-INTERFACE-20260907.md, TOOLS ruling: the cart-linked
+// LEDGER-KINDS-INTERFACE-20260907.md, TOOLS ruling 05:12Z: the cart-linked
 // path -- one shopping list, its settled decision and its recorded charge --
 // must appear as ONE record (kind P) in the owner-request ledger, mirrored
 // through recordApprovedPurchase, never a second record.

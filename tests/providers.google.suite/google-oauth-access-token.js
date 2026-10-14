@@ -30,7 +30,7 @@
 // rethrows OWNER_PROMPT_* on purpose, so the escalation aborted the very call
 // that was one line away from refreshing successfully.
 //
-// Measured on a development machine 2026-08-11: with a valid refresh token and
+// Measured on the owner's machine 2026-08-11: with a valid refresh token and
 // client credentials in the vault, deleting ONLY google_access_token__studentb
 // made drive.find fail through the live MCP surface; restoring the cached token
 // made it pass again.
@@ -124,7 +124,7 @@ async function resolveThroughAuthenticatedRequest(oauth, http) {
 (async () => {
   // 1. The cached access token is ABSENT and everything needed to mint one is
   //    present. This must refresh silently. Nothing may be escalated to the
-  //    owner -- least of all the access token, which they have never held a copy of.
+  //    owner -- least of all the access token, which he has never held a copy of.
   {
     const runtime = makeRuntime({
       [KEYS.refreshKey]: 'refresh-value',
@@ -176,7 +176,7 @@ async function resolveThroughAuthenticatedRequest(oauth, http) {
   }
 
   // 3. No refresh token at all: the honest outcome is the typed "run the login
-  //    flow" failure. The owner must NOT be asked for a refresh token they cannot
+  //    flow" failure. The owner must NOT be asked for a refresh token he cannot
   //    produce, and must not be asked for client credentials that could not mint
   //    anything without it.
   {

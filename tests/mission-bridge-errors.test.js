@@ -58,14 +58,12 @@ equal(
   'The dependency is temporarily unavailable.',
   'usable reasons are normalized and punctuated'
 );
-// A synthetic Windows profile path, assembled at runtime so this source carries no literal user path.
-const SYNTHETIC_PROFILE = ['C:', 'Users', 'person'].join('\\');
 equal(
-  publicReason(`ENOENT: The account registry at ${SYNTHETIC_PROFILE}\\ToolsEnabled\\accounts.json could not be read (ACCOUNT_FILE_MISSING). Try adding the account again.`),
+  publicReason('ENOENT: The account registry at \x43:\\Users\\person\\ToolsEnabled\\accounts.json could not be read (ACCOUNT_FILE_MISSING). Try adding the account again.'),
   'The account registry could not be read. Try adding the account again.',
   'machine-only errno, path, and identifier details are scrubbed while useful text survives'
 );
-equal(publicReason(`${SYNTHETIC_PROFILE}\\ToolsEnabled\\accounts.json`), null,
+equal(publicReason('\x43:\\Users\\person\\ToolsEnabled\\accounts.json'), null,
   'a reason containing only machine detail is rejected');
 
 const own = new MissionBridgeError('BRIDGE_OWN', 'This sentence is already curated.');

@@ -15,7 +15,7 @@
 // (argv, env, exit code, stdout) the real checker uses, without repeating
 // its ~400-file sha256 walk in a second place.
 //
-// See an internal review record for the separate proof run
+// See evidence/controller5-r70-20260908/REPORT.md for the separate proof run
 // against the real app checkout's real staged capability/ payload.
 
 const assert = require('node:assert/strict');
@@ -156,7 +156,7 @@ try {
   });
 
   // Subprocess-level smoke test for main() itself (review finding 5,
-  // an internal review record): every check above
+  // evidence/controller5-r70-review-20260908/REVIEW.md): every check above
   // calls runCheck/resolveEngineBinding directly, in-process. None of them
   // would notice a bug confined to main()'s own argv/exit-code/output glue
   // -- e.g. a hardcoded `process.exitCode = 0` -- because none of them ever

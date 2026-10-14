@@ -1,13 +1,13 @@
 'use strict';
 
 // Deterministic Phase 2 generator.  Schemas are the wire authority; generated
-// consumers are copied only to the isolated dashboard reader tree.
+// consumers are copied only to the isolated Agent Activity Visualizer tree.
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const VISUALIZER_ROOT = path.resolve(ROOT, '..', 'agent-dashboard');
+const VISUALIZER_ROOT = path.resolve(ROOT, '..', 'AgentActivityVisualizer');
 const PACKAGE_ROOT = path.join(ROOT, 'schemas', 'agent-activity', '1.0.0');
 const LEDGER_PATH = path.join(ROOT, 'schemas', 'master-work-ledger', '2.0.0', 'schema.json');
 const MANIFEST_PATH = path.join(PACKAGE_ROOT, 'manifest.json');

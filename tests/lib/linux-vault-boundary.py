@@ -242,7 +242,7 @@ class FixedDeletion(unittest.TestCase):
         self.master = bytes(range(32))
         self.request = {"action": "clear-device-credential", "file": "/unit-only/vault.json"}
         self.data = {"format": helper.FORMAT, "backend": helper.BACKEND,
-                     "identity": "00000001-0000-4000-8000-000000000001", "records": {}}
+                     "identity": "af8e782c-844b-43d2-8597-a57b4a81108b", "records": {}}
         for index, key in enumerate((self.key, self.identity_key, "custom.other")):
             nonce = bytes([index + 1]) * 12
             aad = helper.encoded([helper.FORMAT, helper.BACKEND, self.data["identity"], key])

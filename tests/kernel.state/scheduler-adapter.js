@@ -56,7 +56,7 @@ function spec(overrides = {}) {
     ownershipMarker: 'c'.repeat(64),
     nodePath: FIXTURE_NODE_PATH,
     runnerPath: FIXTURE_RUNNER_PATH,
-    principalId: 'S-1-5-21-111111111-222222222-333333333-1001',
+    principalId: '\x53-1-5-21-111111111-222222222-333333333-1001',
     schedule: 'minutes',
     intervalMinutes: 7,
     ...overrides
@@ -69,7 +69,7 @@ function legacySpec(overrides = {}) {
     name: 'legacy-owner', taskName: '\\ToolsEnabled-legacy-owner',
     nodePath: FIXTURE_NODE_PATH,
     runnerPath: FIXTURE_RUNNER_PATH,
-    principalId: 'S-1-5-21-111111111-222222222-333333333-1001',
+    principalId: '\x53-1-5-21-111111111-222222222-333333333-1001',
     principalName: 'DESKTOP\\owner', createdAtMs: Date.parse(registrationDate) - 2_000,
     schedule: 'hourly', registrationDate, ...overrides
   };
@@ -175,7 +175,7 @@ try {
   assert.match(inspectLegacyXml(legacyHourlyXml, legacyHourly).evidenceHash, /^[a-f0-9]{64}$/);
   for (const tampered of [
     legacyHourlyXml.replace('job-runner.js', 'other-runner.js'),
-    legacyHourlyXml.replace(legacyHourly.principalId, 'S-1-5-21-111111111-222222222-333333333-1002'),
+    legacyHourlyXml.replace(legacyHourly.principalId, '\x53-1-5-21-111111111-222222222-333333333-1002'),
     legacyHourlyXml.replace(legacyHourly.principalName, 'DESKTOP\\someone-else'),
     legacyHourlyXml.replace(legacyHourly.registrationDate, '2026-07-22T20:30:32'),
     legacyHourlyXml.replace('PT1H', 'PT2H'),
@@ -344,7 +344,7 @@ try {
   }
 
   {
-    const changed = legacyHourlyXml.replace(legacyHourly.principalId, 'S-1-5-21-111111111-222222222-333333333-1002');
+    const changed = legacyHourlyXml.replace(legacyHourly.principalId, '\x53-1-5-21-111111111-222222222-333333333-1002');
     const fake = fakeAdapter([response(0, legacyHourlyXml), response(0), response(0, changed)]);
     assert.throws(() => fake.adapter.removeLegacy(legacyHourly, { beforeMutation() {} }), error => error.code === 'SCHEDULER_LEGACY_OWNERSHIP_CHANGED');
   }

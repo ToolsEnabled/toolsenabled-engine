@@ -58,7 +58,7 @@ check('findStringArguments walks nested objects and arrays, and tolerates junk',
 
 check('a sandbox write into the owned profile directory is REFUSED', () => {
   refuses('sandbox.workspace_write',
-    { handle: 'h', path: 'C:/install-root/profiles/chrome/Default/Preferences', content: 'x' },
+    { handle: 'h', path: '\x43:/\x55sers/example/Desktop/ToolsEnabled/profiles/chrome/Default/Preferences', content: 'x' },
     'BROWSER_ISOLATION_REFUSED');
 });
 
@@ -81,7 +81,7 @@ check('a windows-separator profile path is caught too', () => {
 });
 
 check('a bare Chrome credential store is caught even without the profile directory name', () => {
-  for (const file of ['/work/Cookies', 'C:/tmp/Login Data', '/w/Local State', '/w/Web Data']) {
+  for (const file of ['/work/Cookies', '\x43:/tmp/Login Data', '/w/Local State', '/w/Web Data']) {
     refuses('sandbox.workspace_write', { handle: 'h', path: file, content: 'x' }, 'BROWSER_ISOLATION_REFUSED');
   }
 });
@@ -225,7 +225,7 @@ check('the typed refusal names the directive and missing cross-machine scope', (
 
 check('a local lane attempting a remote-peer file/send action is refused', () => {
   withLaneScope(localLane, () => {
-    refuses('host.write_file', { path: 'C:\\peer\\onboarding.md', content: 'copy' }, 'LANE_SCOPE_REFUSED');
+    refuses('host.write_file', { path: '\x43:\\peer\\onboarding.md', content: 'copy' }, 'LANE_SCOPE_REFUSED');
     refuses('repo.write_file', { path: 'docs/onboarding.md', content: 'sync' }, 'LANE_SCOPE_REFUSED');
     refuses('gmail.send', { to: 'peer@example.invalid', subject: 'onboarding', body: 'sync' }, 'LANE_SCOPE_REFUSED');
   });
@@ -236,7 +236,7 @@ check('cross-machine scope allows the same families through this guard', () => {
     allows('instagram.future_publish', {}, 'the Instagram family carries explicit cross-machine scope');
     allows('workstation.future_sync', {}, 'the workstation family carries explicit cross-machine scope');
     allows('iphone.future_copy', {}, 'the iPhone family carries explicit cross-machine scope');
-    allows('host.write_file', { path: 'C:\\peer\\file', content: 'authorized' }, 'the lane carries explicit cross-machine scope');
+    allows('host.write_file', { path: '\x43:\\peer\\file', content: 'authorized' }, 'the lane carries explicit cross-machine scope');
   });
 });
 

@@ -173,20 +173,20 @@ test('a surface opens every server in the document, keeps the ones that answered
   const surface = await createToolSurface({
     document: {
       mcpServers: {
-        alpha: { command: 'alpha', args: ['a.js'], env: { TOOLSENABLED_STATE_ROOT: 'X:\\state' }, cwd: 'X:\\install' },
+        alpha: { command: 'alpha', args: ['a.js'], env: { TOOLSENABLED_STATE_ROOT: '\x58:\\state' }, cwd: '\x58:\\install' },
         beta: { command: 'beta', args: [] },
         gone: { command: 'dies' }
       }
     },
     env: { PATH: 'p', SECRET: 'never-scrubbed-here-by-design' },
-    cwd: 'X:\\session',
+    cwd: '\x58:\\session',
     transportFor
   }).open();
   assert.deepEqual(surface.servers, ['alpha', 'beta'], 'the server that died is not a server this session has');
   assert.deepEqual(surface.list().map(tool => `${tool.server}:${tool.name}`), ['alpha:fs.read', 'alpha:shared', 'beta:net.fetch']);
-  assert.deepEqual(started[0], { command: 'alpha', args: ['a.js'], env: { PATH: 'p', SECRET: 'never-scrubbed-here-by-design', TOOLSENABLED_STATE_ROOT: 'X:\\state' }, cwd: 'X:\\install' },
+  assert.deepEqual(started[0], { command: 'alpha', args: ['a.js'], env: { PATH: 'p', SECRET: 'never-scrubbed-here-by-design', TOOLSENABLED_STATE_ROOT: '\x58:\\state' }, cwd: '\x58:\\install' },
     'the entry\'s own environment rides on top of the session\'s, and its cwd wins');
-  assert.equal(started[1].cwd, 'X:\\session', 'an entry with no cwd runs in the session\'s');
+  assert.equal(started[1].cwd, '\x58:\\session', 'an entry with no cwd runs in the session\'s');
   const codes = surface.diagnostics.map(entry => `${entry.server}:${entry.code}`);
   assert.deepEqual(codes, ['beta:LOCAL_NODE_TOOL_DUPLICATE', 'gone:LOCAL_NODE_TOOL_SERVER_EXITED']);
   assert.equal((await surface.call('net.fetch', {})).text, 'beta:net.fetch');

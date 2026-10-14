@@ -4,7 +4,7 @@
 //
 // The four markdown ledgers this module used to write (reports/R-LEDGER.md and
 // state/r-ledger/*.md) were a second store for the same fact the canonical
-// JSON ledger already held. Product rule: ONE ledger with
+// JSON ledger already held. The owner ruled on 2026-09-02: ONE ledger with
 // scope tiers. src/lib/owner-request-store.js is that ledger's single write API
 // and tier reader; this file keeps every export name the six callers require
 // by path (the product host, the standing-requests read, agent onboarding, the
@@ -28,7 +28,7 @@ const SCOPES = store.SCOPES;
 // Kept for callers that still read it; the single counter starts at 1 now.
 const GLOBAL_FLOOR = 1;
 // The valid statuses resolve() may set. Re-exported (not renamed, not copied)
-// so a caller that only loads this adapter module -- the bridge verb that
+// so a caller that only loads this adapter module -- the bridge verb Worker 4
 // dispatches kind 'T'/'A' through -- reads the SAME set the store enforces,
 // at call time, from the one place it is declared.
 const RESOLUTION_STATUSES = store.RESOLUTION_STATUSES;

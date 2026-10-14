@@ -78,7 +78,7 @@ const SELECTOR = Object.freeze({
 
 test('an unconfinable scheduled action explains the unattended ceiling at every installation level', async () => {
   for (const tier of INSTALL_LEVELS) {
-    const store = recordingStore('launch.execute', { cwd: 'C:\\project' });
+    const store = recordingStore('launch.execute', { cwd: '\x43:\\project' });
     await assert.rejects(() => runScheduledInvocation(SELECTOR, dependencies(store, tier)),
       error => error && error.code === 'PERMISSION_CONFINED_UNCONFINABLE_REFUSED',
       `launch.execute must be refused by the confined tool policy at ${tier}`);

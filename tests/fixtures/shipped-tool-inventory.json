@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "scope": "The 223 retained shipped identities, plus five generic app/accessibility functions, two Page 2 controller resource tools, the agent.resume lifecycle tool, the seven ask/task/purchase ledger tools (a_ledger.file/answer/decline, t_ledger.file/complete/remove, p_ledger.decide), and sandbox.artifact_read (bounded leased sandbox screenshot reads) reviewed here. Every reviewed addition is preserved. Tests never regenerate this expectation. Reviewed screen.control and screen.status additions and their vocabulary are retained explicitly. host.patch_file (byte-mediated exact-span host edit, added with host byte mediation 2026-09-11) is reviewed here. t_ledger.progress (bounded non-terminal progress or external-blocker checkpoint on an unfinished one-shot task; local-write, idempotent, terminal tasks stay terminal; added 2026-09-10) is reviewed here -- config/capability-index.json already carried it at N=250 while this fixture still said 249, which is the disagreement the boundary test reported. T1138 adds t_ledger.review: explicit payload-bound review outcomes, cumulative failed counts and optional regrade; local-write and idempotent. No prior identity is removed. A later change adds t_ledger.assign: assigns one existing task to one host-verified live child through the private host authority; transport-bound actor, local-write and idempotent under a stable assignmentId; filing is not assignment. No prior identity is removed.",
-  "toolCount": 261,
+  "sourceRef": "776dce5883d936d100f6455aa2740a57ef551a7b",
+  "scope": "The 223 retained shipped identities, plus five generic app/accessibility functions, two Page 2 controller resource tools, the agent.resume lifecycle tool, the seven ask/task/purchase ledger tools (a_ledger.file/answer/decline, t_ledger.file/complete/remove, p_ledger.decide), and sandbox.artifact_read (bounded leased sandbox screenshot reads, added 706aad18) reviewed here. Every reviewed addition is preserved. Tests never regenerate this expectation. Reviewed screen.control and screen.status additions from 874f92b7/d844a9bb and vocabulary a50d1f9f are retained explicitly. host.patch_file (byte-mediated exact-span host edit, added with host byte mediation 2026-09-11) is reviewed here. t_ledger.progress (bounded non-terminal progress or external-blocker checkpoint on an unfinished one-shot task; local-write, idempotent, terminal tasks stay terminal; added a7ee8f37 2026-09-10) is reviewed here -- config/capability-index.json already carried it at N=250 while this fixture still said 249, which is the disagreement the boundary test reported. T1138 adds t_ledger.review: explicit payload-bound review outcomes, cumulative failed counts and optional regrade; local-write and idempotent. No prior identity is removed. 9bcdfc1f (\"Wire authenticated task assignment through owner host\") adds t_ledger.assign: assigns one existing task to one host-verified live child through the private host authority; transport-bound actor, local-write and idempotent under a stable assignmentId; filing is not assignment. No prior identity is removed.",
+  "toolCount": 262,
   "tools": [
     "a_ledger.answer",
     "a_ledger.decline",
@@ -70,6 +71,7 @@
     "drive.find",
     "drive.upload",
     "duo.desktop_status",
+    "duo.institution_login",
     "extension.package",
     "extension.validate",
     "firebase.account_login",

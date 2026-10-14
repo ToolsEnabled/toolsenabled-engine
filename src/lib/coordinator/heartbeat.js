@@ -1,8 +1,8 @@
 'use strict';
 
 // Coordinator duty-host heartbeat: the CONTRACT SURFACE between the duty host
-// (writer, in this repo) and the dashboard watcher (the dashboard reader, in a
-// separate checkout). Request R100.
+// (writer, in this repo) and the dashboard watcher (reader, in
+// AgentActivityVisualizer). Owner request R100.
 //
 // WHY THIS FILE IS DELIBERATELY BORING
 //

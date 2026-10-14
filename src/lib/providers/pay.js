@@ -37,7 +37,7 @@ function check({ amountUsd, purpose = '' }, dependencies = {}) {
 //
 // The daily cap is a limit on how much may be spent. It was never a statement
 // that the spend was WANTED, and until this gate existed it was the only thing
-// standing between an agent and $100 of a person's money -- see the measured
+// standing between an agent and $100 of the owner's money -- see the measured
 // finding in ../purchase-authority.js. The cap still applies; it is now the
 // second question, not the first.
 //
@@ -110,7 +110,7 @@ function recordSpend({ amountUsd, purpose = '', provider = 'manual', reference =
     // WHO APPROVED THIS, AND WHEN, travels into the audit receipt. A spend
     // record that cannot answer "who said yes" is not an audit trail, it is a
     // total. `approvedBy` is the owner for an approved cart line and the
-    // setting itself when they have removed the reservation -- two different
+    // setting itself when he has removed the reservation -- two different
     // facts, never collapsed into one.
     approvedBy: approval.autoApproved ? 'setting:outward.reserved_from_agents' : 'owner',
     approvalCode: approval.code,

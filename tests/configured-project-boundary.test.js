@@ -52,7 +52,7 @@ function run() {
     assert.equal(boundary.protectedStoreItemId({ env, io }), 'current-id');
     assert.equal(boundary.readConfiguredValue('CURRENT', 'root', { env: { CURRENT: ' ' }, io }), '/from-file');
 
-    const historicalRootName = ['TOOLSENABLED', 'RETIRED', 'PROJECT', 'ROOT'].join('_');
+    const historicalRootName = ['TOOLSENABLED', 'AI', 'CALENDAR', 'ROOT'].join('_');
     assert.equal(boundary.readConfiguredRoot({
       env: { [historicalRootName]: '/historical/root' },
       io: ioFixture()

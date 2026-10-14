@@ -58,6 +58,21 @@ for (const leg of legs) {
     `${leg.name} must not sign the raw challenge string`);
 }
 
+// --- 1b. the machine leg's in-place lease RENEWAL applies the same rule -----
+// (security review 1.0.50 H2). The renewal branch kept the old 16-character
+// floor and signed the raw challenge string with the same identity key, so a
+// relay could still collect forged hellos there. Its behaviour -- shape refusal
+// and one signature per renewal -- is exercised in online-fra-relay-client.js.
+{
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src/lib/online-fra-relay-client.js'), 'utf8');
+  assert.equal(/answer\.challenge\.length\s*>=\s*16/.test(source), false,
+    'renewal must no longer accept any challenge merely for being 16+ characters');
+  assert.equal(/sign\(\s*Buffer\.from\(answer\.challenge/.test(source), false,
+    'renewal must not sign the raw challenge string');
+  assert.ok(source.includes('RELAY_CHALLENGE_RE.test(answer.challenge)'),
+    'renewal must test the challenge against the nonce shape before signing');
+}
+
 // --- 2. an honest relay nonce passes ----------------------------------------
 for (let i = 0; i < 200; i += 1) {
   const honest = crypto.randomBytes(CHALLENGE_BYTES).toString('base64url');

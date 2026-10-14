@@ -22,8 +22,8 @@ test('Linux acceptance uses a POSIX command and leaves shell choice to the host 
 test('probe paths with apostrophes remain one literal argument in each shell grammar', () => {
   assert.equal(launcher.probeCommand("/opt/Node O'Brien/node", { platform: 'linux' }),
     `'/opt/Node O'\\''Brien/node' '${launcher.PROBE_FILE}'`);
-  assert.equal(launcher.probeCommand("C:\\Program Files\\Node O'Brien\\node.exe", { platform: 'win32' }),
-    `& 'C:\\Program Files\\Node O''Brien\\node.exe' '${launcher.PROBE_FILE}'`);
+  assert.equal(launcher.probeCommand("\x43:\\Program Files\\Node O'Brien\\node.exe", { platform: 'win32' }),
+    `& '\x43:\\Program Files\\Node O''Brien\\node.exe' '${launcher.PROBE_FILE}'`);
 });
 
 // The provider and generated objective are real. Platform and child lifecycle

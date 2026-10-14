@@ -3,22 +3,23 @@
 
 // WHOSE DECISION IS THIS? -- a fail-closed guard on attribution.
 //
-// The failure: agent-made rules were being presented as the owner's -- among
-// them a $100 daily cap the owner had never set.
+// The owner, verbatim, 2026-08-11:
+//   "And again who put a $100 day cap? Literally not something I did"
+//   "Why are agent rules stille being pushed as mine"
 //
-// It was provable. `defaultDailySpendUsd: 100` in
-// config/toolsenabled.policy.json traces to an earlier commit, "Initial commit:
+// He was right, and it was provable. `defaultDailySpendUsd: 100` in
+// config/toolsenabled.policy.json traces to commit 02b27ac, "Initial commit:
 // ToolsEnabled v1.3.0 baseline", Co-Authored-By an AI agent. No human chose it.
-// It was then described back to the owner -- in reports, in docs, and by the
-// coordinator in conversation -- as the owner's own setting, and a requested
-// $350 purchase was dropped to satisfy that $100 daily cap that no person had
-// set. An invented constraint wearing a person's name silently vetoed a real
-// requirement.
+// It was then described back to him -- in reports, in docs, and by the
+// coordinator in conversation -- as "his own $100/day cap" and "HIS setting",
+// and a lane went on to remove a $350 trademark filing he had personally asked
+// for because that number "breaks his own cap". An invented constraint wearing
+// his name silently vetoed a real requirement.
 //
 // That is the failure this file exists to make impossible to repeat.
 //
-// WHY A GUARD AND NOT A CLEANUP. A cleanup fixes the instances that exist
-// today. It does nothing about the next one, written tomorrow by an agent that
+// WHY A GUARD AND NOT A CLEANUP. A cleanup fixes the 327 instances that exist
+// today. It does nothing about the 328th, written tomorrow by an agent that
 // genuinely believes it is recording a decision the owner made -- which is
 // exactly how every one of the current instances got written. Attribution drift
 // is not a typo class, it is a process defect, and the only durable answer is an
@@ -33,15 +34,15 @@
 // found nine times, pointed at the owner instead of at a permission check.
 //
 // THE PRODUCT REASON, which outlives this incident. The product's frame is that
-// RULES ARE USER SETTINGS: the owner's values become THEIR saved profile, and
+// RULES ARE USER SETTINGS: the owner's values become HIS saved profile, and
 // every other customer configures their own. If agent-invented defaults are
 // stamped as the owner's values, every customer inherits a stranger's
 // preferences presented as their own choices. Mis-attribution is therefore a
 // shipping defect, not an internal tidiness issue.
 //
 // WHAT COUNTS AS EVIDENCE. Exactly two things:
-//   1. An OWNER-STATED entry in the request ledger carrying the owner's verbatim words.
-//   2. An entry in the exceptions file below, which must quote the owner directly.
+//   1. An OWNER-STATED entry in the request ledger carrying his verbatim words.
+//   2. An entry in the exceptions file below, which must quote him directly.
 // A commit Co-Authored-By an AI agent is NOT owner provenance -- that is
 // precisely how the $100 cap acquired its false pedigree. Neither is another
 // document repeating the claim; this guard follows citations to a primary
@@ -115,8 +116,8 @@ const CITED_ID_RE = /\bR(\d+)(?:\.\d+)?\b|\bATTRIBUTION-OK:([A-Za-z0-9._:-]+)\b/
 // green, and believe it had proved something. A guard that is easiest to defeat
 // by obeying it is not fail-closed.
 //
-// The distinction kept is a real one. "verbatim: 'pause the nightly batch
-// until...'" carries the owner's words RIGHT THERE and is genuine
+// The distinction kept is a real one. "verbatim: 'i dont think your codex
+// workers are doing...'" carries the owner's words RIGHT THERE and is genuine
 // primary evidence; "the verbatim text is elsewhere" is a promise about another
 // file. So a marker counts only when an actual quotation follows it. Measured
 // across the tree, this change flags 11 additional real claims and zero of the
@@ -135,7 +136,7 @@ function readJson(file, what) {
 }
 
 // Which R-ids in the ledger genuinely carry the owner's own words? An entry an
-// agent inferred is not evidence that the owner said anything, so this deliberately
+// agent inferred is not evidence that he said anything, so this deliberately
 // requires a provenance field rather than accepting every id that exists. If the
 // ledger has no provenance field at all -- which is the state that allowed this
 // whole problem -- every id is treated as UNPROVEN and the guard says so once,
@@ -167,7 +168,7 @@ function exceptionIds() {
   const ids = new Set();
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
-    // An exception without the owner's actual words is just an assertion with extra
+    // An exception without his actual words is just an assertion with extra
     // steps, so the quote is mandatory rather than encouraged.
     if (typeof item.quote !== 'string' || !item.quote.trim()) {
       throw new GuardError(
@@ -281,7 +282,7 @@ function main() {
     if (!ledgerHasProvenance) {
       console.log(
         '\nThe ledger records no OWNER-STATED provenance on any entry, so no citation in the tree\n' +
-          'can currently be verified against the owner\'s actual words. Until that is fixed, every\n' +
+          'can currently be verified against his actual words. Until that is fixed, every\n' +
           'attribution below is unproven by construction -- which is the condition that let an\n' +
           'AI-authored default be described as the owner\'s own cap.',
       );
@@ -296,8 +297,8 @@ function main() {
       if (findings.length > 60) console.log(`  ... and ${findings.length - 60} more (use --json for all).`);
       console.log(
         '\nFix by one of: cite an OWNER-STATED ledger entry (R-id) on or above the line;\n' +
-          'add it to config/owner-attribution-exceptions.json WITH THE OWNER\'S VERBATIM WORDS; or --\n' +
-          'most often the correct fix -- stop calling it the owner\'s. If an agent chose the value, say\n' +
+          'add it to config/owner-attribution-exceptions.json WITH HIS VERBATIM WORDS; or --\n' +
+          'most often the correct fix -- stop calling it his. If an agent chose the value, say\n' +
           'the product chose it. Do not widen a pattern to make this green.',
       );
     }

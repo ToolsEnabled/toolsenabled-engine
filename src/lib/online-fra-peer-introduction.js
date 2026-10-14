@@ -145,9 +145,9 @@ function createPeerIntroductionClient({ baseUrl, cookie, deviceToken, vault, ori
    * or NULL -- and null means exactly "there is no introduction for you right
    * now", with no reason, because the service does not give one.
    *
-   * A SOLO MACHINE IS A THIRD ANSWER, AND IT IS NOT NULL. The owner's rule: when
-   * only one computer is connected, the interface serves that one computer. So
-   * a machine that is in a connection BY ITSELF gets a
+   * A SOLO MACHINE IS A THIRD ANSWER, AND IT IS NOT NULL. The owner's rule:
+   * "If theres only one computer connected we need to serve that one computer
+   * in the interface." So a machine that is in a connection BY ITSELF gets a
    * 200 whose peer half is empty -- relayPairId set, peerDeviceId null, no
    * key -- and that is returned as such, with peerPublicKey null, so the shell
    * can open its socket for the browser and build no peer leg. Null still

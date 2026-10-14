@@ -235,9 +235,11 @@ function run() {
   // This source fence is unconditional because resolveHiddenInvocation's
   // behavioral batch branch can execute only on Windows. Without it, deleting
   // an argv safety flag remains green on every non-Windows release runner.
+  // Since 1.0.50 L9 it also requires the metacharacter refusal to run first,
+  // and since platform review E1 the over-length refusal after it.
   assert.match(
     seamCode,
-    /if\s*\(isBatchTarget\(command\)\)\s*{\s*return\s*{\s*command:\s*process\.env\.ComSpec\s*\|\|\s*['"]cmd\.exe['"],\s*args:\s*\[\s*['"]\/d['"],\s*['"]\/v:off['"],\s*['"]\/s['"],\s*['"]\/c['"],\s*['"]call['"],\s*command,\s*\.\.\.args\s*\],\s*env:\s*{},\s*resolved:\s*['"]batch['"],\s*}\s*;?\s*}/,
+    /if\s*\(isBatchTarget\(command\)\)\s*{\s*refuseBatchMetacharacters\(command,\s*args\);\s*refuseOverlongBatchLine\(command,\s*args\);\s*return\s*{\s*command:\s*process\.env\.ComSpec\s*\|\|\s*['"]cmd\.exe['"],\s*args:\s*\[\s*['"]\/d['"],\s*['"]\/v:off['"],\s*['"]\/s['"],\s*['"]\/c['"],\s*['"]call['"],\s*command,\s*\.\.\.args\s*\],\s*env:\s*{},\s*resolved:\s*['"]batch['"],\s*}\s*;?\s*}/,
     'batch resolution must use cmd.exe with the complete explicit, non-shell argv on every platform',
   );
 
@@ -285,21 +287,97 @@ function run() {
 
   // A batch target is resolved to cmd.exe with an explicit argv, never a shell.
   if (process.platform === 'win32') {
-    const batch = resolveHiddenInvocation('C:\\tools\\thing.cmd', ['--flag']);
+    const batch = resolveHiddenInvocation('\x43:\\tools\\thing.cmd', ['--flag']);
     assert.strictEqual(batch.resolved, 'batch');
     assert.match(batch.command, /cmd\.exe$/i);
     assert.deepStrictEqual(
       batch.args,
-      ['/d', '/v:off', '/s', '/c', 'call', 'C:\\tools\\thing.cmd', '--flag'],
+      ['/d', '/v:off', '/s', '/c', 'call', '\x43:\\tools\\thing.cmd', '--flag'],
       'a .cmd target must be run through cmd.exe with an explicit argv',
     );
   }
 
   // A command that is neither a launcher shim nor a batch file is untouched.
-  const plain = resolveHiddenInvocation('C:\\bin\\thing.exe', ['a', 'b']);
+  const plain = resolveHiddenInvocation('\x43:\\bin\\thing.exe', ['a', 'b']);
   assert.strictEqual(plain.resolved, null);
-  assert.strictEqual(plain.command, 'C:\\bin\\thing.exe');
+  assert.strictEqual(plain.command, '\x43:\\bin\\thing.exe');
   assert.deepStrictEqual(plain.args, ['a', 'b']);
+
+  /* SECURITY REVIEW 1.0.50 L9: cmd.exe re-parses a batch target's argv, so an
+     argument carrying a cmd metacharacter is refused before anything starts.
+     Driven on every platform by presenting this process as win32 to the
+     resolver (isBatchTarget reads process.platform at call time), so the rule
+     is not a Windows-only no-op here. Nothing is spawned: every call below
+     either refuses or only resolves. */
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { ...platformDescriptor, value: 'win32' });
+  let metacharacterCases = 0;
+  try {
+    const shim = '\x43:\\tools\\codex.cmd';
+    for (const value of ['x & calc', 'a|b', 'a<b', 'a>b', 'a^b', '%COMSPEC%', 'a\rb', 'a\nb']) {
+      const override = `mcp_servers={"${value}"={enabled=false}}`;
+      assert.throws(
+        () => resolveHiddenInvocation(shim, ['app-server', '-c', override]),
+        error => error.code === 'HIDDEN_SPAWN_BATCH_ARGUMENT_REFUSED'
+          && /argument 3\b/.test(error.message)
+          && !error.message.includes(override),
+        `a batch argument containing ${JSON.stringify(value)} must be refused, naming its position but not its value`,
+      );
+      metacharacterCases += 1;
+    }
+    assert.throws(
+      () => spawnHidden(shim, ['--flag', 'name & calc']),
+      error => error.code === 'HIDDEN_SPAWN_BATCH_ARGUMENT_REFUSED',
+      'spawnHidden refuses the batch launch before starting anything',
+    );
+    const ordinary = ['app-server', '-c', 'mcp_servers.x.enabled=false', '-c', 'sandbox_mode="workspace-write"', 'with space', '(parens)!'];
+    const batch = resolveHiddenInvocation(shim, ordinary);
+    assert.strictEqual(batch.resolved, 'batch');
+    assert.deepStrictEqual(batch.args, ['/d', '/v:off', '/s', '/c', 'call', shim, ...ordinary],
+      'arguments without cmd metacharacters still reach the batch file unchanged');
+    /* PLATFORM REVIEW 1.0.50 E4: the batch file's own path rides on the same
+       line, unquoted when it has no space, so a metacharacter in it is refused
+       by name too, without echoing the path. */
+    for (const folder of ['\x43:\\Users\\R&D\\AppData\\Roaming\\npm', '\x43:\\Users\\a%b\\npm', '\x43:\\Users\\x^y\\npm']) {
+      assert.throws(
+        () => resolveHiddenInvocation(`${folder}\\claude.cmd`, ['-p']),
+        error => error.code === 'HIDDEN_SPAWN_BATCH_COMMAND_REFUSED'
+          && /claude\.cmd/.test(error.message) && !error.message.includes(folder),
+        `a batch program under ${folder} must be refused before cmd.exe is started`,
+      );
+    }
+    assert.throws(
+      () => spawnHidden('\x43:\\Users\\R&D\\AppData\\Roaming\\npm\\gemini.cmd', ['--acp']),
+      error => error.code === 'HIDDEN_SPAWN_BATCH_COMMAND_REFUSED',
+      'spawnHidden refuses the batch launch before starting anything',
+    );
+    const nativeUnderAmpersand = resolveHiddenInvocation('\x43:\\Users\\R&D\\.local\\bin\\claude.exe', ['-p']);
+    assert.strictEqual(nativeUnderAmpersand.resolved, null, 'a native program under such a folder is started directly');
+
+    /* PLATFORM REVIEW 1.0.50 E1: a batch line already over cmd.exe's 8191
+       characters before quoting is refused by name, before anything starts.
+       One character under the limit still resolves to the batch route. */
+    const head = 'call'.length + 1 + shim.length + 1;
+    assert.throws(
+      () => resolveHiddenInvocation(shim, ['x'.repeat(8191 - head + 1)]),
+      error => error.code === 'HIDDEN_SPAWN_BATCH_LINE_TOO_LONG' && /8191/.test(error.message),
+      'a batch command line over 8191 characters must be refused before cmd.exe is started',
+    );
+    assert.throws(
+      () => spawnHidden(shim, ['app-server', '-c', `allowlist=${'a,'.repeat(4100)}`]),
+      error => error.code === 'HIDDEN_SPAWN_BATCH_LINE_TOO_LONG',
+      'spawnHidden refuses the overlong batch launch before starting anything',
+    );
+    assert.strictEqual(resolveHiddenInvocation(shim, ['x'.repeat(8191 - head)]).resolved, 'batch',
+      'a batch command line of exactly 8191 characters still resolves');
+    const native = resolveHiddenInvocation('\x43:\\tools\\codex.exe', ['x & calc', '%COMSPEC%']);
+    assert.strictEqual(native.resolved, null);
+    assert.deepStrictEqual(native.args, ['x & calc', '%COMSPEC%'], 'a non-batch target keeps every character');
+  } finally {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  }
+  assert.strictEqual(metacharacterCases, 8);
+  assert.strictEqual(process.platform, platformDescriptor.value, 'the real platform is restored');
 
   console.log(`hidden-spawn fence: ${files.length} shipped agent-path files checked, 0 violations`);
 }

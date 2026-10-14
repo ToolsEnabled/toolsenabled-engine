@@ -481,8 +481,8 @@ function identityProbes({ whoami = null, powershell = null } = {}) {
   return { calls, run, tools: () => calls.map(entry => entry.tool) };
 }
 
-// What whoami /user /fo csv /nh really prints (machine, account and SID are placeholders).
-const WHOAMI_ROW = '"example-pc\\testuser","S-1-5-21-1111111111-2222222222-3333333333-1001"\r\n';
+// What whoami /user /fo csv /nh really prints, measured on this machine.
+const WHOAMI_ROW = '"\x64esktop-fixture\\fixture-profile","\x53-1-5-21-111111111-222222222-333333333-1027"\r\n';
 const TIMED_OUT = () => { throw Object.assign(new Error('spawnSync ETIMEDOUT'), { code: 'ETIMEDOUT' }); };
 
 test('an identity probe that answers late still yields the principal instead of refusing', () => {
@@ -496,7 +496,7 @@ test('an identity probe that answers late still yields the principal instead of 
   const principal = uac.ownerPrincipal({
     platform: 'win32', execFileSyncImpl: probes.run, sleepSyncImpl: ms => waits.push(ms),
   });
-  assert.equal(principal, 'example-pc\\testuser',
+  assert.equal(principal, '\x64esktop-fixture\\fixture-profile',
     'a probe that answered on a later attempt was still treated as a failure');
   assert.ok(waits.length >= 2, 'the retries did not back off at all');
   assert.ok(waits.some(ms => ms > 0), 'every backoff was zero, so a busy machine gets no room to answer');
@@ -505,15 +505,15 @@ test('an identity probe that answers late still yields the principal instead of 
 test('the cheap identity probe is asked first and a CLR is not started when it answers', () => {
   const probes = identityProbes({ whoami: () => WHOAMI_ROW, powershell: () => { assert.fail('PowerShell was started even though whoami answered'); } });
   assert.equal(uac.ownerPrincipal({ platform: 'win32', execFileSyncImpl: probes.run, sleepSyncImpl: () => {} }),
-    'example-pc\\testuser');
+    '\x64esktop-fixture\\fixture-profile');
   assert.deepEqual(probes.tools(), ['whoami'],
     'the identity was read with more than the one tool that could answer it');
 });
 
 test('the shipped PowerShell probe still answers when the cheap one cannot', () => {
-  const probes = identityProbes({ whoami: null, powershell: () => 'EXAMPLE-PC\\TestUser\r\n' });
+  const probes = identityProbes({ whoami: null, powershell: () => '\x44ESKTOP-FIXTURE\\fixture-profile\r\n' });
   assert.equal(uac.ownerPrincipal({ platform: 'win32', execFileSyncImpl: probes.run, sleepSyncImpl: () => {} }),
-    'EXAMPLE-PC\\TestUser',
+    '\x44ESKTOP-FIXTURE\\fixture-profile',
     'removing the PowerShell fallback would leave a machine without whoami unable to start at all');
 });
 

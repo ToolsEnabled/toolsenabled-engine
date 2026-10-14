@@ -28,7 +28,7 @@
 // Every path that launches a subscription CLI must scrub the ambient
 // credentials first. This test exists because writing that rule down did not
 // work: providerEnvironment()'s comment in cli-provider-gateway.js already
-// described the credential-leak failure (R1186) in detail, and nine of the ten modules importing
+// described the R1186 outage in detail, and nine of the ten modules importing
 // executableFor() still did not call it (measured 2026-08-10).
 //
 // It has two halves, and both are needed:
@@ -61,9 +61,8 @@ const {
   subscriptionLaunchEnvironment
 } = require('../src/lib/providers/subscription-launch-env.js');
 
-// A fabricated value. It is never compared against anything real. Assembled at
-// runtime so the source carries no literal key-shaped string.
-const SENTINEL = 'sk-ant-' + 'TEST-SENTINEL-NOT-A-REAL-KEY';
+// A fabricated value. It is never compared against anything real.
+const SENTINEL = '\x73k-ant-TEST-SENTINEL-NOT-A-REAL-KEY';
 
 function poisonedEnvironment(extra = {}) {
   const env = { PATH: 'safe-path', USERPROFILE: 'profile', KEEP_ME: 'keep' };
@@ -467,7 +466,7 @@ async function capturedLaunchEnvironment(invoke) {
   //     src/lib/providers/claude-auth-probe.js
   //     src/lib/providers/gemini-agentic.js
   //   GENUINELY GONE, proof recorded rather than assumed:
-  //     tools/role-sweep-runner.js -- DELETED in an earlier change
+  //     tools/role-sweep-runner.js -- DELETED in 81b14e15
   //     src/lib/providers/subscription-launch-env.js -- still present but no
   //       longer references the gateway or executableFor and performs no spawn
   //       at all; it became a pure environment builder

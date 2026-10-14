@@ -15,6 +15,7 @@ const {
   MultiAccountError,
   accountsFor,
   describeProviders,
+  exhaustionThresholds,
   findAccount,
   loadRegistry,
   parseRegistry,
@@ -77,30 +78,35 @@ test('a Gemini account names its home in the provider own word and is presence-c
   );
 });
 
-test('parseRegistry normalizes entries, permits names per provider, and sorts by priority', () => {
+test('parseRegistry normalizes entries and preserves account order while ignoring retired policy fields', () => {
   const registry = parseRegistry(REGISTRY_TEXT, { source: 'memory://accounts' });
 
-  assert.equal(registry.exhaustedAtPercent, 87);
+  assert.equal(Object.hasOwn(registry, 'exhaustedAtPercent'), false);
   assert.equal(registry.source, 'memory://accounts');
-  assert.deepEqual(registry.accounts.map(({ name, provider, home, role, priority }) => (
-    { name, provider, home, role, priority }
+  assert.deepEqual(registry.accounts.map(({ name, provider, home, role }) => (
+    { name, provider, home, role }
   )), [
-    { name: 'Personal', provider: 'codex', home: '.codex-personal', role: 'backup', priority: 1 },
-    { name: 'Work', provider: 'claude', home: '.claude-work', role: 'primary', priority: 2 },
-    { name: 'Work', provider: 'codex', home: '.codex-work', role: 'primary', priority: 3 }
+    { name: 'Work', provider: 'codex', home: '.codex-work', role: 'primary' },
+    { name: 'Personal', provider: 'codex', home: '.codex-personal', role: 'backup' },
+    { name: 'Work', provider: 'claude', home: '.claude-work', role: 'primary' }
   ]);
+  assert.equal(registry.accounts.every(account => !Object.hasOwn(account, 'priority')), true);
+  assert.deepEqual(exhaustionThresholds({ exhaustedAtPercent: 87, exhaustedAtPercentHourly: 23, exhaustedAtPercentWeekly: 41 }), {
+    exhaustedAtPercent: 100, exhaustedAtPercentHourly: 100, exhaustedAtPercentWeekly: 100
+  });
 
   const defaulted = parseRegistry(JSON.stringify({
     exhaustedAtPercent: 0,
     accounts: [{ name: 'Only', provider: 'codex', profileDir: '.only' }]
   }), { source: 'memory://default' });
-  assert.equal(defaulted.exhaustedAtPercent, DEFAULT_EXHAUSTED_AT_PERCENT);
+  assert.equal(Object.hasOwn(defaulted, 'exhaustedAtPercent'), false);
+  assert.equal(exhaustionThresholds(defaulted).exhaustedAtPercent, DEFAULT_EXHAUSTED_AT_PERCENT);
 });
 
 test('selection is provider-scoped and accepts case-insensitive names and roles', () => {
   const registry = parseRegistry(REGISTRY_TEXT, { source: 'memory://accounts' });
 
-  assert.deepEqual(accountsFor(registry, ' CODEX ').map(({ name }) => name), ['Personal', 'Work']);
+  assert.deepEqual(accountsFor(registry, ' CODEX ').map(({ name }) => name), ['Work', 'Personal']);
   assert.deepEqual(accountsFor(registry, 'claude').map(({ name }) => name), ['Work']);
   assert.equal(findAccount(registry, ' PRIMARY ', { provider: 'claude' }).home, '.claude-work');
   assert.equal(findAccount(registry, 'work', { provider: 'codex' }).home, '.codex-work');

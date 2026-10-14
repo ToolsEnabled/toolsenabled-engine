@@ -284,12 +284,12 @@ test('paginated resume retains newest full speech in order and enforces turn, pa
 /* A SAVED TURN LARGER THAN THE TRANSPORT BOUND IS LOADED AS CODEX'S SUMMARY,
  * NOT REFUSED.
  *
- * MEASURED on a live tree: seven Codex agents (one of them the tree's only
- * integrator) failed to resume with "This saved Codex
+ * MEASURED 2026-09-24 on the owner's tree: seven Codex agents (Builder 4 among
+ * them, the tree's only integrator) failed to resume with "This saved Codex
  * conversation is too large to restore safely". Their saved SPEECH was 0.19 to
  * 0.40 million characters -- far under the 8,000,000 speech budget -- but each
  * had at least one turn whose full items (mostly tool results) were over 8 MB:
- * The integrator's only turn held 21.1 MB of completed items and 172 person
+ * Builder 4's only turn held 21.1 MB of completed items and 172 person
  * messages. `thread/turns/list` answers one such turn as ONE line, so the
  * transport bound refused the whole restore after Codex had already resumed.
  * Codex 0.156 (measured offline) answers the same cursor with itemsView

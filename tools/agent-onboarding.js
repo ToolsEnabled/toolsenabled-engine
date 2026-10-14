@@ -169,9 +169,9 @@ function recordLaunchInBackground(event, dependencies = {}) {
     const path = require('node:path');
     // The child is Node running our own recorder, and a Node child can go on to
     // launch a provider CLI -- which is exactly the leak class the spawn-env
-    // gate exists for. Measured 2026-08-10 through a real spawned child: the
-    // ambient provider credential variables (ANTHROPIC_API_KEY, OPENAI_API_KEY
-    // and the like) all arrived SET. Inheriting ambient env here shipped
+    // gate exists for. Measured on this machine 2026-08-10 through a real
+    // spawned child: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, AWS_ACCESS_KEY_ID
+    // and OPENAI_API_KEY all arrived SET. Inheriting ambient env here shipped
     // that leak; safeLaunchEnvironment is the one shared scrub, and it refuses
     // the launch rather than leaking silently.
     const { safeLaunchEnvironment } = require('../src/lib/providers/subscription-launch-env');
@@ -231,7 +231,7 @@ function recordUnenforcedLaunch(input, event, dependencies = {}) {
   //
   // The first version of this read only `input.agentId` and `event.session_id`
   // and a REAL harness-spawned subagent landed in the chain as `unattributed`
-  // (an observer) because it carried
+  // (sequence 26621, an observer, 2026-08-13T02:13:17Z) because it carried
   // neither. A launch record that cannot say which agent launched still proves
   // that something did -- each row is its own event, so the COUNT stays honest
   // -- but correlating a running process to its record is most of why the

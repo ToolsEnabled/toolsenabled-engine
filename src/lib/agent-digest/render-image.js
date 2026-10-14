@@ -1,8 +1,8 @@
 'use strict';
 
 // The phone-shaped metrics CARD, and the bounded screenshot of it (R84 append:
-// generate a clean UI with all the metrics, screenshot it at phone size, and
-// send that as the report).
+// "cant we just generate a nice UI with all the metrics and literrally
+// screenshot it to the phone size and send that as the report").
 //
 // WHY THIS IS NOT A SCREENSHOT OF THE DASHBOARD. Three reasons, each of which
 // on its own would rule it out:
@@ -30,9 +30,10 @@
 
 const { PALETTE, buildQuickMetrics, htmlEscape, localStamp, mix, duration } = require('./render');
 
-// A large-phone class device (428x926pt @3x) logical viewport and scale factor,
-// per the published display spec: 428x926pt at @3x -> 1284x2778 physical px.
-// Verified rather than assumed; the prior 390x844 @2x was a smaller generic size.
+// iPhone 13 Pro Max (the owner's phone) logical viewport and scale factor, per
+// Apple's published spec: 428x926pt at @3x -> 1284x2778 physical px. Verified
+// against ios-resolution.com and support.apple.com/en-us/111870 rather than
+// assumed -- the prior 390x844 @2x was iPhone 14/15-generic, not his device.
 const PHONE_WIDTH = 428;
 const PHONE_HEIGHT = 926;     // viewport only; fullPage lets content define real height
 const DEVICE_SCALE = 3;

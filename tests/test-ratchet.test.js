@@ -210,7 +210,7 @@ for (const [name, files] of [['red', BASELINE_STATE], ['green', [{ file: 'tests/
 {
   // ABSENCE. A record with NO `complete` field has not said it finished.
   // Regression guard for a real defect: the check was `complete === false`, and
-  // state/test-runs/latest.json from 2026-08-11 carries no such field at
+  // state/test-runs/latest.json from 2026-08-11T02:57Z carries no such field at
   // all (it predates the partial-snapshot fix), so an unfinished-or-unknown run
   // was waved through as complete.
   const record = runRecord(BASELINE_STATE);

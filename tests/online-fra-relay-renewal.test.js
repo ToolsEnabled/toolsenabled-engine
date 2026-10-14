@@ -4,7 +4,7 @@
  * THE DEFECT THIS EXISTS TO CATCH. tools/relay-shell.js refreshes the relay
  * lease by closing the socket ~30 s before expiry and dialling again. The
  * browser leg lives on that same socket, so every signed-in web session is cut
- * on a clock the person cannot see (the 1.0.41 limitations notes §7.1, P0).
+ * on a clock the person cannot see (LIMITATIONS-AND-HANDOFF-1.0.41 §7.1, P0).
  * The sealed-layer renewal (tests/online-fra-renewal.test.js) deliberately did
  * not touch this: it needs a relay-side message.
  *
@@ -55,7 +55,7 @@ function vaultFor(privateKey, credential) {
   const store = new Map();
   store.set(DEVICE_IDENTITY_VAULT_KEY, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString());
   store.set(DEVICE_CREDENTIAL_VAULT_KEY, JSON.stringify(credential));
-  return { getSecret: k => { if (!store.has(k)) throw new Error('absent'); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
+  return { getSecret: k => { if (!store.has(k)) throw Object.assign(new Error('absent'), { code: 'SECRET_NOT_CONFIGURED' }); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
 }
 function bridgeNamed(name) {
   return {

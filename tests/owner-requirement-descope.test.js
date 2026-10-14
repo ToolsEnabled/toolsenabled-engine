@@ -33,7 +33,7 @@ const ownerRequest = {
   provenance: {
     class: 'owner-stated',
     recordedBy: 'controller',
-    source: 'owner session'
+    source: 'owner session 2026-08-10'
   }
 };
 
@@ -41,7 +41,7 @@ function input(overrides = {}) {
   return {
     descopeId: 'D1',
     requestId: 'R1200',
-    requirement: 'the $350 annual licence, 1 seat',
+    requirement: 'the $350 USPTO trademark filing, 1 class',
     action: 'dropped',
     reason: 'the filing exceeds a daily spending limit set by an agent',
     citedConstraint: {

@@ -45,7 +45,7 @@ for (const provider of ['grok', 'gemini']) {
     const root = fs.mkdtempSync(path.join(isolatedTemporaryRoot(), 'acp-private-'));
     fs.chmodSync(root, 0o700);
     const raw = { ...process.env, TOOLSENABLED_PROVIDER_ISOLATION_ROOT: root,
-      TOOLSENABLED_STATE_ROOT: path.join(root, 'ToolsEnabled-Isolated', 'capability') };
+      TOOLSENABLED_STATE_ROOT: path.join(root, 'fixture-profileelopment', 'capability') };
     for (const variable of Object.values(isolation.HOME_ENV)) delete raw[variable];
     const context = isolation.isolationContext(raw), pins = isolation.profileEnvironment(context);
     const names = [...Object.keys(pins), ...Object.values(isolation.HOME_ENV)];

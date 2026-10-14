@@ -3,7 +3,7 @@
 // Local, dependency-free projection of BUILD-QUEUE.md.
 //
 // Q33/Q50's writer used to import parseQueuePhases from the sibling
-// dashboard reader's repository.  That made the writer impossible to
+// AgentActivityVisualizer repository.  That made the writer impossible to
 // load on a clean ToolsEnabled checkout and turned a cross-repo path into an
 // undocumented runtime dependency.  This module is intentionally a reader
 // only: it preserves the phase body and classifies the display status, while

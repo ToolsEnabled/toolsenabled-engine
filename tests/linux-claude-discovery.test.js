@@ -32,7 +32,7 @@ test('Linux discovery uses absolute POSIX locations and executable access on eve
   executable.set('/fixture/explicit/claude', true);
   assert.equal(executableFor('claude', { ...options, environment: { PATH: '/fixture/explicit' } }).command, '/fixture/explicit/claude');
   inspected.length = 0;
-  assert.equal(executableFor('claude', { ...options, loginHome: 'C:\\fixture\\login' }).command, 'claude');
+  assert.equal(executableFor('claude', { ...options, loginHome: '\x43:\\fixture\\login' }).command, 'claude');
   assert.deepEqual(inspected, [], 'A foreign-platform path is never inspected as a Linux home');
 });
 

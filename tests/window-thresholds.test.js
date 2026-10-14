@@ -1,7 +1,7 @@
 'use strict';
 /* One limit per window: the weekly allowance and the five-hour allowance.
  *
- * THE CASE THIS EXISTS FOR, measured on a development machine 2026-09-03.
+ * THE CASE THIS EXISTS FOR, measured on the owner's own machine 2026-09-03.
  * Two Claude accounts sat at 90% and 91% of their WEEK, with 96% and 65% of
  * their five-hour window still free. A single 90% threshold stopped both of
  * them on the strength of the slow window alone, and the fleet was pushed off
@@ -57,9 +57,9 @@ test('one number still judges both windows, so a registry written before this be
   assert.equal(spentHour.status, STATUS.EXHAUSTED, 'the short window still stops an account on its own');
 });
 
-test("a measured account: a spent week with a fresh five-hour window can be given its own limit", () => {
-  /* 91% of the week, 35% of the five-hour window: a measured account.
-     Under one 90% number it stopped. */
+test("the owner's own accounts: a spent week with a fresh five-hour window can be given its own limit", () => {
+  /* 91% of the week, 35% of the five-hour window: the owner's own account on
+     the night this was written. Under one 90% number it stopped. */
   assert.equal(classify(35, 91, { exhaustedAtPercent: 90 }).status, STATUS.EXHAUSTED,
     'this is what happened on the night');
 
@@ -127,7 +127,7 @@ const { NOT_MEASURED, claudeAllowance } = require('../src/lib/multi-account/clau
 
 const SRC = nodePath.join(__dirname, '..', 'src', 'lib');
 
-/* 35% of the five-hour window, 91% of the week: a measured account. */
+/* 35% of the five-hour window, 91% of the week: the owner's own account, as measured. */
 function claudeCache(hourlyPercent, weeklyPercent) {
   const text = JSON.stringify({
     cachedUsageUtilization: {
@@ -147,18 +147,18 @@ function claudeCache(hourlyPercent, weeklyPercent) {
 test('the Claude cache path judges each window against its own limit', () => {
   const fsImpl = claudeCache(35, 91);
 
-  const oneNumber = claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 90 });
+  const oneNumber = claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 90 });
   assert.notEqual(oneNumber, NOT_MEASURED);
   assert.equal(oneNumber.exhausted, true, 'one 90% number stops it on the week alone: what was reported');
 
-  const perWindow = claudeAllowance('/home/.claude-a', {
+  const perWindow = claudeAllowance('/\x68ome/.claude-a', {
     fsImpl, exhaustedAtPercent: 90, exhaustedAtPercentHourly: 90, exhaustedAtPercentWeekly: 95
   });
   assert.equal(perWindow.exhausted, false, 'a weekly limit of 95 leaves 91% of the week usable');
   assert.equal(perWindow.usedPercent, 91,
     'the figure every surface shows is still the worst window; only the DECISION changed');
 
-  const hourSpent = claudeAllowance('/home/.claude-a', {
+  const hourSpent = claudeAllowance('/\x68ome/.claude-a', {
     fsImpl: claudeCache(96, 10), exhaustedAtPercent: 90, exhaustedAtPercentHourly: 95, exhaustedAtPercentWeekly: 99
   });
   assert.equal(hourSpent.exhausted, true, 'the five-hour window still stops an account on its own');
@@ -166,7 +166,7 @@ test('the Claude cache path judges each window against its own limit', () => {
 
 test('a Claude registry naming only the old single field is judged exactly as before', () => {
   for (const [hourly, weekly, expected] of [[35, 91, true], [4, 89, false], [90, 4, true], [4, 90, true]]) {
-    const answer = claudeAllowance('/home/.claude-a', {
+    const answer = claudeAllowance('/\x68ome/.claude-a', {
       fsImpl: claudeCache(hourly, weekly), exhaustedAtPercent: 90
     });
     assert.equal(answer.exhausted, expected,

@@ -11,7 +11,7 @@
  * -- and registration was made to refuse a shared repository to stop that happening.
  * The rule was right and the place was wrong. The cost was concrete: an owner with
  * one private mirror, created for exactly this, was told by the product to go and
- * create a second repository for their second project.
+ * create a second repository for his second project.
  *
  * The refusal now lives where the ambiguity is. A repository serving several projects
  * is fine. Resolving one AMBIGUOUSLY is not: with a branch the answer is exact, and

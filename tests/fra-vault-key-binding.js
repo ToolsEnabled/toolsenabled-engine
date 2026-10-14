@@ -68,7 +68,14 @@ function parsed(relative, pattern, label) {
 
 // ---- the FRA credential: one slot, five modules, two languages -------------
 
-const fraWriters = {};
+const fraWriters = {
+  'packages/servercontrol/Mechanical-Connect.ps1 $script:VaultKey (the rendezvous minter/receiver)':
+    parsed('packages/servercontrol/Mechanical-Connect.ps1',
+      /\$script:VaultKey\s*=\s*'([^']+)'/, '$script:VaultKey'),
+  'packages/servercontrol/Tunnel-Lifecycle.ps1 Secret-Exists FullRemote (the tray readiness check)':
+    parsed('packages/servercontrol/Tunnel-Lifecycle.ps1',
+      /'FullRemote'[\s\S]{0,200}?default\s*\{\s*'([^']+)'\s*\}/, "the FullRemote lane's key")
+};
 const fraReaders = {
   'src/full-remote-access-bridge.js FRA_TOKEN_VAULT_KEY (the 8790 listener)': fraServer.FRA_TOKEN_VAULT_KEY,
   'tools/remote-agent-mcp-proxy.js FULL_REMOTE_ACCESS_TOKEN_VAULT_KEY (the client)': fraProxy.FULL_REMOTE_ACCESS_TOKEN_VAULT_KEY,
@@ -85,7 +92,10 @@ for (const [where, value] of Object.entries({ ...fraWriters, ...fraReaders })) {
 const bridgeParticipants = {
   'src/remote-agent-bridge.js TOKEN_VAULT_KEY (the 8788 listener)': bridgeServer.TOKEN_VAULT_KEY,
   'tools/remote-agent-mcp-proxy.js BRIDGE_TOKEN_VAULT_KEY (the bounded client)': fraProxy.BRIDGE_TOKEN_VAULT_KEY,
-  'tools/full-remote-access-enroll-token.js BOOTSTRAP_VAULT_KEY (enrollment bootstrap)': fraEnroll.BOOTSTRAP_VAULT_KEY
+  'tools/full-remote-access-enroll-token.js BOOTSTRAP_VAULT_KEY (enrollment bootstrap)': fraEnroll.BOOTSTRAP_VAULT_KEY,
+  'packages/servercontrol/Tunnel-Lifecycle.ps1 Secret-Exists Bridge (the tray readiness check)':
+    parsed('packages/servercontrol/Tunnel-Lifecycle.ps1',
+      /'Bridge'\s*\{\s*'([^']+)'\s*\}/, "the Bridge lane's key")
 };
 
 // Use values observed from the product on both sides. Comparing FRA_KEY and
@@ -101,5 +111,10 @@ for (const [where, value] of Object.entries(bridgeParticipants)) {
 // The two lanes are separately credentialed on purpose: FRA is complete agentic
 // control, the bridge is a bounded tool subset. Collapsing them onto one slot
 // would silently grant the bridge's credential FRA's authority.
+// The rendezvous engine converges the FRA credential and must not also write the
+// bridge slot -- that is exactly the defect this test was written for.
+const engine = fs.readFileSync(path.join(ROOT, 'packages/servercontrol/Mechanical-Connect.ps1'), 'utf8');
+assert.ok(!engine.includes(BRIDGE_KEY),
+  'the rendezvous engine references the bridge credential slot; it converges the FRA credential and the bridge has its own enrollment path');
 
 console.log(`FRA and bridge credential slots are bound across ${Object.keys(fraWriters).length + Object.keys(fraReaders).length} FRA and ${Object.keys(bridgeParticipants).length} bridge participants in 2 languages.`);

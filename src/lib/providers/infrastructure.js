@@ -8,6 +8,7 @@ const { assertActive } = require('../policy');
 const audit = require('../audit');
 const { record } = audit;
 const googleAccounts = require('../google-accounts');
+const { statePath } = require('../runtime-state-root');
 
 const GCLOUD_INSPECT_MAX_PROJECTS = 25;
 const GCLOUD_INSPECT_MAX_STDOUT_BYTES = 512 * 1024;
@@ -488,23 +489,76 @@ function gcloudServiceAccountCreate({ projectId: id, serviceAccountId: rawAccoun
   return { ...result, serviceAccountEmail: email };
 }
 
+// THE ONLY VAULT RECORDS THIS TOOL MAY WRITE (1.0.50 security M2). setSecret is
+// an unconditional overwrite, so a caller-chosen name let a fresh service-account
+// key clobber any record in the vault -- the signed audit anchor, the device
+// identity and credential, the audit signing key, and on Windows the owner's card
+// and legal identity. The schema in tool-registry.js carries the same closed
+// list; this copy holds for direct callers, and refuses before any policy check,
+// gcloud call or temporary key file.
+const GCP_SERVICE_ACCOUNT_VAULT_KEYS = Object.freeze(['gcp_service_account_key']);
+
+/* 1.0.50 review L1: WHERE THE NEW SERVICE-ACCOUNT KEY SITS BEFORE THE VAULT.
+ *
+ * gcloud can only hand the private key over as a file. That file used to live
+ * in a fresh os.tmpdir() directory for the whole vault write -- the helper
+ * spawn plus up to 30 s of lock wait -- and a crash left it there for good,
+ * with nothing that ever looked again. Now the directory is made under this
+ * installation's private state root, the key is read into memory and the
+ * directory removed BEFORE the vault write starts, and every call first sweeps
+ * leftovers a crash may have left (here and at the old tmpdir location). Only
+ * leftovers older than the gcloud timeout are swept, so a call running in
+ * another engine process is never pulled out from under it. */
+const GCP_KEY_STAGING_PREFIX = 'gcp-key-';
+const LEGACY_GCP_KEY_STAGING_PREFIX = 'toolsenabled-gcp-key-';
+const GCP_KEY_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const GCP_KEY_STAGING_STALE_MS = GCP_KEY_COMMAND_TIMEOUT_MS + 5 * 60 * 1000;
+
+function gcpKeyStagingParent() {
+  const parent = statePath('state', 'gcp-key-staging');
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  return parent;
+}
+
+function sweepGcpKeyStaging(parent, prefix, now = Date.now()) {
+  let entries;
+  try { entries = fs.readdirSync(parent, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(prefix)) continue;
+    const leftover = path.join(parent, entry.name);
+    try {
+      if (now - fs.lstatSync(leftover).mtimeMs < GCP_KEY_STAGING_STALE_MS) continue;
+      fs.rmSync(leftover, { recursive: true, force: true });
+    } catch { /* best effort: a leftover that cannot be removed is retried next call */ }
+  }
+}
+
 function gcloudServiceAccountKeyToVault({ projectId: id, serviceAccountId: rawAccountId, vaultKey = 'gcp_service_account_key' }) {
+  if (!GCP_SERVICE_ACCOUNT_VAULT_KEYS.includes(vaultKey)) {
+    const error = new Error(`vaultKey must be one of: ${GCP_SERVICE_ACCOUNT_VAULT_KEYS.join(', ')}.`);
+    error.code = 'GCLOUD_VAULT_KEY_INVALID';
+    throw error;
+  }
   assertActive('gcloud.serviceAccount.keyToVault');
   requireCommand(gcloudAvailable, 'gcloud');
   const project = projectId(id); const email = serviceAccountEmail(project, rawAccountId);
-  if (!/^[A-Za-z0-9_.-]+$/.test(vaultKey)) throw new Error('vaultKey is invalid.');
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'toolsenabled-gcp-key-'));
+  const parent = gcpKeyStagingParent();
+  sweepGcpKeyStaging(parent, GCP_KEY_STAGING_PREFIX);
+  sweepGcpKeyStaging(os.tmpdir(), LEGACY_GCP_KEY_STAGING_PREFIX);
+  const temporary = fs.mkdtempSync(path.join(parent, GCP_KEY_STAGING_PREFIX));
   const keyFile = path.join(temporary, 'key.json');
+  let result;
+  let keyJson;
   try {
-    const result = resultOrThrow(run('gcloud', ['iam', 'service-accounts', 'keys', 'create', keyFile, '--iam-account', email, '--project', project], { timeout: 10 * 60 * 1000 }), 'gcloud iam service-accounts keys create');
-    const keyJson = fs.readFileSync(keyFile, 'utf8');
-    JSON.parse(keyJson);
-    setSecret(vaultKey, keyJson);
-    record('gcloud.serviceAccount.keyToVault', email, { projectId: project, vaultKey });
-    return { command: result.command, status: result.status, serviceAccountEmail: email, vaultKey, stored: true };
+    result = resultOrThrow(run('gcloud', ['iam', 'service-accounts', 'keys', 'create', keyFile, '--iam-account', email, '--project', project], { timeout: GCP_KEY_COMMAND_TIMEOUT_MS }), 'gcloud iam service-accounts keys create');
+    keyJson = fs.readFileSync(keyFile, 'utf8');
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
+  JSON.parse(keyJson);
+  setSecret(vaultKey, keyJson);
+  record('gcloud.serviceAccount.keyToVault', email, { projectId: project, vaultKey });
+  return { command: result.command, status: result.status, serviceAccountEmail: email, vaultKey, stored: true };
 }
 
 function terraformInit({ cwd = ROOT, upgrade = false }) {
@@ -558,6 +612,7 @@ module.exports = {
   gcloudEnableServices,
   gcloudServiceAccountCreate,
   gcloudServiceAccountKeyToVault,
+  GCP_SERVICE_ACCOUNT_VAULT_KEYS,
   terraformInit,
   terraformValidate,
   terraformPlan,

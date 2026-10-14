@@ -250,7 +250,7 @@ function hasRow(run, file, kind, line) {
 
 const DIRTY_FILES = {
   // Profile kinds.
-  'src/a-account.js': `// line one\nconst home = ${JSON.stringify(`C:\\projects\\${ACCOUNT}\\build`)};\n`,
+  'src/a-account.js': `// line one\nconst home = ${JSON.stringify(`\x43:\\projects\\${ACCOUNT}\\build`)};\n`,
   'src/b-alias.js': `const account = ${JSON.stringify(ALIAS)};\n`,
   'src/c-name.js': `// written by ${SURNAME}\n`,
   'src/d-machine.js': `const host = ${JSON.stringify(MACHINE)};\n`,
@@ -260,7 +260,7 @@ const DIRTY_FILES = {
   // Shape kinds. None of these is in the profile.
   'src/h-consumer-mail.js': `const notify = ${JSON.stringify(CONSUMER_MAIL)};\n`,
   // BOTH SPELLINGS OF A WINDOWS PATH, and the escaped one is the load-bearing
-  // fixture. JSON.stringify gives `<drive>:\\Users\\<account>`, which is what a Windows path
+  // fixture. JSON.stringify gives `<profile-root>/...`, which is what a Windows path
   // looks like in every .js and .json file in the tree; the .ps1 below gives the
   // raw single-backslash form. A separator rule that handles only the raw form
   // passes a plausible-looking test and misses most of the real finding.
@@ -279,17 +279,12 @@ const DIRTY_FILES = {
 
 const DIRTY_OPEN = Object.keys(DIRTY_FILES).filter((file) => !file.startsWith('private/'));
 
-// The drive-and-Users prefix of the placeholder paths below, assembled at
-// runtime from synthetic fragments (like every detectable value in this file)
-// so this source carries no literal drive-letter Users path.
-const WINDOWS_USERS = ['C:', 'Users'].join('\\');
-
 const CLEAN_FILES = {
   // The audit's own prescribed remediations. A guard that flags the fix it asks
   // for gets argued with and then overridden, so these must pass.
   'README.md': [
-    `Install under ${WINDOWS_USERS}\\<you>\\Desktop\\checkout.`,
-    `Test fixtures use ${WINDOWS_USERS}\\testuser\\AppData and ${WINDOWS_USERS}\\...\\Local.`,
+    'Install under \x43:\\Users\\<you>\\Desktop\\checkout.',
+    'Test fixtures use \x43:\\Users\\testuser\\AppData and \x43:\\Users\\...\\Local.',
     'Write to primary@example.com or secondary@example.invalid.',
     'The sample project is example-product.test.',
     ''

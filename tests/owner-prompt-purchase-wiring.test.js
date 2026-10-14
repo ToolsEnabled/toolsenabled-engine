@@ -74,6 +74,18 @@ function tempPromptDeps() {
   return { stateFile: path.join(dir, 'p.json') };
 }
 
+/* The shape runtime-policy.js resolveRuntimePolicy() reads. A value only counts
+ * as chosen when its provenance source is 'user' or 'installer', so a bare
+ * values object would leave auditing off and change nothing. */
+const AUDIT_ON = () => ({
+  values: { 'audit.enabled': true, 'audit.activity': 'Full' },
+  provenance: {
+    'audit.enabled': { source: 'user', atMs: 1, directive: null },
+    'audit.activity': { source: 'user', atMs: 1, directive: null }
+  },
+  rejected: []
+});
+
 function buildActions({ dailyLimitCents } = {}) {
   const audit = auditFixture();
   const pay = fakePay({ dailyLimitCents });
@@ -105,7 +117,26 @@ function buildActions({ dailyLimitCents } = {}) {
     // agent id an org can declare, and was never meant to need one. Matching
     // the server's own construction is what makes this an end-to-end proof of
     // the WIRING rather than a proof of an owner that cannot exist.
-    principal: Object.freeze({ kind: 'owner-ui' })
+    principal: Object.freeze({ kind: 'owner-ui' }),
+    // THE SECOND REASON THIS FILE STOOD RED, and it is the same shape as the
+    // first: a check that cannot run reads exactly like a check that failed.
+    //
+    // `audit.enabled` has "default": false in config/settings-registry.json --
+    // intended and documented ("Off keeps ordinary work independent of optional
+    // audit infrastructure"). runtime-policy.js only counts a value chosen by a
+    // 'user' or 'installer' provenance, so on any machine where nobody turned it
+    // on, operation-audit capturePolicy() returns required:false, and
+    // actions.js durableReceipt() returns skippedStatus BEFORE it reaches the
+    // audit writer. The receipt assertions below then fail with "an intent
+    // receipt must be written before the mutation" while the product is
+    // behaving exactly as configured.
+    //
+    // The wiring this file exists to prove is that ownerPromptDecision writes an
+    // intent receipt before the store mutation and an outcome receipt after it.
+    // That is only observable with auditing on, so this run turns it on rather
+    // than inheriting whatever the machine happens to have. auditRequired()
+    // below states the precondition instead of assuming it.
+    loadSettings: AUDIT_ON
   });
   return { actions, audit, pay, ownerPromptDependencies };
 }
@@ -175,6 +206,10 @@ await check('a durable audit receipt is written for the decision', async () => {
   const { promptId } = ownerPrompts.enqueue(PURCHASE(), ownerPromptDependencies);
   ownerPrompts.markPresented({ promptId, evidence: { mounted: true, visible: true, focused: true } }, ownerPromptDependencies);
   await actions.ownerPromptDecision({ promptId, decision: 'submit', itemDecisions: [{ itemId: 'dom-ai', decision: 'approve' }] });
+  // The precondition, stated. Without auditing on there is no receipt to find
+  // and the two assertions below would be measuring the settings default.
+  assert.equal(require('../src/lib/operation-audit').capturePolicy({ loadSettings: AUDIT_ON }).required, true,
+    'auditing is not in force for this run, so the receipt assertions below would test nothing');
   assert.ok(audit.events.some(e => e.action === 'owner-prompt.decision.intent'), 'an intent receipt must be written before the mutation');
   assert.ok(audit.events.some(e => e.action === 'owner-prompt.decision'), 'an outcome receipt must be written for the decision');
 });

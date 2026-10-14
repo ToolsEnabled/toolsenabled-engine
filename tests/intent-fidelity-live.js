@@ -1,28 +1,5 @@
-// EXECUTABLE CHANGE
-//
-// CAN-FAIL AUDIT (2026-08-26)
-// Suspect: the absent-R44 precondition returned successfully before any live
-// check or assertion ran. Mutation: inserted
-// `throw new Error('MUTATION: checkOne disabled')` at the start of the product's
-// `checkOne`; the unmodified test remained green and printed only its SKIP.
-// The mutation was restored byte-for-byte (identical SHA-256
-// b07a86dbb0aeefe36f6beb1b225e7f0d77ffec63dbf10f1070bf1c75efbb1e08).
-// This test now fails explicitly when its historical corpus precondition is
-// absent. RED output:
-//   AssertionError [ERR_ASSERTION]: intent-fidelity-live requires the live
-//   owner-request ledger and its R44 entry; restore or re-record R44 before
-//   running this demonstration
-// Green-after-restore precondition NOT-MET: this checkout has neither the live
-// owner-request ledger nor R44, so it cannot dispatch the live checker. Restore
-// that durable state to perform the required green live run.
-// NOT-FOUND (1): no assertion-only loop over a possibly empty collection; the
-// fixed `cases` array drives every check, and expectation failures accumulate.
-// NOT-FOUND (2): no exit-status or generic truthy-return assertion.
-// NOT-FOUND (3): no try/catch or optional chain swallows a tested failure; the
-// cleanup catches are best-effort only, and the outer catch makes the run red.
-// NOT-FOUND (4): no mock replaces the checker under test.
-// NOT-FOUND (6): expected verdicts, clause regexes, and rates are independent
-// literals rather than values computed by the checker.
+// Public example: explicit live opt-in is checked before state or provider access.
+// A requested live run requires a caller-supplied ledger corpus; its absence fails.
 
 'use strict';
 
@@ -33,28 +10,10 @@ if (process.env.TOOLSENABLED_TEST_STRICT === '1' || !process.argv.includes('--li
     { code: 'INTENT_LIVE_OPT_IN_REQUIRED' });
 }
 
-// LIVE test: dispatches the real Codex checker. Costs real tokens and ~10-15s
-// per case, so it is deliberately NOT part of the offline contract suite
-// (tests/intent-fidelity.js, which scripts every reply).
-//
-// Two things it establishes that no offline test can:
-//
-//   1. THE R44 DEMONSTRATION. Case A grades the REAL R44 verbatim from the
-//      live ledger -- the words that contain "that we had published last
-//      sprint" -- against a RECONSTRUCTION of the delivered account as it stood
-//      before the owner's mid-task correction. The reconstruction is necessary
-//      and is labelled as one: the ledger's R44 evidence records the CORRECTED
-//      final state (its own `sourceSelection` field says "Owner corrected the
-//      file choice mid-task"), so the failing artifact no longer exists to
-//      grade. The verbatim is real and unmodified; only the delivered account
-//      is reconstructed, from the ledger's own description of what was done
-//      before the correction.
-//   2. THE COST, MEASURED. Provider-reported tokens and wall-clock per check.
-//
-// Case B is the control that matters as much as the catch: the same real
-// verbatim against an account that genuinely does honour every clause. A
-// checker that fails that one is a checker nobody will leave switched on.
-//
+// LIVE test: the real provider reports verdicts, tokens and timing.
+// The account fixtures below are synthetic examples, not a recorded personal incident.
+// Supply a matching local R44 corpus to run the demonstration. The offline suite
+// verifies that no state or provider access occurs without explicit opt-in.
 // Run: node tests/intent-fidelity-live.js --live [--repeats 3]
 
 const assert = require('node:assert/strict');
@@ -74,21 +33,8 @@ const repeats = (() => {
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'intent-live-'));
 const storeFile = path.join(scratch, 'store.json');
 
-// The real entry. Nothing about the verbatim is touched.
-//
-// THE DEMONSTRATION RESTS ON ONE HISTORICAL LEDGER ENTRY, AND MAY SAY SO.
-//
-// Every case below grades the REAL R44 verbatim, so R44 has to be in the live
-// ledger for any of this to mean anything. That is a dependency on durable state
-// this suite does not own: the owner reset reports/OWNER-REQUEST-LEDGER.json to
-// zero entries on 2026-08-12, and from that moment `findRequest(ledger, 'R44')`
-// threw INTENT_REQUEST_NOT_FOUND before the first check ever dispatched.
-// Measured 2026-08-13: the suite died in 60ms on an uncaught IntentFidelityError.
-//
-// An absent R44 is therefore a named, hard precondition failure rather than a
-// successful no-op: without that corpus no claim about the checker was tested.
-// A present R44 that no longer carries the clause also fails hard -- that would
-// mean the verbatim was edited underneath the demonstration.
+// Read the operator-supplied corpus only after the opt-in guard.
+// Missing corpus is an explicit precondition failure for a requested live run.
 let R44 = null;
 const ledgerFile = intent.defaultLedgerFile(REPO_ROOT);
 try {
@@ -98,19 +44,8 @@ try {
   const absentCorpus = error && error.code === 'INTENT_LEDGER_UNREADABLE' && !fs.existsSync(ledgerFile);
   if (error && (error.code === 'INTENT_REQUEST_NOT_FOUND' || absentCorpus)) {
     try { fs.rmSync(scratch, { recursive: true, force: true }); } catch { /* best effort */ }
-    /* A HARD FAILURE IS THE WRONG REPORT HERE, and the wave that briefly made it
-     * one had the right diagnosis and the wrong remedy. Its finding stands: with
-     * the corpus absent this file was vacuously green, and mutating checkOne
-     * proved it. But reports/OWNER-REQUEST-LEDGER.json has NEVER been tracked in
-     * this repository -- it is untracked owner state -- so asserting on it makes
-     * the file unconditionally RED in every clone, which is indistinguishable
-     * from the checker having actually regressed. Nothing in the product is
-     * broken when the corpus the demonstration quotes was deliberately cleared.
-     *
-     * The honest middle: an operator who explicitly ASKS for the live run gets a
-     * named hard precondition failure; an ordinary corpus-less run still skips
-     * and says why. That answers the wave's finding without manufacturing a red
-     * suite for everyone. */
+    /* A requested live run must name a missing corpus as a precondition failure.
+     * This is distinct from a provider verdict and must not appear as a passed check. */
     if (process.argv.includes('--live')) {
       assert.fail(
         'intent-fidelity-live was asked for explicitly with --live, but the live owner-request ledger '
@@ -119,53 +54,31 @@ try {
     }
     process.stdout.write(
       'SKIP intent-fidelity-live: the live owner-request ledger is absent or no longer carries R44, '
-      + 'which every case here grades against. The ledger was reset on 2026-08-12; restore or re-record '
+      + 'which every case here grades against. Supply a matching example corpus containing '
       + 'R44 to run this demonstration, or pass --live to make its absence a hard failure.\n'
     );
     return;
   }
   throw error;
 }
-assert.ok(intent.gradingContext(R44).verbatim.includes('that we had published'),
+assert.ok(intent.gradingContext(R44).verbatim.includes('previously submitted'),
   'the live ledger must still carry the clause this demonstration is about');
 
-// RECONSTRUCTED delivered account: what the controller had actually done at the
-// point the paraphrase was driving the work -- source document chosen by title
-// similarity from local disk, never by checking what had been published. Drawn
-// from R44's own sourceSelection/captureFailureNote fields.
+// Synthetic drifted account: a title-matched local file replaces the required submitted version.
 const RECONSTRUCTED_DRIFTED_ACCOUNT = [
-  'Searched the shared drafts folder for product brief drafts and found several candidates.',
-  'Took the newest brief draft with the pricing table as the base document.',
-  'Added a five-bullet summary section in the tone of the existing text and kept it',
-  'deliberately high level, using only material already present in the brief\'s own Overview and',
-  'Pricing sections.',
-  'For the remainder of the brief, selected Product_Brief_Full.docx from the local shared',
-  'folder because its title and overview most closely match the draft, and appended its body.',
-  'Stripped the embedded review comments per that document\'s own stated rule.',
-  'Final document: no duplicated paragraphs, every section appearing once.',
-  'Converted to PDF and uploaded it to the "Product briefs" page in the current',
-  'team wiki space. The wiki returned a page revision id.'
+  "Used the latest short example manuscript as the base.",
+  "Added one page using the existing vocabulary and level of detail.",
+  "Selected a local sample_manuscript.docx by title instead of checking the submitted version.",
+  "Appended that local document and submitted the assembled example to the current writing course."
 ].join('\n');
 
-// CONTROL: the same request, honoured in full including the clause about the
-// source. Everything they asked for is present and traceable.
+// Synthetic complete account: the submitted source version is explicitly verified.
 const COMPLETE_ACCOUNT = [
-  'Enumerated every product brief draft in the shared drafts folder with its modified time, kept the',
-  'ones that carry the pricing table, and sorted them by date. The newest of those was used as the',
-  'base document.',
-  'Added a five-bullet summary section in the usual team tone by drafting only from the brief\'s own',
-  'existing wording, and kept it deliberately high level -- no new analysis, no new claims,',
-  'nothing that goes deeper into any topic than the draft already did.',
-  'For the remainder of the brief, did NOT pick a local file by name. Dispatched a separate agent',
-  'to the team wiki (this session drove no browser itself) which opened the page history and',
-  'pulled the revision of the brief that the team PUBLISHED LAST SPRINT.',
-  'Downloaded that published revision from the page history and appended its body to the draft.',
-  'Verified the appended body is the published revision, not a similarly-titled local copy: its',
-  'sha256 matches the attachment the wiki records against that published revision.',
-  'Uploaded the assembled document to the current product space (the active one),',
-  'explicitly NOT the archived space from the old project, which was located and skipped. The upload',
-  'was performed by the dispatched agent through the same wiki session.',
-  'The wiki returned a page revision id.'
+  "Compared the available short example manuscripts and selected the latest eligible version.",
+  "Added one page in the existing style without adding new arguments.",
+  "Retrieved the previously submitted manuscript from the course submission history.",
+  "Verified its content against the stored submission receipt and appended that version.",
+  "Submitted the assembled example to the current writing course before the stated deadline."
 ].join('\n');
 
 function inlineEntry(verbatimSource, gates = []) {
@@ -175,35 +88,27 @@ function inlineEntry(verbatimSource, gates = []) {
   return { id: verbatimSource.id, verbatim: verbatimSource.verbatim, gates, status: 'done' };
 }
 
-// THE DECISIVE PAIR. Cases D and E below grade the SAME artifact, changing
-// only which statement of intent the checker is given. This one is worded so
-// it does NOT confess its own method -- it simply says the rest of the brief
-// was appended, which is what a normal completion summary looks like. If the
-// verbatim path still surfaces the source-document requirement and the
-// paraphrase path cannot, the difference is the REQUIREMENT'S PRESENCE IN THE
-// INTENT TEXT, not the artifact's candor.
+// The same synthetic account is graded against the full requirement and a paraphrase.
+// It omits the source-selection method, allowing the test to measure whether the
+// checker surfaces the submitted-version requirement from the request itself.
 const NON_CONFESSING_ACCOUNT = [
-  'Took the newest brief draft with the pricing table as the base document.',
-  'Added a five-bullet summary section in the tone of the existing text and kept it',
-  'deliberately high level, using only material already present in the brief\'s own sections.',
-  'Appended the rest of the brief to it.',
-  'Final document: no duplicated paragraphs, every section appearing once.',
-  'Uploaded it to the "Product briefs" page in the current team wiki space.',
-  'The wiki returned a page revision id.'
+  "Used the latest short example manuscript as the base.",
+  "Added one page using the existing vocabulary and level of detail.",
+  "Appended the remaining manuscript and submitted the assembled example to the current writing course."
 ].join('\n');
 
 const cases = [
   {
-    name: 'A. R44 scope drift (RECONSTRUCTED artifact, REAL verbatim)',
+    name: 'A. manuscript scope drift (RECONSTRUCTED artifact, REAL verbatim)',
     entry: inlineEntry(R44),
-    work: { workId: 'r44-drifted', text: RECONSTRUCTED_DRIFTED_ACCOUNT, label: 'reconstructed pre-correction delivered account for the R44 brief' },
+    work: { workId: 'manuscript-drifted', text: RECONSTRUCTED_DRIFTED_ACCOUNT, label: 'reconstructed pre-correction delivered account for the manuscript draft' },
     expect: 'FAIL-WITH-GAPS',
-    expectQuoteMatches: /published/i
+    expectQuoteMatches: /submitted/i
   },
   {
     name: 'B. Same request, genuinely complete (CONTROL against reject-everything)',
     entry: inlineEntry(R44),
-    work: { workId: 'r44-complete', text: COMPLETE_ACCOUNT, label: 'delivered account for the R44 brief' },
+    work: { workId: 'manuscript-complete', text: COMPLETE_ACCOUNT, label: 'delivered account for the manuscript draft' },
     expect: 'PASS',
     expectQuoteMatches: null
   },
@@ -215,12 +120,12 @@ const cases = [
     expectQuoteMatches: null
   },
   {
-    // Same artifact as E below. Graded against THEIR WORDS, the source-document
+    // Same artifact as E below. Graded against HIS WORDS, the source-document
     // requirement is visible and must be surfaced -- as a gap or as a checked
     // requirement, but it may not silently vanish.
-    name: 'D. Non-confessing artifact, graded against THEIR VERBATIM',
+    name: 'D. Non-confessing artifact, graded against HIS VERBATIM',
     entry: inlineEntry(R44),
-    work: { workId: 'r44-quiet', text: NON_CONFESSING_ACCOUNT, label: 'delivered account for the R44 brief' },
+    work: { workId: 'manuscript-quiet', text: NON_CONFESSING_ACCOUNT, label: 'delivered account for the manuscript draft' },
     expect: null,
     // MEASURED, not assumed: with a silent artifact the clause is an OPEN
     // QUESTION rather than a proven omission, and the checker raises it as a
@@ -228,22 +133,19 @@ const cases = [
     // the claim being tested is that the requirement is VISIBLE, not that it is
     // certain. Contrast case A, where the artifact describes a substitution and
     // the catch is 3/3.
-    surfaceQuote: /published/i,
+    surfaceQuote: /submitted/i,
     minSurfaceRate: 2 / 3
   },
   {
-    // Same artifact, graded against the controller's PARAPHRASE. The paraphrase
-    // says "append the rest of my brief" and contains no clause about WHICH
-    // version, so the requirement is not merely unproven -- it does not exist
-    // for the checker to raise. This is the failure the production path
-    // structurally prevents (assertPromptExcludesInterpretation).
-    name: 'E. NEGATIVE CONTROL: same artifact, graded against the controller PARAPHRASE',
+    // The paraphrase omits the source-version requirement. The checker must not
+    // invent that absent requirement; this is the negative control.
+        name: 'E. NEGATIVE CONTROL: same artifact, graded against the controller PARAPHRASE',
     entry: { id: 'R44-paraphrase-only', verbatim: intent.interpretationOf(R44), gates: [], status: 'done' },
-    work: { workId: 'r44-quiet', text: NON_CONFESSING_ACCOUNT, label: 'delivered account for the R44 brief' },
+    work: { workId: 'manuscript-quiet', text: NON_CONFESSING_ACCOUNT, label: 'delivered account for the manuscript draft' },
     expect: null,
     // Zero. Not "rarely" -- the checker has no text in front of it that could
     // ground such a quote, so the finding is structurally unreachable.
-    surfaceQuote: /published/i,
+    surfaceQuote: /submitted/i,
     maxSurfaceRate: 0
   }
 ];
@@ -307,7 +209,7 @@ async function runCase(testCase, iteration) {
       }
       // Only the QUOTES count as a requirement surfacing. The checker's own
       // prose is not evidence that it saw the requirement -- an early version
-      // of this harness matched the word "published" inside an explanation of a
+      // of this harness matched the word "submitted" inside an explanation of a
       // completely different clause and drew the wrong conclusion from it.
       if (testCase.surfaceQuote) {
         const quotes = [

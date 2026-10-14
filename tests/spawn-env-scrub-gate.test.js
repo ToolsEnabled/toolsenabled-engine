@@ -6,8 +6,8 @@
  * the checker still exited 1.  With the assertion below, it went red with:
  *   "the gate emitted no SPREADS_AMBIENT finding for process.env restored
  *    after the scrub helper"
- * After tools/check-spawn-env-scrub.js was restored byte-for-byte, B5 and all
- * other throwaway-tree cases were green.
+ * After tools/check-spawn-env-scrub.js was restored byte-for-byte (matching
+ * SHA-256 40e78b10...329d4b), B5 and all other throwaway-tree cases were green.
  *
  * NOT-FOUND: empty assertion collections (both loops use non-empty literals);
  * swallowed test failures (the JSON catch is followed by assertions that fail
@@ -194,7 +194,7 @@ async function main() {
     const replies = [];
     /* The worker registers its shutdown handlers with once(), on both the port
        and the process -- src/lib/vault-host/worker.js:212-213, added by
-       an earlier commit. A real MessagePort and a real process both have once(); this
+       6e9d973d. A real MessagePort and a real process both have once(); this
        fixture's parentPort had only on(), so loading the module under vm threw
        "parentPort.once is not a function" before a single environment
        assertion ran. The handlers are kept rather than dropped, and the event

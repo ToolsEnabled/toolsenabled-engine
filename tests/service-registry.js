@@ -425,8 +425,8 @@ async function main() {
     const customerPair = {
       schemaVersion: 1,
       machines: {
-        'editing-rig': { address: '10.20.30.90', root: 'D:\\install-root' },
-        'travel-laptop': { address: '10.20.30.4', root: 'E:\\install-root' }
+        'editing-rig': { address: '10.20.30.90', root: '\x44:\\ToolsEnabled' },
+        'travel-laptop': { address: '10.20.30.4', root: '\x45:\\ToolsEnabled' }
       },
       services: {}
     };
@@ -445,7 +445,7 @@ async function main() {
       () => peerDispatch.resolvePeerTopology({
         registry: {
           ...customerPair,
-          machines: { ...customerPair.machines, 'third-machine': { address: '10.20.30.120', root: 'F:\\install-root' } }
+          machines: { ...customerPair.machines, 'third-machine': { address: '10.20.30.120', root: '\x46:\\ToolsEnabled' } }
         }
       }),
       error => error instanceof registry.ServiceRegistryError && error.code === 'SERVICE_PEER_UNDETERMINED'

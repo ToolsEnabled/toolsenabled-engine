@@ -29,7 +29,7 @@
 // tools/grepsaver-orient.js uses a floor RELATIVE to the best hit, and its own
 // comments record what that costs: "when the best hit is itself noise every
 // near-noise hit clears it... 'gmail thread read' returned three unrelated
-// project cards". A relative floor cannot express "none
+// projects of the owner's". A relative floor cannot express "none
 // of these is good enough", which is the answer most prompts deserve.
 //
 // So each candidate's raw BM25F is divided by the most any document could

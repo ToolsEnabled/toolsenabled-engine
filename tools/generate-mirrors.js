@@ -51,7 +51,7 @@ const BANNER = 'GENERATED -- do not edit. Produced by tools/generate-mirrors.js;
 // "current machine root" approach was trying to get right -- it can never go
 // stale, because it never claimed to be anyone's real checkout in the first
 // place.
-const PORTABLE_TEMPLATE_ROOT_PLACEHOLDER = 'C:\\path\\to\\your\\checkout';
+const PORTABLE_TEMPLATE_ROOT_PLACEHOLDER = '\x43:\\path\\to\\your\\toolsenabled-checkout';
 
 function machineRoots() {
   const escape = value => JSON.stringify(value).slice(1, -1); // JSON string body, backslashes escaped

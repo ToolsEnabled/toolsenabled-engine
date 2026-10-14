@@ -1,6 +1,6 @@
 # Starts the remote-agent-bridge (src/remote-agent-bridge.js) hidden, with
 # stdout/stderr redirected to files -- same reasoning and pattern as
-# tools/start-link-bus.ps1: never
+# tools/start-link-bus.ps1 / tools/start-agent-activity-visualizer.ps1: never
 # a flashing console window, never an unredirected long-lived process.
 [CmdletBinding()]
 param([string]$HostAddress)

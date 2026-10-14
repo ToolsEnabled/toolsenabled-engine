@@ -5,7 +5,7 @@
 // destruction was silent. The first fix (idleTimeoutMs option + an observed
 // destroy) made the kill observable but did not stop it. The second fix
 // (armIdleTimeout re-arming instead of destroying a still-bound socket) was
-// itself defeated by a second, independent bug measured directly:
+// itself defeated by a second, independent bug Manager 5 measured directly:
 // Socket#setTimeout(msecs, callback) ADDS a 'timeout' listener rather than
 // replacing one, so the original handshake-reap listener stayed attached
 // after authorization and destroyed the socket on the very first idle

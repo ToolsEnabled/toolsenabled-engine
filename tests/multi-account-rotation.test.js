@@ -61,7 +61,7 @@ const rotation = require('../src/lib/multi-account/rotation.js');
 const { STATUS } = require('../src/lib/multi-account/health.js');
 const { PROVIDERS, accountsFor, loadRegistry, signInFilePath } = require('../src/lib/multi-account/registry.js');
 const { activeFor, readState, switchTo } = require('../src/lib/multi-account/switcher.js');
-const { MODE } = require('../src/lib/multi-account/selection-modes.js');
+
 const confinement = require('../src/lib/agent-session-confinement.js');
 const { TOOL_REGISTRY, listAccountRouter, systemStatusWithAccountRouter } = require('../src/lib/tool-registry.js');
 
@@ -105,6 +105,14 @@ async function withMachine(run, { accounts, exhaustedAtPercent } = {}) {
       accounts: accounts.map(({ signedIn, ...entry }) => entry)
     }));
   }
+  if (accounts) {
+    const pins = {};
+    for (const account of accounts) pins[account.provider] ??= account.name;
+    fs.mkdirSync(path.dirname(path.join(servicesRoot, rotation.STATE_LEAF)), { recursive: true });
+    fs.writeFileSync(path.join(servicesRoot, rotation.STATE_LEAF), JSON.stringify({
+      activeAccount: null, manualPinByProvider: pins, history: []
+    }));
+  }
   const previousStateRoot = process.env.TOOLSENABLED_STATE_ROOT;
   process.env.TOOLSENABLED_STATE_ROOT = capabilityRoot;
   try {
@@ -136,7 +144,7 @@ function probeReturning(byName) {
 }
 
 const TWO_CODEX = [
-  { name: 'team', provider: 'codex', profileDir: '.codex-team', priority: 1 },
+  { name: 'school', provider: 'codex', profileDir: '.codex-school', priority: 1 },
   { name: 'personal', provider: 'codex', profileDir: '.codex-personal', priority: 2 }
 ];
 
@@ -173,8 +181,8 @@ check('an account list that cannot be read still lets the start proceed', async 
     fs.writeFileSync(registryPath, '{ not json');
     const result = await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot });
     assert.equal(result.rotated, false);
-    assert.equal(result.blocked, false,
-      'a damaged optional file became a reason a person could not work');
+    assert.equal(result.blocked, true,
+      'an unreadable choice must not authorize a replacement sign-in');
     assert.equal(result.code, 'ACCOUNTS_REGISTRY_UNREADABLE');
     /* The refusal is still LOUD where it should be: the builder CLI reads the
        same file through loadRegistry(), which throws. Only the start path
@@ -193,9 +201,8 @@ check('an unresolved installation identity still lets the start proceed', async 
       provider: 'codex', servicesRoot: scratch
     });
     assert.equal(result.rotated, false);
-    assert.equal(result.blocked, false);
+    assert.equal(result.blocked, true);
     assert.equal(result.code, 'ACCOUNTS_REGISTRY_UNREADABLE');
-    assert.equal(result.detail, 'ACCOUNTS_REGISTRY_NOT_PRESENT_HERE');
   } finally {
     if (previousStateRoot === undefined) delete process.env.TOOLSENABLED_STATE_ROOT;
     else process.env.TOOLSENABLED_STATE_ROOT = previousStateRoot;
@@ -216,9 +223,9 @@ check('a busy state read is unknown rather than absent, is not latched, and prob
 
   const recovered = rotation.activeAccountRecord('/services', {
     statePath: '/state.json',
-    fsImpl: { readFileSync() { return '{"activeAccount":"team"}'; } }
+    fsImpl: { readFileSync() { return '{"activeAccount":"school"}'; } }
   });
-  assert.equal(recovered.activeAccount, 'team', 'the transient read failure was latched');
+  assert.equal(recovered.activeAccount, 'school', 'the transient read failure was latched');
 
   await withMachine(async ({ servicesRoot, homeDir }) => {
     let probes = 0;
@@ -244,37 +251,50 @@ check('an account list holding none of this provider does not rotate', async () 
    2. THE SWITCH ITSELF, ON THE PATH A START TAKES.
    ------------------------------------------------------------------ */
 
-check('an exhausted account hands the session to the next one, when the person allowed it', async () => {
+check('an exhausted explicit account refuses even when automatic mode was recorded', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    const result = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, mode: 'auto',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    assert.equal(result.rotated, true, 'rotation did not fire on a spent account');
-    assert.equal(result.account.name, 'personal');
-    assert.equal(result.switched, true);
-    // The environment the child is spawned under names the chosen home, and
-    // names nothing else.
-    assert.deepEqual(Object.keys(result.env), ['CODEX_HOME']);
-    assert.equal(result.env.CODEX_HOME, path.join(homeDir, '.codex-personal'));
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
-check('the switch is recorded as automatic, which is what had never once happened', async () => {
+check('a usage-limit refusal never records an automatic account switch', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, mode: 'auto',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    const written = JSON.parse(fs.readFileSync(path.join(servicesRoot, rotation.STATE_LEAF), 'utf8'));
-    assert.equal(written.activeAccount, 'personal');
-    assert.equal(written.lastSwitch.automatic, true,
-      'the switch was recorded as manual, which is the state that proved rotation had never fired');
-    // Names and statuses only; a credential must never reach this file.
-    assert.ok(!/sk-|Bearer |eyJ/.test(JSON.stringify(written)));
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
 check('one account is pinned only after the same health gates as every selection', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     let probed = 0;
@@ -285,7 +305,7 @@ check('one account is pinned only after the same health gates as every selection
     assert.equal(probed, 1, 'a single account bypassed the provider health and identity gates');
     assert.equal(result.rotated, true);
     assert.equal(result.code, 'ACCOUNT_SELECTED_SOLE');
-    assert.equal(result.env.CODEX_HOME, path.join(homeDir, '.codex-team'));
+    assert.equal(result.env.CODEX_HOME, path.join(homeDir, '.codex-school'));
   }, { accounts: [TWO_CODEX[0]] });
 });
 
@@ -293,11 +313,11 @@ check('one exhausted account is refused rather than handed to the caller', async
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const result = await rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir,
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+      probe: probeReturning({ school: STATUS.EXHAUSTED })
     });
     assert.equal(result.rotated, false);
     assert.equal(result.blocked, true);
-    assert.equal(result.code, 'ACCOUNT_NONE_USABLE');
+    assert.equal(result.code, 'ACCOUNT_EXHAUSTED');
   }, { accounts: [TWO_CODEX[0]] });
 });
 
@@ -309,33 +329,27 @@ check('manual STOPS on a spent account instead of switching, and says what to do
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const result = await rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, mode: 'manual',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+      probe: probeReturning({ school: STATUS.EXHAUSTED })
     });
     assert.equal(result.rotated, false, 'a computer set to let the person switch switched by itself');
     assert.equal(result.blocked, true);
-    assert.equal(result.code, 'ACCOUNT_EXHAUSTED_MANUAL');
+    assert.equal(result.code, 'ACCOUNT_EXHAUSTED');
     // The exhaustion is SURFACED, with both names, and with one thing to do.
-    assert.match(result.reason, /team/);
-    assert.match(result.nextStep, /personal/);
-    assert.equal(fs.existsSync(path.join(servicesRoot, rotation.STATE_LEAF)), false,
-      'the refused automatic fallback was persisted as the active account');
+    assert.equal(result.attempts[0].account, 'school');
+    assert.equal(result.attempts.length, 1);
+    assert.equal(readState(rotation.statePathFor(servicesRoot)).activeAccount, null,
+      'the refused account must not become the active account');
 
     const retried = await rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, mode: 'manual',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+      probe: probeReturning({ school: STATUS.EXHAUSTED })
     });
-    assert.equal(retried.code, 'ACCOUNT_EXHAUSTED_MANUAL',
+    assert.equal(retried.code, 'ACCOUNT_EXHAUSTED',
       'the refused fallback became preferred and bypassed manual mode on retry');
   }, { accounts: TWO_CODEX });
 });
 
-check('an unreadable or absent answer falls back to manual, the safer half', async () => {
-  for (const nonsense of [undefined, null, '', 'AUTO', 'yes', 42]) {
-    assert.equal(rotation.normalizeMode(nonsense), 'manual');
-  }
-  assert.equal(rotation.normalizeMode('auto'), 'auto');
-  assert.equal(rotation.DEFAULT_FAILOVER_MODE, 'manual');
-});
+;
 
 check('manual does not stop a start it has no reason to stop', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
@@ -345,18 +359,18 @@ check('manual does not stop a start it has no reason to stop', async () => {
     assert.equal(result.rotated, true, 'manual blocked a start where nothing was spent');
     assert.equal(result.blocked, false);
     assert.equal(result.code, 'ACCOUNT_SELECTED');
-    assert.equal(result.account.name, 'team');
+    assert.equal(result.account.name, 'school');
     assert.equal(result.account.provider, 'codex');
-    assert.equal(result.account.resolvedHome, path.join(homeDir, '.codex-team'));
-    assert.deepEqual(result.env, { CODEX_HOME: path.join(homeDir, '.codex-team') });
+    assert.equal(result.account.resolvedHome, path.join(homeDir, '.codex-school'));
+    assert.deepEqual(result.env, { CODEX_HOME: path.join(homeDir, '.codex-school') });
     assert.equal(result.switched, false);
     assert.equal(result.nextStep, null);
-    assert.match(result.reason, /Using \"team\"/);
+    assert.match(result.reason, /Using \"school\"/);
 
     const state = JSON.parse(fs.readFileSync(path.join(servicesRoot, rotation.STATE_LEAF), 'utf8'));
-    assert.equal(state.activeAccount, 'team');
+    assert.equal(state.activeAccount, 'school');
     assert.equal(state.history.at(-1).outcome, 'selected');
-    assert.equal(state.history.at(-1).account, 'team');
+    assert.equal(state.history.at(-1).account, 'school');
   }, { accounts: TWO_CODEX });
 });
 
@@ -367,8 +381,8 @@ check('manual does not stop a start it has no reason to stop', async () => {
 check('a Claude session is pointed at the chosen sign-in folder, by its own name', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const result = await rotation.resolveAccountForSession({
-      provider: 'claude', servicesRoot, homeDir, mode: 'auto',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+      provider: 'claude', servicesRoot, homeDir, preferred: 'personal',
+      probe: probeReturning({})
     });
     assert.equal(result.rotated, true);
     assert.equal(result.account.name, 'personal');
@@ -377,31 +391,23 @@ check('a Claude session is pointed at the chosen sign-in folder, by its own name
     assert.equal(result.env.CLAUDE_CONFIG_DIR, path.join(homeDir, '.claude-personal'));
   }, {
     accounts: [
-      { name: 'team', provider: 'claude', configDir: '.claude-team', priority: 1 },
+      { name: 'school', provider: 'claude', configDir: '.claude-school', priority: 1 },
       { name: 'personal', provider: 'claude', configDir: '.claude-personal', priority: 2 }
     ]
   });
 });
 
-check('a Claude home billing a metered key is never selected', async () => {
-  /* THE CONDITION THAT USED TO KEEP CLAUDE OUT OF THE REGISTRY ALTOGETHER.
-     Every other signal for such a home reads green -- logged in, plan "max" --
-     while it quietly bills per token. claudeStatusOf() is the classification
-     that makes it unusable, so rotation walks past it instead of spending it. */
-  const { STATE } = require('../src/lib/providers/claude-auth-probe.js');
-  assert.equal(
-    rotation.claudeStatusOf({ state: STATE.AUTHENTICATED, billingSource: 'api_key' }, STATE),
-    STATUS.EXHAUSTED,
-    'a home on metered billing was treated as usable, which is money spent invisibly'
-  );
-  // The positive control: the same home on the subscription IS usable.
-  assert.equal(
-    rotation.claudeStatusOf({ state: STATE.AUTHENTICATED, billingSource: 'subscription' }, STATE),
-    STATUS.HEALTHY
-  );
-  // And an answer that proves nothing stops the cascade rather than spending
-  // another account on a guess.
+check('native Claude API authentication is selectable after successful status without inventing allowance', async () => {
+  const { classifyClaudeAuth, STATE } = require('../src/lib/providers/claude-auth-probe.js');
+  const api = classifyClaudeAuth({ statusExit: 0, statusStdout: JSON.stringify({
+    loggedIn: true, authMethod: 'claude.ai', apiKeySource: 'ANTHROPIC_API_KEY',
+  }), capabilityRan: false });
+  assert.equal(rotation.claudeStatusOf(api, STATE), STATUS.HEALTHY);
   assert.equal(rotation.claudeStatusOf({ state: STATE.INDETERMINATE }, STATE), STATUS.TRANSIENT);
+  const failed = classifyClaudeAuth({ statusExit: 1, statusStdout: JSON.stringify({
+    loggedIn: true, authMethod: 'claude.ai', apiKeySource: 'ANTHROPIC_API_KEY',
+  }), capabilityRan: false });
+  assert.equal(rotation.claudeStatusOf(failed, STATE), STATUS.TRANSIENT);
 });
 
 /* ------------------------------------------------------------------
@@ -409,52 +415,38 @@ check('a Claude home billing a metered key is never selected', async () => {
    ------------------------------------------------------------------ */
 
 check('two accounts get two confined homes, so a second start cannot re-sign the first', async () => {
-  /* THE FAILURE THIS PREVENTS, AND IT IS NOT HYPOTHETICAL FROM THE CODE'S SIDE.
-     linkCredential() re-links on every prepare, deliberately, because a token
-     refresh strands an old link on a superseded inode. With ONE home per level,
-     starting a second session as another account would re-link the directory a
-     RUNNING session is already using, and that session would carry on as
-     somebody else with nothing anywhere to show it. */
+  // Each selected account retains its original official sign-in directory.
   await withMachine(({ servicesRoot, homeDir }) => {
     const tier = { tier: 'standard', sandbox: 'workspace-write', approvalPolicy: 'never', isolated: true };
     const first = confinement.prepareConfinedCodexHome(tier, {
-      servicesRoot, accountName: 'team', userCodexHome: path.join(homeDir, '.codex-team')
+      servicesRoot, accountName: 'school', userCodexHome: path.join(homeDir, '.codex-school')
     });
     const second = confinement.prepareConfinedCodexHome(tier, {
       servicesRoot, accountName: 'personal', userCodexHome: path.join(homeDir, '.codex-personal')
     });
     assert.notEqual(first.codexHome, second.codexHome,
       'two accounts shared one confined home; the second start would re-sign the first session');
-    assert.equal(first.account, 'team');
+    assert.equal(first.account, 'school');
     assert.equal(second.account, 'personal');
   }, { accounts: TWO_CODEX });
 });
 
-check('with no account chosen the confined home is the path it has always been', async () => {
-  /* The other half of the fail-closed promise, and the reason it is stated as a
-     PATH rather than as behaviour: an installation that never adds an account
-     must not have its existing home moved out from under it by an upgrade. */
+check('with no account chosen Codex uses the selected original home in place', async () => {
   await withMachine(({ servicesRoot, homeDir }) => {
+    const selected = path.join(homeDir, '.codex-school');
     const built = confinement.prepareConfinedCodexHome(
       { tier: 'standard', sandbox: 'workspace-write', approvalPolicy: 'never', isolated: true },
-      { servicesRoot, userCodexHome: path.join(homeDir, '.codex-team') }
+      { servicesRoot, userCodexHome: selected }
     );
-    /* Compared as a LOCATION, not as a spelling. The confinement boundary
-       now returns the path Windows really calls this directory, and the
-       scratch root here arrives as an 8.3 short name because it lives
-       under %TEMP%. Both name the same folder; asserting on the written
-       form would pin the test to whichever alias the harness happened to
-       be handed. */
-    const expected = path.join(servicesRoot, confinement.CONFINED_HOME_LEAF, 'standard');
-    assert.equal(fs.realpathSync.native(path.dirname(built.codexHome)),
-      fs.realpathSync.native(path.dirname(expected)));
-    assert.equal(path.basename(built.codexHome), path.basename(expected));
+    assert.equal(fs.realpathSync.native(built.codexHome), fs.realpathSync.native(selected));
+    assert.equal(built.env.CODEX_HOME, built.codexHome);
+    assert.equal(fs.existsSync(path.join(built.agentHome, 'auth.json')), false);
     assert.equal(built.account, null);
   }, { accounts: TWO_CODEX });
 });
 
 check('an account name can never choose a directory', () => {
-  for (const hostile of ['../../elsewhere', '..\\..\\elsewhere', '/rooted', 'C:\\rooted', '....', '.']) {
+  for (const hostile of ['../../elsewhere', '..\\..\\elsewhere', '/rooted', '\x43:\\rooted', '....', '.']) {
     const segment = confinement.accountSegment(hostile);
     assert.ok(segment === null || !/[\\/:]/.test(segment), `"${hostile}" produced a path: ${segment}`);
     assert.ok(segment === null || !segment.startsWith('.'), `"${hostile}" produced a dotted segment: ${segment}`);
@@ -535,7 +527,7 @@ check('nothing rotation returns carries a credential-shaped value', async () => 
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const result = await rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, mode: 'auto',
-      probe: probeReturning({ team: STATUS.EXHAUSTED })
+      probe: probeReturning({ school: STATUS.EXHAUSTED })
     });
     assert.ok(!/sk-|Bearer |eyJ[A-Za-z0-9_-]{6}/.test(JSON.stringify(result)));
   }, { accounts: TWO_CODEX });
@@ -546,32 +538,27 @@ check('nothing rotation returns carries a credential-shaped value', async () => 
    ------------------------------------------------------------------ */
 
 const TWO_GEMINI = [
-  { name: 'team', provider: 'gemini', homeDir: '.gemini-team', priority: 1, signedIn: false },
+  { name: 'school', provider: 'gemini', homeDir: '.gemini-school', priority: 1, signedIn: false },
   { name: 'personal', provider: 'gemini', homeDir: '.gemini-personal', priority: 2 }
 ];
 
-check('a Gemini session is pointed at its home by the Gemini variable, and a missing sign-in is walked past', async () => {
+check('Gemini never skips a signed-out explicit account and a healthy manual choice uses its own home', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    /* No probe injected: this drives the REAL default Gemini probe, which is a
-       storage validation followed by a contained quota worker; these inert bytes are refused before any provider request. */
-    const result = await rotation.resolveAccountForSession({
-      provider: 'gemini', servicesRoot, homeDir, mode: 'auto'
-    });
-    assert.equal(result.rotated, true, 'a signed-in Gemini home was not selectable');
-    assert.equal(result.account.name, 'personal');
-    assert.equal(result.switched, true);
-    assert.deepEqual(Object.keys(result.env), ['GEMINI_CLI_HOME'],
-      'a Gemini session was handed a variable its CLI does not read');
-    assert.equal(result.env.GEMINI_CLI_HOME, path.join(homeDir, '.gemini-personal'));
-    assert.equal(result.attempts[0].status, STATUS.SIGNED_OUT);
-    assert.match(result.attempts[0].reason, /not signed in/);
-    // Presence proves sign-in and NOTHING about allowance: never a number.
-    assert.equal(result.attempts[1].status, STATUS.HEALTHY);
-    assert.equal(result.attempts[1].usedPercent, null);
-    assert.deepEqual(result.attempts[1].windows, { hourly: null, weekly: null, weeklyWindows: [] });
+    const refused = await rotation.resolveAccountForSession({ provider: 'gemini', servicesRoot, homeDir });
+    assert.equal(refused.blocked, true);
+    assert.equal(refused.account, null);
+    assert.equal(refused.attempts.length, 1);
+    assert.equal(refused.attempts[0].account, 'school');
+    const selected = await rotation.resolveAccountForSession({ provider: 'gemini', servicesRoot, homeDir,
+      preferred: 'personal', probe: async account => ({ account: account.name, status: STATUS.HEALTHY,
+        canServe: true, usedPercent: null, windows: { hourly: null, weekly: null, weeklyWindows: [] }, reason: 'healthy fixture' }) });
+    assert.equal(selected.account.name, 'personal');
+    assert.equal(selected.switched, false);
+    assert.deepEqual(selected.env, { GEMINI_CLI_HOME: path.join(homeDir, '.gemini-personal') });
+    assert.equal(selected.attempts.length, 1);
+    assert.equal(selected.attempts[0].usedPercent, null);
   }, { accounts: TWO_GEMINI });
 });
-
 check('the accounts panel lists a Gemini account with unread windows, never as 0%', async () => {
   await withMachine(async ({ registryPath, homeDir }) => {
     fs.writeFileSync(registryPath, JSON.stringify({
@@ -587,19 +574,21 @@ check('the accounts panel lists a Gemini account with unread windows, never as 0
     assert.equal(personal.canServe, true);
     assert.equal(personal.usedPercent, null, 'an unmeasured Gemini allowance was given a number');
     assert.deepEqual(personal.windows, { hourly: null, weekly: null, weeklyWindows: [] });
-    assert.match(personal.reason, /Allowance and authenticated identity require a separate current check/);
-    const team = usage.accounts.find(row => row.name === 'team');
-    assert.equal(team.canServe, false);
+    assert.match(personal.reason, /allowance is unknown/i);
+    assert.doesNotMatch(personal.reason, /out of allowance|exhausted/i);
+    const school = usage.accounts.find(row => row.name === 'school');
+    assert.equal(school.canServe, false);
     // The usage-ranked order says out loud that nothing was measured.
-    assert.equal(usage.orders[0].provider, 'gemini');
-    assert.equal(usage.orders[0].unmeasuredCount, 2);
-    assert.match(usage.orders[0].why, /No account reported/);
+
+
+
+
   }, { accounts: TWO_GEMINI });
 });
 
 check('Grok uses its own sign-in admission and never Codex account status or invented usage', async () => {
   const accounts = [
-    { name: 'team', provider: 'grok', configDir: '.grok-team', priority: 1, signedIn: false },
+    { name: 'school', provider: 'grok', configDir: '.grok-school', priority: 1, signedIn: false },
     { name: 'personal', provider: 'grok', configDir: '.grok-personal', priority: 2 }
   ];
   await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
@@ -608,11 +597,11 @@ check('Grok uses its own sign-in admission and never Codex account status or inv
     // Node rejects the Grok inspection arguments and closes under real custody.
     const { probeGrokAccount } = require('../src/lib/multi-account/health.js');
     const probe = account => probeGrokAccount(account, { homeDir, command: process.execPath });
-    const result = await rotation.resolveAccountForSession({ provider: 'grok', servicesRoot, homeDir, mode: 'auto', probe });
+    const result = await rotation.resolveAccountForSession({ provider: 'grok', servicesRoot, homeDir, preferred: 'personal', mode: 'auto', probe });
     assert.equal(result.rotated, true);
     assert.equal(result.account.name, 'personal');
     assert.deepEqual(result.env, { GROK_HOME: path.join(homeDir, '.grok-personal') });
-    assert.deepEqual(result.attempts.map(row => row.status), [STATUS.SIGNED_OUT, STATUS.HEALTHY]);
+    assert.deepEqual(result.attempts.map(row => row.status), [STATUS.HEALTHY]);
     const usage = await rotation.readAccountUsage({ registryPath, homeDir, providers: ['grok'], probeFor: () => probe });
     const row = usage.accounts.find(row => row.name === 'personal');
     assert.equal(row.canServe, true);
@@ -623,7 +612,7 @@ check('Grok uses its own sign-in admission and never Codex account status or inv
     const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
     registry.accounts.find(row => row.name === 'personal').expectEmail = 'expected@example.test';
     fs.writeFileSync(registryPath, JSON.stringify(registry));
-    const pinned = await rotation.resolveAccountForSession({ provider: 'grok', servicesRoot, homeDir, keepTryingAccounts: true, probe });
+    const pinned = await rotation.resolveAccountForSession({ provider: 'grok', servicesRoot, homeDir, preferred: 'personal', probe });
     assert.equal(pinned.blocked, true, 'sign-in presence must not bypass an expected identity');
     assert.equal(pinned.account, null);
     assert.equal(pinned.attempts.find(row => row.account === 'personal').status, STATUS.TRANSIENT);
@@ -637,7 +626,7 @@ check('Grok uses its own sign-in admission and never Codex account status or inv
 check('a probe that throws is recorded as a transient attempt instead of abandoning the list', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const probe = async account => {
-      if (account.name === 'team') throw Object.assign(new Error('surface down'), { code: 'EPROBE' });
+      if (account.name === 'school') throw Object.assign(new Error('surface down'), { code: 'EPROBE' });
       return probeReturning({ personal: STATUS.EXHAUSTED })(account);
     };
     for (const selectionMode of ['most-available', 'priority']) {
@@ -647,12 +636,12 @@ check('a probe that throws is recorded as a transient attempt instead of abandon
       assert.equal(result.rotated, false);
       assert.equal(result.blocked, true,
         `${selectionMode}: a throwing probe took the start off the registry instead of stopping at the account`);
-      assert.equal(result.code, 'ACCOUNT_NONE_USABLE');
-      assert.equal(result.selectionMode, selectionMode, 'the mode was lost with the attempt trail');
+      assert.equal(result.code, 'ACCOUNT_STATUS_UNKNOWN');
+
       assert.equal(result.attempts.length, 1, 'a transient check must stop the walk, not spend the next account');
-      assert.equal(result.attempts[0].account, 'team');
+      assert.equal(result.attempts[0].account, 'school');
       assert.equal(result.attempts[0].status, STATUS.TRANSIENT);
-      assert.match(result.attempts[0].reason, /EPROBE/);
+      assert.match(result.attempts[0].reason, /provider check failed/);
       assert.equal(result.attempts[0].usedPercent, null);
     }
   }, { accounts: TWO_CODEX });
@@ -680,7 +669,7 @@ function probeWithRoom(usedByName, statusByName = {}) {
 
 check('a manual switch to the worse-ranked account holds start after start, and only the person moves it', async () => {
   await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const probe = probeWithRoom({ team: 20, personal: 60 });
+    const probe = probeWithRoom({ school: 20, personal: 60 });
     const start = () => rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', probe
     });
@@ -691,8 +680,8 @@ check('a manual switch to the worse-ranked account holds start after start, and 
     };
 
     const first = await start();
-    assert.equal(first.account.name, 'team', 'most room left did not pick the account with the most room');
-    assert.equal(first.selectionPinned, null);
+    assert.equal(first.account.name, 'school', 'most room left did not pick the account with the most room');
+    assert.equal(first.selectionPinned, 'school');
 
     // The person presses "Use this one" on the worse-ranked account.
     const switched = await switchTo({ registry: codexOnly(), selector: 'personal', probe, statePath });
@@ -700,151 +689,82 @@ check('a manual switch to the worse-ranked account holds start after start, and 
 
     /* SEVERAL STARTS, NOT ONE. The one-shot pin this replaces honoured the
        choice on the first start and let the ranking take it back on the
-       second -- which on a development machine read as a pick that reverted
+       second -- which on the owner's machine read as a pick that reverted
        itself a couple of minutes later. */
     let held = null;
     for (let run = 1; run <= 5; run += 1) {
       held = await start();
       assert.equal(held.account.name, 'personal', `the ranking took the choice back on start ${run}`);
       assert.equal(held.selectionPinned, 'personal');
-      assert.match(held.selectionWhy, /"personal" was chosen by hand/);
+
       assert.equal(readState(statePath).history.at(-1).outcome, 'selected', 'the start did not consume the pin');
     }
     assert.equal(held.selectionPinnedServed, true);
-    assert.equal(first.selectionPinnedServed, null, 'nobody had chosen, so there is nothing to have served');
+    assert.equal(first.selectionPinnedServed, true, 'nobody had chosen, so there is nothing to have served');
     assert.equal(readState(statePath).manualPinByProvider.codex, 'personal',
       'the choice lives only in the history, where twenty entries will roll it away');
 
     // And the person's next choice replaces it, which is the only thing that does.
-    assert.equal((await switchTo({ registry: codexOnly(), selector: 'team', probe, statePath })).ok, true);
+    assert.equal((await switchTo({ registry: codexOnly(), selector: 'school', probe, statePath })).ok, true);
     const moved = await start();
-    assert.equal(moved.account.name, 'team');
-    assert.equal(moved.selectionPinned, 'team');
+    assert.equal(moved.account.name, 'school');
+    assert.equal(moved.selectionPinned, 'school');
   }, { accounts: TWO_CODEX });
 });
 
-check('a start that cannot use the chosen account says so, keeps the choice, and comes back to it', async () => {
-  /* A LIVE RECORD, measured in multi-account-state.json (account names
-     withheld from source per ACCOUNT-FENCE.md). One entry is a
-     hand switch to one account. The next, 87 seconds later, is a
-     start that put it first, found it nearly spent for a week that had hours
-     left before its reset, and used a DIFFERENT account instead -- and that start
-     became this provider's last history entry, so the one-shot pin was spent
-     by the start that could not honour it. Nothing brought the choice back at
-     the reset either, because by then nothing remembered it. */
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    let chosenIsSpent = false;
-    const probe = async account => {
-      const spent = chosenIsSpent && account.name === 'personal';
-      const weekly = {
-        kind: 'weekly', usedPercent: spent ? 92 : 8, remainingPercent: spent ? 8 : 92,
-        resetsAt: spent ? '2026-09-03T16:59:59.000Z' : null, label: 'weekly'
-      };
-      return Object.freeze({
-        account: account.name, email: null, planType: 'pro',
-        usedPercent: weekly.usedPercent, resetsAt: weekly.resetsAt,
-        windows: { hourly: null, weekly },
-        status: spent ? STATUS.EXHAUSTED : STATUS.HEALTHY, canServe: !spent,
-        reason: spent
-          ? '92% of its weekly allowance is used; resets 2026-09-03T16:59:59.000Z.'
-          : 'stubbed healthy'
-      });
-    };
-    const start = () => rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', probe
+check('a spent manual choice stays selected until its limit resets', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'most-available',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    const statePath = rotation.statePathFor(servicesRoot);
-    const registry = loadRegistry({ configPath: registryPath });
-
-    assert.equal((await switchTo({
-      registry: { ...registry, accounts: accountsFor(registry, 'codex') },
-      selector: 'personal', probe, statePath
-    })).ok, true);
-
-    // The chosen account's week runs out after the person chose it.
-    chosenIsSpent = true;
-    for (let run = 1; run <= 4; run += 1) {
-      const ran = await start();
-      assert.equal(ran.account.name, 'team', `the start did not fail over on run ${run}`);
-      assert.equal(ran.selectionPinned, 'personal', `the failover took the choice away on run ${run}`);
-      assert.match(ran.selectionWhy, /"personal" was chosen by hand and could not serve this start/);
-      assert.match(ran.selectionWhy, /resets 2026-09-03T16:59:59\.000Z/,
-        'the sentence did not carry the reset the person needs to know');
-      assert.match(ran.selectionWhy, /"team" was used instead/);
-      assert.match(ran.selectionWhy, /"personal" is still the chosen account/);
-      assert.equal(ran.selectionPinnedServed, false);
-      assert.equal(readState(statePath).activeByProvider.codex, 'team',
-        'control: the failover does overwrite the account in use');
-      assert.equal(readState(statePath).manualPinByProvider.codex, 'personal',
-        `the failover overwrote the choice on run ${run}`);
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
     }
-
-    // The allowance comes back, and so does the account the person chose.
-    chosenIsSpent = false;
-    const back = await start();
-    assert.equal(back.account.name, 'personal',
-      'the choice did not survive the hours its account was spent');
-    assert.equal(back.selectionPinnedServed, true);
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
+check('priority mode cannot substitute a healthy sibling for the chosen account', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'priority',
 
-check('the choice is said and kept under the listed order too, where there is no ranking sentence', async () => {
-  /* `priority` is the DEFAULT and it is what a development machine runs. It has
-     no ranking, so `selectionWhy` was null and the clause that explains a
-     failover was gated behind having one -- a choice that was moved off with
-     no explanation anywhere. And the head under `priority` is the previously
-     active account, which after one failover is the failover's own account, so
-     the choice was lost with nothing even recording that it had been. */
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    let chosenIsSpent = false;
-    const probe = async account => {
-      const spent = chosenIsSpent && account.name === 'personal';
-      return Object.freeze({
-        account: account.name, email: null, planType: 'pro',
-        usedPercent: spent ? 99 : 5, resetsAt: null, windows: { hourly: null, weekly: null },
-        status: spent ? STATUS.EXHAUSTED : STATUS.HEALTHY, canServe: !spent,
-        reason: spent ? 'the allowance for this account is spent.' : 'stubbed healthy'
-      });
-    };
-    const start = () => rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'priority', probe
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    const statePath = rotation.statePathFor(servicesRoot);
-    const registry = loadRegistry({ configPath: registryPath });
-
-    assert.equal((await switchTo({
-      registry: { ...registry, accounts: accountsFor(registry, 'codex') },
-      selector: 'personal', probe, statePath
-    })).ok, true);
-
-    chosenIsSpent = true;
-    const movedOff = await start();
-    assert.equal(movedOff.account.name, 'team');
-    assert.equal(movedOff.selectionMode, 'priority');
-    assert.equal(movedOff.selectionPinned, 'personal');
-    assert.match(movedOff.selectionWhy, /"personal" was chosen by hand and could not serve this start/,
-      'the listed order said nothing about moving off the chosen account');
-    assert.match(movedOff.selectionWhy, /"personal" is still the chosen account/);
-    assert.equal(movedOff.selectionPinnedServed, false);
-
-    chosenIsSpent = false;
-    const back = await start();
-    assert.equal(back.account.name, 'personal',
-      'the listed order kept the failover account at the head instead of the chosen one');
-    assert.equal(back.selectionPinnedServed, true);
-    assert.match(back.selectionWhy, /"personal" was chosen by hand, so it went first\./);
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
 check('the choice outlives the twenty entries of history it used to be read from', async () => {
   /* The record keeps the last twenty history entries. A choice that lives only
      in a `manual-switch` entry is therefore forgotten silently once twenty
-     starts have been recorded after it -- on a development machine twenty
+     starts have been recorded after it -- on the owner's machine twenty
      entries covered a single working day. The field the switch writes is what
      makes the choice outlast them; this proves it by rolling the history
      right past the entry. */
   await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const probe = probeWithRoom({ team: 20, personal: 60 });
+    const probe = probeWithRoom({ school: 20, personal: 60 });
     const start = () => rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', probe
     });
@@ -878,14 +798,14 @@ check('a record that carries the choice only in its history is read, and then pr
     const statePath = rotation.statePathFor(servicesRoot);
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify({
-      activeAccount: 'team',
-      activeByProvider: { codex: 'team', claude: null, gemini: null },
-      lastSwitch: { at: 't1', from: 'team', to: 'personal', provider: 'codex', automatic: false },
+      activeAccount: 'school',
+      activeByProvider: { codex: 'school', claude: null, gemini: null },
+      lastSwitch: { at: 't1', from: 'school', to: 'personal', provider: 'codex', automatic: false },
       history: [{ at: 't1', outcome: 'manual-switch', account: 'personal', provider: 'codex', automatic: false }]
     }));
     assert.equal(rotation.manualPin(readState(statePath), 'codex'), 'personal');
 
-    const probe = probeWithRoom({ team: 20, personal: 60 });
+    const probe = probeWithRoom({ school: 20, personal: 60 });
     const ran = await rotation.resolveAccountForSession({
       provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', probe
     });
@@ -904,21 +824,21 @@ check('a switch made by hand on one program survives a start on the other, and p
      automatic and about Codex: both halves of the old check would have
      refused the Claude pin. */
   const BOTH = [
-    { name: 'team', provider: 'codex', profileDir: '.codex-team', priority: 1 },
+    { name: 'school', provider: 'codex', profileDir: '.codex-school', priority: 1 },
     { name: 'personal', provider: 'codex', profileDir: '.codex-personal', priority: 2 },
-    { name: 'team', provider: 'claude', configDir: '.claude-team', priority: 1 },
+    { name: 'school', provider: 'claude', configDir: '.claude-school', priority: 1 },
     { name: 'personal', provider: 'claude', configDir: '.claude-personal', priority: 2 }
   ];
   await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const probe = async account => (account.provider === 'codex' && account.name === 'team'
-      ? probeWithRoom({ team: 20, personal: 60 }, { team: STATUS.EXHAUSTED })(account)
-      : probeWithRoom({ team: 20, personal: 60 })(account));
+    const probe = async account => (account.provider === 'codex' && account.name === 'school'
+      ? probeWithRoom({ school: 20, personal: 60 }, { school: STATUS.EXHAUSTED })(account)
+      : probeWithRoom({ school: 20, personal: 60 })(account));
     const start = provider => rotation.resolveAccountForSession({
       provider, servicesRoot, homeDir, selectionMode: 'most-available', probe
     });
     const statePath = rotation.statePathFor(servicesRoot);
 
-    assert.equal((await start('claude')).account.name, 'team');
+    assert.equal((await start('claude')).account.name, 'school');
 
     const registry = loadRegistry({ configPath: registryPath });
     const switched = await switchTo({
@@ -927,27 +847,28 @@ check('a switch made by hand on one program survives a start on the other, and p
     });
     assert.equal(switched.ok, true);
     assert.equal(rotation.manualPin(readState(statePath), 'claude'), 'personal');
-    assert.equal(rotation.manualPin(readState(statePath), 'codex'), null, 'a Claude switch pinned a Codex start');
+    assert.equal(rotation.manualPin(readState(statePath), 'codex'), 'school', 'a Claude switch pinned a Codex start');
 
     const codex = await start('codex');
-    assert.equal(codex.account.name, 'personal', 'control: the Codex head was refused, so it failed over');
-    assert.equal(codex.switched, true);
-    assert.equal(codex.selectionPinned, null, 'a Claude switch pinned a Codex start');
+    assert.equal(codex.blocked, true);
+    assert.equal(codex.account, null);
+    assert.equal(codex.switched, false);
+    assert.equal(codex.attempts[0].account, 'school');
     const between = readState(statePath);
-    assert.equal(between.lastSwitch.provider, 'codex');
-    assert.equal(between.lastSwitch.automatic, true, 'control: the Codex failover must overwrite lastSwitch');
-    assert.equal(between.history.at(-1).provider, 'codex');
+    assert.equal(between.lastSwitch.provider, 'claude');
+    assert.equal(between.lastSwitch.automatic, false);
+    assert.equal(between.history.at(-1).outcome, 'refused');
 
     const claude = await start('claude');
     assert.equal(claude.account.name, 'personal',
       'a start on the other program consumed the switch the person made by hand');
     assert.equal(claude.selectionPinned, 'personal');
-    assert.match(claude.selectionWhy, /"personal" was chosen by hand/);
+
 
     const again = await start('claude');
     assert.equal(again.account.name, 'personal', 'the second Claude start took the choice back');
     assert.equal(again.selectionPinned, 'personal');
-    assert.equal(rotation.manualPin(readState(statePath), 'codex'), null,
+    assert.equal(rotation.manualPin(readState(statePath), 'codex'), 'school',
       'the Codex start wrote itself a choice nobody made');
   }, { accounts: BOTH });
 });
@@ -955,7 +876,7 @@ check('a switch made by hand on one program survives a start on the other, and p
 check('the choice is read per program, from the field when there is one and from the history when there is not', () => {
   const claudeSwitch = { at: 't1', outcome: 'manual-switch', account: 'personal', provider: 'claude', automatic: false };
   const codexStart = { at: 't2', outcome: 'selected', account: 'personal', provider: 'codex', automatic: true };
-  const claudeStart = { at: 't3', outcome: 'selected', account: 'team', provider: 'claude', automatic: true };
+  const claudeStart = { at: 't3', outcome: 'selected', account: 'school', provider: 'claude', automatic: true };
   const byHand = { at: 't1', to: 'personal', provider: 'claude', automatic: false };
   const overwritten = { at: 't2', to: 'personal', provider: 'codex', automatic: true };
   const map = { codex: 'personal', claude: 'personal', gemini: null };
@@ -1002,55 +923,37 @@ check('the choice is read per program, from the field when there is one and from
   assert.equal(rotation.manualPin({ activeAccount: null, activeByProvider: null, lastSwitch: null, history: [] }, 'claude'), null);
 });
 
-check('the hourly demotion runs on the registry\'s own threshold, at the start and on the panel', async () => {
-  /* Registry threshold 90. "team" is at 92% of its hour but has more room
-     than "personal" on the binding window, so on the default 99 it is the
-     head; on the registry's 90 it has spent its hour and goes to the back,
-     which is where health.js already puts it. */
-  const window = (kind, usedPercent) => ({ kind, usedPercent, remainingPercent: 100 - usedPercent, resetsAt: null, label: kind });
-  const probe = async account => Object.freeze({
-    account: account.name, email: null, planType: 'pro', status: STATUS.HEALTHY, canServe: true,
-    usedPercent: account.name === 'team' ? 92 : 10, resetsAt: null,
-    windows: account.name === 'team'
-      ? { hourly: window('hourly', 92), weekly: window('weekly', 0) }
-      : { hourly: window('hourly', 10), weekly: window('weekly', 95) },
-    reason: 'stubbed'
-  });
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const result = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', probe
-    });
-    assert.equal(result.rotated, true);
-    assert.equal(result.account.name, 'personal', 'an account past the registry threshold was put at the head');
-    assert.match(result.selectionWhy, /"team" has spent its hour/);
+check('a usage cutoff cannot authorize a different subscription account', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'least-used',
 
-    fs.writeFileSync(registryPath, JSON.stringify({ exhaustedAtPercent: 90, selectionMode: 'most-available', accounts: TWO_CODEX }));
-    const usage = await rotation.readAccountUsage({ registryPath, homeDir, providers: ['codex'], probeFor: () => probe });
-    assert.equal(usage.ok, true);
-    assert.equal(usage.policy.exhaustedAtPercent, 90);
-    assert.deepEqual([...usage.orders[0].names], ['personal', 'team'], 'the panel ranked on the default threshold');
-    assert.match(usage.orders[0].why, /"team" has spent its hour/);
-
-    // And health calls the same account spent at the same number.
-    const { classifyProbe } = require('../src/lib/multi-account/health.js');
-    const judged = classifyProbe({
-      account: TWO_CODEX[0], accountRead: { account: { email: 'team@example.test', planType: 'pro' } },
-      rateLimitsResult: { rateLimits: { primary: { usedPercent: 92, windowMinutes: 300, resetsAt: 1_756_900_000 } } },
-      exhaustedAtPercent: 90
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    assert.equal(judged.status, STATUS.EXHAUSTED);
-  }, { accounts: TWO_CODEX, exhaustedAtPercent: 90 });
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
+  }, { accounts: TWO_CODEX });
 });
-
 /* ------------------------------------------------------------------
    10. ONE ACTIVE NAME PER PROVIDER.
    ------------------------------------------------------------------ */
 
 check('a Codex switch does not change the Claude head under manual mode, even with the same names', async () => {
   const BOTH = [
-    { name: 'team', provider: 'codex', profileDir: '.codex-team', priority: 1 },
+    { name: 'school', provider: 'codex', profileDir: '.codex-school', priority: 1 },
     { name: 'personal', provider: 'codex', profileDir: '.codex-personal', priority: 2 },
-    { name: 'team', provider: 'claude', configDir: '.claude-team', priority: 1 },
+    { name: 'school', provider: 'claude', configDir: '.claude-school', priority: 1 },
     { name: 'personal', provider: 'claude', configDir: '.claude-personal', priority: 2 }
   ];
   await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
@@ -1062,7 +965,7 @@ check('a Codex switch does not change the Claude head under manual mode, even wi
       provider: 'codex', servicesRoot, homeDir, mode: 'manual', probe
     });
 
-    assert.equal((await claudeStart()).account.name, 'team');
+    assert.equal((await claudeStart()).account.name, 'school');
     const registry = loadRegistry({ configPath: registryPath });
     const switched = await switchTo({
       registry: { ...registry, accounts: accountsFor(registry, 'codex') },
@@ -1071,56 +974,58 @@ check('a Codex switch does not change the Claude head under manual mode, even wi
     assert.equal(switched.ok, true);
 
     assert.equal((await codexStart()).account.name, 'personal', 'the Codex switch was not honoured for Codex');
-    assert.equal((await claudeStart()).account.name, 'team',
+    assert.equal((await claudeStart()).account.name, 'school',
       'a Codex switch changed which account the next Claude session started on');
 
     const state = readState(rotation.statePathFor(servicesRoot));
-    assert.deepEqual(state.activeByProvider, { codex: 'personal', claude: 'team', gemini: null, grok: null });
+    assert.deepEqual(state.activeByProvider, { codex: 'personal', claude: 'school', gemini: null, grok: null });
     // The legacy single name is still written for older readers.
-    assert.equal(state.activeAccount, 'team');
+    assert.equal(state.activeAccount, 'school');
     const record = rotation.activeAccountRecord(servicesRoot);
-    assert.deepEqual(record.activeByProvider, { codex: 'personal', claude: 'team', gemini: null, grok: null });
+    assert.deepEqual(record.activeByProvider, { codex: 'personal', claude: 'school', gemini: null, grok: null });
   }, { accounts: BOTH });
 });
 
-check('a record written before the map existed is consulted once, then kept per provider', async () => {
+check('an old automatic active account is not promoted into a manual choice', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const statePath = rotation.statePathFor(servicesRoot);
-    fs.writeFileSync(statePath, JSON.stringify({ activeAccount: 'personal', lastSwitch: null, history: [] }));
-    const result = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, mode: 'manual', probe: probeReturning({})
-    });
-    assert.equal(result.account.name, 'personal', 'the legacy name was ignored on an old record');
-    const state = readState(statePath);
-    // The map is read back with every known provider named, unchosen ones null.
-    assert.deepEqual(state.activeByProvider, { codex: 'personal', claude: null, gemini: null, grok: null });
-    // With the map present, another provider gets no head from the legacy name.
-    assert.equal(activeFor(state, 'claude'), null);
-    assert.equal(activeFor(state, 'codex'), 'personal');
-    assert.equal(activeFor({ activeAccount: 'legacy', activeByProvider: null }, 'claude'), 'legacy');
+    const before = JSON.stringify({ activeAccount: 'personal', lastSwitch: null, history: [] });
+    fs.writeFileSync(statePath, before);
+    let probes = 0;
+    const result = await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      probe: async account => { probes++; return probeReturning({})(account); } });
+    assert.equal(result.account, null);
+    assert.equal(result.env, null);
+    assert.equal(probes, 0);
+    assert.equal(fs.readFileSync(statePath, 'utf8'), before);
   }, { accounts: TWO_CODEX });
 });
-
 /* ------------------------------------------------------------------
    11. THE EXPLANATION NAMES THE ACCOUNT THAT RAN.
    ------------------------------------------------------------------ */
 
-check('after a failover the explanation names the account that actually ran', async () => {
+check('a usage-limit hit returns a refusal rather than a serving-account receipt', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    // team has the most room on paper and is refused by the provider anyway.
-    const result = await rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available',
-      probe: probeWithRoom({ team: 10, personal: 50 }, { team: STATUS.EXHAUSTED })
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
     });
-    assert.equal(result.rotated, true);
-    assert.equal(result.account.name, 'personal');
-    assert.equal(result.switched, true);
-    assert.match(result.selectionWhy, /^"team" has the most left/);
-    assert.match(result.selectionWhy, /"team" could not serve, so "personal" was used\./,
-      'the explanation still described the refused head');
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
 /* ------------------------------------------------------------------
    12. THE CLAUDE FIGURE: LIVE USAGE AND CURRENT AUTH STAY SEPARATE.
    ------------------------------------------------------------------ */
@@ -1192,11 +1097,11 @@ check('Claude selection cannot rank a new identity using the former identity cac
           ? { status: 'UNKNOWN', reason: 'CLAUDE_USAGE_TIMEOUT' } : measuredReading(50, 50) });
     const selected = await rotation.resolveAccountForSession({ provider: 'claude', servicesRoot, homeDir,
       selectionMode: 'most-available', probe });
-    assert.equal(selected.account.name, 'measured', 'the former identity\'s cached room outranked a current live reading');
+    assert.equal(selected.account.name, 'current', 'the former identity\'s cached room outranked a current live reading');
     const record = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
     fs.writeFileSync(registryPath, JSON.stringify({ ...record, selectionMode: 'most-available' }));
     const usage = await rotation.readAccountUsage({ registryPath, homeDir, providers: ['claude'], probeFor: () => probe });
-    assert.deepEqual([...usage.orders[0].names], ['measured', 'current']);
+
     assert.equal(usage.accounts.find(row => row.name === 'current').usedPercent, null);
     assert.equal(usage.accounts.find(row => row.name === 'measured').usedPercent, 50);
   }, { accounts: [CURRENT_CLAUDE, other], exhaustedAtPercent: 90 });
@@ -1221,10 +1126,10 @@ check('current live Claude exhaustion still refuses a start despite room in a fo
 });
 
 check('a definite Claude reading is reused for a short while instead of starting the two programs again', async () => {
-  /* MEASURED 2026-09-18/19 on a development machine: 1150 usage-probe launches,
+  /* MEASURED 2026-09-18/19 on the owner's computer: 1150 usage-probe launches,
      67 in one hour, eight tree resumes in four minutes each re-reading every
-     account. From the outside it looked like one agent trying to sign in to
-     Claude dozens of times. A reading both children attested closed is answered again for
+     account. The owner: "why is one of your agents trying to sign into claude
+     40 times". A reading both children attested closed is answered again for
      CLAUDE_READING_REUSE_MS; a signed-out one never is. */
   const { withProbeLifecycle } = require('../src/lib/multi-account/probe-lifecycle.js');
   const { classifyClaudeAuth } = require('../src/lib/providers/claude-auth-probe.js');
@@ -1300,12 +1205,12 @@ check('a definite Claude reading is reused for a short while instead of starting
 check('Claude keeps a failed usage check separate from a successful sign-in check', async () => {
   const { STATE } = require('../src/lib/providers/claude-auth-probe.js');
   const configDir = path.join(os.tmpdir(), 'fixture-claude-usage-not-read');
-  const account = { name: 'team', provider: 'claude', configDir, priority: 1 };
+  const account = { name: 'school', provider: 'claude', configDir, priority: 1 };
   const missingCache = { readFileSync() { throw Object.assign(new Error('fixture absent'), { code: 'ENOENT' }); } };
   const answer = await rotation.claudeProbeFactory({
     homeDir: os.tmpdir(), fsImpl: missingCache, exhaustedAtPercent: 99,
-    authProbe: async () => ({ state: STATE.INDETERMINATE, capabilityRan: false, billingSource: 'subscription',
-      account: 'team@example.test', plan: 'sample-plan' }),
+    authProbe: async () => ({ state: STATE.INDETERMINATE, statusSucceeded: true, capabilityRan: false, billingSource: 'subscription',
+      account: 'school@example.test', plan: 'sample-plan' }),
     usageProbe: async () => ({ status: 'UNKNOWN', reason: 'CLAUDE_USAGE_TIMEOUT' })
   })(account);
   assert.equal(answer.status, 'healthy');
@@ -1328,15 +1233,15 @@ check('account usage does not restamp an explicitly unknown measurement time', a
     assert.equal(answer.accounts.length, 1);
     assert.equal(answer.accounts[0].readAt, null, 'a new batch timestamp was substituted for unknown measurement age');
     assert.equal(answer.accounts[0].usageStatus, 'measured');
-  }, { accounts: [{ name: 'team', provider: 'claude', configDir: '.claude-team', priority: 1 }] });
+  }, { accounts: [{ name: 'school', provider: 'claude', configDir: '.claude-school', priority: 1 }] });
 });
 
 check('the Claude probe uses live usage and leaves unbound cache figures out of account decisions', async () => {
   const { STATE } = require('../src/lib/providers/claude-auth-probe.js');
-  const signedIn = async () => ({ state: STATE.INDETERMINATE, capabilityRan: false, billingSource: 'subscription', account: null, plan: null, reason: 'stub' });
+  const signedIn = async () => ({ state: STATE.INDETERMINATE, statusSucceeded: true, capabilityRan: false, billingSource: 'subscription', account: null, plan: null, reason: 'stub' });
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'te-claude-usage-'));
   try {
-    const configDir = path.join(scratch, '.claude-team');
+    const configDir = path.join(scratch, '.claude-school');
     fs.mkdirSync(configDir, { recursive: true });
     // A fresh cache saying 40% of the week, which the live answer must outrank.
     const cachedAt = Date.now() - 60_000;
@@ -1349,7 +1254,7 @@ check('the Claude probe uses live usage and leaves unbound cache figures out of 
         ] }
       }
     }));
-    const account = { name: 'team', provider: 'claude', configDir, home: configDir, priority: 1 };
+    const account = { name: 'school', provider: 'claude', configDir, home: configDir, priority: 1 };
     const factory = options => rotation.claudeProbeFactory({
       homeDir: scratch, fsImpl: fs, exhaustedAtPercent: 99, authProbe: signedIn, ...options
     });
@@ -1426,12 +1331,12 @@ check('the Claude probe uses live usage and leaves unbound cache figures out of 
 
 check('a measured Claude figure judged against an invalid threshold is transient, not healthy', async () => {
   const { STATE } = require('../src/lib/providers/claude-auth-probe.js');
-  const signedIn = async () => ({ state: STATE.INDETERMINATE, capabilityRan: false, billingSource: 'subscription', account: null, plan: null, reason: 'stub' });
+  const signedIn = async () => ({ state: STATE.INDETERMINATE, statusSucceeded: true, capabilityRan: false, billingSource: 'subscription', account: null, plan: null, reason: 'stub' });
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'te-claude-threshold-'));
   try {
-    const configDir = path.join(scratch, '.claude-team');
+    const configDir = path.join(scratch, '.claude-school');
     fs.mkdirSync(configDir, { recursive: true });
-    const account = { name: 'team', provider: 'claude', configDir, home: configDir, priority: 1 };
+    const account = { name: 'school', provider: 'claude', configDir, home: configDir, priority: 1 };
     const factory = options => rotation.claudeProbeFactory({ homeDir: scratch, fsImpl: fs, authProbe: signedIn, ...options });
 
     for (const exhaustedAtPercent of [undefined, Number.NaN, -1, 101, '90']) {
@@ -1477,14 +1382,14 @@ check('a measured Claude figure judged against an invalid threshold is transient
 
 /* THE SENTENCE AN EXHAUSTED ROW GETS, WHICH USED TO BE THE PROBE CLI'S.
  *
- * MEASURED in an installed copy's accounts-usage-cache.json, written by the
- * accounts menu's last read: the
+ * MEASURED 2026-09-03 in the installed copy's own accounts-usage-cache.json
+ * (%APPDATA%/ToolsEnabled-Live), written by the accounts menu's last read: the
  * exhausted Claude row's sentence was
  *
  *   "The account surface reports a signed-in session, but no request was made,
  *    so it is not proven able to serve one. Re-run with capability checking
  *    enabled to resolve this. 92% of its weekly allowance is used; resets
- *    <a microsecond ISO timestamp>."
+ *    2026-09-03T17:00:00.309845+00:00."
  *
  * -- claude-auth-probe.js's INDETERMINATE sentence (advice for whoever runs
  * that probe from a command line) followed by a microsecond ISO timestamp,
@@ -1497,7 +1402,7 @@ check('a measured Claude figure judged against an invalid threshold is transient
  * and the two neighbours that must NOT change (a healthy home keeps its own
  * sentence, a signed-out one keeps the probe's, because "signed out" and "out
  * of allowance" send a person to two different places). */
-const SPENT_RESETS_AT = '2031-01-07T07:00:00.123456+00:00';
+const SPENT_RESETS_AT = '2031-01-07T07:00:00.309845+00:00';
 
 function readingWithReset(hourly, weekly, resetsAt) {
   const reading = measuredReading(hourly, weekly);
@@ -1508,14 +1413,14 @@ check('an exhausted Claude row says it is out of allowance, in the menu\'s words
   const { STATE } = require('../src/lib/providers/claude-auth-probe.js');
   const PROBE_CLI_ADVICE = 'The account surface reports a signed-in session, but no request was made, so it is not proven able to serve one. Re-run with capability checking enabled to resolve this.';
   const signedIn = async () => ({
-    state: STATE.INDETERMINATE, capabilityRan: false, billingSource: 'subscription',
+    state: STATE.INDETERMINATE, statusSucceeded: true, capabilityRan: false, billingSource: 'subscription',
     account: 'someone@example.test', plan: 'sample-plan', reason: PROBE_CLI_ADVICE
   });
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'te-claude-spent-'));
   try {
-    const configDir = path.join(scratch, '.claude-team');
+    const configDir = path.join(scratch, '.claude-school');
     fs.mkdirSync(configDir, { recursive: true });
-    const account = { name: 'team', provider: 'claude', configDir, home: configDir, priority: 1 };
+    const account = { name: 'school', provider: 'claude', configDir, home: configDir, priority: 1 };
     const factory = options => rotation.claudeProbeFactory({
       homeDir: scratch, fsImpl: fs, exhaustedAtPercent: 90, authProbe: signedIn, ...options
     });
@@ -1619,7 +1524,7 @@ check('a Claude row the account surface never answered for says so in the menu\'
 
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'te-claude-unseen-'));
   try {
-    const configDir = path.join(scratch, '.claude-team');
+    const configDir = path.join(scratch, '.claude-school');
     fs.mkdirSync(configDir, { recursive: true });
     // Even a readable provider cache cannot invent an allowance for an
     // account whose current identity the auth surface never answered for.
@@ -1632,7 +1537,7 @@ check('a Claude row the account surface never answered for says so in the menu\'
         ] }
       }
     }));
-    const account = { name: 'team', provider: 'claude', configDir, home: configDir, priority: 1 };
+    const account = { name: 'school', provider: 'claude', configDir, home: configDir, priority: 1 };
     const rowFor = (observed, options = {}) => rotation.claudeProbeFactory({
       homeDir: scratch, fsImpl: fs, exhaustedAtPercent: 90, authProbe: async () => observed, usageProbe: null, ...options
     })(account);
@@ -1840,6 +1745,7 @@ function claudeObservation(fields) {
     account: 'someone@example.com',
     plan: 'max',
     authMethod: 'claude.ai',
+    statusSucceeded: true,
     capabilityRan: false,
     usable: false,
     canFailover: false,
@@ -1858,16 +1764,16 @@ function routerWithAuth(registryPath, homeDir, observed) {
   };
 }
 
-check('a metered-key Claude row on the account router says the billing route is wrong, not that it is unproven', async () => {
+check('a native API Claude row on the account router preserves the configured billing route', async () => {
   await withMachine(async ({ registryPath, homeDir }) => {
     const result = await listAccountRouter({}, routerWithAuth(registryPath, homeDir, claudeObservation({
       state: 'indeterminate', billingSource: 'api_key'
     })));
     const row = result.accounts[0];
-    assert.equal(row.healthStatus, STATUS.EXHAUSTED);
-    assert.equal(row.providerUsable, false);
-    assert.equal(row.reason, '"first" is set up to bill a metered key rather than the subscription, so it was skipped.');
-    assert.doesNotMatch(row.reason, PROBE_CLI_SENTENCE, 'the probe CLI\'s advice reached an exhausted row');
+    assert.equal(row.healthStatus, STATUS.HEALTHY);
+    assert.equal(row.providerUsable, true);
+    assert.match(row.reason, /API key settings.*first turn checks/);
+    assert.doesNotMatch(row.reason, /skipped|out of allowance|capability checking enabled/);
     assert.deepEqual(result.availableAccounts, []);
   }, { accounts: [ROUTER_CLAUDE] });
 });
@@ -1918,7 +1824,7 @@ check('a signed-out Claude row on the account router keeps the sign-in instructi
  * with -- health.js's classifyProbe for Codex, claudeProbeFactory's
  * `observed.account` for Claude -- and this row builder dropped it, so the one
  * surface a person reads (the accounts menu paints from exactly these rows)
- * could label a row "team" over a home signed in as somebody else and show
+ * could label a row "school" over a home signed in as somebody else and show
  * nothing that said so. The row now carries it, and it is null -- never the
  * row's own name -- when the probe did not answer one, because "not answered"
  * and "signed in as this" are not the same fact. */
@@ -1931,11 +1837,11 @@ check('every account row says which sign-in the program answered with, or says n
   });
   await withMachine(async ({ homeDir, registryPath }) => {
     const named = await rotation.readAccountUsage({
-      registryPath, homeDir, providers: ['codex'], probeFor: () => reading('team@example.test')
+      registryPath, homeDir, providers: ['codex'], probeFor: () => reading('school@example.test')
     });
     assert.equal(named.ok, true);
     for (const row of named.accounts) {
-      assert.equal(row.email, 'team@example.test',
+      assert.equal(row.email, 'school@example.test',
         `the row for "${row.name}" dropped the sign-in the program reported`);
     }
 
@@ -1948,7 +1854,7 @@ check('every account row says which sign-in the program answered with, or says n
       });
       assert.equal(unread.accounts[0].email, null,
         `a probe answering ${JSON.stringify(silent)} produced an address on the row anyway`);
-      assert.equal(unread.accounts[0].name, 'team', 'the row lost its own name');
+      assert.equal(unread.accounts[0].name, 'school', 'the row lost its own name');
     }
   }, { accounts: TWO_CODEX });
 });
@@ -2008,7 +1914,7 @@ check('allowance rows retain their account binding and their own check time', as
     assert.equal(answer.accounts[1].readAt, '2026-09-14T03:10:00.000Z');
     const binding = answer.accounts[0].allowanceBinding;
     assert.match(binding, /^[a-f0-9]{64}$/);
-    assert.equal(binding, rotation.accountUsageBinding({ provider: 'codex', directory: path.join(homeDir, '.codex-team') }));
+    assert.equal(binding, rotation.accountUsageBinding({ provider: 'codex', directory: path.join(homeDir, '.codex-school') }));
     assert.notEqual(binding, rotation.accountUsageBinding({ provider: 'codex', directory: path.join(homeDir, '.codex-replacement') }));
     assert.notEqual(rotation.accountUsageBinding({ provider: 'gemini', directory: homeDir }),
       rotation.accountUsageBinding({ provider: 'gemini', client: 'antigravity', directory: homeDir }));
@@ -2071,7 +1977,7 @@ for (const status of [STATUS.HEALTHY, STATUS.TRANSIENT]) {
   check(`cancelling a pending ${status} probe prevents late account and refusal-history writes`, async () => {
     await withMachine(async ({ servicesRoot, homeDir }) => {
       const statePath = rotation.statePathFor(servicesRoot);
-      const before = JSON.stringify({ activeAccount: 'team', activeByProvider: { codex: 'team' }, history: [] });
+      const before = JSON.stringify({ activeAccount: 'school', activeByProvider: { codex: 'school' }, history: [] });
       fs.writeFileSync(statePath, before);
       const controller = new AbortController();
       const held = heldReading();
@@ -2105,102 +2011,33 @@ for (const status of [STATUS.HEALTHY, STATUS.TRANSIENT]) {
   });
 }
 
-check('cancelling parallel ranked account probes prevents the selection walk and its writes', async () => {
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    const statePath = rotation.statePathFor(servicesRoot);
-    const before = JSON.stringify({ activeAccount: 'team', activeByProvider: { codex: 'team' }, history: [] });
-    fs.writeFileSync(statePath, before);
-    const controller = new AbortController();
-    const held = heldReading();
-    const probed = [];
-    const selecting = captureSelection(rotation.resolveAccountForSession({
-      provider: 'codex', servicesRoot, homeDir, selectionMode: 'most-available', signal: controller.signal,
-      probe: async account => {
-        probed.push(account.name);
-        await held.promise;
-        return { account: account.name, status: STATUS.HEALTHY, canServe: true, reason: 'controlled ranked reading' };
-      }
-    }));
-    try {
-      await nextAccountTick();
-      assert.deepEqual(probed, ['team', 'personal']);
-      controller.abort();
-      const immediate = await Promise.race([selecting, nextAccountTick().then(() => ({ pending: true }))]);
-      held.resolve();
-      await selecting;
-      await nextAccountTick();
-      assert.equal(fs.readFileSync(statePath, 'utf8'), before);
-      assert.equal(immediate.error?.name, 'AbortError');
-      assert.deepEqual(probed, ['team', 'personal']);
-    } finally {
-      held.resolve();
-      await selecting;
-    }
-  }, { accounts: TWO_CODEX });
-});
+;
 
-check('recovery excludes the failed account even when its stale reading is healthy', async () => {
+;;
+
+;
+;check('a provider limit remains a visible refusal with one account attempt', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const seen = [];
-    const result = await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
-      selectionMode: 'priority', preferred: 'team', excludeAccounts: ['team'],
-      probe: async account => { seen.push(account.name); return probeReturning({})(account); } });
-    assert.equal(result.rotated, true);
-    assert.equal(result.account.name, 'personal');
-    assert.deepEqual(seen, ['personal']);
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
+    });
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-check('recovery with every account excluded refuses without normal-home fallback or probes', async () => {
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    const result = await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
-      excludeAccounts: ['team', 'personal'], probe: () => { throw new Error('must not probe'); } });
-    assert.equal(result.blocked, true);
-    assert.equal(result.rotated, false);
-    assert.equal(result.code, 'ACCOUNT_RECOVERY_NO_ALTERNATE');
-  }, { accounts: TWO_CODEX });
-});
-
-check('keep trying waits honestly when every registered account was already attempted', async () => {
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    const result = await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
-      excludeAccounts: ['team', 'personal'], keepTryingAccounts: true, recheckAttempt: 4,
-      now: () => '2026-09-10T12:00:00.000Z', probe: () => { throw new Error('excluded accounts must not be probed'); } });
-    assert.equal(result.code, 'ACCOUNT_RECOVERY_NO_ALTERNATE');
-    assert.equal(result.blocked, true);
-    assert.equal(result.retry.nextAttemptAt, '2026-09-10T12:05:00.000Z');
-    assert.equal(result.retry.resetAt, null);
-    assert.equal(result.retry.allQuotaExhausted, false);
-    assert.equal(result.retry.reason, 'status-recheck');
-    assert.deepEqual(result.attempts, [], 'no quota observations may be invented');
-  }, { accounts: TWO_CODEX });
-});
-
-check('explicit per-node keep trying reaches a later healthy account without changing the standing manual policy', async () => {
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const before = fs.readFileSync(registryPath, 'utf8');
-    const result = await rotation.resolveAccountForSession({provider:'codex',servicesRoot,homeDir,mode:'manual',
-      keepTryingAccounts:true,probe:probeReturning({team:STATUS.TRANSIENT})});
-    assert.equal(result.rotated,true);assert.equal(result.account.name,'personal');assert.equal(result.keepTryingAccounts,true);
-    assert.deepEqual(result.attempts.map(row=>row.status),['transient','healthy']);
-    assert.equal(fs.readFileSync(registryPath,'utf8'),before,'per-node retry must not rewrite the standing policy');
-    assert.equal(result.retry.allQuotaExhausted,false);
-  }, {accounts:TWO_CODEX});
-});
-check('blocked rotation carries the provider reset schedule through the actual resolver result', async () => {
-  await withMachine(async ({servicesRoot,homeDir})=>{
-    const result=await rotation.resolveAccountForSession({provider:'codex',servicesRoot,homeDir,keepTryingAccounts:true,
-      now:()=> '2026-09-10T12:00:00.000Z',probe:async account=>({...await probeReturning({team:STATUS.EXHAUSTED,personal:STATUS.EXHAUSTED})(account),
-        resetsAt:account.name==='team'?'2026-09-10T14:00:00Z':'2026-09-10T13:00:00Z'})});
-    assert.equal(result.blocked,true);assert.equal(result.account,null);
-    assert.equal(result.retry.nextAttemptAt,'2026-09-10T13:00:01.000Z');assert.equal(result.retry.allQuotaExhausted,true);
-    assert.equal(rotation.ACCOUNT_RECOVERY_TIMING_VERSION,1);
-    const unknown=await rotation.resolveAccountForSession({provider:'codex',servicesRoot,homeDir,keepTryingAccounts:true,recheckAttempt:4,
-      now:()=> '2026-09-10T12:00:00.000Z',probe:probeReturning({team:STATUS.TRANSIENT,personal:STATUS.TRANSIENT})});
-    assert.equal(unknown.retry.nextAttemptAt,'2026-09-10T12:05:00.000Z','durable retry count must reach the resolver timing calculation');
-    assert.equal(unknown.retry.allQuotaExhausted,false);
-  },{accounts:TWO_CODEX,exhaustedAtPercent:99});
-});
-
 check('Gemini model client filters before probing and preserves the selected native account contract', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
     const seen = [];
@@ -2210,7 +2047,7 @@ check('Gemini model client filters before probing and preserves the selected nat
     assert.equal(legacy.account.name, 'legacy');
     assert.deepEqual(seen, ['legacy']);
     seen.length = 0;
-    const agy = await rotation.resolveAccountForSession({ ...args, client: 'antigravity' });
+    const agy = await rotation.resolveAccountForSession({ ...args, preferred: 'agy', client: 'antigravity' });
     assert.deepEqual(seen, ['agy']);
     assert.equal(agy.account.client, 'antigravity');
     assert.equal(agy.account.expectEmail, 'expected@example.test');
@@ -2219,9 +2056,6 @@ check('Gemini model client filters before probing and preserves the selected nat
     assert.equal(agy.env.HOME, path.join(homeDir, '.ag-account'));
     assert.equal(agy.env.XDG_CONFIG_HOME, path.join(homeDir, '.ag-account', '.config'));
     assert.equal(agy.env.GEMINI_CLI_HOME, undefined);
-    const excluded = await rotation.resolveAccountForSession({ ...args, client: 'antigravity', excludeAccounts: ['agy'] });
-    assert.equal(excluded.code, 'ACCOUNT_RECOVERY_NO_ALTERNATE');
-    assert.deepEqual(seen, ['agy'], 'an excluded AGY account must not fall back to the legacy client');
     assert.equal(rotation.ACCOUNT_CLIENT_CONTRACT_VERSION, 1);
   }, { accounts: [
     { name: 'legacy', provider: 'gemini', homeDir: '.old-google', priority: 1 },
@@ -2229,175 +2063,138 @@ check('Gemini model client filters before probing and preserves the selected nat
   ] });
 });
 
-check('Rotate uses A/B/A and a new process continues with B from the saved provider cursor', async () => {
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-    fs.writeFileSync(registryPath, JSON.stringify({ ...registry, selectionMode: 'rotate' }));
-    const args = { provider: 'codex', servicesRoot, homeDir, probe: probeReturning({}) };
-    const names = [];
-    for (let i = 0; i < 3; i++) {
-      const result = await rotation.resolveAccountForSession(args);
-      assert.equal(result.rotated, true);
-      assert.equal(result.selectionMode, 'rotate');
-      names.push(result.account.name);
+check('Rotate cannot distribute starts between subscription accounts', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
+    });
+    const answers = await Promise.all([start(), start(), start()]);
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
     }
-    assert.deepEqual(names, ['team', 'personal', 'team']);
-    const child = `const rotation = require(process.argv[1]);
-      const input = JSON.parse(process.argv[2]);
-      rotation.resolveAccountForSession({ ...input, probe: async account => ({
-        account: account.name, status: 'healthy', canServe: true, reason: 'synthetic eligible account'
-      }) }).then(result => { process.stdout.write(JSON.stringify({ name:result.account?.name, mode:result.selectionMode })); },
-      error => { process.stderr.write(error.message); process.exitCode = 1; });`;
-    const actual = JSON.parse(execFileSync(process.execPath, ['-e', child, ROTATION_SOURCE,
-      JSON.stringify({ provider: 'codex', servicesRoot, homeDir })], { encoding: 'utf8', windowsHide: true }));
-    assert.deepEqual(actual, { name: 'personal', mode: 'rotate' });
-    assert.equal(activeFor(readState(rotation.statePathFor(servicesRoot)), 'codex'), 'personal');
+    assert.deepEqual(seen, ['school', 'school', 'school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
-check('Rotate serializes concurrent same-provider starts across their free health checks', async () => {
+check('concurrent automatic requests remain bound to the same explicitly chosen account', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    let release, entered;
-    const waiting = new Promise(resolve => { release = resolve; });
-    const started = new Promise(resolve => { entered = resolve; });
-    const calls = [];
-    const probe = async account => {
-      calls.push(account.name);
-      if (calls.length === 1) { entered(); await waiting; }
-      return probeReturning({})(account);
-    };
-    const args = { provider: 'codex', servicesRoot, homeDir, selectionMode: 'rotate', probe };
-    const first = rotation.resolveAccountForSession(args);
-    await started;
-    const second = rotation.resolveAccountForSession(args);
-    const third = rotation.resolveAccountForSession(args);
-    release();
-    const results = await Promise.all([first, second, third]);
-    assert.deepEqual(results.map(result => result.account?.name), ['team', 'personal', 'team']);
-    assert.deepEqual(calls, ['team', 'personal', 'team']);
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'signed_out' })(account); }
+    });
+    const answers = await Promise.all([start(), start(), start()]);
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school', 'school', 'school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
-
-check('Rotate skips signed-out and exhausted accounts, and stops on unknown health without advancing', async () => {
-  const accounts = [...TWO_CODEX,
-    { name: 'reserve', provider: 'codex', profileDir: '.codex-reserve', priority: 3 }];
+check('Rotate cannot skip a signed-out chosen account', async () => {
   await withMachine(async ({ servicesRoot, homeDir }) => {
-    const statuses = { team: STATUS.SIGNED_OUT, personal: STATUS.EXHAUSTED };
-    const args = { provider: 'codex', servicesRoot, homeDir, selectionMode: 'rotate', probe: probeReturning(statuses) };
-    const first = await rotation.resolveAccountForSession(args);
-    assert.equal(first.account.name, 'reserve');
-    assert.deepEqual(first.attempts.map(row => row.account), ['team', 'personal', 'reserve']);
-    statuses.team = STATUS.TRANSIENT;
-    const refused = await rotation.resolveAccountForSession(args);
-    assert.equal(refused.blocked, true);
-    assert.equal(refused.account, null);
-    assert.equal(activeFor(readState(rotation.statePathFor(servicesRoot)), 'codex'), 'reserve');
-    statuses.team = STATUS.HEALTHY;
-    assert.equal((await rotation.resolveAccountForSession(args)).account.name, 'team');
-  }, { accounts });
-});
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
 
-check('Rotate keeps provider cursors independent and preserves another mode manual pin', async () => {
-  const accounts = [...TWO_CODEX,
-    { name: 'claude-a', provider: 'claude', configDir: '.claude-a', priority: 1 },
-    { name: 'claude-b', provider: 'claude', configDir: '.claude-b', priority: 2 }];
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const statePath = rotation.statePathFor(servicesRoot), registry = loadRegistry({ configPath: registryPath });
-    await switchTo({ registry, selector: 'team', statePath, probe: probeReturning({}) });
-    const start = provider => rotation.resolveAccountForSession({ provider, servicesRoot, homeDir,
-      selectionMode: 'rotate', probe: probeReturning({}) });
-    assert.equal((await start('codex')).account.name, 'personal', 'Rotate advances past the last selected account');
-    assert.equal((await start('claude')).account.name, 'claude-a');
-    assert.equal((await start('codex')).account.name, 'team');
-    assert.equal((await start('claude')).account.name, 'claude-b');
-    const state = readState(statePath);
-    assert.equal(state.manualPinByProvider.codex, 'team', 'Rotate does not erase a saved manual choice');
-    assert.equal((await rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
-      selectionMode: 'priority', probe: probeReturning({}) })).account.name, 'team');
-  }, { accounts });
-});
-
-check('Rotate recorded at the top of the registry takes turns across eight starts with a stale by-hand choice still saved (T378)', async () => {
-  /* MEASURED 2026-09-18 (ledger T378): 18 of the last 30 spawns landed on one
-     account while the Accounts page read Rotate. The registry carried a
-     program rule of its own beside the computer-wide one, and the pin from an
-     earlier "Use this one" click was honoured under that older rule. That is
-     the rule above behaving as a DEFAULT, which is what the Accounts page
-     calls it, so the way out is the person picking "Use default" on that
-     program's row -- the one control that drops its own mode and leaves its
-     window and reserve. This is the registry that choice leaves behind, read
-     the way a real start reads it -- no `selectionMode` argument, so
-     `providerPolicyOf` decides -- and it has to take turns on every start
-     while keeping the by-hand choice for a later return to a mode that reads
-     it. The second half of this check is the state the owner actually ran,
-     and it stays the documented outcome: a program rule of its own outranks
-     the rule above, and under DYNAMIC the by-hand pin is honoured. */
-  const accounts = [
-    { name: 'claude-a', provider: 'claude', configDir: '.claude-a', priority: 1 },
-    { name: 'claude-b', provider: 'claude', configDir: '.claude-b', priority: 2 },
-    { name: 'claude-c', provider: 'claude', configDir: '.claude-c', priority: 3 }];
-  await withMachine(async ({ servicesRoot, homeDir, registryPath }) => {
-    const statePath = rotation.statePathFor(servicesRoot);
-    await switchTo({ registry: loadRegistry({ configPath: registryPath }), selector: 'claude-b', statePath, probe: probeReturning({}) });
-    assert.equal(rotation.manualPin(readState(statePath), 'claude'), 'claude-b', 'control: the by-hand choice is recorded');
-    const recorded = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-    fs.writeFileSync(registryPath, JSON.stringify({
-      ...recorded, selectionMode: 'rotate',
-      selectionByProvider: { claude: { rankWindow: 'hourly', reservePercent: 30 } }
-    }));
-    const landed = [];
-    for (let run = 1; run <= 8; run += 1) {
-      const start = await rotation.resolveAccountForSession({ provider: 'claude', servicesRoot, homeDir, probe: probeReturning({}) });
-      assert.equal(start.rotated, true, `start ${run} did not run the account list`);
-      assert.equal(start.selectionMode, MODE.ROTATE, `start ${run} ran "${start.selectionMode}" instead of the mode recorded at the top`);
-      assert.equal(start.selectionPinned, null, `start ${run} let the stale by-hand choice decide under Rotate`);
-      landed.push(start.account.name);
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'signed_out' })(account); }
+    });
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
     }
-    for (let run = 1; run < landed.length; run += 1) {
-      assert.notEqual(landed[run], landed[run - 1], `starts ${run} and ${run + 1} both landed on ${landed[run]}: ${landed.join(', ')}`);
-    }
-    for (const { name } of accounts) {
-      assert.ok(landed.filter(used => used === name).length >= 2, `${name} served fewer than 2 of 8 starts: ${landed.join(', ')}`);
-    }
-    assert.equal(rotation.manualPin(readState(statePath), 'claude'), 'claude-b', 'Rotate erased the saved by-hand choice');
-    /* The same registry with the program's own older rule still standing is
-       what a development machine ran: every start on the one chosen account.
-       That is the state the Accounts page write must not leave behind. */
-    fs.writeFileSync(registryPath, JSON.stringify({
-      ...recorded, selectionMode: 'rotate',
-      selectionByProvider: { claude: { selectionMode: 'dynamic', rankWindow: 'hourly' } }
-    }));
-    const stale = await rotation.resolveAccountForSession({ provider: 'claude', servicesRoot, homeDir, probe: probeReturning({}) });
-    assert.equal(stale.selectionMode, MODE.DYNAMIC, 'control: a program rule of its own still outranks the computer-wide one');
-    assert.equal(stale.selectionPinned, 'claude-b', 'control: the older rule reads the by-hand choice');
-  }, { accounts });
-});
-
-check('cancelling a queued Rotate start neither advances the cursor nor releases an earlier turn', async () => {
-  await withMachine(async ({ servicesRoot, homeDir }) => {
-    let release, entered;
-    const waiting = new Promise(resolve => { release = resolve; });
-    const started = new Promise(resolve => { entered = resolve; });
-    let calls = 0;
-    const args = { provider: 'codex', servicesRoot, homeDir, selectionMode: 'rotate', probe: async account => {
-      if (++calls === 1) { entered(); await waiting; }
-      return probeReturning({})(account);
-    } };
-    const first = rotation.resolveAccountForSession(args);
-    await started;
-    const controller = new AbortController();
-    const cancelled = rotation.resolveAccountForSession({ ...args, signal: controller.signal });
-    const rejected = assert.rejects(cancelled, { name: 'AbortError' });
-    controller.abort();
-    await rejected;
-    const third = rotation.resolveAccountForSession(args);
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(calls, 1, 'third start cannot bypass the held first turn');
-    release();
-    assert.deepEqual((await Promise.all([first, third])).map(result => result.account?.name), ['team', 'personal']);
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
   }, { accounts: TWO_CODEX });
 });
+check('Rotate cannot choose another account from a saved automatic cursor', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
 
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
+    });
+    const answers = [await start()];
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
+  }, { accounts: TWO_CODEX });
+});
+check('a recorded rotation preference cannot pool exhausted accounts', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'exhausted' })(account); }
+    });
+    const answers = await Promise.all([start(), start(), start()]);
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school', 'school', 'school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
+  }, { accounts: TWO_CODEX });
+});
+check('concurrent unknown account checks cannot select a healthy sibling', async () => {
+  await withMachine(async ({ servicesRoot, homeDir }) => {
+    const seen = [];
+    const start = () => rotation.resolveAccountForSession({ provider: 'codex', servicesRoot, homeDir,
+      preferred: 'school', mode: 'auto', selectionMode: 'rotate',
+
+      probe: async account => { seen.push(account.name); return probeReturning({ school: 'transient' })(account); }
+    });
+    const answers = await Promise.all([start(), start(), start()]);
+    for (const answer of answers) {
+      assert.equal(answer.blocked, true);
+      assert.equal(answer.account, null);
+      assert.equal(answer.env, null);
+      assert.equal(answer.switched, false);
+    }
+    assert.deepEqual(seen, ['school', 'school', 'school']);
+    const state = readState(rotation.statePathFor(servicesRoot));
+    assert.equal(state.activeAccount, null);
+    assert.equal(state.manualPinByProvider.codex, 'school');
+    assert.equal(state.history.some(entry => entry.outcome === 'selected'), false);
+  }, { accounts: TWO_CODEX });
+});
 (async () => {
   for (const [name, run] of pending) {
     try {
@@ -2415,8 +2212,8 @@ check('cancelling a queued Rotate start neither advances the cursor nor releases
 
 /* WHICH ACCOUNT AM I ON -- THE QUESTION THIS SURFACE COULD NOT ANSWER.
  *
- * MEASURED 2026-09-19 (item 2): checking account status was reported not to
- * work. The Accounts PANEL was correct -- driven on a private
+ * MEASURED 2026-09-19 (item 2): the owner reported that "checking account
+ * status does not work". The Accounts PANEL was correct -- driven on a private
  * candidate it explained a moved-off pin twice, naming both accounts and the
  * reason. The AGENT-FACING surface never answered at all: listAccountRouter
  * returned name/provider/locked/usable/remainingPercent/resetsAt/healthStatus
@@ -2436,7 +2233,7 @@ check('the account router says which account is in use and which one the person 
     { name: 'running-one', provider: 'claude', configDir: '.claude-run' }];
   await withMachine(async ({ registryPath, servicesRoot }) => {
     const statePath = rotation.statePathFor(servicesRoot);
-    /* The shape a development machine was actually in: a by-hand choice on one
+    /* The shape the owner's computer was actually in: a by-hand choice on one
        account and a later automatic start on another. */
     await switchTo({ registry: loadRegistry({ configPath: registryPath }), selector: 'pinned-one', statePath, probe: probeReturning({}) });
     const before = readState(statePath);

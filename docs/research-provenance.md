@@ -117,13 +117,15 @@ executable itself is listed. A hash of an environment is not a cleanroom
 certificate. File checks are not an operating-system sandbox or protection
 against an adversarial process that can race path replacement on the same host.
 
-For a future LEAN-bench adapter, the public repository protocol requires
-frozen prompts, a pinned LEAN engine and hash-verified oracle bank,
+For a future LEAN-bench adapter, the public
+[repository protocol](https://github.com/fixture-account/LEAN-bench/blob/main/README.md)
+requires frozen prompts, a pinned LEAN engine and hash-verified oracle bank,
 deterministic execution grading, and an instruction-bare environment with
 calibrated same-day canaries around each batch. Generic file pins can bind
 reviewed prompts, scripts, and manifest files, but do not inspect transitive
-manifest entries or assert any of those other requirements. The benchmark's
-cleanroom record describes its calibration evidence. A supported benchmark adapter still needs
+manifest entries or assert any of those other requirements. The
+[cleanroom record](https://github.com/fixture-account/LEAN-bench/tree/main/cleanroom)
+describes its calibration evidence. A supported benchmark adapter still needs
 actual environment isolation and measurement, batch/canary enforcement,
 container/oracle verification, deterministic grader integration, and explicit
 binding of each observation to those artifacts. No LEAN-bench execution or

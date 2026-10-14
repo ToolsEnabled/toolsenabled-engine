@@ -301,9 +301,9 @@ check('appendArchiveEvent still appends normally when the row is genuinely new (
 // A FIXED LOOKBEHIND WINDOW SIZED FOR "SMALL" LINES UNDERCOUNTS A REAL
 // BATCH OF LARGE EVENTS.
 //
-// MEASURED on a live archive: 108,650,376 bytes over
+// MEASURED on the live archive (Controller 4): 108,650,376 bytes over
 // 82,807 lines = ~1,312 bytes/line average -- a fixed 2 MiB window (this
-// lane's first amendment) reaches back only ~1,600 lines,
+// lane's first amendment, commit 06041022) reaches back only ~1,600 lines,
 // short of the 2000-row ceiling it was meant to cover, and every line
 // embeds the full eventJson, bounded by MAX_EVENT_BYTES (audit-store.js),
 // not "small". This check builds a batch of events near that real ceiling
@@ -368,7 +368,8 @@ check('a retried batch whose events sit near MAX_EVENT_BYTES is still found with
 
 // END TO END, NOT JUST THE UNIT UNDER TEST.
 //
-// An independent trace of this lane found that every check above calls
+// Worker 10's independent trace of this lane (W4\REPORT-archive-guard-
+// second-reader-20260907.md) found that every check above calls
 // appendArchiveEvent() directly against a synthetic archive and never
 // exercises the real chain: AUDIT_ARCHIVE_BEHIND is thrown inside
 // rollOldestEventOut()'s persist callback, before the SQL DELETE, and
@@ -380,7 +381,7 @@ check('a retried batch whose events sit near MAX_EVENT_BYTES is still found with
 // -- one seeds a genuine archive by actually rolling, a second, completely
 // independent store (the "DB was reset" case) is pointed at that same
 // archive file and made to roll into it -- rather than asserting the
-// propagation would happen; RED is not expected here (an earlier fix already
+// propagation would happen; RED is not expected here (06041022 already
 // gets this right structurally), the point is coverage of the path the
 // unit checks above cannot reach.
 check('a fresh store sharing an old archive file refuses end to end -- record() itself fails closed, nothing commits, the shared archive is untouched', () => {

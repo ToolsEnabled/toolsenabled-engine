@@ -67,6 +67,20 @@ async function check(label, fn) {
 }
 
 (async () => {
+  await check('stderr preserves UTF-8 characters split across pipe reads', async () => {
+    const child = fakeChild((message, target) => {
+      if (message.method === 'initialize' || message.method === 'shutdown') queueMicrotask(() => target.reply({ id: message.id, result: message.method === 'initialize' ? { capabilities: {} } : null }));
+      if (message.method === 'exit') queueMicrotask(() => target.exit(0));
+    });
+    const session = new LspSession(sessionOptions({ spawnFn: () => child }));
+    await session.start();
+    const expected = 'café 界 😀';
+    for (const byte of Buffer.from(expected)) child.stderr.emit('data', Buffer.from([byte]));
+    child.stderr.emit('end');
+    assert.equal(session.stderrTail, expected);
+    await session.stop({ timeoutMs: 20 });
+  });
+
   await check('input validation refuses before spawning', async () => {
     let spawnCalls = 0;
     const spawnFn = () => { spawnCalls += 1; };

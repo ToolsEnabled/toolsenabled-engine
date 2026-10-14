@@ -51,12 +51,18 @@ const USER_CODE_PATTERN = /\b([A-Z0-9]{4}-[A-Z0-9]{4})\b/;
 const VERIFICATION_URL_PATTERN = /\bhttps?:\/\/[^\s"'<>)]+/;
 
 function runCommand(command, args, options, runner) {
-  const result = runner(command, args, {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 120_000,
-    ...options
-  });
+  let result;
+  try {
+    result = runner(command, args, {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 120_000,
+      ...options
+    });
+  } catch {
+    result = { error: { code: 'COMMAND_FAILED' } };
+  }
+  if (!result || typeof result !== 'object') result = { error: { code: 'COMMAND_FAILED' } };
   if (result.error) {
     return {
       available: false,
@@ -64,7 +70,8 @@ function runCommand(command, args, options, runner) {
       status: null,
       stdout: '',
       stderr: '',
-      reason: result.error.code || result.error.message
+      reason: ['ENOENT', 'EACCES', 'EPERM', 'ETIMEDOUT'].includes(result.error.code)
+        ? result.error.code : 'COMMAND_FAILED'
     };
   }
   return {
@@ -105,11 +112,15 @@ function refuseFailedProbe(result, operation) {
  */
 function probeProvider(provider, { runner = spawnSync, env = process.env } = {}) {
   if (!PROVIDERS.includes(provider)) {
-    throw new SetupRefusal('SETUP_PROVIDER_UNKNOWN', `${provider} is not a provider this setup knows about.`, { provider });
+    throw new SetupRefusal('SETUP_PROVIDER_UNKNOWN', 'That provider is not supported by setup.');
   }
   if (provider === 'claude') {
     const present = runCommand('claude', ['--version'], { env }, runner);
     refuseFailedProbe(present, 'whether the Claude assistant program is installed');
+    if (present.missing) {
+      return Object.freeze({ provider, installed: false, signedIn: false,
+        detail: 'the assistant program is not on this computer yet' });
+    }
     const configuredKey = typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.trim() !== '';
     return Object.freeze({
       provider,
@@ -137,8 +148,11 @@ function probeProvider(provider, { runner = spawnSync, env = process.env } = {})
 }
 
 function providersForTier(tier) {
+  if (typeof tier !== 'string' || !Object.hasOwn(TIER_PROVIDERS, tier)) {
+    throw new SetupRefusal('SETUP_TIER_UNKNOWN', 'That tier is not supported by setup.');
+  }
   const allowed = TIER_PROVIDERS[tier];
-  if (!allowed) throw new SetupRefusal('SETUP_TIER_UNKNOWN', `${tier} is not a tier this setup knows about.`, { tier });
+  if (!allowed) throw new SetupRefusal('SETUP_TIER_UNKNOWN', 'That tier is not supported by setup.');
   return allowed;
 }
 
@@ -232,8 +246,11 @@ function storeClaudeApiKey(candidate, { setSecret = null } = {}) {
   if (!shape.ok) throw new SetupRefusal(shape.code, shape.message);
   // Required lazily: loading the runtime opens the vault, which a caller only
   // doing shape validation has no reason to touch.
-  const writer = typeof setSecret === 'function' ? setSecret : require('../runtime').setSecret;
-  writer(CLAUDE_API_KEY_VAULT_KEY, candidate.trim());
+  try {
+    const writer = typeof setSecret === 'function' ? setSecret : require('../runtime').setSecret;
+    writer(CLAUDE_API_KEY_VAULT_KEY, candidate.trim());
+  }
+  catch { throw new SetupRefusal('SETUP_CLAUDE_KEY_STORE_FAILED', 'The key could not be stored. Try saving it again.'); }
   return Object.freeze({ stored: true, vaultKey: CLAUDE_API_KEY_VAULT_KEY });
 }
 

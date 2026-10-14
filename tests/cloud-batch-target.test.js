@@ -93,7 +93,7 @@ function declaration(overrides = {}) {
     batchId: 'wave-1',
     project: 'engine',
     tasks: [task(0), task(1), task(2)],
-    bounds: { launchesPerMinute: 60, accounts: 2 },
+    bounds: { launchesPerMinute: 60 },
     ...overrides
   };
 }
@@ -126,7 +126,7 @@ const FRESH_MIRROR = { checkMirrorFreshness: async () => ({ fresh: true }) };
     const error = await raises('CLOUD_BATCH_REFUSED',
       () => target.admitBatch(declaration({
         tasks: [task(0, 'src/same.js'), task(1, 'src/same.js'), { target: 'src/x.js' }],
-        bounds: { launchesPerMinute: 5000, accounts: 1 }
+        bounds: { launchesPerMinute: 5000 }
       }), { mirrorApi: FRESH_MIRROR }),
       'admission: a declaration with several faults is refused');
     check(error.details && error.details.findings.length >= 3,
@@ -216,9 +216,9 @@ const FRESH_MIRROR = { checkMirrorFreshness: async () => ({ fresh: true }) };
   // -------------------------------------------------------------------
   // A stale mirror refuses the whole batch at admission.
   //
-  // This is the measured one: the app's cloud branch sat hundreds of commits
-  // behind local HEAD and its harvests came back useless, while the engine's,
-  // only a few behind, came back clean.
+  // This is the measured one: the app's cloud branch sat 467 commits behind
+  // local HEAD and its harvests came back useless, while the engine's, 5
+  // behind, came back clean.
   // -------------------------------------------------------------------
   {
     const stale = { checkMirrorFreshness: async () => ({ fresh: false }) };
@@ -283,9 +283,9 @@ const FRESH_MIRROR = { checkMirrorFreshness: async () => ({ fresh: true }) };
   // mirror.
   //
   // MEASURED, and it is why this gate is per-task rather than per-batch: engine
-  // harvests were CLEAN a few commits behind the published branch and USELESS
-  // hundreds behind. The distance is not what decides it. Whether this task's own file
-  // moved is. Of a 150-task engine corpus measured against a handful of unpublished
+  // harvests were CLEAN at 5 commits behind the published branch and USELESS at
+  // 467. The distance is not what decides it. Whether this task's own file
+  // moved is. Of a 150-task engine corpus measured against 11 unpublished
   // commits, 119 targets had not moved and 31 had.
   // -------------------------------------------------------------------
   const COMMIT = 'a'.repeat(40);
@@ -530,37 +530,37 @@ const FRESH_MIRROR = { checkMirrorFreshness: async () => ({ fresh: true }) };
       'provider: a declaration without one parses with provider null -- nothing that admitted yesterday refuses today');
 
     const full = target.parseBatchTarget(declaration({
-      provider: { environments: { 'cloud-b': 'b'.repeat(32), 'cloud-a': 'a'.repeat(32) }, concurrency: 10 }
+      provider: { account: 'cloud-a', environment: 'a'.repeat(32), concurrency: 10 }
     }));
     check(full.provider.branch === 'main', 'provider: branch defaults to main rather than to a guess');
     check(full.provider.concurrency === 10, 'provider: declared concurrency is carried');
-    check(Object.keys(full.provider.environments).join(',') === 'cloud-a,cloud-b',
-      'provider: environments are canonically ordered, so the seal is over meaning and not key order');
-    check(Object.isFrozen(full.provider) && Object.isFrozen(full.provider.environments),
+    check(full.provider.account === 'cloud-a' && full.provider.environment === 'a'.repeat(32),
+      'provider: the selected account and its environment are carried in the sealed provider block');
+    check(Object.isFrozen(full.provider),
       'provider: the parsed block is frozen -- specified once, then out of reach');
 
     await raises('CLOUD_BATCH_MALFORMED',
-      () => target.parseBatchTarget(declaration({ provider: { environments: { a: 'a'.repeat(32), b: 'b'.repeat(32) }, repository: 'x' } })),
+      () => target.parseBatchTarget(declaration({ provider: { account: 'a', environment: 'a'.repeat(32), repository: 'x' } })),
       'provider: an unknown field is refused rather than accepted-and-ignored');
     await raises('CLOUD_BATCH_MALFORMED',
-      () => target.parseBatchTarget(declaration({ provider: { environments: { a: 'not-hex' } } })),
+      () => target.parseBatchTarget(declaration({ provider: { account: 'a', environment: 'not-hex' } })),
       'provider: an environment id that is not 32 hex characters is refused by name');
     await raises('CLOUD_BATCH_MALFORMED',
-      () => target.parseBatchTarget(declaration({ provider: { environments: { only: 'c'.repeat(32) } } })),
-      'provider: an account roster that disagrees with bounds.accounts is refused while the coordinator is still steering');
+      () => target.parseBatchTarget(declaration({ provider: { account: '', environment: 'c'.repeat(32) } })),
+      'provider: a missing selected account is refused while the coordinator is still steering');
 
     const sealedWith = await target.admitBatch(declaration({
-      provider: { environments: { a: 'a'.repeat(32), b: 'b'.repeat(32) } }
+      provider: { account: 'a', environment: 'a'.repeat(32) }
     }), { mirrorApi: FRESH_MIRROR });
     await raises('CLOUD_BATCH_SEAL_BROKEN',
       () => target.assertSealIntact(sealedWith, declaration({
-        provider: { environments: { a: 'a'.repeat(32), b: 'd'.repeat(32) } }
+        provider: { account: 'a', environment: 'd'.repeat(32) }
       })),
       'provider: repointing an environment after admission breaks the seal -- the destination is exactly what the seal exists to pin');
   }
 
   try { fs.rmSync(TEMP, { recursive: true, force: true }); } catch { /* best effort */ }
-  console.log(`cloud-batch tests passed (${checks} checks: admission returning ALL findings with actionable reasons, collision refused case-insensitively, a stale mirror and an UNCHECKABLE mirror refused differently, gates ordered so a malformed declaration costs no round trip, the seal surviving key reorder and catching a post-admission edit, an intent with no outcome held as UNRESOLVED rather than failed, a resume refusing until those are reconciled, a kill mid-write losing only its final line, an absent or unwritable journal refusing rather than reading as empty, and THE DRIFT GATE: only the moved target named, unmoved targets admitted against a behind-but-published branch, a batch that can vouch for nothing refused, could-not-look separated from did-not-move, the two modes exclusive, and the declared source covered by the seal, plus THE PROVIDER BLOCK: absent meaning the old contract, defaults and canonical order, unknown fields and bad ids and a roster disagreeing with bounds.accounts refused by name, and a repointed environment breaking the seal).`);
+  console.log(`cloud-batch tests passed (${checks} checks: admission returning ALL findings with actionable reasons, collision refused case-insensitively, a stale mirror and an UNCHECKABLE mirror refused differently, gates ordered so a malformed declaration costs no round trip, the seal surviving key reorder and catching a post-admission edit, an intent with no outcome held as UNRESOLVED rather than failed, a resume refusing until those are reconciled, a kill mid-write losing only its final line, an absent or unwritable journal refusing rather than reading as empty, and THE DRIFT GATE: only the moved target named, unmoved targets admitted against a behind-but-published branch, a batch that can vouch for nothing refused, could-not-look separated from did-not-move, the two modes exclusive, and the declared source covered by the seal, plus THE PROVIDER BLOCK: absent meaning the old contract, defaults and chosen-account coordinates, unknown fields and bad ids and a missing chosen account refused by name, and a repointed environment breaking the seal).`);
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
   process.exitCode = 1;

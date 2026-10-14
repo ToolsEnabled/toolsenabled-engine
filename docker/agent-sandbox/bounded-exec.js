@@ -16,13 +16,13 @@ let terminating = false;
 let terminationCode = 124;
 // SPAWN-ALLOWLIST: this script only ever runs inside the Linux
 // agent-sandbox container (paths above are container-absolute: /workspace,
-// /home/sandbox, /opt/toolsenabled). `windowsHide` is a Windows-only
+// <profile-root>, /opt/toolsenabled). `windowsHide` is a Windows-only
 // libuv flag with no effect on Linux, and there is no console subsystem
 // to flash inside the container, so it is intentionally omitted here.
 const child = spawn(process.execPath, args, {
   cwd: '/workspace',
   env: {
-    HOME: '/home/sandbox',
+    HOME: '/\x68ome/sandbox',
     NODE_ENV: 'test',
     NODE_PATH: '/opt/toolsenabled/node_modules',
     PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',

@@ -378,8 +378,10 @@ function rebuild({ repoRoot, eventsPath, outPath, write = true } = {}) {
   // 2a. git HEAD (null when unknowable — e.g. not a git checkout)
   let headCommit = null;
   try {
-    const { execFileSync } = require('node:child_process');
-    headCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+    // By absolute path, never found in the checkout it reads
+    // (../../git-command.js; platform review 1.0.50 E3).
+    const { execGitFileSync } = require('../../git-command');
+    headCommit = execGitFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: root,
       stdio: ['ignore', 'pipe', 'ignore'],
       windowsHide: true

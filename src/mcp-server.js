@@ -31,6 +31,22 @@ const fileToolContext = require('./lib/file-tool-context');
 // cannot see the difference. Do not "fix" that by touching this line.
 const agentToolSummary = require('./lib/agent-tool-summary');
 const { SchemaValidationError } = require('./lib/schema-validator');
+// PLUGINS COME UP HERE, AND THE LINE ORDER IS LOAD-BEARING.
+//
+// It is ABOVE the tool-registry require below on purpose. An activated plugin's
+// tools reach the registry through src/lib/tool-pack-registry.js, which freezes at
+// module load: register a pack after TOOL_REGISTRY has been built and it throws,
+// because the alternative is a tool that silently does not exist. Moving this line
+// below the next one therefore breaks every plugin, and
+// tests/plugin-activation.test.js asserts the ordering rather than leaving it to a
+// reader to notice. plugin-activation.js also checks require.cache itself and
+// refuses with a sentence naming this file, so the mistake cannot be quiet.
+//
+// It costs nothing on a machine with no plugins: activate() lists the packages
+// directory, finds none, and returns. It never throws out of here for a plugin's
+// own fault -- a broken package is collected into status() and the engine starts.
+const pluginActivation = require('./lib/plugin-activation');
+pluginActivation.activate();
 const {
   UnknownToolError, ToolNotEnabledError, assertToolRegistered, dispatchKindForTool, executeTool, listTools
 } = require('./lib/tool-registry');
@@ -44,11 +60,11 @@ const { statePath } = require('./lib/runtime-state-root');
 
 /* LAST WORDS -- the file this process leaves behind so its death can be read.
  *
- * WHY. Two MCP servers of one circle once left crash dumps and NOTHING ELSE.
- * Working out whether they had died
+ * WHY. On 2026-09-04T04:11:56Z two MCP servers of one circle (pids 20204 and
+ * 11012) left crash dumps and NOTHING ELSE. Working out whether they had died
  * mid-tool-call, run out of heap, or simply been shut down took a full
  * CONTEXT-based stack walk of two minidumps against 338 MB of breakpad symbols
- * (the crash investigation evidence). The answer -- both were exiting cleanly,
+ * (REPORT-crash-20260903/evidence/D). The answer -- both were exiting cleanly,
  * and aborted inside electron::NodeMain()'s teardown when V8's memory-pool
  * release task re-posted onto an already-closed libuv loop -- was three lines of
  * information that this process knew at the time and never wrote down.
@@ -182,7 +198,7 @@ const SUPPORTED_PROTOCOLS = Object.freeze(['2025-11-25', '2025-06-18', '2025-03-
 // Transport-bindable agent principals.  `human` and `coordinator` are
 // deliberately absent and must stay absent.
 //
-// `coordinator` (request R98) carries fleet-wide control authority over
+// `coordinator` (owner ledger R98) carries fleet-wide control authority over
 // every run regardless of submitter.  Binding it here would make it reachable
 // by setting one environment variable -- and the shared, user-scoped Claude MCP
 // entry is inherited by every Claude session on this host, including builder
@@ -351,11 +367,26 @@ function toolError(error) {
    * sentence. This exception must not include terminal provider/security
    * failures merely because those are also non-retryable. The taxonomy block
    * remains unchanged and carries no source message. */
+  /* A RETRYABLE FAILURE WITH A NAME OF ITS OWN (B38). A tree circle whose
+   * agent did not start used to reach the agent as an internal error; it is
+   * retryable now, and the class summary "temporarily unavailable" would be
+   * the wrong story for it too. error-taxonomy.js owns the exact codes and
+   * their fixed sentences. A start failure also carries the application's own
+   * bounded sentence -- the reason it did not start -- redacted like every
+   * other public message here, because "you have hit your weekly limit" and
+   * "try once more" call for different next steps. */
+  const namedRetry = boundedSourceCode === '' ? errorTaxonomy.retryableSourceSentence(error) : null;
+  // publicMessage stands in "Tool execution failed." for a missing message;
+  // only words the application actually sent are worth appending.
+  const sourceSaid = namedRetry?.withSource === true && typeof error?.message === 'string'
+    && error.message.trim() !== '' && typeof details.message === 'string' && details.message !== '';
   const text = boundedSourceCode !== ''
     ? details.message
-    : typed.retryable === false && !protectedTerminal && typeof details.message === 'string' && details.message !== ''
-      ? details.message
-      : typed.safeSummary;
+    : namedRetry
+      ? (sourceSaid ? `${namedRetry.sentence} The application said: ${details.message}` : namedRetry.sentence)
+      : typed.retryable === false && !protectedTerminal && typeof details.message === 'string' && details.message !== ''
+        ? details.message
+        : typed.safeSummary;
   // Some MCP clients show only content, not structuredContent. Keep this
   // deliberately closed: arbitrary provider codes (or diagnostic details)
   // must not become a new text channel. This is an identifier, not authority
@@ -453,15 +484,15 @@ function annotateDoctorDegradation(toolName, output, permissionSession) {
 // THE SESSION-START TOOL NOTE, ACTUALLY DELIVERED.
 //
 // src/lib/agent-tool-summary.js has been writing the note the owner asked for
-// -- a really short standard file that shares exactly what exists -- and
+// -- "a really short standard file that just shares exactly what exists" -- and
 // tests/agent-tool-summary.test.js has been proving it true, budgeted, and
 // switchable. Nothing read it. `grep -rn briefToolSummary src` found only that
 // module and comments in src/lib/capability-recall/*: no product caller, and
 // this handshake returned protocolVersion/capabilities/serverInfo and nothing
 // else. So every agent on every install started with the note unwritten to it,
 // which is indistinguishable, from the agent's side, from the note not
-// existing -- and it is why the first outside user's agents could not use the
-// credential manager or vault and reached for Windows' or Google's store
+// existing -- and it is why the first outside user's agents "weren't able to
+// use credential manager or vault" and reached for Windows' or Google's store
 // instead. `instructions` is the MCP handshake's field for exactly this and has
 // been in InitializeResult since 2024-11-05, the oldest protocol this server
 // speaks, so no client is broken by its arrival.
@@ -947,7 +978,7 @@ function start(options = {}) {
   });
   /* THE MOMENT THE PARENT WENT AWAY, written down.
    *
-   * This is how both servers in that crashed pair actually ended: their client
+   * This is how both servers in the 04:11:56Z pair actually ended: their client
    * closed stdin, readline closed, the loop drained, and the process exited. A
    * reader comparing this timestamp against a crash dump's header time can tell
    * a shutdown that raced teardown from a process killed mid-call. */

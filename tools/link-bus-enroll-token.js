@@ -7,12 +7,13 @@
 // nothing else.
 //
 // WHY THIS EXISTS. The bridge token already exists in an open session on the
-// peer PC. The normal path (a masked local DPAPI form via
+// owner's other physical PC. The normal path (a masked local DPAPI form via
 // system.credential_request) requires an interactive desktop to render a
 // dialog on, which this agent's execution context does not reliably have --
-// the same symptom already seen with a UAC consent prompt. The token must
-// not be retyped or emailed between the two machines. Both machines are
-// owner-controlled hardware connected through the configured private network.
+// the same symptom already seen with a UAC consent prompt. The owner
+// explicitly does not want to retype or email the token between the two
+// machines. Both machines are the owner's own hardware, physically
+// co-located and connected through the configured private network.
 //
 // THE TRADEOFF, STATED PLAINLY. This listens for exactly one POST carrying
 // the raw token value, with NO token-based auth of its own (there is no

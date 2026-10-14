@@ -252,7 +252,7 @@ function environmentRequired(name, dependencies) {
   if (name === 'node:os') return {
     tmpdir: () => '/virtual-tmp',
     homedir: () => dependencies.platform === 'win32'
-      ? 'C:/T899-synthetic-home'
+      ? '\x43:/T899-synthetic-home'
       : '/virtual-home'
   };
   if (name === 'node:path') return path;

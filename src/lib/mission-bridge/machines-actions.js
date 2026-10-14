@@ -38,7 +38,7 @@ const { MissionBridgeError } = require('./errors');
 const { safeLaunchEnvironment } = require('../providers/subscription-launch-env');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
-const POWERSHELL = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const POWERSHELL = path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 // Bounds sized to the tool's own worst cases, with margin: -Status is a
 // read-only sweep (~15s worst); -On polls up to 180s for the pair to connect

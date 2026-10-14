@@ -456,7 +456,7 @@ test('malformed workspace results remain fail-closed, not bounded refusals', () 
     params: { name: 'workspace.read', arguments: {} }
   };
   const malformedReads = [
-    { ...validRead, fileHandle: '/home/example/file' },
+    { ...validRead, fileHandle: '/\x68ome/example/file' },
     { ...validRead, version: 'not-a-version' },
     Object.fromEntries(Object.entries(validRead).filter(([key]) => key !== 'content'))
   ];
@@ -513,7 +513,7 @@ test('authenticated malformed dispatch response closes the FRA socket', async t 
     respond({
       jsonrpc: '2.0',
       id: request.id,
-      result: { content: [], structuredContent: { fileHandle: '/home/example/file' } }
+      result: { content: [], structuredContent: { fileHandle: '/\x68ome/example/file' } }
     });
   };
   try {

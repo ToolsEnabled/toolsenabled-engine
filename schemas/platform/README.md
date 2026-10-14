@@ -12,8 +12,8 @@ node tools/generate-platform-contracts.js
 node tools/generate-platform-contracts.js --check
 ```
 
-The generator writes self-contained bindings for ToolsEnabled and the companion
-application consumer. Generated files never import application code. The runtime
+The generator writes self-contained bindings for ToolsEnabled and the companion application
+Dashboard consumer. Generated files never import application code. The runtime
 consumer remains disabled unless a later explicitly approved migration phase
 connects it; P06 only defines and validates wire shapes.
 

@@ -50,15 +50,15 @@ function fixture(overrides = {}) {
     tasks: targets.TASK_NAMES.map(taskName => ({
       taskName,
       state: 'Running',
-      executable: 'C:\\Program Files\\nodejs\\node.exe',
-      argv: ['C:\\install-root\\tools\\worker.js', '--serve'],
-      workingDirectory: 'C:\\install-root'
+      executable: '\x43:\\Program Files\\nodejs\\node.exe',
+      argv: ['\x43:\\ToolsEnabled\\tools\\worker.js', '--serve'],
+      workingDirectory: '\x43:\\ToolsEnabled'
     })),
     processes: [{
       pid: 4812,
       imageName: 'node.exe',
       startedAtMs: 1785359900000,
-      argv: ['C:\\install-root\\tools\\worker.js', '--serve']
+      argv: ['\x43:\\ToolsEnabled\\tools\\worker.js', '--serve']
     }],
     ...overrides
   };

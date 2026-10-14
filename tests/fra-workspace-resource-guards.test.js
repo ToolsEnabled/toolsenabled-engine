@@ -12,8 +12,8 @@ const toolRegistry = require('../src/lib/tool-registry');
 const coordination = require('./helpers/fra-workspace-authority-fixture');
 
 const registry = { schemaVersion: 1, machines: {
-  left: { address: '203.0.113.1', root: 'C:\\left' },
-  right: { address: '203.0.113.2', root: 'C:\\right' }
+  left: { address: '203.0.113.1', root: '\x43:\\left' },
+  right: { address: '203.0.113.2', root: '\x43:\\right' }
 }, services: {} };
 let nextContext = 0;
 

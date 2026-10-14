@@ -27,7 +27,7 @@
 
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // THE SWITCH THAT DECIDES WHETHER AN AGENT MAY FILE A STANDING RULE. What must
 // hold: silence is off; a value outside the options is off; a value nobody
@@ -86,7 +86,7 @@ test('only user or installer provenance can turn it on', () => {
 test('the catalogue row and the module agree: one toggle, default off, enforcer named', () => {
   const row = loadRegistry().byId.get(ID);
   assert.ok(row, `${ID} must exist in config/settings-registry.json`);
-  assert.equal(row.control, 'toggle', 'the owner ruled for a plain on/off switch; a select here would be a third position nobody asked for');
+  assert.equal(row.control, 'toggle', 'the owner ruled "just on or off"; a select here would be a third position nobody asked for');
   assert.equal(row.options, undefined);
   assert.equal(row.default, gate.OPTIONS.OFF);
   assert.equal(row.default, false);
@@ -116,7 +116,7 @@ test('through the real settings loader: a stored legacy value fails validation a
 
 test('the contract paragraph: off is the pre-O7 text plus the no-asking sentence; on names the tool only when reachable', () => {
   const off = gate.requestContractParagraph('off', { canFile: true });
-  // The product note: when it is disabled, agents do not ask either. Off
+  // The owner, 2026-09-15: "agents shouldnt ask if its disabled either". Off
   // keeps the pre-O7 sentence about the typed commands and adds the one thing
   // that sentence never said: no filing, no proposing and no question about it.
   assert.equal(off, 'If the person types /Request, /RequestSession, /RequestTree, or /RequestThread here, ToolsEnabled itself files their words as a standing rule — you need no tool for that and should not act on the command yourself; the chat shows the person the confirmation, and the rules above are read again at each session start. '
@@ -148,7 +148,7 @@ test('the contract paragraph: off is the pre-O7 text plus the no-asking sentence
 });
 
 // ---------------------------------------------------------------------------
-// THE O7 IMPROVEMENTS (product note). Three doors on the filing path --
+// THE O7 IMPROVEMENTS (owner, 2026-08-22). Three doors on the filing path --
 // verbatim or nothing, duplicates nest, ask me when unsure -- proved here
 // against a scratch ledger and a scratch spool, with the gate and the audit
 // intent injected so only the words are on trial.
@@ -434,9 +434,9 @@ test('"ask me when unsure": the nested row, how it is read, and the paragraph it
   const row = byId.get(ASK);
   assert.ok(row, `${ASK} must exist in config/settings-registry.json`);
   assert.equal(row.control, 'toggle');
-  assert.equal(row.default, false, 'the owner: default off');
+  assert.equal(row.default, false, "The setting defaults to disabled");
   assert.equal(row.section, byId.get(ID).section);
-  assert.equal(row.depth, byId.get(ID).depth + 1, 'the owner: nested below its parent in settings');
+  assert.equal(row.depth, byId.get(ID).depth + 1, "Place this setting under its parent settings group");
   assert.equal(entries.findIndex(entry => entry.id === ASK), entries.findIndex(entry => entry.id === ID) + 1, 'directly after its parent row');
   assert.equal(row.enforcedBy, 'src/lib/r-ledger-agent-gate.js');
   assert.equal(row.derivedFrom, 'built-in product policy');
@@ -492,7 +492,7 @@ test('"ask me when unsure": the nested row, how it is read, and the paragraph it
   assert.equal(gate.requestContractParagraph('auto', { canFile: false, askWhenUnsure: true }), gate.requestContractParagraph('auto', { canFile: false }));
 });
 
-/* APPROVE BEFORE IT COUNTS (product note: one ledger, managed on the
+/* APPROVE BEFORE IT COUNTS (owner, 2026-09-02: one ledger, managed on the
    Ledger page). The row rules.agent_filed_needs_approval sits under the one
    switch beside "ask me when unsure", read by the same three rules and off by
    default; with it on, r_ledger.file lands a row that waits for the person

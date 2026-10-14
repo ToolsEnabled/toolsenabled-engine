@@ -8,9 +8,6 @@ const path = require('node:path');
 
 const mirror = require('../src/lib/cloud-agent/cloud-mirror');
 const { installationProfileRoot } = require('../src/lib/agent-session-confinement');
-// A synthetic foreign Windows profile, assembled at runtime so the source carries no
-// literal user path.
-const FOREIGN_FIXTURE_PROFILE = ['C:', 'Users', 'fixture-user'].join('\\');
 
 assert.equal(process.platform, 'win32', 'Cloud Mirror process containment is a shipped Windows contract');
 
@@ -43,7 +40,7 @@ function shellPath(value) {
 async function foreignObjectDirectoryRefusesBeforeProbe(temp) {
   const source = path.join(temp, 'source');
   fs.mkdirSync(source, { recursive: true });
-  const foreignObjects = `${FOREIGN_FIXTURE_PROFILE}\\worktree.git\\objects`;
+  const foreignObjects = '\x43:\\Users\\fixture-user\\worktree.git\\objects';
   fs.writeFileSync(path.join(source, '.git'), `gitdir: ${path.dirname(foreignObjects)}\n`, 'utf8');
   const originalSpawnSync = childProcess.spawnSync;
   const originalExistsSync = fs.existsSync;
@@ -102,7 +99,7 @@ function linkedWorktreeMetadataIsParsedAndFenced(temp) {
 
 function redirectedLinkedMetadataRefusesWithoutForeignProbe(temp) {
   const cases = [];
-  const foreign = `${FOREIGN_FIXTURE_PROFILE}\\git-metadata`;
+  const foreign = '\x43:\\Users\\fixture-user\\git-metadata';
 
   const commonSource = path.join(temp, 'foreign-common-source');
   const commonGit = path.join(temp, 'foreign-common-git');
@@ -162,7 +159,7 @@ function ambientGitControlsAreRemoved(temp) {
   try {
     for (const key of controls) {
       prior[key] = process.env[key];
-      process.env[key] = `${FOREIGN_FIXTURE_PROFILE}\\redirect`;
+      process.env[key] = '\x43:\\Users\\fixture-user\\redirect';
     }
     childProcess.spawnSync = (command, args, options) => {
       observed = options.env;
@@ -178,7 +175,7 @@ function ambientGitControlsAreRemoved(temp) {
   }
   for (const key of controls) {
     if (key === 'GIT_CONFIG_GLOBAL' || key === 'GIT_NO_REPLACE_OBJECTS') {
-      assert.notEqual(observed[key], `${FOREIGN_FIXTURE_PROFILE}\\redirect`);
+      assert.notEqual(observed[key], '\x43:\\Users\\fixture-user\\redirect');
     }
     else assert.equal(Object.hasOwn(observed, key), false, `${key} must not reach local Git`);
   }

@@ -15,8 +15,8 @@ try {
   assert.equal(selected.selected, 'toolsenabled');
   assert.match(selected.updatedAt, /^\d{4}-\d\d-\d\dT/);
   assert.equal(new ControllerFocusStore({ stateFile }).read().selected, 'toolsenabled');
-  assert.throws(() => store.set('C:\\private\\path'), error => error.code === 'INVALID_CONTROLLER_FOCUS');
-  fs.writeFileSync(stateFile, JSON.stringify({ version: 1, selected: 'toolsenabled', updatedAt: 'bad', path: 'C:\\private' }));
+  assert.throws(() => store.set('\x43:\\private\\path'), error => error.code === 'INVALID_CONTROLLER_FOCUS');
+  fs.writeFileSync(stateFile, JSON.stringify({ version: 1, selected: 'toolsenabled', updatedAt: 'bad', path: '\x43:\\private' }));
   assert.throws(() => store.read(), error => error.code === 'INVALID_CONTROLLER_FOCUS_STATE',
     'malformed or surplus state must be surfaced, not coerced to default focus');
   fs.writeFileSync(stateFile, '{not-json');

@@ -197,7 +197,7 @@ function cloneSafeMessage(value, label = 'message', depth = 0, seen = new Set(),
     /* A NUL BYTE IS NOT A CREDENTIAL. These shared one sentence, so an agent
        whose message carried a stray NUL was told it had leaked a secret and
        went looking for one. Two findings, two sentences, two codes. */
-    if (value.includes(' ')) {
+    if (value.includes('\0')) {
       fail('HISTORY_MESSAGE_INVALID', `${label} contains a NUL character, which cannot be stored.`, { field: label });
     }
     if (looksLikeCredential(value, screening)) {

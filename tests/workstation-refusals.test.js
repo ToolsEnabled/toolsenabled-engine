@@ -14,7 +14,7 @@ function refusal(code, action) {
 // is also a tripwire: refusals that happen before mutation must leave it exactly
 // as the fixture created it.
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'workstation-refusals-'));
-const transactionRoot = `C:\\workstation-refusals-${process.pid}-${Date.now()}`;
+const transactionRoot = `\x43:\\workstation-refusals-${process.pid}-${Date.now()}`;
 const transactionDirectory = path.resolve(transactionRoot);
 try {
   const marker = path.join(scratch, 'marker');

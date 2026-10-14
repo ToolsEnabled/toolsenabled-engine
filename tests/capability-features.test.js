@@ -20,10 +20,9 @@
 
 // THE ONBOARDING FEATURE LINE MUST NOT BE ABLE TO LIE.
 //
-// Product rules: every feature a user has enabled in settings
-// ([filekeeper], [grepsaver] and so on) gets an onboarding line; and access to
-// the parts of the program a user disabled is restricted completely and
-// mechanically.
+// Owner, 2026-08-13: '[filekepper] [grepsaver] etc should be an onboarding line
+// for all the users enabled setting features', then: 'cant we mechanically
+// restrict access completely to the parts of the program that a user disabled?'
 //
 // The answer this suite pins is that the line is a PROJECTION of the resolved
 // tool surface, not a config value someone can set. That matters because the
@@ -56,7 +55,7 @@ check('the shipped manifest parses and every feature declares a real tier', () =
     assert.ok(features.TIERS.includes(feature.tier),
       `${feature.id} declares tier ${feature.tier}, which is not one of ${features.TIERS.join(', ')}`);
   }
-  // Both names the owner used must be present, or their line cannot render.
+  // Both names the owner used must be present, or his line cannot render.
   const ids = declared.map(feature => feature.id);
   assert.ok(ids.includes('grepsaver'), 'grepsaver must be declared');
   assert.ok(ids.includes('filekeeper'), 'filekeeper must be declared');

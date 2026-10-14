@@ -288,7 +288,7 @@ check('MASKER: real comments are still removed', () => {
 });
 
 check('MASKER: quotes, escapes and regex literals do not desync it', () => {
-  const escaped = 'const p = "C:\\\\dir\\\\";\nspawn(node, { detached: true });\n';
+  const escaped = 'const p = "\x43:\\\\dir\\\\";\nspawn(node, { detached: true });\n';
   assert.ok(stripComments(escaped).includes('spawn(node, { detached: true })'),
     'a string ending in an escaped backslash must close');
 

@@ -62,8 +62,8 @@ function observationId(provider, ranges, coverage) {
   return `${OBSERVATION_ID_PREFIX}${digest}`;
 }
 
-// Bounds. These exist because the two corpora are large (gigabytes of Claude
-// transcripts and Codex rollouts on a development install) and an unbounded
+// Bounds. These exist because the two corpora are large (~1.4 GB of Claude
+// transcripts and ~4.7 GB of Codex rollouts on this machine) and an unbounded
 // read would be both slow and a memory hazard.
 const DEFAULT_MAX_FILES = 64;
 const DEFAULT_MAX_BYTES = 192 * 1024 * 1024;

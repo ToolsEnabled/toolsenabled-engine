@@ -1,6 +1,6 @@
 'use strict';
 
-// THE FAILURE THE OWNER ACTUALLY REPORTED: the local node does not start at all.
+// THE FAILURE THE OWNER ACTUALLY REPORTED: "it literally does not start".
 //
 // Measured 2026-09-04 by running the real lane child from the running payload,
 // `tools/local-node-lane-runner.js`, against this machine's Ollama with the

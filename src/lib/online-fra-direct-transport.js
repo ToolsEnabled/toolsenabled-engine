@@ -5,7 +5,7 @@
 // envelopes the relay road carries. We are changing the road, not the
 // envelope.
 //
-// werift (pure-JS WebRTC; approved, pinned exact) is loaded
+// werift (pure-JS WebRTC; owner-approved 2026-08-19, pinned exact) is loaded
 // LAZILY and only here: the engine works without it -- transport selection
 // simply reports the direct road unavailable and stays on the relay, which is
 // the fallback behaving as designed, not an error. The relay repo never sees

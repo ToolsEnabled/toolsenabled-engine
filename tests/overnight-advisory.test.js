@@ -489,7 +489,7 @@ async function main() {
         assert.equal(isAlive(4003), false, 'ESRCH means the process genuinely does not exist -- must read as dead');
         /* THE TEST WAS STALE, NOT THE RUNTIME. It asserted that an unrecognised errno
    * yields a confident `false` -- i.e. "definitely dead" -- which is exactly the
-   * could-not-collapse an earlier sweep removed. ESRCH proves absence and EPERM
+   * could-not-collapse the w20 sweep removed. ESRCH proves absence and EPERM
    * proves presence; any OTHER errno means liveness was not established, and the
    * runtime now refuses instead of inventing a death certificate for a process
    * it could not probe. */

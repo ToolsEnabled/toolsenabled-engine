@@ -2,7 +2,7 @@
 
 /* host.exec's AUDIT-BEFORE-RUN NO LONGER PARKS THE THREAD IT IS CALLED ON.
  *
- * MEASURED 2026-09-04 on a live main process, four circles: 53
+ * MEASURED 2026-09-04 on the owner's Live main process, four circles: 53
  * main-thread stalls of 2 to 4 s in fifteen minutes, 46 of them containing a
  * host.exec.intent record, with the process spawning powershell (the vault
  * anchor a REQUIRED record forces) inside every stall window. The provider

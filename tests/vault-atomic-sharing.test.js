@@ -134,7 +134,7 @@ test.before(() => {
   environment.TOOLSENABLED_ATOMIC_PROBE_SCRIPT = ACL_SCRIPT;
   let confirmedNormalExit = false;
   try {
-    const result = spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', [
+    const result = spawnSync('\x43:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-EncodedCommand',
       Buffer.from(PROBE, 'utf16le').toString('base64')
     ], { cwd: ROOT, env: environment, encoding: 'utf8', windowsHide: true,

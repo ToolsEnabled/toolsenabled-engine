@@ -3,7 +3,7 @@
  * Landed: yes; the module SHA-256 changed after the single replacement.
  * Result: red; this isolated file exited 1 because the spoofed actor reached `projectSave`.
  *
- * Refusal mutation checks were recorded when this file was written.
+ * Refusal mutation checks are recorded in REPORT-research-action-refusals.md.
  */
 'use strict';
 

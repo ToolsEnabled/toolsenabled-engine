@@ -238,7 +238,7 @@ async function main() {
     assert.equal(malformedCodex[0].remaining, null);
   }
 
-  // Product requirement: a newer parseable Codex version is
+  // T1598, owner request (2026-09-22): a newer parseable Codex version is
   // admitted by its actual handshake and rate-limit shape, not a release pin.
   for (const cliVersion of ['codex-cli 0.146.1', 'codex-cli 999.0.0']) {
     const updatedTransport = fakeCodexTransport({ cliVersion });

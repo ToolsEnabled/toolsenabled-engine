@@ -29,9 +29,9 @@
 'use strict';
 /* THE BROWSER OPERATES THE MACHINE, THROUGH THE REAL RELAY.
  *
- * The owner's third leg: the product is also reachable on the web through the
- * person's account -- behind the login is the fully working software, and from
- * there they can connect. This proves the whole path end to end with as much of
+ * The owner's third leg: "it is also supposed to be accessible by web through
+ * their account -- behind login is the full functioning software, and then
+ * they can connect." This proves the whole path end to end with as much of
  * the real thing as fits in one process:
  *
  *   - a customer-neutral reference registry/minter behind a fake fetch serving
@@ -91,7 +91,7 @@ function vaultFor(privateKey, credential) {
   const store = new Map();
   store.set(DEVICE_IDENTITY_VAULT_KEY, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString());
   store.set(DEVICE_CREDENTIAL_VAULT_KEY, JSON.stringify(credential));
-  return { getSecret: (k) => { if (!store.has(k)) throw new Error('absent'); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
+  return { getSecret: (k) => { if (!store.has(k)) throw Object.assign(new Error('absent'), { code: 'SECRET_NOT_CONFIGURED' }); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
 }
 
 function bridgeNamed(name) {
@@ -332,8 +332,8 @@ function bridgeNamed(name) {
   }
 
   /* --- THE BROWSER DRIVES MACHINE B WHEN THE ACCOUNT SERVER SAYS SO ----------
-   * Product rule: when two machines are connected, the interface serves both
-   * and both are controllable. The client addressed a constant 'machine-a'
+   * Owner ruling: "If there's two we need to serve both in the interface and
+   * both need to be controllable." The client addressed a constant 'machine-a'
    * leg, so a browser introduced to machine B would have put every hello on
    * A's leg, where A refuses it on the exact-peer fields -- and the page would
    * have said "the machine did not answer" about a machine that was fine. The

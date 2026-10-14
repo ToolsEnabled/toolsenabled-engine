@@ -94,7 +94,7 @@ async function rejectsCode(promise, code) {
   }));
   await rejectsCode(refused.connectToPeer(), 'RELAY_SHELL_LEASE_REFUSED');
   assert.equal(refusedUrls.length, 2);
-  assert.equal(refusedVault.writes, 0);
+  assert.equal(refusedVault.writes, 1, 'the first peer key is pinned before a lease is requested');
 
   // Even a successful mint is refused if its role cannot belong to this shell;
   // validation happens before construction of the relay WebSocket.
@@ -110,7 +110,7 @@ async function rejectsCode(promise, code) {
   }));
   await rejectsCode(invalid.connectToPeer(), 'RELAY_SHELL_LEASE_INVALID');
   assert.equal(invalidFetches, 2);
-  assert.equal(invalidVault.writes, 0);
+  assert.equal(invalidVault.writes, 1, 'the first peer key is pinned before a lease is requested');
   assert.equal(bridge.calls, 0);
 
   console.log('online-fra-relay-shell driven refusals: ok');

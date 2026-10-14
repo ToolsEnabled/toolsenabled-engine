@@ -157,7 +157,7 @@ const LANE_OUTCOME_RULES = Object.freeze([
   Object.freeze({
     id: 'R-SNAPSHOT-UNPROVEN',
     class: 'environment-fault',
-    summary: 'guard on R-EXIT-AGENT only: the failure would be agent-attributable but the lane ran without a proven-complete materialization (snapshot absent or not complete===true). The mechanical form of the pre-checkpoint stale-tree attribution: failure inside an unproven tree is not agent evidence. Never downgrades an accepted verdict.',
+    summary: 'guard on R-EXIT-AGENT only: the failure would be agent-attributable but the lane ran without a proven-complete materialization (snapshot absent or not complete===true). The mechanical form of the pre-checkpoint-94a9d22 stale-tree attribution: failure inside an unproven tree is not agent evidence. Never downgrades an accepted verdict.',
     when: ctx => ctx.code === 'EXIT_NONZERO' && ctx.hasTransient
       && ctx.outcome.transient === false && !MODEL_UNAVAILABLE_RE.test(ctx.detail)
       && ctx.snapshotProven !== true

@@ -174,7 +174,7 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     const spawnImpl = fakeSpawn(() => ({ stdout: `Submitted task ${TASK_ID}\nView it at https://chatgpt.com/codex/tasks/${TASK_ID}\n` }));
     const transport = createCodexCliTransport({
       spawnImpl,
-      branch: 'feature/cloud-core',
+      branch: 'r1177/s1-cloud-core',
       attempts: 2,
       buildQuery: payload => `Run the bound charter task ${payload.taskHash}`
     });
@@ -187,7 +187,7 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     const call = spawnImpl.calls[0];
     assert.equal(call.command, 'codex');
     assert.deepEqual(call.args, [
-      'cloud', 'exec', '--env', 'env-main', '--branch', 'feature/cloud-core',
+      'cloud', 'exec', '--env', 'env-main', '--branch', 'r1177/s1-cloud-core',
       '--attempts', '2'
     ]);
     assert.equal(call.child.stdinText, `Run the bound charter task ${request.taskHash}`);
@@ -335,13 +335,14 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
   // --- nonzero exit carries a bounded stderr excerpt ----------------------------
 
   await asyncCheck('a nonzero exit rejects with a bounded stderr excerpt, never a raw multi-kilobyte dump', async () => {
-    const spawnImpl = fakeSpawn(() => ({ stderr: 'boom '.repeat(4000), exitCode: 3 }));
+    const confidential = require('node:crypto').randomBytes(24).toString('base64url');
+    const spawnImpl = fakeSpawn(() => ({ stderr: confidential.repeat(4000), exitCode: 3 }));
     const transport = createCodexCliTransport({ spawnImpl });
     await assert.rejects(transport.getTask(TASK_ID), error => {
       assert.equal(error.code, 'CODEX_CLI_NONZERO_EXIT');
       assert.ok(error.message.length < 2048, `error message must stay under 2KB, was ${error.message.length}`);
       assert.match(error.message, /status 3/);
-      assert.match(error.message, /truncated/);
+      assert.equal(error.message.includes(confidential), false, 'CLI stderr must never enter error text');
       return true;
     });
   });
@@ -463,28 +464,28 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     assert.equal(spawnImpl.calls.length, 0);
   });
 
-  // A cursor in the exact shape `codex cloud list --json
-  // --limit 1` emits from codex-cli 0.146.1 (the base64 bodies
+  // A GROUND-TRUTH cursor, captured 2026-09-03 from `codex cloud list --json
+  // --limit 1` running codex-cli 0.146.1 on this machine (the base64 bodies
   // are shortened; the punctuation and the leading "+" are verbatim). The
-  // real cursor of this shape, fed straight back as `--cursor`, returned
-  // page 2 with a different task id, so the shape is a WORKING cursor. The two
+  // same call fed straight back as `--cursor` returned page 2 with a
+  // different task id, so this value is a WORKING cursor at the CLI. The two
   // checks below are about the transport being able to use it at all.
-  const SAMPLE_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody0000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
+  const REAL_CURSOR = '+RID:~AAAA-AAAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody000000000000#ISV:2#IEO:65567#QCF:8#CID:2';
 
   await asyncCheck('a cursor in the shape the CLI actually emits reaches argv instead of being refused as invalid input', async () => {
     const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: null }) }));
     const transport = createCodexCliTransport({ spawnImpl });
-    const listed = await transport.listTasks({ limit: 5, cursor: SAMPLE_CURSOR });
+    const listed = await transport.listTasks({ limit: 5, cursor: REAL_CURSOR });
     assert.deepEqual(listed.tasks, []);
     const args = spawnImpl.calls[0].args;
-    assert.equal(args[args.indexOf('--cursor') + 1], SAMPLE_CURSOR, 'the cursor must be handed to the CLI verbatim');
+    assert.equal(args[args.indexOf('--cursor') + 1], REAL_CURSOR, 'the cursor must be handed to the CLI verbatim');
   });
 
   await asyncCheck('the cursor the transport reports is a cursor the transport will accept back, so paging can advance', async () => {
-    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: SAMPLE_CURSOR }) }));
+    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: REAL_CURSOR }) }));
     const transport = createCodexCliTransport({ spawnImpl });
     const page1 = await transport.listTasks({ limit: 5 });
-    assert.equal(page1.cursor, SAMPLE_CURSOR);
+    assert.equal(page1.cursor, REAL_CURSOR);
     // Feeding the transport's own output back in is exactly what
     // cloudTaskStatus does; it must not be an input error.
     const page2 = await transport.listTasks({ limit: 5, cursor: page1.cursor });
@@ -515,7 +516,7 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
   // was holding the two facts a reader needs (which cursor, and how many tasks
   // went unreported) plus a rule that had stopped being true: it still demanded
   // "letters, digits and + / = _ . -", the alphabet deleted for rejecting the
-  // CLI's own `+RID:~...#...` cursor.
+  // CLI's own `+RID:~AAAA-AAAAAAAAAAAAAAAAAA==#RT:1#TRC:1#RTD:SyntheticCursorBody000000000000#ISV:2#IEO:65567#QCF:8#CID:2` cursor.
   await asyncCheck('the unusable-cursor refusal names the cursor, the tasks withheld, and the rule the shipped code enforces', async () => {
     const page = JSON.stringify({
       tasks: JSON.parse(GROUND_TRUTH_LIST_JSON).tasks,
@@ -525,7 +526,7 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     const transport = createCodexCliTransport({ spawnImpl });
     await assert.rejects(transport.listTasks({ limit: 5 }), error => {
       assert.equal(error.code, 'CODEX_CLI_OUTPUT_UNPARSEABLE');
-      assert.match(error.message, /--not-a-cursor/, 'the offending cursor must be quoted back');
+      assert.equal(error.message.includes('--not-a-cursor'), false, 'opaque provider cursor must not enter diagnostics');
       assert.match(error.message, /1 task\(s\) on this page were not reported/, 'the withheld tasks must be counted');
       assert.doesNotMatch(
         error.message,
@@ -544,12 +545,12 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
   // The dead guard's sentence, applied to the CLI's real cursor, would have
   // called a WORKING token malformed. Nothing may refuse this value.
   await asyncCheck('the shape the refusal describes is the shape the transport actually accepts', async () => {
-    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: SAMPLE_CURSOR }) }));
+    const spawnImpl = fakeSpawn(() => ({ stdout: JSON.stringify({ tasks: [], cursor: REAL_CURSOR }) }));
     const transport = createCodexCliTransport({ spawnImpl });
     const page = await transport.listTasks({ limit: 5 });
-    assert.equal(page.cursor, SAMPLE_CURSOR, 'the CLI\'s own cursor must survive the round trip');
+    assert.equal(page.cursor, REAL_CURSOR, 'the CLI\'s own cursor must survive the round trip');
     await transport.listTasks({ limit: 5, cursor: page.cursor });
-    assert.equal(spawnImpl.calls[1].args[spawnImpl.calls[1].args.indexOf('--cursor') + 1], SAMPLE_CURSOR);
+    assert.equal(spawnImpl.calls[1].args[spawnImpl.calls[1].args.indexOf('--cursor') + 1], REAL_CURSOR);
   });
 
   // --- integration-shaped: the provider wired with this transport ---------------
@@ -564,7 +565,7 @@ const GROUND_TRUTH_LIST_JSON = JSON.stringify({
     });
     const transport = createCodexCliTransport({
       spawnImpl,
-      branch: 'feature/cloud-core',
+      branch: 'r1177/s1-cloud-core',
       buildQuery: payload => `Run the bound charter task ${payload.taskHash}`
     });
     const adapter = createCodexCloudAdapter({ transport, procRun: () => ({ status: 'failure' }) });

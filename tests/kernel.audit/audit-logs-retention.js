@@ -414,7 +414,7 @@ check('an absent rotation record with no segments on disk is not a false alarm',
 // ---------------------------------------------------------------------
 check('a junction inside the logs root is neither followed nor deleted', () => {
   // This repo has already had a recursive delete empty a shared node_modules
-  // through a junction, and a development install can carry hundreds of worktrees with junctions.
+  // through a junction, and this machine carries ~250 worktrees with junctions.
   // The guard is dirent.isSymbolicLink(), which is only correct because Windows
   // reports a junction as a link dirent -- asserted here rather than assumed.
   const root = fixture('junction');

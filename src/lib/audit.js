@@ -77,7 +77,7 @@ const FULL_VERIFY_EVERY = 200;
 // spawns powershell.exe), so the reader observes a file ahead of the head that
 // is completely STABLE across its whole verification -- indistinguishable from
 // corruption to a check that requires exact equality, which is why the live
-// ledger kept reporting AUDIT_PROJECTION_DIVERGED after an earlier change.
+// ledger kept reporting AUDIT_PROJECTION_DIVERGED after 96fc6ec.
 //
 // Tolerating the lead loses nothing: projectSinks()'s own untrusted path
 // re-parses the file, finds it does not match the committed window, and
@@ -110,8 +110,8 @@ const projectionVerifyCache = new Map();
 // A STABLE DIVERGENCE IS DECIDED ONCE, NOT ON EVERY TOOL CALL.
 //
 // validateProjectionState() reads and re-parses BOTH projection files in full
-// on every cache-missing admission. MEASURED 2026-09-04 against a
-// real live ledger (10,053 live events, actions.jsonl 12.0 MB + actions.log
+// on every cache-missing admission. MEASURED 2026-09-04 against the owner's
+// real Live ledger (10,053 live events, actions.jsonl 12.0 MB + actions.log
 // 7.0 MB): 0.64 s per call, on the main process, synchronously. When the
 // answer is a refusal AND nothing that could change that answer has moved --
 // the same two files at the same size and mtime, the same ledger head, the
@@ -1157,7 +1157,7 @@ function verifyArchiveSegment(file, keys, dependencies = {}) {
   // (enforceRetentionAfterAppend) never rolls more than the live window
   // holds, so a retried batch can never re-archive a sequence further back
   // than one retention cap plus its roll slack -- the same 10,000 + 500
-  // a review named. Bounding the lookback keeps a genuinely ancient,
+  // Controller 4 named. Bounding the lookback keeps a genuinely ancient,
   // unrelated sequence number from ever being accepted as "just a repeat".
   const MAX_TOLERATED_REPEAT_LOOKBACK = 10500;
   let previousHash = ZERO_HASH;
@@ -1182,7 +1182,7 @@ function verifyArchiveSegment(file, keys, dependencies = {}) {
     // reason, the fs writes survive but the SQL deletes do not -- so a retry
     // of the same batched admission re-selects the same still-live rows, IN
     // ORDER, and re-archives all of them. MEASURED against the live archive
-    // (a full census of the archive):
+    // (Worker 6's full census, W4/REPORT-archive-duplicates-full-20260907.md):
     // copy 2 of a repeated sequence sits ~501 lines after copy 1 -- the width
     // of the retried batch, not the next line -- so a check that only
     // compares a line to the ONE immediately before it never recognizes the
@@ -1504,7 +1504,7 @@ function readAnchor(dependencies, { fresh = false } = {}) {
 // timeout, ...), instead of pattern-matching error text -- the same
 // "generic error swallows a specific, actionable classification" failure
 // already documented for lock contention elsewhere in this codebase
-// (an earlier SQLite contention diagnosis).
+// (agent-coord key help-answer/q33-sqlite-contention-diagnosis-20260729).
 // Every throw site reachable ONLY once a benign concurrent-writer race has
 // already been ruled out (see reconcileAnchor below) is tagged with this
 // code; nothing benign or retryable ever carries it.
@@ -1516,9 +1516,9 @@ function readAnchor(dependencies, { fresh = false } = {}) {
 // two were the same number -- so slicing by the raw sequence read correctly
 // until the first retention roll and silently stopped afterwards.
 //
-// What that cost was not speed, it was the check this feeds. Measured on a
-// development install that had rolled once: the old expression sliced past
-// the end of the array and produced [],
+// What that cost was not speed, it was the check this feeds. Measured on the
+// owner's install (boundary 981, anchor near sequence 11069, 10,088 live
+// rows): the old expression sliced past the end of the array and produced [],
 // so the caller's `suffix.some(event => event.keyId !== signer.keyId)` had
 // nothing to look at. The alarm for unanchored events signed by some key other
 // than the vault-trusted one could not fire on any install that had ever
@@ -1785,7 +1785,7 @@ function reconcileAnchor(store, signer, dependencies, snapshot, {
   // were the same number, so this read correctly until the first retention roll
   // and silently stopped afterwards.
   //
-  // What it cost was not speed, it was the check below. On a live install
+  // What it cost was not speed, it was the check below. On the owner's install
   // (boundary 981, anchor near sequence 11069, 10,088 live rows) the old
   // expression sliced past the end of the array and produced [], so
   // `suffix.some(...)` had nothing to look at: the alarm for unanchored events
@@ -2015,18 +2015,18 @@ function trustedProjectionVerification(sink, file, state, io) {
 // WHY. validateProjectionState() is on the admission path -- every audited
 // action in the Electron main process and in every MCP server goes through it
 // whenever the store's verification cache is not a hit -- and it parsed both
-// projection files from scratch each time. MEASURED 2026-09-03 on a copy of a
-// live install (actions.jsonl 11.49 MB / 10,053 rows, actions.log
-// 6.63 MB), Node 22, a development machine, five runs each:
+// projection files from scratch each time. MEASURED 2026-09-03 on a copy of the
+// owner's Live install (actions.jsonl 11.49 MB / 10,053 rows, actions.log
+// 6.63 MB), node v22.14.0, this machine, five runs each:
 //
 //   parsedProjection(actions.jsonl, 'jsonl') ...... med 117.2 ms
 //   parsedProjection(actions.log,   'text')  ...... med  40.5 ms
 //   both sinks, i.e. one validateProjectionState .. med 186.1 ms
 //
 // All of it synchronous, all of it on the thread that also serves every other
-// session's IPC. A development install saw dozens of admissions in a minute
-// (the crash investigation evidence), and its durability sidecar records
-// retained AUDIT_PROJECTION_DIVERGED and AUDIT_LEDGER_INVALID breaches --
+// session's IPC. The owner's install saw up to 64 admissions in a minute
+// (evidence/E/audit-frequency.txt), and its durability sidecar records 70
+// retained AUDIT_PROJECTION_DIVERGED and 114 AUDIT_LEDGER_INVALID breaches --
 // every one of which clears the store's verification cache and therefore sends
 // the NEXT admission down this path again.
 //
@@ -2536,11 +2536,11 @@ function forgetDigest(file) {
 // digestFileSet is the hot loop of an audit admission. verificationExternal()
 // calls it, record() reaches verificationExternal six times per event, and the
 // memo above collapses those six to one -- so what remains is one complete
-// pass over both projection files per record. On a development install those
-// files are several megabytes each, and each pass allocated, filled and then
+// pass over both projection files per record. On the owner's install those
+// files are 11.0 MB and 6.4 MB, and each pass allocated, filled and then
 // discarded a Buffer of exactly that size.
 //
-// MEASURED 2026-09-03 on a development machine, over those two real files:
+// MEASURED 2026-09-03 on the owner's machine, over those two real files:
 //   readFileSync + sha256 of both ................. 73.7 ms
 //   the same digest through one 256 KB buffer ..... 61.3 ms
 // The saving is not in the hashing. This is a Haswell without the SHA
@@ -2709,9 +2709,9 @@ function validateProjectionState(files, events, verification, dependencies, boun
     // to what it actually holds still verifies against the real, already
     // signature-checked event chain.
     //
-    // an earlier change LOOSENED ONLY THE CURSOR COMPARISON, AND THAT WAS NOT ENOUGH.
+    // 96fc6ec LOOSENED ONLY THE CURSOR COMPARISON, AND THAT WAS NOT ENOUGH.
     //
-    // MEASURED 2026-09-04 against a copy of a live ledger (boundary
+    // MEASURED 2026-09-04 against a copy of the owner's Live ledger (boundary
     // 8356, cursor 18409, 10,053 live events, actions.jsonl 12.0 MB): with the
     // committed head rolled back by one and the projection line for that head
     // still on disk -- exactly what projectSinks() leaves behind between its
@@ -3579,7 +3579,7 @@ function enforceRetentionAfterAppend({
 // lock. Any race is a retry outside the lock, never an admission pass.
 // The archive boundary another writer may have moved since prepare() read it.
 //
-// MEASURED 2026-09-04 on a live ledger (10,080 live rows
+// MEASURED 2026-09-04 15:27-15:34Z on the owner's Live ledger (10,080 live rows
 // at the 10,000-row cap, head 19,244, seventeen circles): six admissions were
 // refused AUDIT_LEDGER_INVALID (sequence-gap) and spooled, every write tool
 // paid the retry-then-refuse latency, and a verify() of the same ledger a
@@ -3670,12 +3670,12 @@ function verifyAdmissionOutsideLock(context, dependencies) {
     // the anchor is in question here -- only the sink file -- and throwing that
     // prefix away is the difference between a 3 ms admission and a full O(N)
     // row read and Ed25519 walk of the whole live window. MEASURED 2026-09-04
-    // on a copy of a live ledger (10,053 live events): 3.2-3.5 ms
+    // on a copy of the owner's Live ledger (10,053 live events): 3.2-3.5 ms
     // with the prefix kept, 3.1-4.4 s with it dropped -- and since the failed
     // admission spools and the NEXT one hits the same file, the ledger paid
     // that 3-4 s again on every following tool call for as long as the
     // disagreement lasted. That is a self-sustaining 100% CPU period on the
-    // main process, which is what a live install kept dying in.
+    // main process, which is what the owner's install kept dying in.
     //
     // Keeping the cache changes what is RECOMPUTED, never what is PROVEN --
     // the same argument trustedVerificationMatches() already makes for the
@@ -4523,6 +4523,30 @@ function tail(limit = 20, dependencies = {}) {
   return context.store.listEvents({ afterSequence: Math.max(0, head - count), limit: count }).map(flattenEvent);
 }
 
+/* THE AGENT-FACING TAIL WITHHOLDS FREE-FORM COMMAND TEXT (1.0.50 review L6).
+ *
+ * audit.tail is a local-read tool on the Guided and Guarded surfaces. The
+ * ledger keeps every host.exec command line, and scrub() redacts key names and
+ * known token shapes only, so `mysql -p...`, `curl -u user:...` or
+ * `sshpass -p ...` typed by another session reached any caller of the tool.
+ * The tool view now shows a command only as its length, and an argument list
+ * beside it only as a count. tail() itself, which the metrics, attribution and
+ * digest readers use, is unchanged. No hash is shown: a hash of a short
+ * command line would confirm a guessed password. */
+const FREE_FORM_COMMAND_KEYS = new Set(['command', 'commandLine', 'commandline', 'cmdline']);
+
+function withholdCommandText(value, depth = 0) {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth > 12) return '[TRUNCATED_DEPTH]';
+  if (Array.isArray(value)) return value.map(entry => withholdCommandText(entry, depth + 1));
+  const hasCommand = Object.entries(value).some(([key, entry]) => FREE_FORM_COMMAND_KEYS.has(key) && typeof entry === 'string');
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    if (FREE_FORM_COMMAND_KEYS.has(key) && typeof entry === 'string') return [key, `[command withheld: ${entry.length} characters]`];
+    if (hasCommand && key === 'args' && Array.isArray(entry)) return [key, `[arguments withheld: ${entry.length}]`];
+    return [key, withholdCommandText(entry, depth + 1)];
+  }));
+}
+
 function flattenEvent(event) {
   return {
     ...scrub(event.event), sequence: event.sequence, eventId: event.eventId, eventHash: event.eventHash, keyId: event.keyId
@@ -4769,7 +4793,7 @@ function verify(dependencies = {}) {
       // minted by this installation's key, not that the bytes sitting in
       // audit-archive.jsonl between genesis and that boundary still match
       // what was actually signed. Nothing before this flag existed ever
-      // checked that (an internal archive review).
+      // checked that (W4/REPORT-archive-verify-exposure-20260907.md).
       //
       // Left off by default so every existing caller -- the system.status/
       // system.doctor poller above all, which calls this on a timer -- pays
@@ -4884,5 +4908,5 @@ module.exports = {
   AuditRequiredError, SIGNING_VAULT_KEY, anchorVaultStats, assertLedgerVaultBinding, checkpoint,
   conditionalRecord, durability, durabilityWindows, flush, record, recordBatch,
   readDurabilityState, noteDurabilityBreach, redact, requireRecord, requireDurableStatus, findEvents, getEvent, resetForTests, resetProjectionVerifyCache, scrub, scrubText,
-  status, tail, tailWithReferencedParents, verify, warm
+  status, tail, tailWithReferencedParents, verify, warm, withholdCommandText
 };

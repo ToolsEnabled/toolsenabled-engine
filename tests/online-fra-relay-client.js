@@ -43,6 +43,9 @@ FakeSocket.CLOSED = 3;
 FakeSocket.instances = [];
 
 const LEASE = { schemaVersion: 'online-fra-lease.v1', pairId: 'pair-x', endpointRole: 'machine-a', signature: 'sig' };
+// The only challenge shape the key door (admission or renewal) will sign: 32
+// bytes, base64url, 43 characters -- the relay's own NONCE_BYTES.
+const HONEST_NONCE = Buffer.alloc(32, 0x5a).toString('base64url');
 
 (async () => {
   // --- static guarantees ----------------------------------------------------
@@ -159,6 +162,110 @@ const LEASE = { schemaVersion: 'online-fra-lease.v1', pairId: 'pair-x', endpoint
     equal((await connection.closed).code, 1000);
   }
 
+  // --- RENEWAL IS NOT A SIGNING SERVICE EITHER (security review 1.0.50 H2) --
+  // The in-place renewal branch used to sign ANY relay-supplied challenge of 16+
+  // characters with the device identity key -- the key that also signs E2E
+  // handshake leases -- and to sign every such challenge that arrived while one
+  // renewal was in flight. A relay could hand it canonical lease bytes carrying
+  // its own X25519 ephemeral and collect forged hellos. Renewal must apply the
+  // admission rule (exactly 32 bytes, base64url) and sign at most once.
+  {
+    const crypto = require('node:crypto');
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const spki = publicKey.export({ type: 'spki', format: 'der' }).toString('base64url');
+    const signed = [];
+    const proof = { publicKeySpki: spki, sign: bytes => { signed.push(Buffer.from(bytes)); return crypto.sign(null, bytes, privateKey); } };
+    const FRESH = { ...LEASE, leaseId: 'lease-fresh', signature: 'sig-fresh' };
+    // The renewal timer is unref'd (production must not be held alive by it);
+    // hold the loop so a renewal left pending FAILS here instead of exiting 0.
+    const keepAlive = setInterval(() => {}, 10);
+    try {
+      const pending = connectOnlineFraRelay({ url: 'wss://relay.example.net/v1/rendezvous', lease: LEASE, onFrame: () => {}, proof, WebSocketImpl: FakeSocket });
+      const socket = FakeSocket.instances.at(-1);
+      socket.emit('open');
+      socket.emit('message', { data: JSON.stringify({ challenge: HONEST_NONCE }) });
+      const connection = await pending;
+      equal(signed.length, 1, 'admission signed its one nonce');
+
+      // A canonical lease, as the E2E session composes one, carrying the
+      // RELAY's ephemeral -- offered as a "renewal challenge".
+      const forgedLease = Buffer.from(JSON.stringify({
+        pairId: crypto.randomUUID(), issuerDeviceId: crypto.randomUUID(), recipientDeviceId: crypto.randomUUID(),
+        issuerRole: 'A', recipientRole: 'B', generation: 7, capabilityDigest: crypto.randomBytes(32).toString('hex'),
+        leaseId: crypto.randomUUID(), leaseNonce: crypto.randomBytes(32).toString('base64url'),
+        issuedAtMs: Date.now() + 60_000, expiresAtMs: Date.now() + 660_000,
+        ephemeralPublicKey: crypto.randomBytes(32).toString('base64url'),
+      }), 'utf8').toString('base64url');
+      const refusedShapes = [
+        ['a forged canonical lease', forgedLease],
+        ['16 characters (the old floor)', 'a'.repeat(16)],
+        ['31 bytes', crypto.randomBytes(31).toString('base64url')],
+        ['33 bytes', crypto.randomBytes(33).toString('base64url')],
+        ['standard-base64 alphabet', 'A+' + 'B'.repeat(41)],
+        ['whitespace padded', ' ' + crypto.randomBytes(32).toString('base64url')],
+      ];
+      for (const [label, challenge] of refusedShapes) {
+        const sentBefore = socket.sent.length;
+        const renewing = connection.renew({ lease: FRESH, proof, timeoutMs: 1_000 });
+        renewing.catch(() => {});
+        equal(socket.sent.length, sentBefore + 1, `renewal (${label}) opened with one request frame`);
+        assert.deepEqual(JSON.parse(socket.sent.at(-1)), { renew: 'request' });
+        socket.emit('message', { data: JSON.stringify({ challenge, expiresAtMs: Date.now() + 30_000, renewal: true }) });
+        equal(signed.length, 1, `a renewal challenge that is ${label} is not signed`);
+        equal(socket.sent.length, sentBefore + 1, `and nothing is answered to a renewal challenge that is ${label}`);
+        await assert.rejects(renewing, error => error.code === 'RELAY_CLIENT_CHALLENGE_INVALID', `a renewal challenge that is ${label} fails the renewal by name`);
+        assertions += 1;
+      }
+      equal(socket.readyState, FakeSocket.OPEN, 'a refused renewal challenge leaves the socket (and the old lease) up for the caller to decide');
+
+      // One renewal, one signature: a second challenge inside the same
+      // renewal -- even a perfectly shaped one -- is ignored, not signed.
+      {
+        const first = crypto.randomBytes(32).toString('base64url');
+        const second = crypto.randomBytes(32).toString('base64url');
+        const sentBefore = socket.sent.length;
+        const renewing = connection.renew({ lease: FRESH, proof, timeoutMs: 1_000 });
+        renewing.catch(() => {});
+        socket.emit('message', { data: JSON.stringify({ challenge: first, expiresAtMs: Date.now() + 30_000, renewal: true }) });
+        equal(signed.length, 2, 'an honest renewal nonce is signed');
+        ok(signed.at(-1).equals(Buffer.from(first, 'base64url')) && signed.at(-1).length === 32, 'over exactly its 32 decoded bytes');
+        equal(socket.sent.length, sentBefore + 2, 'and answered once');
+        const answer = JSON.parse(socket.sent.at(-1));
+        assert.deepEqual(Object.keys(answer).sort(), ['nonce', 'publicKeySpki', 'renew', 'signature'], 'the renewal answer carries exactly the four fields the edge reads');
+        assertions += 1;
+        equal(answer.nonce, first);
+        ok(crypto.verify(null, Buffer.from(first, 'base64url'), publicKey, Buffer.from(answer.signature, 'base64url')), 'the renewal signature verifies over the nonce bytes');
+        socket.emit('message', { data: JSON.stringify({ challenge: second, expiresAtMs: Date.now() + 30_000, renewal: true }) });
+        socket.emit('message', { data: JSON.stringify({ challenge: first, expiresAtMs: Date.now() + 30_000, renewal: true }) });
+        equal(signed.length, 2, 'a second challenge in the same renewal is NOT signed');
+        equal(socket.sent.length, sentBefore + 2, 'and NOT answered');
+        socket.emit('message', { data: JSON.stringify({ renewed: { leaseId: 'lease-fresh', expiresAtMs: Date.now() + 900_000 } }) });
+        const renewed = await renewing;
+        equal(renewed.leaseId, 'lease-fresh', 'the renewal still completes on the relay\'s {renewed}');
+      }
+
+      // The latch is per renewal: the NEXT renewal signs its own fresh nonce once.
+      {
+        const third = crypto.randomBytes(32).toString('base64url');
+        const renewing = connection.renew({ lease: FRESH, proof, timeoutMs: 1_000 });
+        renewing.catch(() => {});
+        socket.emit('message', { data: JSON.stringify({ challenge: third, expiresAtMs: Date.now() + 30_000, renewal: true }) });
+        equal(signed.length, 3, 'a later renewal signs its own nonce');
+        socket.emit('message', { data: JSON.stringify({ renewalRefused: { code: 'RELAY_RENEWAL_REFUSED' } }) });
+        await assert.rejects(renewing, error => error.code === 'RELAY_CLIENT_RENEWAL_REFUSED');
+        assertions += 1;
+      }
+
+      // Text with no renewal in flight is still dropped unparsed and unsigned.
+      socket.emit('message', { data: JSON.stringify({ challenge: crypto.randomBytes(32).toString('base64url'), renewal: true }) });
+      equal(signed.length, 3, 'a renewal challenge nobody asked for is not signed');
+      connection.close();
+      equal((await connection.closed).code, 1000);
+    } finally {
+      clearInterval(keepAlive);
+    }
+  }
+
   // --- a malformed proof option is refused before any socket is opened -----
   {
     assertions += 1;
@@ -184,7 +291,7 @@ const LEASE = { schemaVersion: 'online-fra-lease.v1', pairId: 'pair-x', endpoint
     });
     const socket = FakeSocket.instances.at(-1);
     socket.emit('open');
-    socket.emit('message', { data: JSON.stringify({ challenge: '0123456789abcdef' }) });
+    socket.emit('message', { data: JSON.stringify({ challenge: HONEST_NONCE }) });
     await assert.rejects(pending, error => error.code === 'RELAY_CLIENT_PROOF_FAILED');
     assertions += 1;
   }
@@ -200,7 +307,7 @@ const LEASE = { schemaVersion: 'online-fra-lease.v1', pairId: 'pair-x', endpoint
     });
     const socket = FakeSocket.instances.at(-1);
     socket.emit('open');
-    if (proof) socket.emit('message', { data: JSON.stringify({ challenge: '0123456789abcdef' }) });
+    if (proof) socket.emit('message', { data: JSON.stringify({ challenge: HONEST_NONCE }) });
     await assert.rejects(pending, error => error.code === 'RELAY_CLIENT_ADMISSION_SEND_FAILED');
     assertions += 1;
   }

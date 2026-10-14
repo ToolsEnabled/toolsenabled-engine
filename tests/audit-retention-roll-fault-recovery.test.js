@@ -4,7 +4,7 @@
 //
 // MEASURED on the live install 2026-09-03 (capability\logs\audit-durability.json):
 // 382 breaches, the last 200 kept, every one AUDIT_PROJECTION_DIVERGED, clustered
-// immediately after capability\state\audit-archive.jsonl rolled
+// immediately after capability\state\audit-archive.jsonl rolled at 17:07:36 local
 // -- and every external-write tool in the product stayed refused for hours
 // afterward. Reproduced here on a private, isolated ledger with one simulated
 // one-time fault: before this fix, that single fault left every later record()

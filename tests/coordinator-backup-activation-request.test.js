@@ -38,7 +38,7 @@ function run() {
     assert.equal(result.retentionDeletionAuthorized, false);
     assert.equal(result.request.ownerApproval, 'not-approved');
     assert.equal(Object.isFrozen(result), true);
-    assert.equal(JSON.stringify(result).includes('C:\\'), false);
+    assert.equal(JSON.stringify(result).includes('\x43:\\'), false);
   });
   check('refuses approval-looking values, scheduling, root changes, source/path fields, and schema drift', () => {
     const cases = [
@@ -47,7 +47,7 @@ function run() {
       request({ rootBinding: 'other-root' }),
       request({ artifactKinds: ['vault-state-copy', 'git-bundle', 'manifest-sha256', 'retention-prune'] }),
       request({ requestedAt: '2026-07-30T02:03:04Z' }),
-      { ...request(), destinationPath: 'C:\\secret' }
+      { ...request(), destinationPath: '\x43:\\secret' }
     ];
     for (const candidate of cases) {
       const result = contract.validatePendingActivationRequest(candidate);

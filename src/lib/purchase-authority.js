@@ -2,10 +2,11 @@
 
 // THE GATE BETWEEN AN AGENT AND THE OWNER'S MONEY.
 //
-// The requirement: the cart is the user's shopping cart, built by their AI, for
-// anything the AI needs to buy that the user's settings do not auto-approve --
-// and the default settings auto-approve nothing. The cart and the setting were
-// verified to exist rather than assumed.
+// The requirement, paraphrased from the owner: the cart is the user's shopping
+// cart, built by their AI, for anything the AI needs to buy that the user's
+// settings do not auto-approve -- and the default settings auto-approve
+// nothing. The request came with an instruction to verify the cart and the
+// setting actually exist rather than assume they do.
 //
 // WHAT WAS VERIFIED BEFORE THIS FILE WAS WRITTEN, because the answer decided
 // what it had to be:
@@ -21,7 +22,7 @@
 //                                       contains "Approving any purchase or
 //                                       spending any money". So this owner's
 //                                       settings do auto-approve nothing, by
-//                                       default, exactly as they said.
+//                                       default, exactly as he said.
 //
 //   NOTHING ON THE SPEND PATH READ IT.  That is the defect. Measured on this
 //                                       checkout:
@@ -43,7 +44,7 @@
 //
 // THAT IS THE SHAPE THIS PROJECT KEEPS FINDING: a control that is declared,
 // rendered, and inert. It is worse than no control, because the owner reads the
-// setting and believes they are covered.
+// setting and believes he is covered.
 //
 // ============================== THE RULE ==============================
 //
@@ -236,7 +237,7 @@ function authorizeSpend(request, dependencies = {}) {
     return refuse(REFUSAL.DECISION_MISSING, 'This spend points at something that is not an approved shopping list line, so nothing was spent.');
   }
 
-  // ---- 3. THE LINE HAS TO BE ONE THEY APPROVED. ---------------------------
+  // ---- 3. THE LINE HAS TO BE ONE HE APPROVED. ---------------------------
   const items = Array.isArray(settled.decision.items) ? settled.decision.items : [];
   const line = items.find(item => isPlainObject(item) && item.itemId === itemId);
   if (!line) {
@@ -249,7 +250,7 @@ function authorizeSpend(request, dependencies = {}) {
     return refuse(REFUSAL.DECISION_NOT_APPROVED, 'You refused this line, so nothing was spent. A refused line stays refused.');
   }
 
-  // ---- 4. THE AMOUNT HAS TO BE THE AMOUNT THEY SAW. -----------------------
+  // ---- 4. THE AMOUNT HAS TO BE THE AMOUNT HE SAW. -----------------------
   // Approving $11.08 must not authorize $1,108. The comparison is on the exact
   // integer cents the owner was shown, never on a reconstructed float.
   if (!Number.isSafeInteger(line.amountCents) || line.amountCents !== amountCents) {
@@ -290,10 +291,10 @@ function authorizeSpend(request, dependencies = {}) {
     // "spend once" enforceable rather than conventional.
     spendProvider: APPROVED_SPEND_PROVIDER,
     spendReference,
-    // Which of their own words this line came from, carried through so the audit
+    // Which of his own words this line came from, carried through so the audit
     // receipt for a spend can answer "which of my words bought this?". Null is
-    // the honest answer for an agent-proposed line, and is what they saw stamped
-    // on that line when they approved it.
+    // the honest answer for an agent-proposed line, and is what he saw stamped
+    // on that line when he approved it.
     ownerRequestIds: Array.isArray(line.ownerRequestIds) ? Object.freeze([...line.ownerRequestIds]) : null,
     decidedAt: typeof settled.decision.decidedAt === 'string' ? settled.decision.decidedAt : null
   });

@@ -16,12 +16,11 @@
 // `--json` prints the projection verbatim for a surface that wants to render it.
 //
 // ---------------------------------------------------------------------------
-// THE FOUR-PART REQUIREMENT, AND WHICH PARTS OF IT THIS FILE CAN ANSWER
+// THE 2026-08-12 22:04Z DIRECTIVE, AND WHICH PARTS OF IT THIS FILE CAN ANSWER
 //
-// The requirement has four parts: the cart shown in the owner's signed-in
-// account, the owner's card stored in the vault, the whole thing proven on a
-// live session, and a loud sound whenever a question is posted that needs the
-// owner.
+// He asked for four things at once: the cart in front of him IN HIS SIGNED-IN
+// ACCOUNT, his CARD LOCKED IN THE VAULT, the whole thing PROVEN on a live
+// session, and A LOUD SOUND whenever a question is posted that needs him.
 //
 // This file answers the ones it can MEASURE and refuses to answer the one it
 // cannot, by name -- `--ready` prints all four either way:
@@ -32,20 +31,20 @@
 //                     nothing and answers through an exit code with empty
 //                     stdout. Present / absent / could-not-tell, never a
 //                     boolean that turns a permissions error into "no card".
-//   a question waits  measured. `questionCount` from the projection -- rows the
-//                     owner can still answer, not rows that exist.
-//   signed in         NOT MEASURABLE FROM HERE, and not faked. The signed-in
+//   a question waits  measured. `questionCount` from the projection -- rows he
+//                     can still answer, not rows that exist.
+//   signed in as him  NOT MEASURABLE FROM HERE, and not faked. The signed-in
 //                     session lives in the desktop app's main process and on
 //                     disk only as product-session.enc, sealed by the OS
 //                     keystore in that app's own userData directory. Reading
 //                     it would mean prising open the app's account partition
 //                     from outside; guessing it would mean this tool telling
-//                     the owner they are signed in when nobody is. So it reports the
+//                     him he is signed in when nobody is. So it reports the
 //                     absence and says which screen does hold the answer.
 //
 // AND THE SOUND IS REAL. `--alert` plays the product's own generic-ramp alert
 // through src/lib/desktop.js -- the same call the Firebase and gcloud sign-in
-// paths already make when they need the owner -- and only when `questionCount` is
+// paths already make when they need him -- and only when `questionCount` is
 // above zero. Beeping at an empty queue is how an alarm gets ignored.
 //
 // THE TWO NEW DEPENDENCIES ARE LOADED LAZILY, ON PURPOSE. Requiring them at
@@ -89,7 +88,7 @@ function money(amountCents, currency) {
 // (owner-prompts.js wirePrompt/wireItem). This reader holds the record, so it
 // does NOT re-create that stamp -- re-creating it wrongly would put a false
 // provenance label on the owner's lines, which is the exact failure that made
-// them reject four earlier carts. It passes provenanceSource: 'record' instead,
+// him reject four earlier carts. It passes provenanceSource: 'record' instead,
 // and the projection reads the structural field the record still has. Only
 // `defaultDecision` is derived, from the store's own stated rule.
 function readQueue(stateFile) {
@@ -110,7 +109,7 @@ function readQueue(stateFile) {
 }
 
 /**
- * Is their card on file -- asked of the vault, never read out of it.
+ * Is his card on file -- asked of the vault, never read out of it.
  *
  * Delegates to src/lib/vault-presence.js, which runs the vault's `present`
  * action: no decryption, no stdout, an exit code only. That module never
@@ -140,7 +139,7 @@ function cardSentence(card) {
 }
 
 /**
- * The required loud sound, played only when something actually needs the owner.
+ * The loud sound he asked for, played only when something actually needs him.
  *
  * `generic-ramp` is the product's four-tone alert that rises in amplitude --
  * the same one src/lib/tool-registry.js already plays for the Firebase and
@@ -148,7 +147,7 @@ function cardSentence(card) {
  * carries across a room.
  *
  * IT NEVER THROWS. A speaker that is muted, absent or busy must not take down
- * the reading of their cart; the return value says whether the sound happened,
+ * the reading of his cart; the return value says whether the sound happened,
  * and the caller prints that rather than assuming it.
  */
 function alertIfNeeded(result, overrides = {}) {
@@ -170,7 +169,7 @@ function alertIfNeeded(result, overrides = {}) {
 }
 
 /**
- * The four facts of the directive, in one block, each with its standing.
+ * The four facts of the 22:04Z directive, in one block, each with its standing.
  *
  * Printed as a block rather than folded into prose because the point of it is
  * that a reader can see WHICH of the four is not yet true.

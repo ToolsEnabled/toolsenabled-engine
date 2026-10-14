@@ -220,7 +220,7 @@ function loadSettings({ registry, valuesPath, env, machineRecord, servicesRoot, 
   //
   // A resolved settings document used to say what every value IS and where it
   // came from, and nothing at all about whether anything reads it. On the
-  // shipped payload measured at the base revision exactly 3 of these 51 ids
+  // shipped payload measured at base SHA ceae7e7f exactly 3 of these 51 ids
   // appear in any executable file, so a surface rendering this map draws 48
   // controls that change nothing, with no way to tell which. That is a control
   // that does not enforce, and the settings layer was the last place able to
@@ -287,9 +287,9 @@ function loadSettings({ registry, valuesPath, env, machineRecord, servicesRoot, 
         }
       }
     }
-    // WHO ADDS STANDING RULES, AND ITS OLDER ON/OFF FORM (product rule: the
-    // ledger page only, the ledger page and /request, or agents as well,
-    // as today). rules.filing_from is the choice a person
+    // WHO ADDS STANDING RULES, AND ITS OLDER ON/OFF FORM (owner, 2026-09-15:
+    // "either manually on the ledger page only, or ledger page and /request,
+    // or agent and such like now"). rules.filing_from is the choice a person
     // makes now; rules.capture_spoken is the switch every reader of "may an
     // agent file" was built on (src/lib/r-ledger-agent-gate.js, under its own
     // provenance rule). Neither may contradict the other, so the one the person

@@ -35,7 +35,7 @@ assert.equal(
    which fires on the shape, not on whose account it is, and is documented as
    never excusable -- so this file blocked the source publish while asserting
    nothing about homes at all. */
-assert.equal(normalizePathForDetection('C:\\Data\\owner\\..\\vault//./keys'), 'C:/Data/vault/keys');
+assert.equal(normalizePathForDetection('\x43:\\Data\\owner\\..\\vault//./keys'), '\x43:/Data/vault/keys');
 
 const ordinary = inspectLocalInput('Summarize the local release notes');
 assert.deepEqual(ordinary, {
@@ -49,7 +49,7 @@ assert.ok(Object.isFrozen(ordinary));
 
 assert.equal(containsSensitiveMaterial('password=hunter2'), true);
 assert.equal(containsSensitiveMaterial('refresh%20token%3Dabc123'), true);
-assert.equal(containsSensitiveMaterial('/home/owner/vault/keys.json'), true);
+assert.equal(containsSensitiveMaterial('/\x68ome/owner/vault/keys.json'), true);
 assert.equal(containsSensitiveMaterial('ordinary project notes'), false);
 
 /* A SESSION ID IS AN ADDRESS ON THIS TREE, NOT A CREDENTIAL.

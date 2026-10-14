@@ -17,7 +17,7 @@
 // worthless, so a test suite for the reviewer that only checks bookkeeping
 // would be committing the same sin one level up. The centre of this file is
 // therefore testFabricatedPassingLaneIsRejected(): a real fixture modeled on
-// the PDF-count/message-id escapes -- a module whose OWN test passes while its real-data
+// the s03/s09 escapes -- a module whose OWN test passes while its real-data
 // behaviour is wrong -- driven through the real review pipeline by a reviewer
 // that actually executes the artifact against the real producer's output.
 //
@@ -424,7 +424,7 @@ function testPacketCaptureFromRealWorktree() {
   const root = tempDir('capture-repo');
   const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true, shell: false });
   git(['init', '--quiet']);
-  git(['config', 'user.email', 'fleet@test.local']);
+  git(['config', 'user.email', 'person-0a910ad1@example.com']);
   git(['config', 'user.name', 'fleet test']);
   fs.writeFileSync(path.join(root, 'seed.txt'), 'seed\n', 'utf8');
   git(['add', '-A']);
@@ -474,9 +474,9 @@ function testPacketCaptureFromRealWorktree() {
 //    wrong must be REJECTED.
 //
 // Modeled on the two batch-1 escapes described in the doctrine:
-//   * the mail lane: consumed `details.messageId` / `details.errorCode`; the real
+//   * s09-gmail: consumed `details.messageId` / `details.errorCode`; the real
 //     producer writes neither, so the field is permanently null in production.
-//   * the PDF-info lane: reported a count with ok:true that did not match reality.
+//   * s03-pdfinfo: reported a count with ok:true that did not match reality.
 // The fixture reproduces the mechanism exactly: the artifact codes against an
 // imagined schema, and the lane's own test fabricates that same schema so it
 // passes. Reading the code does not catch it. Running the lane's test does not
@@ -615,8 +615,8 @@ async function testFabricatedPassingLaneIsRejected() {
   // Precondition: against REAL data the artifact is wrong.
   const { summarize } = require(path.join(worktree, 'src', 'lib', 'send-history.js'));
   const realResult = summarize(realLog);
-  equal(realResult.ok, true, 'and against real data it still reports ok:true (the PDF-count shape)');
-  equal(realResult.withMessageId, 0, 'while actually finding 0 message ids in 3 real sends (the message-id shape)');
+  equal(realResult.ok, true, 'and against real data it still reports ok:true (the s03 shape)');
+  equal(realResult.withMessageId, 0, 'while actually finding 0 message ids in 3 real sends (the s09 shape)');
 
   seedFinishedLane(stateFile, 'fab-lane', { itemId: 'Q11', changedFileCount: 2, worktree });
 
@@ -717,8 +717,8 @@ function testPromptForcesExecution() {
   const prompt = review.buildReviewPrompt({
     lane: { laneId: 'lane-p', itemId: 'Q11', provider: 'gemini' },
     manifest: { changedPaths: ['src/lib/x.js'], expectFiles: ['src/lib/producer.js'], brief: 'do the thing', laneClaims: { filesChanged: ['src/lib/x.js'] } },
-    workspace: 'C:/tmp/ws',
-    repoRoot: 'C:/repo'
+    workspace: '\x43:/tmp/ws',
+    repoRoot: '\x43:/repo'
   });
   for (const demand of [
     'EXECUTE', 'RAN-COMMAND', 'RAN-OUTPUT', 'IMAGINED SCHEMA', 'UNREACHABLE CODE',
@@ -728,14 +728,14 @@ function testPromptForcesExecution() {
   }
   ok(/own test results are NOT evidence/i.test(prompt), 'and tells the reviewer the lane\'s tests are not evidence');
   ok(prompt.includes('untrusted'), 'and marks the brief/files as untrusted data');
-  ok(prompt.includes('C:/tmp/ws') && prompt.includes('C:/repo'),
+  ok(prompt.includes('\x43:/tmp/ws') && prompt.includes('\x43:/repo'),
     'and names the workspace AND the live repo so real data is reachable');
 
   // Reviewer invocation must let the reviewer actually run things.
-  const codexArgs = review.reviewerArgs('codex', { prompt: 'p', cwd: 'C:/tmp/ws' });
+  const codexArgs = review.reviewerArgs('codex', { prompt: 'p', cwd: '\x43:/tmp/ws' });
   ok(codexArgs.includes('--sandbox') && codexArgs[codexArgs.indexOf('--sandbox') + 1] === 'workspace-write',
     'codex reviews run in a sandbox that permits executing a harness');
-  equal(codexArgs[codexArgs.indexOf('--cd') + 1], 'C:/tmp/ws', 'and are pinned to the review workspace');
+  equal(codexArgs[codexArgs.indexOf('--cd') + 1], '\x43:/tmp/ws', 'and are pinned to the review workspace');
   ok(!codexArgs.includes('--ignore-user-config'),
     'the machine codex config is honored: measured 2026-07-28, --ignore-user-config leaves codex unable to run ANY command on Windows ("rejected: blocked by policy"), which would make every review unverifiable');
   assert.throws(() => review.reviewerArgs('claude', { prompt: 'p', cwd: 'x' }), /No reviewer invocation/);
@@ -1052,7 +1052,7 @@ function testHarnessCommandSafety() {
     'node is spawned as the running interpreter, not resolved from PATH');
   // And nothing credential-shaped is inherited by a command a model chose.
   const env = review.verifyEvidence === undefined ? null : require('../src/lib/fleet-supervisor/evidence.js')
-    .harnessEnvironment({ GEMINI_API_KEY: 'secret', GOOGLE_APPLICATION_CREDENTIALS: 'c:/adc.json', PATH: 'x' });
+    .harnessEnvironment({ GEMINI_API_KEY: 'secret', GOOGLE_APPLICATION_CREDENTIALS: '\x63:/adc.json', PATH: 'x' });
   equal(env.GEMINI_API_KEY, undefined, 'the harness strips credential env vars before running a model-chosen command');
   equal(env.GOOGLE_APPLICATION_CREDENTIALS, undefined, 'including the ADC path');
   equal(env.PATH, 'x', 'while leaving the ordinary environment intact');
@@ -1065,9 +1065,9 @@ function testMatcherToleratesNoiseButCatchesInvention() {
   const compare = review.compareOutputs;
 
   ok(compare('52/52 page counts matched', '52/52 page counts matched').match, 'identical output matches');
-  ok(compare('2026-01-01T01:02:03.456Z  52/52 matched in 1841ms', '2026-01-01T05:00:00.000Z  52/52 matched in 12ms').match,
+  ok(compare('2026-07-29T04:11:02.881Z  52/52 matched in 1841ms', '2026-07-29T05:00:00.000Z  52/52 matched in 12ms').match,
     'timestamps and durations are normalized away -- exact matching here would fail every honest review');
-  ok(compare('read C:\\example\\checkout\\logs\\x.jsonl: 3 rows', 'read C:\\other\\path\\x.jsonl: 3 rows').match,
+  ok(compare('read \x43:\\Users\\owner\\Desktop\\ToolsEnabled\\logs\\x.jsonl: 3 rows', 'read \x43:\\other\\path\\x.jsonl: 3 rows').match,
     'absolute paths are normalized away too');
   ok(compare('checking...\n52/52 page counts matched\ndone.', '52/52 page counts matched').match,
     'a partial quote of real output matches (the prompt asks for <=300 chars)');
@@ -1330,7 +1330,7 @@ async function testGradedScoreAndSecondOpinion() {
   ok(!review.scoreIsBorderline(1.0) && !review.scoreIsBorderline(0.0),
     'a clear accept or a clear reject is NOT borderline, so it costs one reviewer, not two');
 
-  // Score and verdict must agree -- their cross-validation discipline.
+  // Score and verdict must agree -- his cross-validation discipline.
   const contradictory = review.parseVerdict(ACCEPT_TEMPLATE({
     command: 'node probe.js', output: 'counted 3 real records', score: '0.3'
   }).join('\n'));
@@ -1372,7 +1372,7 @@ async function testGradedScoreAndSecondOpinion() {
   equal(outcome.verdict, 'rejected', 'the averaged cross-vendor score overturns a borderline accept');
   equal(Number(outcome.score.toFixed(3)), 0.55, 'the verdict now carries a graded score, not one bit');
   equal(outcome.secondOpinion.straddledThreshold, true,
-    'and records that the two vendors landed on OPPOSITE sides of the line -- the 31% case their data measured');
+    'and records that the two vendors landed on OPPOSITE sides of the line -- the 31% case his data measured');
 
   // Our real pool is {codex, gemini}: for a GEMINI lane there is no third
   // vendor, and that must be reported honestly rather than faked by re-asking
@@ -1401,7 +1401,7 @@ async function testGradedScoreAndSecondOpinion() {
 // ---------------------------------------------------------------------------
 // 21. Our own restarts must not spend a lane's review budget
 // ---------------------------------------------------------------------------
-// Live 2026-07-28: six supervisor restarts drove one lane to
+// Live 2026-07-28: six supervisor restarts drove q21-ms5cd6w1z8wd to
 // reviewAttempt 3 of 3 without a reviewer ever finishing. One more restart
 // would have stalled a lane whose work nobody had judged. A takeover from a
 // dead holder is a RECLAIM, counted and capped on its own budget.

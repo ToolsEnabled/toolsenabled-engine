@@ -95,7 +95,7 @@ assert.match(source, /\$health\.rootAccessReady -and \$health\.transportBindingR
 assert.match(source, /runtime_integrity_not_ready/);
 assert.match(source, /root_access_not_ready/);
 assert.match(source, /transport_binding_not_ready/);
-assert.match(source, /C:\\Program Files\\nodejs\\node\.exe/);
+assert.match(source, /\x43:\\agent-apps\\node-v22\.19\.0\\node\.exe/);
 assert.match(source, /NODE_22_19_OR_NEWER_MISSING/);
 assert.match(source, /\$parsedVersion -ge \$MinimumNodeVersion/);
 assert.match(source, /\$ReasonPrefix \+ '_stale'/);
@@ -210,7 +210,8 @@ try {
   assert.equal(report.firewallReason, null);
 
   const missingRuntimeSource = source
-    .replace("'C:\\Program Files\\nodejs\\node.exe'", "'C:\\fra-control-test-missing\\node-b.exe'");
+    .replace("'\x43:\\agent-apps\\node-v22.19.0\\node.exe'", "'\x43:\\fra-control-test-missing\\node-a.exe'")
+    .replace("'\x43:\\Program Files\\nodejs\\node.exe'", "'\x43:\\fra-control-test-missing\\node-b.exe'");
   assert.notEqual(missingRuntimeSource, source, 'disposable missing-runtime fixture was not created');
   fs.writeFileSync(fixtureScript, missingRuntimeSource, 'utf8');
   const lifecycleFailure = spawnSync('powershell.exe', [

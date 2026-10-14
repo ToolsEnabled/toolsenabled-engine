@@ -54,9 +54,9 @@ const REQUESTERS = Object.freeze(['codex', 'claude', 'gemini', 'toolsenabled', '
 const REQUESTER_EVIDENCE = Object.freeze(['declared', 'none']);
 // WHY `none` IS FATAL FOR A PAYMENT CARD AND NOT A CREDENTIAL.
 //
-// A credential form asks the owner to type a provider secret they can rotate. The
-// card form asks for the instrument that spends their money. An unnamed requester
-// is a reason to tell the owner plainly and let them decide on a credential; on
+// A credential form asks the owner to type a provider secret he can rotate. The
+// card form asks for the instrument that spends his money. An unnamed requester
+// is a reason to tell the owner plainly and let him decide on a credential; on
 // the card form it is a reason to refuse, because there is no cheap recovery
 // from a wrong answer. Refusing both is what made the whole credential path dead on
 // every transport that names no actor -- measured 2026-08-11, and still true on
@@ -78,8 +78,8 @@ const REQUEST_ID_RE = /^owner-prompt-[a-f0-9-]{36}$/;
 // The slot is gone (see enqueue), so the wedge is gone, and with it the only
 // argument for a deadline. What remains is a person typing a secret into a
 // form. Expiring that is a data-loss bug wearing a safety hat: the owner walks
-// away mid-entry, comes back, and the request they were answering has been
-// cancelled underneath them with nothing to say so. The runner already drains a
+// away mid-entry, comes back, and the request he was answering has been
+// cancelled underneath him with nothing to say so. The runner already drains a
 // multi-item queue in order, and its own dialog says "$Count private steps are
 // ready, one at a time" -- it was always built for a queue, not a slot.
 //
@@ -257,7 +257,7 @@ function appendEvent(queue, item, type) {
 // A DIALOG WHOSE RUNNER IS GONE IS THE ONE STATE WITH NO ROUTE BACK, because
 // cancel() refuses a presenting item outright -- deliberately, so nothing can
 // yank a form out from under the owner mid-entry. Previously a four-hour timer
-// was the floor under that. A timer cannot tell "they are still typing" from "the
+// was the floor under that. A timer cannot tell "he is still typing" from "the
 // process died", so it eventually cancelled both.
 //
 // runnerIsAlive() can tell them apart, so ask it. If no runner owns this queue
@@ -497,7 +497,7 @@ function enqueue({ kind, vaultKey, label, requestContext, requester } = {}, over
    * success it has not verified, so the next occurrence names itself instead of
    * looking like a working queue.
    *
-   * This is the same lesson as an earlier change ("a pid is not a running dialog") one
+   * This is the same lesson as `909455a` ("a pid is not a running dialog") one
    * layer up: there, a spawn that returned a pid was not a dialog; here, a write
    * that returned an id is not a durable request. Both were true-looking values
    * standing in for the thing actually wanted.
@@ -544,7 +544,7 @@ function cancel(input = {}, overrides = {}) {
     // JS -- the refusal below is unconditional, so a dialog lost to a reboot or a
     // killed runner would stay presenting forever. Re-queueing it when its runner
     // is provably gone makes it cancellable here, while a form genuinely in front
-    // of the owner is still refused, however long they take over it.
+    // of the owner is still refused, however long he takes over it.
     const atMs = now();
     recoverOrphanedPresenting(queue, atMs, overrides);
     const item = queue.items.find(candidate => candidate.requestId === input.requestId);

@@ -11,8 +11,9 @@
 //
 // The layout below borrows its visual language -- table-based tiles and
 // bars, a colour-coded left accent per panel, a hidden inbox preheader, a
-// gradient header band with a solid bgcolor fallback -- from an earlier,
-// proven email renderer. Two things are deliberately NOT copied from it, because
+// gradient header band with a solid bgcolor fallback -- from the renderer
+// the owner already praised (another project of theirs, app/services/
+// email_render.py). Two things are deliberately NOT copied from it, because
 // this digest's honesty rules outrank house style:
 //
 //   * A metric with no durable meter renders as a labelled "not recorded"
@@ -38,7 +39,7 @@
 // Reading order (both the text and HTML bodies): what changed since the
 // last digest, then what is blocked or stale, then the headline metrics --
 // because the owner scans this hourly on a phone and those are the three
-// things worth a glance before they decide whether to open it further.
+// things worth a glance before he decides whether to open it further.
 //
 // R84 ADDED A THIRD VIEW. Every message also carried `telegram` and
 // `telegramCaption` -- a short, phone-shaped rendering produced by
@@ -46,7 +47,7 @@
 // tiles below so the two could never disagree.
 //
 // BOTH VIEWS WERE REMOVED 2026-08-23, with ./render-telegram.js and the rest of
-// the Telegram connector (product decision: Telegram may be removed). Two views
+// the Telegram connector (owner ruling: "you can rip out telegram"). Two views
 // remain, `text` and `html`, and they are the pair the surviving email channel
 // sends. The honesty rules above are unchanged and still apply to both.
 

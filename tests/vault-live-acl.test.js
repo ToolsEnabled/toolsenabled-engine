@@ -74,7 +74,7 @@ const { spawnSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..');
 const PROBE = path.join(ROOT, 'tools', 'vault-access-probe.ps1');
 const VAULT_ACL = path.join(ROOT, 'tools', 'lib', 'vault-acl.ps1');
-const POWERSHELL = path.join(process.env.SystemRoot || 'C:\\Windows',
+const POWERSHELL = path.join(process.env.SystemRoot || '\x43:\\Windows',
   'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 function runProbe(repoRoot) {

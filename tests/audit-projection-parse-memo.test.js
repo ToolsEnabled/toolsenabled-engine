@@ -1,11 +1,11 @@
 // WHAT THIS PINS, AND WHY IT IS A COST TEST RATHER THAN A CALL-COUNT TEST.
 //
 // validateProjectionState() re-parsed both audit projection files on every
-// admission. MEASURED 2026-09-03 on a copy of a live install
-// (actions.jsonl 11.49 MB / 10,053 rows + actions.log 6.63 MB), Node 22,
-// a development machine: one pass cost a median of 223 ms, synchronously, on the Electron
+// admission. MEASURED 2026-09-03 on a copy of the owner's Live install
+// (actions.jsonl 11.49 MB / 10,053 rows + actions.log 6.63 MB), node v22.14.0,
+// this machine: one pass cost a median of 223 ms, synchronously, on the Electron
 // main thread. Evidence:
-// the crash investigation evidence.
+// REPORT-crash-20260903/evidence/E/{bench-audit-projection.txt,fix1-before-after.txt}.
 //
 // The memo that fixes it applies ONLY when the real filesystem is used, so an
 // injected `dependencies.fs` double -- the way every other suite in this tree
@@ -62,7 +62,7 @@ function loadParsedProjection() {
   }
 }
 
-// A projection of the size a real install actually carries. Built here, not
+// A projection of the size the owner's install actually carries. Built here, not
 // copied from anywhere, so the fixture is independently specified.
 const ROWS = 10_000;
 
@@ -110,7 +110,7 @@ test('a repeated parse of an unchanged projection does not pay the full parse ag
     assert.equal(cold.value.length, ROWS, 'the cold parse must read every row');
 
     // Five repeats, and the CHEAPEST of them is the one asserted: a single
-    // sample on a machine shared with other work is noise, and the
+    // sample on a four-core machine shared with other work is noise, and the
     // claim being made is about the floor the code can reach, not the median.
     let cheapest = Infinity;
     let rows = null;

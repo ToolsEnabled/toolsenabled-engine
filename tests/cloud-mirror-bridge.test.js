@@ -85,6 +85,27 @@ const SILENT_AUDIT = {
 };
 const OPEN_POLICY = { assertActive: () => {} };
 
+/* AUDITING HAS TO BE ON FOR SILENT_AUDIT TO BE ASKED ANYTHING.
+ *
+ * `audit.enabled` has "default": false in config/settings-registry.json --
+ * intended and documented ("Off keeps ordinary work independent of optional
+ * audit infrastructure"). actions.js durableReceipt() returns
+ * operationAudit.skippedStatus() and never reaches the writer when the captured
+ * policy says auditing is not required, so on any machine where nobody turned it
+ * on, `result.receipt.intentAudit` has no sequence and the intent-before-mutation
+ * check below fails while the product does exactly what it is configured to do.
+ *
+ * runtime-policy.js only counts a value whose provenance source is 'user' or
+ * 'installer', so the provenance here is load-bearing rather than decoration. */
+const AUDIT_ON = () => ({
+  values: { 'audit.enabled': true, 'audit.activity': 'Full' },
+  provenance: {
+    'audit.enabled': { source: 'user', atMs: 1, directive: null },
+    'audit.activity': { source: 'user', atMs: 1, directive: null }
+  },
+  rejected: []
+});
+
 // A stand-in for the mirror module. It RECORDS what it was asked to do, which
 // is how the tests below assert that the provider's answer -- not the caller's
 // input -- is what reached the registry.
@@ -96,14 +117,14 @@ function fakeMirror() {
     calls,
     publishCalls,
     disableCalls,
-    listRegisteredProjects: () => ({ registryPath: 'C:/fake/registry.json', projects: [] }),
+    listRegisteredProjects: () => ({ registryPath: '\x43:/fake/registry.json', projects: [] }),
     registerMirrorProject: async (args) => {
       const destination = cloudMirrorCore.githubRepositoryFromRemote(args.mirrorRemote);
       const metadata = await args.githubRepoGetImpl(destination);
       cloudMirrorCore.assertPrivateGithubMetadata(metadata, destination.fullName);
       calls.push({ ...args, observedMetadata: metadata });
       return {
-        ok: true, registryPath: 'C:/fake/registry.json', projectKey: args.projectKey,
+        ok: true, registryPath: '\x43:/fake/registry.json', projectKey: args.projectKey,
         project: { cloudRepository: metadata.fullName, mirrorBranch: `cloud-mirror/${args.projectKey}` },
         replaced: false,
         checks: [{ name: 'mirror repository is private', state: 'OK', detail: 'provider reports private' }]
@@ -127,7 +148,7 @@ function fakeMirror() {
       disableCalls.push(args);
       return {
         ok: true,
-        registryPath: 'C:/fake/registry.json',
+        registryPath: '\x43:/fake/registry.json',
         projectKey: args.projectKey,
         project: {
           key: args.projectKey,
@@ -148,6 +169,9 @@ function actionsWith({ environments = [], environmentsComplete = true, mirror = 
     toolCalls,
     actions: createMissionActions({
       audit: SILENT_AUDIT,
+      // Pinned for the same reason permissionSession is: otherwise this file
+      // passes or fails by whether the machine running it has auditing on.
+      loadSettings: AUDIT_ON,
       policy: OPEN_POLICY,
       cloudMirror: mirror,
       // Pinned rather than inherited, for the reason mission-bridge.test.js
@@ -201,7 +225,7 @@ const PRIVATE_ENV = Object.freeze({
   {
     const { actions, mirror, toolCalls } = actionsWith({ environments: [PRIVATE_ENV] });
     const result = await actions.cloudMirrorRegister({
-      projectKey: 'engine', sourceRoot: 'C:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git',
+      projectKey: 'engine', sourceRoot: '\x43:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git',
       environment: PRIVATE_ENV.environmentId
     });
     check(result.ok === true, 'register: a private, singly-bound environment registers');
@@ -219,6 +243,10 @@ const PRIVATE_ENV = Object.freeze({
       'register: the environment default branch is ignored and the project workspace branch is derived');
     check(Array.isArray(result.receipt.checks) && result.receipt.checks.length === 1,
       'register: the per-fact check list reaches the surface intact -- a registration showing only its successes would read as a clean bill of health for things nobody looked at');
+    // The precondition, stated: with auditing off there is no receipt to order,
+    // and the check below would be measuring the settings default.
+    check(require('../src/lib/operation-audit').capturePolicy({ loadSettings: AUDIT_ON }).required === true,
+      'register: auditing is in force for this run, without which the receipt ordering check tests nothing');
     check(result.receipt.intentAudit?.sequence > 0 && result.receipt.audit?.sequence > result.receipt.intentAudit.sequence,
       'register: a durable intent precedes the registry mutation and a later outcome receipt reaches the surface');
   }
@@ -234,7 +262,7 @@ const PRIVATE_ENV = Object.freeze({
         schemaVersion: cloudMirrorCore.REGISTRY_SCHEMA,
         projects: {
           engine: {
-            sourceRoot: 'C:/existing-checkout',
+            sourceRoot: '\x43:/existing-checkout',
             mirrorRemote: 'https://github.com/Example/agent-mirror.git',
             mirrorBranch: 'cloud-mirror/engine',
             boundaryManifest: 'config/cloud-mirror-boundary.json',
@@ -266,7 +294,7 @@ const PRIVATE_ENV = Object.freeze({
       const { actions, toolCalls } = actionsWith({ environments: [PRIVATE_ENV], mirror: guardedCore });
       const refusal = await raises('CLOUD_MIRROR_ACTIVE_REPLACEMENT_REFUSED',
         () => actions.cloudMirrorRegister({
-          projectKey: 'engine', sourceRoot: 'C:/replacement-checkout',
+          projectKey: 'engine', sourceRoot: '\x43:/replacement-checkout',
           mirrorRemote: 'https://github.com/Example/agent-mirror.git',
           environment: PRIVATE_ENV.environmentId,
           replace: true
@@ -288,7 +316,7 @@ const PRIVATE_ENV = Object.freeze({
     const { actions, mirror, toolCalls } = actionsWith({ environments: [PRIVATE_ENV] });
     await raises('BRIDGE_CLOUD_MIRROR_REPOSITORY_MISMATCH',
       () => actions.cloudMirrorRegister({
-        projectKey: 'engine', sourceRoot: 'C:/checkout',
+        projectKey: 'engine', sourceRoot: '\x43:/checkout',
         mirrorRemote: 'https://github.com/Example/a-different-repository.git',
         environment: PRIVATE_ENV.environmentId
       }),
@@ -305,7 +333,7 @@ const PRIVATE_ENV = Object.freeze({
     });
     await raises('CLOUD_MIRROR_REPOSITORY_NOT_PRIVATE',
       () => actions.cloudMirrorRegister({
-        projectKey: 'engine', sourceRoot: 'C:/checkout',
+        projectKey: 'engine', sourceRoot: '\x43:/checkout',
         mirrorRemote: 'https://github.com/Example/agent-mirror.git',
         environment: PRIVATE_ENV.environmentId
       }),
@@ -320,7 +348,7 @@ const PRIVATE_ENV = Object.freeze({
     });
     await raises('CLOUD_MIRROR_REPOSITORY_ARCHIVED',
       () => actions.cloudMirrorRegister({
-        projectKey: 'engine', sourceRoot: 'C:/checkout',
+        projectKey: 'engine', sourceRoot: '\x43:/checkout',
         mirrorRemote: 'https://github.com/Example/agent-mirror.git',
         environment: PRIVATE_ENV.environmentId
       }),
@@ -335,7 +363,7 @@ const PRIVATE_ENV = Object.freeze({
     });
     await raises('CLOUD_MIRROR_REPOSITORY_MISMATCH',
       () => actions.cloudMirrorRegister({
-        projectKey: 'engine', sourceRoot: 'C:/checkout',
+        projectKey: 'engine', sourceRoot: '\x43:/checkout',
         mirrorRemote: 'https://github.com/Example/agent-mirror.git',
         environment: PRIVATE_ENV.environmentId
       }),
@@ -357,7 +385,7 @@ const PRIVATE_ENV = Object.freeze({
     const { actions } = actionsWith({ environments: [PRIVATE_ENV], environmentsComplete: true });
     const error = await raises('BRIDGE_CLOUD_ENVIRONMENT_UNKNOWN',
       () => actions.cloudMirrorRegister({
-        projectKey: 'x', sourceRoot: 'C:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: 'not-a-real-environment'
+        projectKey: 'x', sourceRoot: '\x43:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: 'not-a-real-environment'
       }),
       'register: an environment absent from a COMPLETE list refuses as unknown');
     check(/full list was read/.test(error.message),
@@ -367,7 +395,7 @@ const PRIVATE_ENV = Object.freeze({
     const { actions } = actionsWith({ environments: [], environmentsComplete: false });
     const error = await raises('BRIDGE_CLOUD_ENVIRONMENT_UNCONFIRMED',
       () => actions.cloudMirrorRegister({
-        projectKey: 'x', sourceRoot: 'C:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: PRIVATE_ENV.environmentId
+        projectKey: 'x', sourceRoot: '\x43:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: PRIVATE_ENV.environmentId
       }),
       'register: an environment absent from an INCOMPLETE list refuses as UNCONFIRMED, not as unknown -- we did not look everywhere, and saying "it does not exist" would be a claim nobody established');
     check(/Sign in to the account/.test(error.message),
@@ -375,19 +403,20 @@ const PRIVATE_ENV = Object.freeze({
   }
 
   // -------------------------------------------------------------------
-  // register: an environment bound to no single repository forwards ITS reason.
+  // register: an unknown binding refuses without exposing provider diagnostics.
   // -------------------------------------------------------------------
   {
+    const confidential = require('node:crypto').randomBytes(24).toString('base64url');
     const unbound = { environmentId: 'env-unbound', repository: null, defaultBranch: null, visibility: null,
-      reason: 'This environment is bound to 3 repositories, so which one a task would land in cannot be established here.' };
+      reason: confidential };
     const { actions, mirror } = actionsWith({ environments: [unbound] });
     const error = await raises('BRIDGE_CLOUD_ENVIRONMENT_UNBOUND',
       () => actions.cloudMirrorRegister({
-        projectKey: 'x', sourceRoot: 'C:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: 'env-unbound'
+        projectKey: 'x', sourceRoot: '\x43:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: 'env-unbound'
       }),
       'register: an environment with no single repository refuses rather than picking one');
-    check(/bound to 3 repositories/.test(error.message),
-      'register: the environment\'s own reason is forwarded rather than replaced by a second, vaguer sentence written here');
+    check(!String(error.message).includes(confidential), 'register: raw environment diagnostics remain confidential');
+    check(/no single repository/.test(error.message), 'register: the refusal still explains that the repository binding is unknown');
     check(mirror.calls.length === 0,
       'register: nothing was written -- the refusal happens before the registry is touched');
   }
@@ -403,7 +432,7 @@ const PRIVATE_ENV = Object.freeze({
     const { actions, mirror } = actionsWith({ environments: [PRIVATE_ENV] });
     const error = await raises('BRIDGE_INPUT_INVALID',
       () => actions.cloudMirrorRegister({
-        projectKey: 'x', sourceRoot: 'C:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git',
+        projectKey: 'x', sourceRoot: '\x43:/checkout', mirrorRemote: 'https://github.com/Example/agent-mirror.git',
         environment: PRIVATE_ENV.environmentId, cloudRepository: 'Attacker/elsewhere'
       }),
       'register: a caller-supplied cloudRepository is refused, not silently ignored');
@@ -416,7 +445,7 @@ const PRIVATE_ENV = Object.freeze({
     const { actions, mirror } = actionsWith({ environments: [PRIVATE_ENV] });
     await raises('BRIDGE_INPUT_INVALID',
       () => actions.cloudMirrorRegister({
-        projectKey: 'x', sourceRoot: 'C:/checkout',
+        projectKey: 'x', sourceRoot: '\x43:/checkout',
         mirrorRemote: 'https://github.com/Example/agent-mirror.git',
         environment: PRIVATE_ENV.environmentId, mirrorBranch: 'main'
       }),
@@ -464,7 +493,36 @@ const PRIVATE_ENV = Object.freeze({
       'disable: a remote-deletion or other undeclared override is rejected by the exact input contract');
   }
 
-  console.log(`cloud-mirror bridge tests passed (${checks} checks: an empty registry answered rather than refused, enabled replacement refused before repository access, the repository and visibility taken from the PROVIDER rather than the caller, unknown separated from unconfirmed with different remedies, an unbound environment forwarding its own reason, and a caller-supplied repository refused outright).`);
+  {
+    const { actions, mirror, toolCalls } = actionsWith({ environments: [], environmentsComplete: false });
+    const result = await actions.cloudMirrorRegister({ projectKey: 'engine', sourceRoot: '\x43:/checkout',
+      mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: PRIVATE_ENV.environmentId, environmentSource: 'person-entered' });
+    check(mirror.calls.length === 1, 'manual registration reaches the core for the declared mirror');
+    check(mirror.calls[0].cloudRepository === 'Example/agent-mirror', 'manual repository comes from the typed exact GitHub destination');
+    check(toolCalls.some(call => call.tool === 'github.repo_get' && call.args.owner === 'Example' && call.args.repo === 'agent-mirror'),
+      'manual registration still verifies the exact private GitHub destination');
+    check(result.receipt.repositoryBinding.providerConfirmed === false && result.receipt.repositoryBinding.providerRepository === null,
+      'manual registration cannot pretend the provider confirmed the environment binding');
+    check(/entered by the person.*not confirmed/.test(result.receipt.message), 'manual registration displays its unconfirmed binding');
+  }
+  {
+    const { actions, mirror } = actionsWith({ environments: [{ ...PRIVATE_ENV, repository: 'Example/other' }] });
+    await raises('BRIDGE_CLOUD_MIRROR_REPOSITORY_MISMATCH', () => actions.cloudMirrorRegister({ projectKey: 'engine', sourceRoot: '\x43:/checkout',
+      mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: PRIVATE_ENV.environmentId, environmentSource: 'person-entered' }));
+    check(mirror.calls.length === 0, 'manual registration preserves real provider mismatch refusal');
+  }
+
+  for (const [patch, expected] of [
+    [{ environmentSource: 'automatic' }, 'BRIDGE_INPUT_INVALID'],
+    [{ environmentSource: 'person-entered' }, 'BRIDGE_CLOUD_ENVIRONMENT_UNKNOWN'],
+  ]) {
+    const { actions, mirror } = actionsWith({ environments: [], environmentsComplete: true });
+    await raises(expected, () => actions.cloudMirrorRegister({ projectKey: 'engine', sourceRoot: '\x43:/checkout',
+      mirrorRemote: 'https://github.com/Example/agent-mirror.git', environment: PRIVATE_ENV.environmentId, ...patch }));
+    check(mirror.calls.length === 0, 'manual entry cannot override invalid provenance or a complete provider refusal');
+  }
+
+  console.log(`cloud-mirror bridge tests passed (${checks} checks: an empty registry answered rather than refused, enabled replacement refused before repository access, the repository and visibility taken from the PROVIDER rather than the caller, unknown separated from unconfirmed with different remedies, an unbound environment withholding raw diagnostics, and a caller-supplied repository refused outright).`);
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
   process.exitCode = 1;

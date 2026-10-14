@@ -203,7 +203,7 @@ function removePendingRecord(file) {
  * it. It only gains the note saying so, which is what turns an undifferentiated
  * queue into "these are the requests an agent read and left".
  *
- * MEASURED 2026-09-03, a live spool at
+ * MEASURED 2026-09-03, the owner's live spool at
  * state/r-ledger/owner-capture-spool: 228 of its 231 settled records read
  * ledgerOutcome 'discarded' with the reason "agent read it and filed nothing"
  * and discardedBy an agent name, while the canonical request ledger held ONE

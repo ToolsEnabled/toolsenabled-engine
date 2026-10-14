@@ -76,7 +76,7 @@ function append(file, record, { fsImpl = fs } = {}) {
   }
 }
 
-function openBatch({ stateRoot, admission, at = null, fsImpl = fs }) {
+function openBatch({ stateRoot, admission, account = null, at = null, fsImpl = fs }) {
   const file = journalPath(stateRoot, admission.batchId);
   append(file, {
     schemaVersion: JOURNAL_SCHEMA,
@@ -85,6 +85,7 @@ function openBatch({ stateRoot, admission, at = null, fsImpl = fs }) {
     project: admission.project,
     taskCount: admission.taskCount,
     bounds: admission.bounds,
+    account: account || (admission.declaration && admission.declaration.provider && admission.declaration.provider.account) || null,
     admissionSha256: admission.admissionSha256,
     /* The harvester enumerates a wave from THIS journal (the provider list
      * caps at 20 rows), so the landing branch and verification bar travel in

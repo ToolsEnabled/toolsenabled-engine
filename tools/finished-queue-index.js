@@ -1,18 +1,18 @@
 // FINISHED-queue index — "has this already been BUILT?", derived, never hand-kept.
 //
-// WHY THIS EXISTS (product note)
+// WHY THIS EXISTS (owner, 2026-08-11)
 // -----------------------------------
-//   The same work kept being built twice; a per-project queue of finished
-//   builds may be needed, and either way the outcome was a software failure.
+//   "why do we keep building things twice? Maybe we need a finished build que
+//    per project. Either way the outcome here is a software failure again."
 //
 // In one wave, three lanes each burned a full session rediscovering that their
 // assigned defect was already fixed:
-//   * setup "Recommended dead-end"  -> already fixed by an earlier change
-//   * Pause/Respawn/Terminate       -> already fixed by an earlier change (same commit!)
-//   * parts of the upgrade path     -> already fixed by earlier commits
+//   * setup "Recommended dead-end"  -> already fixed by 27f5922
+//   * Pause/Respawn/Terminate       -> already fixed by 27f5922 (same commit!)
+//   * parts of the upgrade path     -> already fixed by b3af448/3e49cf1/482bed8/...
 // The dispatcher had no way to know. BUILD-QUEUE.md carries a section literally
 // titled "Completed - do not rebuild", and it is PROSE, WRITTEN BY HAND. Its
-// newest entry is 2026-08-04; an earlier change landed 2026-08-11 and appears nowhere.
+// newest entry is 2026-08-04; 27f5922 landed 2026-08-11 and appears nowhere.
 // A hand-maintained done-list is the same failure class as no done-list: it is
 // only as current as the last person who remembered.
 //
@@ -66,8 +66,8 @@ const CACHE_VERSION = 'finished-queue-index-v2';
 //
 // The tight default is CORRECT, not merely fast, and the lane that motivated
 // this file proves it: the steering-controls prior work lived in
-// a stale worktree (quiet since 2026-08-06) as an earlier commit, and
-// that commit was ALREADY MERGED into the canonical checkout. Merged work is in a
+// wt-r1152-terminate-control (quiet since 2026-08-06) as commit e54dddc, and
+// that commit was ALREADY MERGED into engine-checkout. Merged work is in a
 // live tree by definition; UNMERGED work in a quiet worktree is not finished,
 // because nothing can be built on it. Raise it with --active-days when you
 // deliberately want to read the graveyard.
@@ -76,9 +76,10 @@ const DEFAULT_ACTIVE_DAYS = 2;
 const MAX_COMMITS_PER_TREE = 6000;
 // Never read these, by absolute rule (lane fence) or because they are not this
 // product's live history.
-const HARD_EXCLUDED_SEGMENTS = ['.worktrees', 'node_modules', 'agent-dashboard'];
+const HARD_EXCLUDED_SEGMENTS = ['.worktrees', 'node_modules', 'LLMBenchmarking', 'AgentActivityVisualizer'];
 // The retired compatibility tree: the pre-migration checkout that sits beside
-// this one as a sibling directory named `ToolsEnabled` in the same parent folder.
+// this one as a sibling directory (see the machine-A cutover notes -- canonical
+// is `engine-checkout`, legacy is `ToolsEnabled`, same parent folder).
 // Resolved relative to this tree's own parent rather than hardcoded to one
 // operator's home, so the comparison still means "my sibling named
 // ToolsEnabled" wherever this checkout is cloned. Excluded by default and
@@ -176,16 +177,16 @@ function isExcludedPath(p) {
  * Every candidate is reported with a disposition, including the ones left out.
  */
 // One process is one point in time, so the roster is derived at most once per
-// process per option-set. Without this, every check() re-spawned git across
-// many sibling checkouts; a 13-question calibration run took
+// process per option-set. Without this, every check() re-spawned git across all
+// ~115 sibling checkouts on this desktop; a 13-question calibration run took
 // over two minutes and was killed by its own timeout.
 //
 // Deliberately NOT cached to disk and NOT given a TTL: a disk cache with a
 // lifetime would make a newly created tree invisible for the length of that
 // lifetime, which is the same silent-narrowing bug in a slower costume. A
-// prefilter on .git mtime was measured and rejected for the same reason -- most
-// checkouts measured had a .git mtime OLDER than their own last commit (by
-// up to days), so it would have dropped live trees without saying so.
+// prefilter on .git mtime was measured and rejected for the same reason -- 91
+// of 114 checkouts here have a .git mtime OLDER than their own last commit (by
+// up to 77 hours), so it would have dropped live trees without saying so.
 const rosterMemo = new Map();
 
 function buildRoster(options = {}) {

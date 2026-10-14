@@ -545,15 +545,15 @@ function main(argv) {
      * The artifact records the engine commit it was built at. Committing the
      * artifact moves HEAD, so the next build stamps a different commit and the
      * committed copy differs from a fresh build -- permanently. Measured: HEAD
-     * against a stamp of the commit it was built at, one before the commit
-     * that contains it. No number of rebuilds closes that:
+     * c9a7d173 against a stamp of 9bae071a, the commit it was built at, one
+     * before the commit that contains it. No number of rebuilds closes that:
      * the stamp is a function of the commit, and the commit is a function of
      * the content that holds the stamp.
      *
      * An unsatisfiable gate is worse than no gate, because the first person to
      * meet it baselines it away and the real check goes with it. This one had
-     * already gone red on every commit and hidden a live defect: a fix to
-     * capability retrieval landed in config/phrases.json and the built index shipped
+     * already gone red on every commit and hidden a live defect: 93f6562 fixed
+     * capability retrieval in config/phrases.json and the built index shipped
      * with the old phrase table, because a permanently-red gate tells you
      * nothing when it turns red for a real reason.
      *

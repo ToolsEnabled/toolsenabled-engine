@@ -44,4 +44,4 @@ Run the package checks from the repository root:
 ```powershell
 node tests/run-isolated.js <packages/internal-vcs/test/*.test.js files>
 ```
-Product name: **Filekeeper**. The stable code identifier remains `internal-vcs`; see docs/design/FILEKEEPER-EVIDENCE-ADDENDUM-2026-08-05.md.
+Product name: **Filekeeper** (owner, R1162 2026-08-07). The stable code identifier remains `internal-vcs`; see docs/design/FILEKEEPER-EVIDENCE-ADDENDUM-2026-08-05.md.

@@ -1,7 +1,7 @@
 'use strict';
 
-// The tick. This is where the four hard-won invariants from an earlier,
-// proven report scheduler live, and the reason each one exists:
+// The tick. This is where the four hard-won invariants from a companion application
+// Dashboard's app/scheduler.py live, and the reason each one exists:
 //
 //   1. FIRE KEY PERSISTED BEFORE GENERATION. markFired() runs before generate()
 //      is even called. A crash mid-generation therefore LOSES that slot rather

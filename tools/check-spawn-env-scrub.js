@@ -5,8 +5,8 @@
  *
  * WHY THIS IS A GATE AND NOT FIVE MORE EDITS
  * ------------------------------------------
- * Spawning a child with the parent's environment hands it the person's billing
- * credentials and any endpoint redirector. That is the credential-leak failure (R1186) shape: the
+ * Spawning a child with the parent's environment hands it the owner's billing
+ * credentials and any endpoint redirector. That is the R1186 outage shape: the
  * sweeps "billed a drained API account for hours while reporting logged in",
  * because callers resolved a provider executable and hand-rolled the spawn.
  *
@@ -147,6 +147,15 @@ const CREDENTIAL_NAMES = Object.freeze([
   'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
   'AWS_BEARER_TOKEN_BEDROCK', 'AWS_BEDROCK_API_KEY',
   'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN',
+  // Claude Code 2.1.281 routes, credentials and redirectors (see
+  // supervision/launch-environment.js).
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+  'CLAUDE_CODE_USE_MANTLE', 'CLAUDE_CODE_USE_GATEWAY',
+  'ANTHROPIC_AWS_API_KEY', 'ANTHROPIC_FOUNDRY_API_KEY', 'ANTHROPIC_FOUNDRY_AUTH_TOKEN',
+  'ANTHROPIC_IDENTITY_TOKEN', 'ANTHROPIC_IDENTITY_TOKEN_FILE',
+  'CLAUDE_CODE_OAUTH_REFRESH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR', 'CLAUDE_CODE_API_BASE_URL',
+  'CLAUDE_CODE_CUSTOM_OAUTH_URL', 'ANTHROPIC_UNIX_SOCKET',
   'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN',
   'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_GENAI_USE_VERTEXAI',
   'GOOGLE_APPLICATION_CREDENTIALS',
@@ -920,6 +929,28 @@ function main(argv) {
     // ratchet against, and the whole point is to photograph the existing pile
     // so that anything after it is visibly new. Every LATER write may only
     // lower a count unless --allow-new-debt is passed on purpose.
+    /* AND GENESIS NEEDS ITS OWN FLAG, because "there is no prior file" was an ABSENCE
+       READ AS CONSENT and it defeated this whole ratchet.
+
+       MEASURED: add one unscrubbed spawn and `--update-baseline` refuses, exactly as
+       designed -- "refusing to raise recorded debt ... Pass --allow-new-debt if it
+       truly must land". Then DELETE this baseline file and run the same command. It
+       becomes a genesis write, records the new call site as accepted debt, exits 0,
+       and the gate goes green with the unscrubbed spawn still in the tree. The flag
+       the paragraph above asks for is bypassed by removing the file it ratchets
+       against.
+
+       So absence is no longer permission: a first-ever baseline is a deliberate act
+       and says so on the command line. A SEPARATE flag from --allow-new-debt, because
+       the two intents differ and a reader of a diff should be able to tell which one
+       happened. */
+    if (baseline.missing && !argv.includes('--genesis')) {
+      console.error(`NO BASELINE: ${baseline.file} does not exist.`);
+      console.error('Refusing to create one implicitly. A missing baseline would otherwise admit any');
+      console.error('number of unscrubbed call sites as "pre-existing", which is the one thing this');
+      console.error('gate exists to prevent. Pass --genesis to photograph the pile on purpose.');
+      return 1;
+    }
     const genesis = baseline.missing;
     try {
       writeBaseline(baseline.file, observed, genesis || argv.includes('--allow-new-debt'), baseline.debt);

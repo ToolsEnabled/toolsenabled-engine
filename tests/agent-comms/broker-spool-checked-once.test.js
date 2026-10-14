@@ -108,7 +108,10 @@ function countFingerprints(t, state) {
   const original = crypto.createHash;
   const counter = { recomputed: 0, fingerprints: new Set() };
   counter.reset = next => {
-    const entries = [...next.spool, ...next.deferred.map(row => row.entry), ...next.deadLetters.map(row => row.entry)];
+    // Every stored entry the broker checks: the spool, deferred handoffs, dead letters and, where the broker keeps
+    // them, terminal markers (Builder 8's courier settlement stores each settled message's entry there too).
+    const entries = [...next.spool, ...next.deferred.map(row => row.entry), ...next.deadLetters.map(row => row.entry),
+      ...(next.terminalMarkers || []).map(row => row.entry)];
     counter.recomputed = 0;
     counter.entries = entries.length;
     counter.fingerprints = new Set(entries.map(entry => entry.fingerprint));

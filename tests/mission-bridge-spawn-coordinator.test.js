@@ -67,7 +67,7 @@ async function main() {
   assert.match(registrySource, /actor:\s*context\.agentId/,
     'agent.spawn is not attributed to its exact declared identity');
 
-  /* This tripwire fired for real: an earlier change (2026-09-10) added 'grok' to
+  /* This tripwire fired for real: a57cd698 (2026-09-10) added 'grok' to
      AGENT_ACTORS (setup/machine-record.js:902) for the ACP launch path and did
      not come back here. Reviewed and accepted as the fourth actor; the list stays
      exact so the next unreviewed addition trips it the same way.

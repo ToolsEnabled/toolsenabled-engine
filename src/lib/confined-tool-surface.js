@@ -109,9 +109,9 @@ const CONTAINED = Object.freeze(new Set([
   // Downloads accept a job ID and size bound, never a local path; the provider
   // publishes exclusively beneath its fixed video artifact directory.
   'video.models', 'video.generate', 'video.jobs', 'video.status', 'video.cancel', 'video.download',
-  /* agent.stop / agent.restart / agent.remove (added 2026-09-03, product
-     requirement: agents can delete, start and restart the agents under
-     them) take nodeId/treeId/expectedSessionId -- identifiers into the local
+  /* agent.stop / agent.restart / agent.remove (added 2026-09-03, owner:
+     "THE AGENTS NEED TO BE ABLE TO DELETE AND START AND RESTART AGENTS UNDER
+     THEM") take nodeId/treeId/expectedSessionId -- identifiers into the local
      agent tree, never a filesystem path -- and their shared handler,
      treeLifecycle() in src/lib/tool-registry.js, forwards exactly those three
      strings to agent-tree-spawn.js#commandOnTree. The circle acting is read
@@ -153,7 +153,7 @@ const CONTAINED = Object.freeze(new Set([
   'calendar.create', 'calendar.list', 'cloud.account_add', 'cloud.account_list',
   'cloud.account_remove', 'cloud.task_launch',
   'cloud.task_diff', 'cloud.task_list',
-  'cloud.task_status', 'drive.delete', 'drive.find', 'duo.desktop_status',
+  'cloud.task_status', 'drive.delete', 'drive.find', 'duo.desktop_status', 'duo.institution_login',
   'firebase.account_login', 'firebase.app_create', 'firebase.doctor',
   'firebase.firestore_create', 'firebase.project_create', 'firebase.project_enable',
   'gcloud.account_inspect', 'gcloud.account_login', 'gcloud.doctor', 'gcloud.project_create',
@@ -193,8 +193,8 @@ const CONTAINED = Object.freeze(new Set([
      against the store's own KIND_ID_RE, checked before the store; key
      against r-ledger.js SAFE_KEY) before either is joined. No settings row
      gates these (LEDGER-KINDS-INTERFACE-20260907.md: a task or an ask is the
-     agent's own, not a claim about what the person said; the product rule
-     that asks and purchases are agent-closable extends the same
+     agent's own, not a claim about what the person said; the owner's
+     2026-09-07 ruling "asks and purchases: agent closable" extends the same
      posture to answering/declining an ask and deciding a purchase's ledger
      mirror), so unlike r_ledger there is no second door to note here -- the
      audit requirement (src/lib/minor-ledger-agent-gate.js) is not a
@@ -453,7 +453,35 @@ function assertToolConfinable(name, { tier = 'confined', profile = null } = {}) 
 // substitutes its own installation-owned default, never a caller choice,
 // which is the reason this checks arguments rather than resolved paths.
 function assertPathValueInsideRoots(name, label, value, workspaceRoots, { tier, profile }) {
-  if (value === undefined || value === null || value === '') return;
+  /* ABSENT AND EMPTY ARE NOT THE SAME THING, AND TREATING THEM ALIKE WAS AN ESCAPE.
+   *
+   * The comment above is right about an ABSENT value: the provider substitutes
+   * its own installation-owned default, so there is no caller choice to check.
+   * An EMPTY STRING is a caller choice. It travels through the tool's own
+   * `args.x || default` idiom and comes out as the default -- so a confined
+   * caller who cannot name a path outside its workspace can pick one anyway, by
+   * naming nothing at all.
+   *
+   * MEASURED on this build. search.index's `root` is REQUIRED, so an omitted
+   * root never reaches the handler -- but its schema is a bare `{type:'string'}`
+   * with no minLength, the validator accepts `{root: ''}`, this line then waved
+   * it through, and src/lib/search.js:240 resolves `String(args.root || '.')` to
+   * '.', which is the server's working directory: the install root, not the
+   * agent's workspace. A confined/workspace agent could make the indexer walk
+   * and store content from outside its fence. (It could not read it back:
+   * search.js currentlyAllowedSearchRows() re-checks every row at query time.
+   * The write still happened.)
+   *
+   * launch.detect already carried a hand-written special case for exactly this
+   * shape. One tool got a carve-out where the rule belonged in the fence.
+   *
+   * undefined and null still return: those are genuinely "not supplied". */
+  if (value === undefined || value === null) return;
+  if (value === '') {
+    throw new ConfinedSurfaceRefusal('PERMISSION_CONFINED_PATH_UNREADABLE',
+      `Tool '${name}' was given an empty '${label}'; this permission level needs a path it can check.`,
+      { tool: name, argument: label, tier, profile });
+  }
   if (typeof value !== 'string') {
     throw new ConfinedSurfaceRefusal('PERMISSION_CONFINED_PATH_UNREADABLE',
       `Tool '${name}' was given a '${label}' this permission level cannot check.`,

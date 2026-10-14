@@ -190,11 +190,11 @@ const livePromptUsage = {
   response(main.transport, authRequest, {});
   assert.deepEqual(await authenticated, { methodId: 'api-key' });
 
-  const started = main.adapter.startThread({ cwd: 'C:/workspace' });
+  const started = main.adapter.startThread({ cwd: '\x43:/workspace' });
   const newRequest = main.transport.writes.at(-1);
   assert.deepEqual(newRequest, {
     jsonrpc: '2.0', id: newRequest.id, method: 'session/new',
-    params: { cwd: 'C:/workspace', mcpServers: [] }
+    params: { cwd: '\x43:/workspace', mcpServers: [] }
   });
   response(main.transport, newRequest, {
     sessionId: 'session-1',
@@ -231,7 +231,7 @@ const livePromptUsage = {
 
   const sparseDescriptors = createAdapter();
   await initialize(sparseDescriptors);
-  const sparseSession = sparseDescriptors.adapter.startThread({ cwd: 'C:/workspace' });
+  const sparseSession = sparseDescriptors.adapter.startThread({ cwd: '\x43:/workspace' });
   const sparseSessionRequest = sparseDescriptors.transport.writes.at(-1);
   response(sparseDescriptors.transport, sparseSessionRequest, {
     sessionId: 'session-sparse-descriptors',
@@ -412,7 +412,7 @@ const livePromptUsage = {
 
   const wrongConfigChoiceKey = createAdapter();
   await initialize(wrongConfigChoiceKey);
-  const invalidSession = wrongConfigChoiceKey.adapter.startThread({ cwd: 'C:/workspace' });
+  const invalidSession = wrongConfigChoiceKey.adapter.startThread({ cwd: '\x43:/workspace' });
   const invalidSessionRequest = wrongConfigChoiceKey.transport.writes.at(-1);
   response(wrongConfigChoiceKey.transport, invalidSessionRequest, {
     sessionId: 'session-invalid-config',
@@ -425,7 +425,7 @@ const livePromptUsage = {
 
   const authRequired = createAdapter();
   await initialize(authRequired, { authMethods });
-  const unauthenticatedSession = authRequired.adapter.startThread({ cwd: 'C:/workspace' });
+  const unauthenticatedSession = authRequired.adapter.startThread({ cwd: '\x43:/workspace' });
   const unauthenticatedRequest = authRequired.transport.writes.at(-1);
   authRequired.transport.emit({
     jsonrpc: '2.0', id: unauthenticatedRequest.id,
@@ -451,7 +451,7 @@ const livePromptUsage = {
     jsonrpc: '2.0', id: 'attack', method: 'session/request_permission',
     params: { sessionId: 'session-hostile' }
   });
-  await protocolReject(hostile.adapter.startThread({ cwd: 'C:/workspace' }), 'ACP_PROTOCOL_INVALID');
+  await protocolReject(hostile.adapter.startThread({ cwd: '\x43:/workspace' }), 'ACP_PROTOCOL_INVALID');
 
   console.log('Claude ACP agent-engine adapter tests passed (initialize, auth, capabilities, modes, config, streaming, approvals, images, fail-closed).');
 })().catch(error => {

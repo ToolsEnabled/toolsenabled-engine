@@ -44,13 +44,13 @@
 //   src/lib/agent-onboarding.js   -- runs automatically on every SessionStart
 //
 // WHY THIS EXISTS. On 2026-08-10 a full status report was produced against the
-// RETIRED tree (a legacy Desktop checkout, 353 test files, last commit
+// RETIRED tree (<profile-root>/owner\Desktop\ToolsEnabled, 353 test files, last commit
 // 2026-08-08) while the canonical tree had 748 and was being committed to that
 // same day. Every conclusion in it was stale on arrival, and the author had no
 // mechanical way to know -- that checkout told them three different things at
-// once. The owner's rule: agents should not have to manage things like this
-// inside ToolsEnabled; it should be mechanical, because relying on memory causes
-// problems and belongs only where it is the only realistic solution.
+// once. The owner's rule: "agents shouldnt have to manage things like this
+// inside toolsenabled, it should be mechanical, remembering causes issues and
+// should only be implemented where its the only realistic solution."
 //
 // So the guarantee under test is not "the function returns the right string".
 // It is that A SESSION IS TOLD WHICH TREE IT IS IN WITHOUT ASKING, and that the

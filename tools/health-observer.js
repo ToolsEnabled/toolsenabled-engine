@@ -11,7 +11,7 @@
 //
 // This process is the thing that would have noticed. On 2026-07-29 the fleet
 // supervisor was down for 45 minutes and the only reason anyone found out was
-// that the owner asked. A monitor armed afterwards detected it in under 60
+// that the owner asked. A monitor armed at 05:20 detected it in under 60
 // seconds -- the signal was always there, nobody was looking.
 
 const fs = require('node:fs');

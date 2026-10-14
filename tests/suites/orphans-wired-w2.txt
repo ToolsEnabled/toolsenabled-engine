@@ -1,7 +1,7 @@
-# Stable orphan admissions.
+# W2 stable orphan admissions.
 #
 # Each entry executed in its own child process before this manifest was wired.
-# The wiring report records the complete admission bound and outcomes.
+# REPORT-W2-orphan-wire.md records the complete admission bound and outcomes.
 tests/approval-boundary-bypasses.test.js
 tests/capability-settings-honest.test.js
 tests/fra-keeper-linux-lifecycle.test.js

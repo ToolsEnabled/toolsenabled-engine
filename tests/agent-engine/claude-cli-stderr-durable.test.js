@@ -4,10 +4,10 @@
 //
 // THE DEFECT. createClaudeCliTransport() collected the child's stderr into a
 // string in this process's memory and handed it to the caller once, in
-// finish(), when the CHILD ended. During one evening the APPLICATION ended
-// repeatedly without running its will-quit path
-// (the crash investigation findings). Two MCP
-// servers of one assistant had aborted out of memory; whatever the
+// finish(), when the CHILD ended. On 2026-09-03 the APPLICATION ended about
+// eight times between 19:30 and 21:26 local without running its will-quit path
+// (REPORT-crash-20260903/00-CONTROLLER-FINDINGS.md sections 1-2). Two MCP
+// servers of one assistant had aborted out of memory at 21:11:56; whatever the
 // claude CLI wrote about that went into the buffer and died with the app. There
 // is no record of it anywhere on this machine -- which is why the investigation
 // had to read minidumps to find out what happened.

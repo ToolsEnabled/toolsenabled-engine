@@ -383,6 +383,38 @@ test('the content fence refuses credentials and accepts timestamps and seeds', (
   state.close();
 });
 
+// The finding register is written by agents (research.finding_save) and read
+// back by every agent (research.finding_list) and by the Research page. Only
+// its claim and evidence passed the content fence; method, confidence,
+// falsifier and dissents were persisted as written, so a credential an agent
+// put there was kept and served to every later reader. An inline experiment's
+// name skipped the fence that experimentSave applies to the same field.
+test('every free-text field of a finding, and an inline experiment name, passes the content fence', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'research-provider-fence-'));
+  const state = createStateStore({ file: path.join(dir, 'state.sqlite3') });
+  state.health();
+  const audits = [];
+  const control = new ResearchControl({ state, gate: onGate, auditRequire: action => { audits.push(action); return { durable: true }; } });
+  const { project } = control.projectSave({ actor: 'human', name: 'Fence', enabled: true });
+  // Synthetic token shapes only; no provider credential is read or used.
+  const bearer = 'Bearer ' + 'x'.repeat(32), pat = 'ghp_' + 'x'.repeat(32);
+  const before = audits.length;
+  for (const field of [{ method: 'Called the API with ' + bearer }, { confidence: 'High; key ' + pat }, { falsifier: 'Retry with ' + bearer },
+    { dissents: [{ by: 'codex', note: 'Use ' + pat + ' instead' }] }]) {
+    assert.throws(() => control.findingSave({ actor: 'codex', projectId: project.projectId, claim: 'A plain claim.', ...field }),
+      error => error instanceof ResearchError && error.code === 'RESEARCH_SENSITIVE_CONTENT', JSON.stringify(Object.keys(field)));
+  }
+  assert.equal(audits.length, before, 'a refused finding records no audit intent');
+  assert.deepEqual(state.listResearchFindings({ projectId: project.projectId }), [], 'no refused finding was written');
+  const saved = control.findingSave({ actor: 'codex', projectId: project.projectId, claim: 'A plain claim.',
+    method: 'Ran 20260814120000 seeds at 1765650000000 ms.', confidence: 'moderate', falsifier: 'A second run disagrees.', dissents: [{ by: 'claude', note: 'Too few seeds.' }] });
+  assert.match(saved.findingId, /^F-\d{4}-\d{4}-\d{3}$/, 'ordinary science still saves');
+  assert.throws(() => control.runSubmit({ actor: 'human', experiment: { ...SPEC(project.projectId), name: 'Authorization: ' + bearer }, params: {} }),
+    error => error instanceof ResearchError && error.code === 'RESEARCH_SENSITIVE_CONTENT');
+  assert.equal(state.transaction(db => db.prepare('SELECT COUNT(*) AS count FROM research_experiments').get().count), 0);
+  state.close();
+});
+
 test('the public task surface can neither submit to nor read the reserved research-runs queue', async () => {
   const { state, control } = build();
   const { project } = control.projectSave({ actor: 'human', name: 'Demo', enabled: true });

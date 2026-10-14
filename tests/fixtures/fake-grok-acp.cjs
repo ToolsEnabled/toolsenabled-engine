@@ -1,7 +1,7 @@
 'use strict';
 // A stand-in for the official Grok CLI, answering only what the account usage
-// read may ask, with replies in the shape Grok CLI 1.0.25 returns
-// (grok-billing-acp-20260910.json, synthetic values). It records
+// read may ask, with the replies captured from Grok CLI 1.0.25 on 2026-09-10
+// (grok-billing-acp-20260910.json, address and team id replaced). It records
 // every method it receives so a test can prove no session or prompt was sent,
 // and it stays alive after answering, as the real agent does, so the probe's
 // process custody is what ends it.

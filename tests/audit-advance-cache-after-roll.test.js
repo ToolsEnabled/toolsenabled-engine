@@ -9,7 +9,7 @@
 // a full O(N) chain-and-signature walk, and so does the one after it.
 //
 // That failure is invisible: the answers stay correct, only the cost changes.
-// It was measured on a live install 2026-09-02 as 1.7 s per record and
+// It was measured on the owner's install 2026-09-02 as 1.7 s per record and
 // roughly two records per tool call, which is most of why every tool call took
 // ten seconds or more.
 //

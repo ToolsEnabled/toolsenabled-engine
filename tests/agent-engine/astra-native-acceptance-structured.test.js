@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const { CodexAdapter, CODEX_CLI_VERSION } = require('../../src/lib/agent-engine/codex-adapter');
 
-const ENGINE_BASE_REF = '0000000000000000000000000000000000000000';
+const ENGINE_BASE_REF = 'f3d8bb3d81fb6a1868a13b2c4f1dbb1dafd0544c';
 
 function exactEngineBaseGuard() {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();

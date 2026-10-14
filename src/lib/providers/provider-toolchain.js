@@ -2,10 +2,11 @@
 
 /* ONE PROVIDER TOOLCHAIN FOR EVERY AGENT PROGRAM.
  *
- * Product rule: provider CLI versions should be handled
- * automatically instead of being chased by hand; the product should not
- * aggressively overwrite a user's paths; install time should do a better job;
- * and the same should then extend to the other providers.
+ * The owner, 2026-09-22: "we should really be able to handle these
+ * automatically so we dont need to try to parent the codex version all the
+ * time. right now do we aggressively try to write over a users paths or such?
+ * Can we do a better job at install time?", and then "expand to the other
+ * providers too".
  *
  * What was wrong before this file existed:
  *   - The app (app/shell/provider-cli-presence.cjs) and this engine
@@ -145,9 +146,12 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
     updateCommand: { native: 'claude update', 'npm-global': 'npm install -g @anthropic-ai/claude-code@latest' },
     manualInstall: null,
     /* Every option claude-cli-adapter.js passes. Measured present in
-       `claude --help` of 2.1.280. */
+       `claude --help` of 2.1.280 (lanes/f-providers/claude-code-claude-/help-2.1.280.txt). */
     features: {
       probe: 'help',
+      /* commander prints the Options table, then Commands: a listing that
+         reached Commands has printed every option (helpListingComplete). */
+      complete: 'options-then-commands',
       list: [
         feature('--print', true), feature('--input-format', true), feature('--output-format', true),
         feature('--verbose', true), feature('--include-partial-messages', true),
@@ -168,7 +172,7 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
     npmPackage: '@openai/codex',
     /* Codex's standalone installer: ~/.local/bin/codex ->
        ~/.codex/packages/standalone/releases/<version>-<target>/bin/codex. The
-       Codex lane (the Codex review) owns this row's decisions. */
+       Codex lane (rc-0922/lanes/f-codex) owns this row's decisions. */
     nativeLayouts: [{ channel: 'standalone', under: ['.codex', 'packages', 'standalone', 'releases'], version: 'segment-before-target' }],
     loginHomeBins: [['.local', 'bin'], ['bin']],
     selfUpdateOff: null,
@@ -224,7 +228,7 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
        unversioned grok-<os>-<arch>, whose version is null until a probe reads
        it. npm's postinstall writes $GROK_HOME/bin/grok-<version>.
        ~/.grok/version.json is the last update CHECK, never the installed copy
-       (Grok review, measured). */
+       (Grok lane, rc-0922, measured). */
     nativeLayouts: [{ channel: 'native', under: ['.grok', 'downloads'], version: 'grok-file-name' },
       { channel: 'npm-global', under: ['.grok', 'bin'], version: 'grok-file-name' }],
     loginHomeBins: [['.grok', 'bin'], ['.local', 'bin'], ['bin']],
@@ -254,7 +258,7 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
     npmPackage: null,
     /* One flat binary, ~/.local/bin/agy, replaced in place by its own updater:
        no version folder, so the version is null until `agy --version` runs at
-       a session start (Antigravity review). */
+       a session start (Antigravity lane, rc-0922). */
     nativeLayouts: [{ channel: 'native', under: ['.local', 'bin'], version: 'none' }],
     loginHomeBins: [['.local', 'bin'], ['bin']],
     selfUpdateOff: { env: { AGY_CLI_DISABLE_AUTO_UPDATE: '1' } },
@@ -657,6 +661,28 @@ function helpMentions(text, spelling) {
   return new RegExp(`(^|[\\s,])${escaped}(?=[\\s,=<\\[]|$)`, 'm').test(text);
 }
 
+/* WHETHER A HELP LISTING IS WHOLE, for a row that declares how its whole
+ * listing ends. true/false for such a row; null when the row declares no shape,
+ * because then nothing here can tell a complete listing from a cut one.
+ *
+ * Only a whole listing is evidence that an option is MISSING. MEASURED on
+ * claude 2.1.281: its --help read through a shell pipe ended after exactly
+ * 16384 bytes (line 230 of 306) with exit 0; every option after the cut --
+ * --tools and --verbose among them -- then read as absent. */
+function helpListingComplete(providerId, helpText, { client = null } = {}) {
+  const row = rowFor(providerId, client);
+  const shape = row && row.features && row.features.complete;
+  if (!shape) return null;
+  if (typeof helpText !== 'string') return false;
+  if (shape === 'options-then-commands') {
+    const lines = helpText.split(/\r?\n/);
+    const options = lines.findIndex(line => /^Options:\s*$/.test(line));
+    const commands = lines.findIndex(line => /^Commands:\s*$/.test(line));
+    return options >= 0 && commands > options;
+  }
+  return false;
+}
+
 /* What one probe found, as the set of feature names present. For a `help`
  * probe that is the options named in the program's own --help; for a method
  * probe the caller passes the method names it saw. */
@@ -908,6 +934,7 @@ module.exports = {
   resolveProvider,
   publicCopySummary,
   featuresFromHelp,
+  helpListingComplete,
   evaluateFeatures,
   probeCacheKey,
   recallProbe,

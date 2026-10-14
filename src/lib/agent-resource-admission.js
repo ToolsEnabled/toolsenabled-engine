@@ -42,8 +42,8 @@ function createResourceAdmission({ now = Date.now, settings = () => DEFAULT_SETT
   const seenAdvice = new Map();
   let sequence = 0;
   let pressure = false;
-  /* WHY THE PRESSURE LATCHED, kept beside the latch. Measured in a signed
-     spawn record 2026-09-14T09Z: 558 AGENT_RESOURCE_PRESSURE refusals
+  /* WHY THE PRESSURE LATCHED, kept beside the latch. Measured in the owner's
+     signed spawn record 2026-09-14T09Z: 558 AGENT_RESOURCE_PRESSURE refusals
      in one hour for one node, and the reason text named "97% CPU" for every
      one of them although the latch below also trips on application loop lag
      and on an unreadable sample. A retry loop cannot classify what it is

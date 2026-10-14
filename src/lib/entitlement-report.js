@@ -29,7 +29,7 @@
 // did its runtime job: a diagnostic never dragged licensing code into a process
 // that had no licence to check, and tests/shipped-registry-boundary.test.js
 // still proves that at runtime. But laziness is invisible to the packer, and that
-// one line of text staged three modules that must not ship in the open payload:
+// one line of text staged three modules the owner ruled must not ship 2026-08-11:
 //   src/lib/entitlement.js          the commercial tier table and prices
 //   src/lib/providers/license.js    the mechanism a paid tier is enforced with
 //   src/lib/license-store.js        its signed revocation store

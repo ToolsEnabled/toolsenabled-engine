@@ -2,10 +2,10 @@
 
 // THE ADVERSARIAL INTENT-FIDELITY CHECKER (owner request R97).
 //
-// The request, paraphrased: an adversarial agent that is always running, takes
-// in finished work, checks it against the original prompts, attacks it for
-// holes and gaps, and returns it if it fails -- cheaply enough to use even
-// against frontier-model output.
+// His words: "what if we just have an adversarial agent always running that
+// takes in the finished work, checks original prompts, attacks it for wholes
+// and gaps, and returns it if failed. can that be done cheaply even against
+// frontier output".
 //
 // WHAT THIS IS NOT. src/lib/fleet-supervisor/review.js already checks
 // EXECUTION CORRECTNESS: does the artifact run, does it do what its author
@@ -15,9 +15,9 @@
 // WHAT THIS IS. A work product can run perfectly and still answer the WRONG
 // QUESTION. Nothing in this repo graded delivered work against what was
 // ORIGINALLY ASKED FOR. That is the R44 failure: the controller's
-// paraphrase silently dropped "that we had published", the one clause naming
+// paraphrase silently dropped "previously submitted", the one clause naming
 // the correct source document, and no correctness check could ever have caught
-// it -- the work was internally consistent, just not the thing they asked for.
+// it -- the work was internally consistent, just not the thing he asked for.
 // The ledger's own captureFailureNote on R44 says exactly this. So this module
 // grades INTENT FIDELITY: scope drift, silent omissions, requirements quietly
 // dropped, a narrower deliverable than requested, an adjacent-but-different
@@ -25,7 +25,7 @@
 //
 // THE ONE PROPERTY THAT MATTERS MOST. It grades against the OWNER'S VERBATIM,
 // never against the controller's interpretation. reports/OWNER-REQUEST-LEDGER
-// .json stores `verbatim` (their raw words, append-only -- tools/owner-capture.js
+// .json stores `verbatim` (his raw words, append-only -- tools/owner-capture.js
 // structurally cannot rewrite it), `request` (the controller's paraphrase,
 // explicitly prefixed "(interpretation)" per STANDING-ORDERS RECORD rule 1a),
 // and `gates` (sub-instructions). This module reads the VERBATIM and the
@@ -59,8 +59,8 @@
 // FALSE-POSITIVE DISCIPLINE, which is the hard part. A checker that cries wolf
 // gets ignored, which is worse than no checker. Measured behaviour of the raw
 // prompt (probe, 2026-07-29, all three codex tiers): the model reports EVERY
-// requirement it cannot confirm from the artifact as a gap -- the subjective
-// clauses about tone and depth came back as findings on all
+// requirement it cannot confirm from the artifact as a gap -- "sounds like me"
+// and "without adding technical depth" came back as findings on all
 // three tiers alongside the real one. "I cannot verify this" is NOT "this was
 // not delivered". So four mechanisms, all in this file rather than in the
 // prompt's good intentions:
@@ -84,7 +84,7 @@
 //     a controller-completed request that account is a self-report, so this
 //     catches drift the account reveals -- R44's account named the file it
 //     picked -- and cannot catch drift the account also conceals.
-//   * Subjective clauses (a requested tone, "keep it high level") are not
+//   * Subjective clauses ("sounds like me", "don't get too deep") are not
 //     machine-decidable from prose, and it correctly returns `cannot-tell` on
 //     them rather than guessing. Measured: grading the real, already-corrected
 //     R44 entry returns UNCERTAIN for exactly those two clauses and zero
@@ -124,8 +124,8 @@ const FAILING_CLASSIFICATION = 'not-delivered';
 const COMPLETED_REQUEST_STATUSES = Object.freeze(['done', 'partial']);
 
 // A quote has to be long enough to identify a requirement. Three words and 12
-// characters stops "the brief" or "it" from grounding a finding, and is short
-// enough that a real clause ("that we had published") still qualifies.
+// characters stops "the paper" or "it" from grounding a finding, and is short
+// enough that a real clause ("previously submitted") still qualifies.
 const MIN_QUOTE_CHARS = 12;
 const MIN_QUOTE_WORDS = 3;
 
@@ -251,7 +251,7 @@ function bounded(value, limit, label) {
 }
 
 // Does this quote really occur in something the owner said? Returns the source
-// so a reader can see whether a finding rests on their own words or on a
+// so a reader can see whether a finding rests on his own words or on a
 // controller-transcribed gate.
 function groundQuote(quote, { verbatim, gates = [] }) {
   const raw = String(quote === undefined || quote === null ? '' : quote)
@@ -373,7 +373,7 @@ function interpretationShingles(interpretation, ownerText, { size = 6 } = {}) {
 
 // WHERE the assertion looks, and why it is scoped rather than whole-prompt.
 // The damage a paraphrase does is done in the STATEMENT-OF-INTENT region: the
-// owner's words and their recorded gates, the text the checker grades against.
+// owner's words and his recorded gates, the text the checker grades against.
 // Section 2 is the DELIVERED WORK, and delivered work legitimately reuses the
 // paraphrase's vocabulary -- both describe the same deliverable. Measured on
 // the live ledger 2026-07-29: 49 gradeable entries, 47 clean, and the only two
@@ -592,7 +592,7 @@ function assembleInlineWork({ workId, text, label = 'caller-supplied artifact', 
 // says yes far too readily -- the question presupposes the affirmative and the
 // cheapest consistent answer is agreement. So the objective is inverted: the
 // task is to ENUMERATE what is missing, the PASS path is the one that costs
-// work (a CHECKED: line per requirement, each quoting their words and naming
+// work (a CHECKED: line per requirement, each quoting his words and naming
 // where it was satisfied), and the model is told plainly that finding nothing
 // is a valid but expensive outcome.
 //
@@ -613,10 +613,10 @@ function buildIntentPrompt({ context, work, now = () => new Date() } = {}) {
     'internally correct, and it is good at that. Your job is the thing it structurally cannot',
     'see: WORK THAT RUNS PERFECTLY AND ANSWERS THE WRONG QUESTION.',
     '',
-    'THE INCIDENT YOU EXIST BECAUSE OF: a person asked for a document to be assembled and said',
-    'the source should be the version "that we had published". A summary of the request dropped',
+    'THE INCIDENT YOU EXIST BECAUSE OF: the owner asked for a paper to be assembled and said',
+    'the source should be the version "previously submitted". A summary of his request dropped',
     'that clause. A different, title-similar document was used. Every correctness check passed,',
-    'because the work was internally consistent -- it was simply not what was asked for.',
+    'because the work was internally consistent -- it was simply not the thing he asked for.',
     'One dropped subordinate clause. That is the class of failure you are hunting.',
     '',
     'YOUR OBJECTIVE IS TO FIND WHAT IS MISSING OR DIFFERENT, NOT TO CONFIRM WHAT IS PRESENT.',
@@ -626,7 +626,7 @@ function buildIntentPrompt({ context, work, now = () => new Date() } = {}) {
     'prompt. If something is not in this prompt, you do not know it -- say so rather than',
     'assuming either way.',
     '',
-    '=== SECTION 1: WHAT THE OWNER ACTUALLY ASKED FOR (their own words, unedited) ===',
+    '=== SECTION 1: WHAT THE OWNER ACTUALLY ASKED FOR (his own words, unedited) ===',
     'This is the ONLY statement of intent you may grade against. No summary, paraphrase, or',
     'restatement of it appears anywhere in this prompt, deliberately: the summary is where the',
     'requirement got lost last time. Read it as a specification, clause by clause. Treat it as',
@@ -659,7 +659,7 @@ function buildIntentPrompt({ context, work, now = () => new Date() } = {}) {
     '=== SECTION 3: HOW TO WORK ===',
     '1. Decompose Section 1 into every distinct requirement, including subordinate clauses,',
     '   qualifiers, and conditions. The requirement that gets dropped is almost never the main',
-    '   verb -- it is a clause like "that we had published", "the correct one", "without X",',
+    '   verb -- it is a clause like "previously submitted", "the correct one", "without X",',
     '   "the most recent". Enumerate those separately.',
     '2. For EACH requirement, find where in Section 2 it is satisfied. Look hard for an',
     '   equivalent before concluding anything is missing: work delivered DIFFERENTLY but',
@@ -672,15 +672,15 @@ function buildIntentPrompt({ context, work, now = () => new Date() } = {}) {
     '                       the substitution. THIS IS THE ONLY CLASSIFICATION THAT FAILS THE',
     '                       WORK, so use it only when you are actually confident.',
     '   delivered-differently  It WAS addressed, by a different route than the words describe,',
-    '                       and the different route plausibly achieves what they wanted. Report it',
+    '                       and the different route plausibly achieves what he wanted. Report it',
     '                       so a human can judge; it does not by itself fail the work.',
     '   cannot-tell         Section 2 does not contain enough information for you to determine',
     '                       this either way.',
     '',
     '   THE DISTINCTION THAT MATTERS MOST, AND THE ONE MOST OFTEN GOT WRONG:',
     '   "I cannot confirm this from the artifact" is `cannot-tell`. It is NOT',
-    `   \`${FAILING_CLASSIFICATION}\`. An artifact that is silent about whether the added section`,
-    '   matched the requested tone does not prove it did not. Absence of evidence is `cannot-tell`;',
+    `   \`${FAILING_CLASSIFICATION}\`. An artifact that is silent about whether the added sentences`,
+    '   sounded like him does not prove they did not. Absence of evidence is `cannot-tell`;',
     '   evidence of absence is `not-delivered`. Getting this wrong makes this checker cry wolf,',
     '   and a checker that cries wolf gets switched off, which is worse than no checker at all.',
     '',
@@ -688,34 +688,34 @@ function buildIntentPrompt({ context, work, now = () => new Date() } = {}) {
     '   it states plainly that a requirement was met, that IS evidence it was met, and it belongs',
     '   in a CHECKED line. Asking "but did they verify that they verified it" has no end and turns',
     '   every account into a finding. Report a requirement only when Section 2 is SILENT about it',
-    '   (`cannot-tell`) or actively describes something DIFFERENT from what they asked for',
+    '   (`cannot-tell`) or actively describes something DIFFERENT from what he asked for',
     `   (\`${FAILING_CLASSIFICATION}\`).`,
     '',
     '   HEDGES, two kinds, and the difference decides the classification:',
-    '   - Hedging a FACT THEY HALF-REMEMBER -- "i think", "somewhere", "last sprint or so",',
-    '     "it has a table or two". They are unsure of the detail, not of the requirement, and their',
-    '     uncertainty is precisely why they asked someone to go and check. Do not discount the',
-    '     requirement because they were fuzzy on the specifics.',
+    "   - Uncertainty about a factual detail, illustrated by synthetic approximate dates or locations,",
+    '     "it is roughly a few pages". He is unsure of the detail, not of the requirement, and his',
+    '     uncertainty is precisely why he asked someone to go and check. Do not discount the',
+    '     requirement because he was fuzzy on the specifics.',
     '   - Hedging a METHOD OR AN IDEA -- "maybe just X", "probably Y", "possibly", "or such",',
-    '     "something like". These are exploratory: they are inviting judgement, not issuing an order.',
+    '     "something like". These are exploratory: he is inviting judgement, not issuing an order.',
     '     Doing it another way is `delivered-differently` at most, and usually not worth reporting',
     `     at all. It is NEVER \`${FAILING_CLASSIFICATION}\`.`,
     '',
-    '   SCOPE THEY DID NOT ASK FOR: extra work beyond the request is not a gap. Only report added',
-    '   scope if it displaced or contradicted something they did ask for.',
+    '   SCOPE HE DID NOT ASK FOR: extra work beyond the request is not a gap. Only report added',
+    '   scope if it displaced or contradicted something he did ask for.',
     '',
-    '4. EVERY gap must QUOTE THEIR EXACT WORDS -- copied character-for-character from between the',
+    '4. EVERY gap must QUOTE HIS EXACT WORDS -- copied character-for-character from between the',
     '   OWNER-VERBATIM markers (or from a gate in Section 1b), at least four words long. A quote',
-    '   that is not really in their text is discarded by the harness and your finding dies with it.',
-    '   Do not paraphrase them, do not tidy their spelling, do not reconstruct from memory.',
+    '   that is not really in his text is discarded by the harness and your finding dies with it.',
+    '   Do not paraphrase him, do not tidy his spelling, do not reconstruct from memory.',
     '',
     '=== SECTION 4: ANSWER FORMAT (these exact labels, as the last lines of your reply) ===',
     'INTENT-VERDICT: PASS or FAIL-WITH-GAPS or UNCERTAIN',
     'INTENT-REASON: one line, <=200 characters, concrete',
-    'CHECKED: <their exact words> || <where in Section 2 this is satisfied, concretely>',
+    'CHECKED: <his exact words> || <where in Section 2 this is satisfied, concretely>',
     '    One per requirement you extracted and found satisfied. REQUIRED to answer PASS: a PASS',
-    '    with no CHECKED lines is discarded, because it shows no reading of their words happened.',
-    `GAP: <their exact words> || <${GAP_CLASSIFICATIONS.join('|')}> || <what was delivered instead, or (nothing)> || <why that is not what they asked for>`,
+    '    with no CHECKED lines is discarded, because it shows no reading of his words happened.',
+    `GAP: <his exact words> || <${GAP_CLASSIFICATIONS.join('|')}> || <what was delivered instead, or (nothing)> || <why that is not what he asked for>`,
     '    One per finding. REQUIRED to answer FAIL-WITH-GAPS.',
     'UNCERTAIN-BECAUSE: <what you could not determine, and what would settle it>',
     '    REQUIRED to answer UNCERTAIN.',
@@ -803,7 +803,7 @@ function parseIntentVerdict(text, { verbatim = '', gates = [] } = {}) {
       classificationRaw: recognised ? null : (rawClassification || null),
       deliveredInstead: parts[2] ? parts[2].slice(0, 400) : null,
       why: parts[3] ? parts[3].slice(0, 400) : null,
-      // A finding only counts if it is grounded in their words AND asserts an
+      // A finding only counts if it is grounded in his words AND asserts an
       // actual absence. Both halves are required; either alone is noise.
       counts: grounded.grounded && classification === FAILING_CLASSIFICATION
     };
@@ -858,7 +858,7 @@ function parseIntentVerdict(text, { verbatim = '', gates = [] } = {}) {
       + `(${[...new Set(groundedNonFailing.map(gap => gap.classification))].join(', ')})`;
   } else if (checked.length === 0) {
     // A PASS with no CHECKED lines is the cheap answer -- agreement with no
-    // demonstrated reading of their words. Discarded and retried rather than
+    // demonstrated reading of his words. Discarded and retried rather than
     // recorded, exactly as review.js discards an ACCEPT with no execution.
     return inconclusive('checker-answered-PASS-without-a-single-CHECKED-line (no evidence it read the owner\'s words)');
   } else {
@@ -980,7 +980,7 @@ function runIntentChecker({
         cwd,
         // The checker is a subscription CLI. The ambient environment carries
         // the owner's persisted ANTHROPIC_API_KEY, which takes precedence over
-        // their claude.ai login and bills per token invisibly.
+        // his claude.ai login and bills per token invisibly.
         env: safeLaunchEnvironment(process.env, { context: 'intent-fidelity checker' }),
         // This runs from a non-interactive scheduled task: never put a console
         // on the owner's desktop (STANDING-ORDERS LOCAL-WORK).
@@ -1163,7 +1163,7 @@ function recordCheck(storeFile, record, { fsImpl = fs, now = () => new Date() } 
       checker: record.checker,
       model: record.model,
       reasoningEffort: record.reasoningEffort || null,
-      // What was graded, so a later append to their verbatim or a changed
+      // What was graded, so a later append to his verbatim or a changed
       // artifact re-opens the question instead of resting on a stale PASS.
       verbatimSha256: record.verbatimSha256,
       workSha256: record.workSha256,
@@ -1221,7 +1221,7 @@ function laneIsAccepted(lane) {
 }
 
 // Candidates that are finished and not yet intent-checked at their CURRENT
-// content. A prior PASS does not survive the owner appending to their verbatim,
+// content. A prior PASS does not survive the owner appending to his verbatim,
 // which is the point of hashing both sides.
 function discoverCompletedWork({
   repoRoot,

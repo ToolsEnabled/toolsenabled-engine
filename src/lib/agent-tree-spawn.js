@@ -48,8 +48,8 @@ const {
 
 /* The lifecycle verbs an assistant may ask for on a circle BELOW it.
 
-   Product requirement: agents must be able to delete, start and
-   restart the agents under them, and message each one. Start and message
+   Owner, 2026-09-03: "THE AGENTS NEED TO BE ABLE TO DELETE AND START AND
+   RESTART AGENTS UNDER THEM AND BE ABLE TO MESSAGE EACH". Start and message
    already had a route; these three did not, although the application performs
    every one of them for the person's own press. Each is delivered through the
    SAME broker errand as a spawn, so the delivery clock, the queue and the

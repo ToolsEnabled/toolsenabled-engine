@@ -1,4 +1,5 @@
 'use strict';
+const { StringDecoder } = require('node:string_decoder');
 
 // Minimal, bounded Language Server Protocol client (JSON-RPC 2.0 over stdio).
 //
@@ -270,9 +271,10 @@ class LspSession {
     });
     this.child.stdout.on('error', error => this.#fail(lspError('LSP_PROTOCOL_ERROR',
       `Language server '${this.id}' stdout failed: ${error.message}`, {}, error)));
-    this.child.stderr.on('data', chunk => {
-      this.stderrTail = `${this.stderrTail}${chunk.toString('utf8')}`.slice(-MAX_STDERR_BYTES);
-    });
+    const stderrDecoder = new StringDecoder('utf8');
+    const keepStderr = text => { this.stderrTail = `${this.stderrTail}${text}`.slice(-MAX_STDERR_BYTES); };
+    this.child.stderr.on('data', chunk => keepStderr(typeof chunk === 'string' ? chunk : stderrDecoder.write(chunk)));
+    this.child.stderr.on('end', () => keepStderr(stderrDecoder.end()));
     this.child.stderr.on('error', () => { /* diagnostic stream only */ });
 
     let result;

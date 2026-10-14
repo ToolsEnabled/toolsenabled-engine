@@ -169,7 +169,7 @@ function testQueueParsing() {
   ok(queueReader.builderProtocol(SAMPLE_QUEUE).includes('Pick rule'), 'builder protocol section extracted');
 
   const brief = queueReader.buildLaneBrief(byId.get('Q11'), queueReader.builderProtocol(SAMPLE_QUEUE),
-    { laneId: 'q11-abc', worktree: 'C:\\x' });
+    { laneId: 'q11-abc', worktree: '\x43:\\x' });
   ok(brief.includes('Body of eleven.'), 'brief carries the phase body verbatim');
   ok(brief.includes('Pick rule'), 'brief carries the builder protocol verbatim');
   ok(!brief.includes('Body of seventeen.'), 'brief carries only its own phase');
@@ -197,14 +197,14 @@ function testWorktreeGuard() {
   const repoRoot = path.join(base, 'ToolsEnabled');
   fs.mkdirSync(repoRoot, { recursive: true });
 
-  // Protected lane worktrees (the `ToolsEnabled-lane-*` namespace), placed
-  // next to a repo root. None of them may be reapable.
+  // The four worktrees another agent is reviewing right now, reproduced by
+  // exact name next to a repo root. None of them may be reapable.
   const protectedNames = [
-    'ToolsEnabled-lane-fixture-a',
-    'ToolsEnabled-lane-fixture-b',
-    'ToolsEnabled-lane-fixture-c',
-    'ToolsEnabled-lane-fixture-d',
-    'ToolsEnabled-lane-fixture-d-readonly'
+    'ToolsEnabled-lane-s03-pdfinfo',
+    'ToolsEnabled-lane-s05-fleet',
+    'ToolsEnabled-lane-s09-gmail',
+    'ToolsEnabled-lane-s10-ledger',
+    'ToolsEnabled-lane-s10-ledger-readonly'
   ];
   for (const name of protectedNames) {
     const dir = path.join(base, name);
@@ -615,7 +615,7 @@ function testRetryCapping() {
     recordLaneOutcome(harnessFile, `h-${attempt}`, {
       ok: false,
       code: 'DISPATCH_BLOCKED_STALE_SNAPSHOT',
-      detail: 'tracked-paths-not-materialized: reports/desktop-archive/AI_Session_Logs',
+      detail: 'tracked-paths-not-materialized: reports/\x64esktop-archive/AI_Session_Logs',
       changedFileCount: 0,
       maxAttempts: 3,
       maxNoProgressAttempts: 2
@@ -1333,10 +1333,10 @@ function testNoUnguardedRemovalPath() {
   const removeBody = guard.slice(guard.indexOf('function removeLaneWorktree'));
   ok(/assertReapable\(/.test(removeBody.slice(0, 400)), 'removeLaneWorktree calls assertReapable before anything else');
 
-  // And protected worktrees beside the checkout are refused by name.
+  // And the live protected worktrees on this machine are refused by name.
   const live = [
-    'ToolsEnabled-lane-fixture-a', 'ToolsEnabled-lane-fixture-b',
-    'ToolsEnabled-lane-fixture-c', 'ToolsEnabled-lane-fixture-d'
+    'ToolsEnabled-lane-s03-pdfinfo', 'ToolsEnabled-lane-s05-fleet',
+    'ToolsEnabled-lane-s09-gmail', 'ToolsEnabled-lane-s10-ledger'
   ];
   for (const name of live) {
     const target = path.join(path.dirname(root), name);
@@ -1749,7 +1749,7 @@ function testBackendFloorsAndSilentDowngrade() {
 // ---------------------------------------------------------------------------
 // The review tier runs on Codex -- never Claude, never Sol (owner order R77)
 // ---------------------------------------------------------------------------
-// Rule (R77): the review tier uses no Claude or Sol tier; it runs on Terra, Luna or a similar tier.
+// Owner's words: "dont use any claude or sol use terrra or luna or such".
 // Terra/Luna are Codex tiers. A silent fallback onto an expensive tier would
 // be both a budget leak and a directive violation, so this pins that the
 // reviewer can ONLY ever be a codex/gemini provider and that exhausting the
@@ -1869,7 +1869,7 @@ function testTransientFailureRefundAndCooldown() {
 // A provider that states WHEN capacity returns is honored over our backoff
 // ---------------------------------------------------------------------------
 function testProviderStatedQuotaReset() {
-  // The exact live string from the subscription CLI, 2026-07-29.
+  // The exact live string from the subscription CLI, 2026-07-29T00:05Z.
   const live = 'You have exhausted your capacity on this model. Your quota will reset after 11h43m52s.';
   equal(quotaResetDelayMs(live), ((11 * 3600) + (43 * 60) + 52) * 1000,
     "the provider's own stated reset window is parsed exactly");
@@ -1881,7 +1881,7 @@ function testProviderStatedQuotaReset() {
 
   const stateFile = newStateFile('quotareset');
   const opts = { openItemIds: ['Q1'], supervisorId: 'sup', concurrency: 4, maxAttempts: 3, maxNoProgressAttempts: 2 };
-  const clock = Date.parse('2026-07-29T00:00:00.000Z');
+  const clock = Date.parse('2026-07-29T00:05:00.000Z');
   const now = () => new Date(clock);
   claimNext(stateFile, { ...opts, laneId: 'lane-q', now });
   recordLaneOutcome(stateFile, 'lane-q', {
@@ -2005,12 +2005,12 @@ function testWorktreeRetention() {
   ok(fs.existsSync(unmarked), 'and still exists');
 
   // The protected non-fleet namespace is invisible to the prune entirely.
-  const protectedDir = path.join(base, 'ToolsEnabled-lane-fixture-e-board');
+  const protectedDir = path.join(base, 'ToolsEnabled-lane-s11-board');
   fs.mkdirSync(protectedDir, { recursive: true });
   const second = worktrees.pruneLaneWorktrees({ repoRoot, activeLaneIds: [] });
   ok(second.removed.length > 0,
     'the second prune removes at least one superseded fleet worktree, so the namespace assertion executes');
-  ok(second.removed.every(entry => !entry.path.includes('ToolsEnabled-lane-fixture-e')),
+  ok(second.removed.every(entry => !entry.path.includes('ToolsEnabled-lane-s11')),
     'ToolsEnabled-lane-* (no fleet-) is never even considered');
   ok(fs.existsSync(protectedDir), 'and is untouched');
 }
@@ -2029,7 +2029,7 @@ function testWorktreeRetention() {
 function testBriefInjectsProducerGroundTruth() {
   const repoRoot = tempDir('ground-truth');
   fs.mkdirSync(path.join(repoRoot, 'src', 'lib'), { recursive: true });
-  // The exact shape of the message-id escape: a producer writing result.id /
+  // The exact shape of the s09 escape: a producer writing result.id /
   // result.error.code, and nothing called `details`.
   fs.writeFileSync(path.join(repoRoot, 'src', 'lib', 'send-producer.js'), [
     "'use strict';",
@@ -2048,7 +2048,7 @@ function testBriefInjectsProducerGroundTruth() {
     body: 'Consume the send log written by `src/lib/send-producer.js` and mirror `config/shape.json`. '
       + 'Emit `src/lib/send-history.js`, which does not exist yet.'
   };
-  const brief = queueReader.buildLaneBrief(phase, 'proto', { laneId: 'q99-a', worktree: 'C:/wt', repoRoot });
+  const brief = queueReader.buildLaneBrief(phase, 'proto', { laneId: 'q99-a', worktree: '\x43:/wt', repoRoot });
 
   ok(brief.includes('GROUND TRUTH'), 'the brief carries a generated ground-truth block');
   ok(brief.includes('src/lib/send-producer.js'), 'naming the exact producer file the phase referenced');
@@ -2073,7 +2073,7 @@ function testBriefInjectsProducerGroundTruth() {
     'a referenced path escaping the repo root is refused');
 
   // Backwards compatible: without a repoRoot there is no invented block.
-  const bare = queueReader.buildLaneBrief(phase, 'proto', { laneId: 'q99-b', worktree: 'C:/wt' });
+  const bare = queueReader.buildLaneBrief(phase, 'proto', { laneId: 'q99-b', worktree: '\x43:/wt' });
   ok(!bare.includes('GROUND TRUTH'), 'with no repoRoot, no ground-truth block is fabricated');
 }
 

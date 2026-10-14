@@ -26,7 +26,7 @@ function declaration() {
         'report    REPORT-firsttest-example.md'
       ].join('\n')
     }],
-    bounds: { launchesPerMinute: 1, accounts: 1 }
+    bounds: { launchesPerMinute: 1 }
   };
 }
 
@@ -43,7 +43,7 @@ function declaration() {
       admission,
       declaration: input,
       stateRoot,
-      accounts: ['account-one'],
+      account: 'account-one',
       now: () => 1000,
       sleep: async () => {},
       dispatch: async ({ index, task, account }) => {

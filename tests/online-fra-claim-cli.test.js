@@ -58,7 +58,7 @@ function newVault() {
     operations: () => fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8').trim().split('\n').map(JSON.parse) : []
   };
 }
-async function invoke(vault, args) {
+async function invoke(vault, args, tokenEnvironment = {}) {
   // Preserve only platform process lookup, then explicitly isolate all test
   // state and profile destinations. No credential-bearing ambient variables.
   const env = {};
@@ -73,7 +73,8 @@ async function invoke(vault, args) {
     USERPROFILE: isolated.root,
     APPDATA: path.join(isolated.root, 'roaming-app-data'),
     TOOLSENABLED_CLAIM_FIXTURE_ROOT: vault.root,
-    TOOLSENABLED_ACCOUNT_ORIGIN: origin
+    TOOLSENABLED_ACCOUNT_ORIGIN: origin,
+    ...tokenEnvironment
   });
   const result = await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--require', PRELOAD, CLI, ...args], {
@@ -189,6 +190,11 @@ const server = http.createServer(async (req, res) => {
       ['open'], ['open', '--name'], ['open', '--name', ''],
       ['open', '--name', 'PC', '--accept', 'true'],
       ['poll'], ['poll', '--token'], ['poll', '--accept', 'true'],
+      ['poll', '--token-env'], ['wait', '--token-env'],
+      ['poll', '--token-env', TOKEN], // Mistaking the token for a variable name must not echo it.
+      ['poll', '--token-env', 'TOOLSENABLED_CLAIM_POLL_TOKEN'],
+      ['poll', '--token-env', 'TOOLSENABLED_CLAIM_POLL_TOKEN', '--token-env', 'SECOND_TOKEN_NAME'],
+      ['wait', '--token-env', 'TOOLSENABLED_CLAIM_POLL_TOKEN', '--token-env', 'SECOND_TOKEN_NAME'],
       ['poll', '--token', TOKEN, '--accept'], ['poll', '--token', '--accept', 'true'],
       ['poll', '--token', TOKEN, '--accept=true'], ['poll', '--token', TOKEN, '--unknown', 'true'],
       ['poll', '--token', TOKEN, '--token', 'other'], ['poll', '--token', TOKEN, '--accept', 'true', '--accept', 'false'],
@@ -221,6 +227,48 @@ const server = http.createServer(async (req, res) => {
     assert.equal(Object.hasOwn(vault.read(), IDENTITY_KEY), true);
     noGrant(vault);
     assert.equal(result.stderr.includes(TOKEN), false);
+  });
+
+  await check('environment token reaches real poll, accept, collection, decline and wait requests without argv or output disclosure', async () => {
+    const vault = newVault();
+    const name = 'TOOLSENABLED_CLAIM_POLL_TOKEN';
+    const env = { [name]: TOKEN };
+    const args = ['poll', '--token-env', name];
+    assert.equal(JSON.stringify(args).includes(TOKEN), false);
+    reply(200, { state: 'pending', intervalSeconds: 5 });
+    const pending = await invoke(vault, args, env);
+    assert.equal(pending.code, 0);
+    assert.equal(pending.answer.state, 'pending');
+    assert.equal(lastBody().pollToken === TOKEN, true, 'the request receives the private token');
+    assert.equal(Object.hasOwn(lastBody(), 'accept'), false);
+    reply(202, { state: 'accepted' });
+    const accepted = await invoke(vault, [...args, '--accept', 'true'], env);
+    assert.equal(accepted.code, 0);
+    assert.equal(accepted.answer.state, 'accepted');
+    assert.equal(lastBody().pollToken === TOKEN && lastBody().accept === true, true);
+    noGrant(vault);
+    reply(200, GRANT);
+    const connected = await invoke(vault, args, env);
+    assert.equal(connected.code, 0);
+    assert.deepEqual(connected.answer, { state: 'connected', ...DEVICE });
+    assert.equal(lastBody().pollToken === TOKEN, true);
+    assert.equal(Object.hasOwn(lastBody(), 'accept'), false);
+    const otherVault = newVault();
+    reply(200, { state: 'rejected' });
+    const declined = await invoke(otherVault, [...args, '--accept', 'false'], env);
+    assert.equal(declined.code, 0);
+    assert.equal(declined.answer.state, 'rejected');
+    assert.equal(lastBody().pollToken === TOKEN && lastBody().accept === false, true);
+    noGrant(otherVault);
+    reply(200, reserved);
+    const waiting = await invoke(otherVault, ['wait', '--token-env', name, '--deadline-ms', '1000'], env);
+    assert.equal(waiting.code, 0);
+    assert.equal(waiting.answer.state, 'reserved');
+    assert.equal(lastBody().pollToken === TOKEN, true);
+    for (const result of [pending, accepted, connected, declined, waiting]) {
+      noWireSecrets(result.answer);
+      assert.equal(result.stderr.includes(TOKEN), false, 'human output excludes the token');
+    }
   });
 
   await check('ordinary pending and reserved polls never send a decision', async () => {

@@ -53,12 +53,12 @@
  * is down.
  *
  *   node tools/cloud-batch-plan.js --corpus <dir> --project <key> \
- *        --batch-id <id> --launches-per-minute <n> --accounts <n> \
+ *        --batch-id <id> --launches-per-minute <n> \
  *        --out <declaration.json> [--against-commit <sha40>]
  *
  * WHY --against-commit EXISTS, since it is not in the shape this file was
  * commissioned to write. batch-target.js changed while this was being built
- * (an earlier commit): a
+ * (commit 1d9c955, "A batch must say what its agents will actually see"): a
  * declaration must now say what its agents see, and admission REFUSES a batch
  * that declares neither `against.publishedCommit` nor a mirror to check. Absent
  * the flag this planner emits no `against`, which is mirror mode -- exactly the
@@ -111,213 +111,13 @@ const EXCLUSION = Object.freeze({
   PROMPT_TOO_LONG: 'PROMPT_TOO_LONG'
 });
 
-/* `accounts` left REQUIRED for a hand-written provider and made optional only
- * for --provider auto, where the system knows the roster better than the caller
- * does. Declaring a number the machine can count is how the two disagree. */
 const REQUIRED_FLAGS = Object.freeze(['corpus', 'project', 'batch-id', 'launches-per-minute', 'out']);
-/* Optional, and absent means MIRROR mode -- the default and the strong case.
- * It is never inferred: batch-target.js refuses to let a batch fall back to a
- * published commit because a mirror was unreachable, and a planner that filled
- * this in on its own would reintroduce exactly that fallback. */
-/* `registry` was READ by --provider auto and never DECLARED here, so the
- * parser refused it as unknown and the only way to reach a mirror registry
- * outside the default location was not to use --provider auto at all. That
- * mattered because one environment variable moves BOTH the account registry
- * and the mirror registry: with it set, accounts resolve and the mirror lookup
- * goes somewhere that may not carry the project; without it, neither resolves.
- * --registry is how a caller points at the right mirror registry without
- * moving the account one. Found by a coordinator who hit it, not by a test. */
-/* `repository` and `branch` are what make --provider auto reachable for a
- * project that publishes no mirror. Without them the only path for app and
- * site was a hand-written --provider file, and that is how every app wave
- * before 2026-08-25 ran on one account while a second held an environment for
- * the same repository. */
-const OPTIONAL_FLAGS = Object.freeze(['against-commit', 'provider', 'drift-check', 'accounts', 'concurrency', 'registry', 'repository', 'branch']);
+// The provider file declares the chosen account and its environment.
+const OPTIONAL_FLAGS = Object.freeze(['against-commit', 'provider', 'drift-check']);
 const FLAGS = Object.freeze([...REQUIRED_FLAGS, ...OPTIONAL_FLAGS]);
 
 function fail(code, message, details) {
   throw new CloudAgentError(code, message, details);
-}
-
-/* THE PROVIDER BLOCK, RESOLVED BY THE SYSTEM RATHER THAN BY A PERSON.
- *
- * Everything this needs is already known to the product: the mirror registry
- * says which repository a project publishes to, the multi-account registry says
- * which codex accounts exist and where their homes are, and the provider's own
- * environments endpoint says which environment each account holds for that
- * repository. A coordinator hand-writing an id map is three lookups the machine
- * can do, plus a chance to get one wrong.
- *
- * IT WAS GOT WRONG, TWICE, THE NIGHT THIS WAS WRITTEN. One coordinator carried
- * ids bound to a DIFFERENT repository and nearly dispatched 71 tasks at it.
- * Another ran six waves on one account without ever learning the second account
- * had an environment for the same repository -- silent half throughput, no
- * refusal, no warning, because nothing was asked and so nothing said no.
- *
- * SO THE SILENT CASE IS THE ONE THIS CLOSES. Every account that HAS an
- * environment for the project's repository is used. An account that has none is
- * NAMED in the summary rather than quietly dropped, because "we ran at half
- * rate" and "we ran at full rate" look identical in a declaration and differ
- * only in how long the wave takes.
- *
- * WHAT IT WILL NOT DO: invent. If discovery cannot be completed, this refuses
- * and says so rather than falling back to a partial roster -- a partial roster
- * is exactly the silent half-capacity this exists to end. */
-async function resolveProviderAutomatically({ projectKey, registryPath, concurrency, repositoryOverride, branchOverride }) {
-  const cloudMirror = require('../src/lib/cloud-agent/cloud-mirror');
-  const accountRegistry = require('../src/lib/multi-account/registry');
-  const { accountRegistryPath } = require('../src/lib/multi-account/registry-location');
-  const { discoverCloudEnvironments } = require('../src/lib/cloud-agent/codex-cloud-environments');
-
-  /* A MIRROR IS HOW THIS LEARNS THE REPOSITORY -- IT IS NOT THE ONLY WAY.
-   *
-   * Auto-discovery needs three facts: which repository the project lives in,
-   * which branch to dispatch against, and a remote to confirm that branch
-   * exists. The mirror registry supplies all three, so `--provider auto` used
-   * to REFUSE outright for any project without a mirror entry -- and the two
-   * projects in that position, app and site, are exactly the ones that run in
-   * drift mode and will never have one.
-   *
-   * The cost was not theoretical. Denied the machine's roster, both fell back
-   * to a hand-written provider file, and every app wave before this one ran on
-   * ONE account while a second account held an environment for the same
-   * repository. That is the identical silent half-throughput this function was
-   * written to end, reintroduced through the door marked "not registered".
-   *
-   * So the repository may be NAMED instead of looked up. Nothing is inferred:
-   * the branch still comes from what the provider itself reports for the
-   * matched environments, and the branch-existence check still runs against
-   * the real remote. */
-  let repository;
-  let branch;
-  let mirrorRemote;
-  if (repositoryOverride) {
-    repository = repositoryOverride;
-    mirrorRemote = `https://github.com/${repository}.git`;
-    branch = branchOverride || null;
-  } else {
-    const mirrorRegistry = cloudMirror.loadRegistry(registryPath ? { registryPath } : {});
-    let project;
-    try {
-      project = cloudMirror.projectFor({ registry: mirrorRegistry, projectKey });
-    } catch (error) {
-      fail('CLOUD_BATCH_PLAN_PROJECT_UNRESOLVED',
-        `${error && error.message} `
-        + 'A project that publishes no mirror can still be resolved automatically: pass --repository <owner/name> to name it, '
-        + 'and the accounts, environments and branch are still discovered rather than hand-written. '
-        + 'Hand-writing --provider instead is what left every app wave running on one account.');
-    }
-    repository = project.cloudRepository;
-    branch = branchOverride || project.mirrorBranch;
-    mirrorRemote = project.mirrorRemote;
-  }
-
-  /* The account registry has ONE location and refuses to guess it, which from a
-   * source checkout means TOOLSENABLED_STATE_ROOT must point at the installed
-   * product's state. That refusal is deliberate, so it is passed through with
-   * the remedy attached rather than worked around. */
-  let accounts;
-  try {
-    const accountsRegistry = accountRegistry.loadRegistry({ configPath: accountRegistryPath() });
-    accounts = accountRegistry.accountsFor(accountsRegistry, 'codex');
-  } catch (error) {
-    fail('CLOUD_BATCH_PLAN_ACCOUNTS_UNREADABLE',
-      `the codex accounts could not be read (${error && error.code}): ${error && error.message} `
-      + 'Set TOOLSENABLED_STATE_ROOT to the installed product state root so the account registry resolves, or pass --provider with a hand-written block.');
-  }
-  if (!accounts || accounts.length === 0) {
-    fail('CLOUD_BATCH_PLAN_NO_ACCOUNTS', 'the account registry lists no codex account, so a batch has nowhere to launch.');
-  }
-
-  /* ONE ACCOUNT PER CALL, and ACCOUNT OBJECTS rather than names.
-   *
-   * Two shapes bite here and both are silent. discoverCloudEnvironments
-   * resolves each account's own home to read its own sign-in, so handed NAME
-   * STRINGS it reports every account as "reader failed" -- which reads like a
-   * broken endpoint and is really the caller passing the wrong type.
-   *
-   * And the MERGED result does not carry which account each environment came
-   * from, so matching on a per-environment account field finds nothing and the
-   * roster comes back empty for a repository both accounts can reach. Asking
-   * one account at a time is what makes the answer attributable. */
-  const environments = {};
-  const without = [];
-  const defaultBranches = new Set();
-  for (const account of accounts) {
-    const reading = await discoverCloudEnvironments({ accounts: [account] });
-    if (!reading || reading.complete !== true) {
-      const why = (reading && reading.accounts || [])
-        .filter((a) => a.reading !== 'authorized')
-        .map((a) => a.reason || a.reading)
-        .join('; ');
-      fail('CLOUD_BATCH_PLAN_ENVIRONMENTS_UNKNOWN',
-        `the environments ${account.name} is authorized for could not be established${why ? ` (${why})` : ''}. `
-        + 'Refusing rather than planning against the accounts that did answer: a partial roster silently halves the wave and looks identical to a whole one.');
-    }
-    const match = (reading.environments || []).find((e) =>
-      String(e.repository || '').toLowerCase() === String(repository).toLowerCase());
-    if (match) {
-      environments[account.name] = match.environmentId;
-      if (match.defaultBranch) defaultBranches.add(String(match.defaultBranch));
-    } else without.push(account.name);
-  }
-  if (Object.keys(environments).length === 0) {
-    fail('CLOUD_BATCH_PLAN_NO_ENVIRONMENT',
-      `no codex account holds an environment for ${repository}, so this batch has nowhere to land. Accounts asked: ${accounts.map((a) => a.name).join(', ')}.`);
-  }
-
-  /* WITH NO MIRROR TO NAME THE BRANCH, ASK THE PROVIDER RATHER THAN ASSUME.
-   *
-   * Defaulting to "main" here would be a guess wearing the clothes of a
-   * convention, and a wrong branch is the failure that costs a whole wave as a
-   * bare [ERROR]. The environments themselves report a defaultBranch, so that
-   * is the answer. If the matched environments DISAGREE about it there is no
-   * single right answer to pick, and picking one silently is how half a wave
-   * lands somewhere nobody looked -- so that refuses and names both. */
-  if (!branch) {
-    if (defaultBranches.size === 1) [branch] = [...defaultBranches];
-    else if (defaultBranches.size === 0) {
-      fail('CLOUD_BATCH_PLAN_BRANCH_UNKNOWN',
-        `no environment for ${repository} reports a default branch, so which branch to dispatch against is unanswerable. Pass --branch.`);
-    } else {
-      fail('CLOUD_BATCH_PLAN_BRANCH_DISAGREE',
-        `the environments for ${repository} report different default branches (${[...defaultBranches].join(', ')}), so there is no single branch to dispatch against. Pass --branch to say which.`);
-    }
-  }
-
-  /* THE DERIVED BRANCH HAS TO EXIST, AND THIS COST 147 TASKS TO LEARN.
-   *
-   * The branch comes from the mirror registry, and a registry entry is a
-   * CLAIM about a remote rather than a fact about one. On 2026-08-25 a mirror
-   * was re-pointed to a workspace branch that had never been published, so
-   * every dispatch after that carried a --branch the provider could not check
-   * out. Three waves failed 66/66, 8/8 and 73/73, and the failure arrives as a
-   * bare [ERROR] with no diff and no detail the CLI can retrieve -- the most
-   * expensive possible way to learn that a string was wrong.
-   *
-   * One ls-remote at plan time answers it. Checked here rather than trusted,
-   * for the same reason the corpus is checked against the tree: the registry
-   * says where the work SHOULD go, and only the remote says where it CAN. */
-  try {
-    const refs = String(execFileSync('git', ['ls-remote', '--heads', mirrorRemote, branch],
-      { encoding: 'utf8', timeout: 120_000, windowsHide: true,
-        env: safeLaunchEnvironment(process.env, { context: 'cloud batch plan ls-remote' }) }) || '').trim();
-    if (!refs) {
-      fail('CLOUD_BATCH_PLAN_BRANCH_ABSENT',
-        `${mirrorRemote} has no branch ${branch}, which is the branch this batch would dispatch against. `
-        + 'Every task would be dispatched with a --branch the provider cannot check out, and each one fails as a bare [ERROR] with no diff and no retrievable reason. '
-        + 'Publish the branch so it exists, or correct the registry entry or --branch. Nothing was written.');
-    }
-  } catch (error) {
-    if (error && error.code === 'CLOUD_BATCH_PLAN_BRANCH_ABSENT') throw error;
-    fail('CLOUD_BATCH_PLAN_BRANCH_UNVERIFIED',
-      `whether ${mirrorRemote} carries the branch ${branch} could not be established (${error && error.message}). `
-      + 'Refusing rather than dispatching against a branch nobody confirmed: an unresolvable branch fails every task in the wave with no readable reason.');
-  }
-  return {
-    provider: { branch, environments, concurrency },
-    resolved: { repository, accounts: Object.keys(environments), withoutEnvironment: without },
-  };
 }
 
 /* --drift-check is meaningless without a commit to be stale RELATIVE TO, and
@@ -495,7 +295,7 @@ function driftedSince(repoRoot, publishedCommit, execImpl) {
   return moved;
 }
 
-function planBatch({ corpusDir, project, batchId, launchesPerMinute, accounts, againstCommit = null, provider = null, driftedTargets = null, fsImpl = fs }) {
+function planBatch({ corpusDir, project, batchId, launchesPerMinute, againstCommit = null, provider = null, driftedTargets = null, fsImpl = fs }) {
   const dir = path.resolve(String(corpusDir));
   const names = listCorpus(dir, fsImpl);
 
@@ -625,11 +425,10 @@ function planBatch({ corpusDir, project, batchId, launchesPerMinute, accounts, a
 
   /* THE CEILING IS IMPORTED, NOT RESTATED. batch-target.js owns the measured
    * number; a copy here would drift from it and the looser one would win. */
-  const ceiling = batchTarget.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT * accounts;
+  const ceiling = batchTarget.MAX_LAUNCHES_PER_MINUTE;
   if (launchesPerMinute > ceiling) {
     fail('CLOUD_BATCH_PLAN_BOUNDS',
-      `--launches-per-minute ${launchesPerMinute} is above the measured ceiling of ${ceiling} for ${accounts} account(s) `
-      + `(${batchTarget.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT} per account), so admission would refuse this declaration. `
+      `--launches-per-minute ${launchesPerMinute} is above the measured ceiling of ${ceiling}, so admission would refuse this declaration. `
       + 'Refused at planning time instead of writing a file that cannot be admitted.');
   }
 
@@ -638,7 +437,7 @@ function planBatch({ corpusDir, project, batchId, launchesPerMinute, accounts, a
     batchId,
     project,
     tasks,
-    bounds: { launchesPerMinute, accounts },
+    bounds: { launchesPerMinute },
     /* Omitted entirely rather than written as null when no commit was declared,
      * so the file says "mirror mode" by the absence the module reads, not by a
      * key an operator might later fill in by hand. */
@@ -666,7 +465,7 @@ function planBatch({ corpusDir, project, batchId, launchesPerMinute, accounts, a
       validated: tasks.length,
       planned: tasks.length,
       excluded,
-      bounds: { launchesPerMinute, accounts },
+      bounds: { launchesPerMinute },
       /* What the agents in this batch will actually see, printed because it is
        * the difference between a clean harvest and 250 diffs against source
        * that moved. */
@@ -684,7 +483,7 @@ function summaryLines(summary, outPath) {
   const lines = [];
   lines.push(`corpus            ${summary.corpus}`);
   lines.push(`project           ${summary.project}    batch ${summary.batchId}`);
-  lines.push(`bounds            ${summary.bounds.launchesPerMinute}/min across ${summary.bounds.accounts} account(s)`);
+  lines.push(`bounds            ${summary.bounds.launchesPerMinute}/min`);
   lines.push(`agents will see   ${summary.source}`);
   lines.push(`briefs read       ${summary.read}`);
   lines.push(`validated         ${summary.validated}`);
@@ -759,61 +558,20 @@ async function main(argv, { fsImpl = fs, log = console.log, logError = console.e
         `${outPath} already exists and was not overwritten. A journal header carries the admissionSha256 of the declaration its batch ran from, so replacing that file destroys the only record of what was admitted. Write to a new path, or remove that one deliberately.`);
     }
 
-    /* THE PROVIDER BLOCK: resolved by the system, or hand-written, or absent.
-     *
-     * `--provider auto` is the one a coordinator should use. It asks the mirror
-     * registry which repository this project publishes to, the account registry
-     * which codex accounts exist, and the provider which environment each holds
-     * for that repository -- three lookups the machine can do and a person
-     * should not have to. `--accounts` then becomes the machine's own count;
-     * declaring it by hand only creates a number that can disagree. */
-    /* A FLAG THAT SILENTLY DOES NOTHING IS ITS OWN DEFECT. --repository and
-     * --branch only feed automatic resolution; passed alongside a hand-written
-     * --provider file, or with no --provider at all, they would be accepted and
-     * ignored, and the operator would believe they had named the repository. */
-    for (const flag of ['repository', 'branch']) {
-      if (options[flag] !== undefined && options.provider !== 'auto') {
-        throw usage(`--${flag} is only used by --provider auto. With a hand-written --provider file the block already names its own coordinates, and with no --provider there is nothing to resolve, so passing it here would change nothing.`);
-      }
-    }
-
-    let providerBlock = null;
-    let resolvedProvider = null;
-    if (options.provider === 'auto') {
-      const auto = await resolveProviderAutomatically({
-        projectKey: options.project,
-        registryPath: options.registry ? path.resolve(options.registry) : null,
-        concurrency: options.concurrency === undefined ? 6 : positiveInteger(options.concurrency, 'concurrency'),
-        repositoryOverride: options.repository,
-        branchOverride: options.branch,
-      });
-      providerBlock = auto.provider;
-      resolvedProvider = auto.resolved;
-      if (options.accounts !== undefined && positiveInteger(options.accounts, 'accounts') !== resolvedProvider.accounts.length) {
-        fail('CLOUD_BATCH_PLAN_ACCOUNTS_DISAGREE',
-          `--accounts ${options.accounts} disagrees with the ${resolvedProvider.accounts.length} account(s) that actually hold an environment for ${resolvedProvider.repository} (${resolvedProvider.accounts.join(', ')}). `
-          + 'Drop --accounts and let the roster be counted, or fix the number: the admitted rate is cleared against it.');
-      }
-    } else if (options.provider !== undefined) {
-      providerBlock = readProviderFile(options.provider, fsImpl);
-    } else if (options.accounts === undefined) {
-      throw usage('--accounts is required unless --provider auto is given, which counts the roster itself.');
-    }
+    const providerBlock = options.provider === undefined
+      ? null : readProviderFile(options.provider, fsImpl);
 
     const { declaration, summary } = planBatch({
       corpusDir: options.corpus,
       project: options.project,
       batchId: options['batch-id'],
       launchesPerMinute: positiveInteger(options['launches-per-minute'], 'launches-per-minute'),
-      /* The resolved roster's own size when it was resolved, so bounds and
-       * dispatch cannot describe different fleets. */
-      accounts: resolvedProvider ? resolvedProvider.accounts.length : positiveInteger(options.accounts, 'accounts'),
       /* Passed through unexamined. parseBatchTarget owns what a commit id must
        * look like and refuses an abbreviation with its own reason; a second
        * check here would be a second standard. */
       againstCommit: options['against-commit'] === undefined ? null : options['against-commit'],
-      /* --provider names a JSON file holding { branch, environments,
-       * concurrency } -- the dispatch coordinates the declaration SEALS, so a
+      /* --provider names a JSON file holding { account, environment,
+       * branch, concurrency } -- the dispatch coordinates the declaration SEALS, so a
        * planned batch can be run by tools/cloud-lane.js batch with no harness
        * composed outside the repo. A file, not inline JSON: environment ids
        * are 32-hex values an operator should paste once, and Windows shells
@@ -833,18 +591,7 @@ async function main(argv, { fsImpl = fs, log = console.log, logError = console.e
     outputWriteAttempted = true;
     fsImpl.writeFileSync(outPath, `${JSON.stringify(declaration, null, 2)}\n`, 'utf8');
     for (const line of summaryLines(summary, outPath)) log(line);
-    /* THE ROSTER IS SAID OUT LOUD, because the failure this closes was silent.
-     * Six waves ran on one account while a second account held an environment
-     * for the same repository; nothing refused, nothing warned, and half the
-     * fleet sat idle. An account WITHOUT an environment is named too -- that is
-     * the line that would have caught it. */
-    if (resolvedProvider) {
-      log(`dispatch roster    ${resolvedProvider.accounts.join(', ')} -> ${resolvedProvider.repository}`);
-      if (resolvedProvider.withoutEnvironment.length > 0) {
-        log(`  NOT dispatching under ${resolvedProvider.withoutEnvironment.join(', ')}: no environment for ${resolvedProvider.repository}. `
-          + 'That account is idle for this batch; create an environment for it there to use the whole fleet.');
-      }
-    }
+    if (providerBlock) log(`dispatch account   ${providerBlock.account}`);
     return 0;
   } catch (error) {
     if (error && error.code === 'CLOUD_BATCH_PLAN_USAGE') {

@@ -3,7 +3,7 @@
 // TWO TREES ON ONE COMPUTER SHARE A DIRECTORY, AND UNTIL 2026-09-03 THEY
 // SHARED ONE NAMESPACE TOO.
 //
-// MEASURED 2026-09-03 on a development machine: two trees, each
+// MEASURED 2026-09-03 19:12 local on the owner's own machine: two trees, each
 // holding one circle named "Worker" (the app's store numbers a role per tree,
 // so the second tree's first Worker is plain "Worker" as well). The directory
 // held two live rows named "Worker" and answered TREE_SENDER_AMBIGUOUS to every

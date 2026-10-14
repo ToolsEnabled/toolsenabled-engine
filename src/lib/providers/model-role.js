@@ -19,7 +19,7 @@ const MODELS = Object.freeze([
 ]);
 const GiB = 1024 ** 3;
 // This is a load admission floor, not an estimate of a model's exact size.
-// It retains a material safety reserve on the local GPU.
+// It retains a material safety reserve on the 16 GiB local GPU.
 const FRESH_MIN_VRAM_BYTES = Object.freeze({
   'qwen2.5:14b': 12 * GiB,
   'qwen2.5:7b': 8 * GiB,

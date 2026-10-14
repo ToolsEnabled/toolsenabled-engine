@@ -191,7 +191,7 @@ function establishedOwnerClassOf(entry) {
  * constraint used to veto other work, a customer-facing profile value.
  *
  * It throws rather than returning false on purpose. A boolean gets ignored; the
- * $350 line was dropped by a lane that would have happily ignored a
+ * trademark line was dropped by a lane that would have happily ignored a
  * boolean. A throw has to be handled.
  */
 function assertCitableAsOwnerRequirement(entry, context) {

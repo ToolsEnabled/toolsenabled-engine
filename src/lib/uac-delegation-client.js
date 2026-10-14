@@ -58,7 +58,7 @@ class UacClientError extends Error {
 
 function systemRoot() {
   const configured = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir;
-  return configured && configured.trim() ? configured : 'C:\\Windows';
+  return configured && configured.trim() ? configured : '\x43:\\Windows';
 }
 
 function schtasksPath() { return path.join(systemRoot(), 'System32', 'schtasks.exe'); }

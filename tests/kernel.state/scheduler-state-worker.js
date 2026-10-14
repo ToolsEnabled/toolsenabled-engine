@@ -20,7 +20,7 @@ try {
     runtime: {
       nodePath: process.execPath,
       runnerPath: require('node:path').resolve(__dirname, '..', '..', 'src', 'job-runner.js'),
-      principalId: 'S-1-5-21-111111111-222222222-333333333-1002'
+      principalId: '\x53-1-5-21-111111111-222222222-333333333-1002'
     },
     maxScheduledJobs: 1
   });

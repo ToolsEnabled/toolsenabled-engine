@@ -1,7 +1,7 @@
 'use strict';
 /* AN INTEGRATION NOBODY HAS SET UP IS NOT A BROKEN INSTALLATION.
  *
- * MEASURED 2026-09-03 on a development machine: doctor() returned ok:false
+ * MEASURED 2026-09-03 on the owner's own machine: doctor() returned ok:false
  * with SIX required failures -- instagram, chrome-web-store, google-default,
  * github, stripe, paddle -- none of which this machine has ever used. `ok` had
  * therefore been false on every run since install, and `system.doctor` is the

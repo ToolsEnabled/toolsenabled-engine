@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..', '..');
 const suites = [
+  'tests/models/exact-model-ids.test.js',
   'tests/models/model-floor.js',
   'tests/models/model-picker.js',
   'tests/models/model-provider.js',

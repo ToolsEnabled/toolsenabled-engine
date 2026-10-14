@@ -16,7 +16,7 @@ function searchWith(entries) {
   const result = observation.observe({ nowMs: 1_000, maxAgeMs: 100 }, {
     search: searchWith([{
       namespace: 'agent-coord',
-      key: 'controller/agent-a-wave-0001',
+      key: 'controller/codex-luna-gemini-wave-20260729',
       updatedAtMs: 950,
       revision: 8,
       value: { secretLikeNarration: 'never expose this' },
@@ -35,7 +35,7 @@ function searchWith(entries) {
   const result = observation.observe({ nowMs: 1_000, maxAgeMs: 100 }, {
     search: searchWith([
       { namespace: 'agent-coord', key: 'controller/review/12', updatedAtMs: 999 },
-      { namespace: 'agent-coord', key: 'controller/agent-b-wave-0002', updatedAtMs: 1_001 },
+      { namespace: 'agent-coord', key: 'controller/codex-wave-20260729', updatedAtMs: 1_001 },
       { namespace: 'other', key: 'controller/coordinator-status', updatedAtMs: 999 }
     ])
   });

@@ -113,9 +113,9 @@ const foreignBoundOwned = foreignLifecycleView.sessions.flatMap(sessionView => s
 assert.equal(foreignBoundOwned.controls.length, 0);
 assert.equal(foreignBoundOwned.mutationAllowed, false);
 
-code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, relativePath: 'C:\\secret\\raw.log', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
+code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, relativePath: '\x43:\\secret\\raw.log', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
 code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, relativePath: '..', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
-code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, downloadId: 'C:\\raw.log', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
+code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, downloadId: '\x43:\\raw.log', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
 code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, autoOpen: true, state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
 code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media, downloads: [{ ...downloadPlan, schemaVersion: 'forged.v1', state: 'pending' }] }), 'BROWSER_SHELL_DOWNLOAD_INVALID');
 code(() => shell.createShellView({ browserStatus: status, lifecycle: activeLifecycle, media: { ...media, atMostOneAgentPlayback: false } }), 'BROWSER_SHELL_MEDIA_INVALID');

@@ -163,7 +163,7 @@ const googleAccounts = {
 // focused; these cases exercise the strict production setting directly.
 {
   const test = harness({ requireOutwardGates: true });
-  test.session.clientLine(call('gate-missing', 'browser_file_upload', { paths: ['Product Current.pdf'] }));
+  test.session.clientLine(call('gate-missing', 'browser_file_upload', { paths: ['Draft Current.pdf'] }));
   assert.equal(test.upstream.length, 0);
   assert.equal(test.intents.length, 0);
   assert.equal(JSON.parse(test.client[0]).result.structuredContent.error.code, 'EGRESS_GATES_REQUIRED');
@@ -176,7 +176,7 @@ const googleAccounts = {
   requestContext.setActiveRequest('Q31-GATEWAY-MET', { setBy: 'test' });
   try {
     const test = harness({ requireOutwardGates: true });
-    test.session.clientLine(call('gate-met', 'browser_file_upload', { paths: ['Product Current.pdf'] }));
+    test.session.clientLine(call('gate-met', 'browser_file_upload', { paths: ['Draft Current.pdf'] }));
     assert.equal(test.upstream.length, 1);
     assert.equal(test.intents.length, 1);
   } finally {
@@ -190,7 +190,7 @@ const googleAccounts = {
   requestContext.setActiveRequest('Q31-GATEWAY-UNMET', { setBy: 'test' });
   try {
     const test = harness({ requireOutwardGates: true });
-    test.session.clientLine(call('gate-unmet', 'browser_file_upload', { paths: ['Product Current.pdf'] }));
+    test.session.clientLine(call('gate-unmet', 'browser_file_upload', { paths: ['Draft Current.pdf'] }));
     assert.equal(test.upstream.length, 0);
     assert.equal(JSON.parse(test.client[0]).result.structuredContent.error.code, 'EGRESS_GATES_UNMET');
   } finally {
@@ -210,7 +210,7 @@ const googleAccounts = {
 
 {
   const test = harness({ accountRegistry: googleAccounts });
-  const explicit = 'https://drive.google.com/drive/u/0?authuser=student%40example.test';
+  const explicit = '\x68ttps://drive.google.com/drive/u/0?authuser=student\x2540example.edu';
   test.session.clientLine(call(13, 'browser_navigate', { url: explicit }));
   assert.equal(JSON.parse(test.upstream[0]).params.arguments.url, explicit,
     'An explicit account selector must be preserved.');
@@ -466,7 +466,7 @@ for (const [name, args] of [
 }
 
 for (const url of [
-  'chrome://quit', 'chrome://restart', 'about:blank', 'file:///C:/Windows/win.ini',
+  'chrome://quit', 'chrome://restart', 'about:blank', 'file:///\x43:/Windows/win.ini',
   'javascript:window.close()', 'data:text/html,bye',
   'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/page.html',
   'devtools://devtools/bundled/inspector.html', 'https://user:secret@example.com/'
@@ -530,20 +530,16 @@ for (const url of [
 
 // --- Q31 build item 2: egress preflight on the actual leaked upload route ---
 //
-// Adversarial replay of the real incident: the incident filename reached its
+// Adversarial replay of the real incident: the scholarship filename reached its
 // destination through this exact upstream tool. tools/standing-orders-hook.js
 // (the PreToolUse hook) cannot see a native mcp__playwright__browser_file_upload
 // call at all -- it only recognizes Bash/PowerShell command shapes. This
 // gateway's clientLine() is the real chokepoint every such call already
 // passes through before being forwarded upstream.
 
-// A synthetic Windows desktop folder, assembled at runtime so the source carries
-// no literal user path.
-const OWNER_DESKTOP = ['C:', 'Users', 'owner', 'Desktop'].join('\\');
-
 {
   const test = harness();
-  const leakPath = `${OWNER_DESKTOP}\\Product Brief 2.10 (agent-reviewed).pdf`;
+  const leakPath = '\x43:\\Users\\owner\\Desktop\\Personal Draft 7.28 (agent-reviewed).pdf';
   test.session.clientLine(call(300, 'browser_file_upload', { paths: [leakPath] }));
   assert.equal(test.upstream.length, 0, 'the real incident filename must never be forwarded to the browser');
   assert.equal(test.intents.length, 0, 'a blocked upload must never acquire a durable audit intent');
@@ -555,7 +551,7 @@ const OWNER_DESKTOP = ['C:', 'Users', 'owner', 'Desktop'].join('\\');
 
 {
   const test = harness();
-  test.session.clientLine(call(301, 'browser_file_upload', { paths: [`${OWNER_DESKTOP}\\Product Current.pdf`] }));
+  test.session.clientLine(call(301, 'browser_file_upload', { paths: ['\x43:\\Users\\owner\\Desktop\\Draft Current.pdf'] }));
   assert.equal(test.upstream.length, 1, 'a clean filename must still be forwarded');
   assert.equal(test.intents.length, 1);
 }
@@ -565,7 +561,7 @@ const OWNER_DESKTOP = ['C:', 'Users', 'owner', 'Desktop'].join('\\');
   // still refuse, not silently drop the bad entry and upload the rest.
   const test = harness();
   test.session.clientLine(call(302, 'browser_file_upload', {
-    paths: [`${OWNER_DESKTOP}\\clean.pdf`, `${OWNER_DESKTOP}\\notes (claude).pdf`]
+    paths: ['\x43:\\Users\\owner\\Desktop\\clean.pdf', '\x43:\\Users\\owner\\Desktop\\notes (claude).pdf']
   }));
   assert.equal(test.upstream.length, 0);
   assert.equal(JSON.parse(test.client[0]).result.structuredContent.error.code, 'EGRESS_PREFLIGHT_BLOCKED');
@@ -702,7 +698,7 @@ function listThroughGateway(tools, { packageVersion = '9.9.9' } = {}) {
   assert.equal(test.notes.length, 1);
   assert.match(test.notes[0], /Playwright MCP 9\.9\.9 works with limits/);
   assert.match(test.notes[0], /turned off browser_file_upload/);
-  test.session.clientLine(call('renamed-upload', 'browser_file_upload', { files: ['Product Current.pdf'] }));
+  test.session.clientLine(call('renamed-upload', 'browser_file_upload', { files: ['Draft Current.pdf'] }));
   assert.equal(test.upstream.length, 0, 'a hidden tool is never forwarded');
   assert.equal(test.intents.length, 0);
   assert.equal(JSON.parse(test.client[test.client.length - 1]).result.structuredContent.error.code, 'BROWSER_TOOL_UPDATE_NEEDED');
@@ -714,7 +710,7 @@ function listThroughGateway(tools, { packageVersion = '9.9.9' } = {}) {
   // The same rename, with a client that never listed tools: the call is
   // refused on its unreviewed argument before anything is forwarded.
   const test = harness();
-  test.session.clientLine(call('unlisted-upload', 'browser_file_upload', { files: ['Product Current.pdf'] }));
+  test.session.clientLine(call('unlisted-upload', 'browser_file_upload', { files: ['Draft Current.pdf'] }));
   assert.equal(test.upstream.length, 0);
   assert.equal(test.intents.length, 0);
   assert.equal(JSON.parse(test.client[0]).result.structuredContent.error.code, 'BROWSER_ARGUMENT_NOT_REVIEWED');

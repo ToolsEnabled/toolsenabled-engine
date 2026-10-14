@@ -1,12 +1,12 @@
 // EXECUTABLE CHANGE — testcanfail-tests-cloud-lane-batch-cli-test-js
 // SUSPECT: the bounds-refusal assertion computed its expected rate from
-// batchTarget.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT, the same production value
+// batchTarget.MAX_LAUNCHES_PER_MINUTE, the same production value
 // used to produce the refusal. Mutation: changed that production constant from
 // 72 to 73. Before this change the suite stayed GREEN: "cloud-lane batch CLI
 // tests passed (118 checks: ...)." The assertion below now pins the independently
 // measured contract at 72. Under the same mutation it went RED with:
 // "AssertionError [ERR_ASSERTION]: real run: the bounds refusal must report the
-// independently measured ceiling of 72 launches per minute per account".
+// independently measured ceiling of 72 launches per minute".
 // The production file was then restored byte-for-byte and the final run was
 // GREEN: "cloud-lane batch CLI tests passed (119 checks: ...)."
 // NOT-FOUND (1): no assertion loop iterates a runtime collection that can be
@@ -149,7 +149,7 @@ function declaration(overrides = {}) {
     batchId: 'cli-wave-1',
     project: 'cli-fixture',
     tasks: [task(0), task(1), task(2)],
-    bounds: { launchesPerMinute: 60, accounts: 2 },
+    bounds: { launchesPerMinute: 60 },
     ...overrides
   };
 }
@@ -627,6 +627,67 @@ function runCli(args, extraEnv = {}) {
       'real run: the runner\'s own result must reach the caller rather than being replaced by a bare ok');
   }
 
+  // The real provider handoff retains the chosen account and destination.
+  {
+    const stateRoot = tempDir('selected-account-state');
+    const selected = 'account-selected';
+    const home = path.join(TEMP_ROOT, 'selected-account-home');
+    const environment = 'a'.repeat(32);
+    const provider = { account: selected, environment, branch: 'release', concurrency: 2 };
+    const file = declarationFile('selected-account', declaration({
+      batchId: 'cli-selected-account', tasks: [task(0), task(1)], provider
+    }));
+    const resolved = [];
+    const launched = [];
+    const result = await cli.main(
+      ['batch', '--declaration', file, '--state-root', stateRoot, '--codex-binary', 'synthetic-codex'],
+      {
+        mirrorApi: freshMirror(),
+        resolveAccountHomeImpl: (account) => { resolved.push(account); return home; },
+        dispatchSpawnImpl: async (command, argv, options) => {
+          launched.push({ command, argv, home: options.env.CODEX_HOME });
+          return { status: 0, stdout: `https://chatgpt.com/codex/tasks/task_selected_${launched.length}`, stderr: '' };
+        }
+      }
+    );
+    check(result.exitCode === 0 && result.out.launched === 2 && result.out.remaining === 0,
+      'selected account: the real runner dispatches the whole declared batch');
+    check(resolved.length === 1 && resolved[0] === selected,
+      'selected account: the CLI resolves only the explicitly chosen account');
+    check(launched.length === 2 && launched.every(call => call.home === home
+      && call.argv[call.argv.indexOf('--env') + 1] === environment
+      && call.argv[call.argv.indexOf('--branch') + 1] === 'release'),
+      'selected account: every dispatch uses its fixed home, environment and branch');
+    const rows = batchJournal.readJournal(result.out.journalFile);
+    check(rows.launched.length === 2 && rows.launched.every(row => row.account === selected),
+      'selected account: every launched journal row retains the chosen name');
+
+    const admission = await batchTarget.admitBatch(declaration({ provider }), { mirrorApi: freshMirror() });
+    await raises('CLOUD_BATCH_SEAL_BROKEN',
+      () => batchTarget.assertSealIntact(admission, declaration({ provider: { ...provider, account: 'account-other' } })),
+      'selected account: changing the admitted account breaks the seal');
+    await raises('CLOUD_BATCH_SEAL_BROKEN',
+      () => batchTarget.assertSealIntact(admission, declaration({ provider: { ...provider, environment: 'b'.repeat(32) } })),
+      'selected account: changing the admitted environment breaks the seal');
+  }
+
+  // Provider coordinates remain validated before a journal or dispatch.
+  for (const [field, value] of [['account', ''], ['account', ['chosen']],
+    ['environment', 'not-an-id'], ['environment', null]]) {
+    const stateRoot = tempDir(`invalid-provider-${field}-${String(value)}`);
+    const provider = { account: 'account-selected', environment: 'a'.repeat(32), [field]: value };
+    const file = declarationFile(`invalid-provider-${field}-${String(value)}`, declaration({ provider }));
+    let calls = 0;
+    await raises('CLOUD_BATCH_MALFORMED', () => cli.main(
+      ['batch', '--declaration', file, '--state-root', stateRoot],
+      { mirrorApi: freshMirror(), runBatchImpl: async () => { calls += 1; },
+        resolveAccountHomeImpl: () => 'synthetic-home',
+        dispatchSpawnImpl: async () => ({ status: 0, stdout: 'task_never_called', stderr: '' }) }),
+    `selected account: an invalid provider ${field} refuses before handoff`);
+    check(calls === 0 && listFilesUnder(stateRoot).length === 0,
+      'selected account: malformed coordinates write no journal and invoke no runner');
+  }
+
   // -------------------------------------------------------------------
   // 6. A refused declaration on a REAL run leaves no journal either. Admission
   //    precedes the journal, so a refusal costs nothing to clean up.
@@ -635,17 +696,17 @@ function runCli(args, extraEnv = {}) {
     const stateRoot = path.join(TEMP_ROOT, 'real-refused-state');
     const file = declarationFile('real-refused', declaration({
       batchId: 'cli-wave-3',
-      bounds: { launchesPerMinute: 5000, accounts: 1 }
+      bounds: { launchesPerMinute: 5000 }
     }));
     let runnerCalls = 0;
     const error = await raises('CLOUD_BATCH_REFUSED',
       () => cli.main(['batch', '--declaration', file, '--state-root', stateRoot],
         { mirrorApi: freshMirror(), runBatchImpl: async () => { runnerCalls += 1; return {}; } }),
       'real run: bounds above the measured ceiling must refuse rather than be quietly clamped');
-    check(String(error.message).includes(String(batchTarget.MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT)),
+    check(String(error.message).includes(String(batchTarget.MAX_LAUNCHES_PER_MINUTE)),
       'real run: the bounds refusal must state the ceiling it measured against');
-    check(error.message.includes('measured ceiling of 72 (72 per account)'),
-      'real run: the bounds refusal must report the independently measured ceiling of 72 launches per minute per account');
+    check(error.message.includes('measured ceiling of 72'),
+      'real run: the bounds refusal must report the independently measured ceiling of 72 launches per minute');
     check(runnerCalls === 0 && listFilesUnder(stateRoot).length === 0,
       'real run: a refusal at admission must reach neither the journal nor the runner');
   }
@@ -653,7 +714,7 @@ function runCli(args, extraEnv = {}) {
   // -------------------------------------------------------------------
   // 7. THE UNINJECTED REAL RUN, against the runner that actually exists.
   //
-  //    src/lib/cloud-agent/batch-runner.js takes `dispatch` and `accounts` as
+  //    src/lib/cloud-agent/batch-runner.js takes `dispatch` and `account` as
   //    well, and tools/cloud-lane.js cannot honestly supply dispatch: the
   //    provider coordinates it would need are not in the sealed declaration, and
   //    passing them beside it would put the batch's destination outside the

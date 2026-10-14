@@ -1,7 +1,8 @@
 'use strict';
 
 // Companion to the retired tree's tests/board-split-readonly-pin.js (see
-// docs/design/PARALLEL-STRUCTURE.md section 6.1 / T4).
+// docs/design/PARALLEL-STRUCTURE.md section 6.1 / T4, and agent-coord key
+// claim/hunter-1-6f84bf9b/board-split-t4-lite).
 //
 // Root cause: src/lib/state-store.js resolves its durable-state database
 // path relative to __dirname (repo-root-relative), unless TOOLSENABLED_STATE_PATH

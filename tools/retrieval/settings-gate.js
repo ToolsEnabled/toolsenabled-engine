@@ -3,9 +3,9 @@
 // THE GATE. Whether this surface runs at all, and which sources it may read, is
 // decided here and nowhere else.
 //
-// R1248, the owner's rule: once a user turns LSP on, spending their tokens on it
-// is fine and it simply runs; if they have not, the system is withheld.
-// Retrieval is the same shape. Reading
+// R1248, owner verbatim: "if a user turns on lsp, we arent worried now about
+// using their tokens for lsp, so now we just do what we do. But if they dont
+// then we need to withhold the system." Retrieval is the same shape. Reading
 // the owner's own verbatims out of the request ledger, or the other agents'
 // coordination notes, is not something a product should do because it can.
 //
@@ -25,11 +25,11 @@
 //    user a control for it cannot silently start reading their data.
 //
 // 3. A NON-USER DEFAULT CANNOT ENABLE A SYSTEM. owner-directive
-//    "control-that-does-not-enforce-is-software-failure", second half: a
-//    control that faithfully enforces an agent-invented value is still a
-//    software failure, because the user's setting is not what is in force --
+//    "control-that-does-not-enforce-is-software-failure", second half: "A
+//    control faithfully enforcing an agent-invented value is still a software
+//    failure, because the user's setting is not what is in force" --
 //    defaultDailySpendUsd:100 traced to an AI-authored baseline commit and was
-//    then quoted back at the owner as THEIR cap. So an ON value whose provenance
+//    then quoted back at the owner as HIS cap. So an ON value whose provenance
 //    is `default` does NOT enable anything here: only `user` and `installer`
 //    provenance can turn a source on. Flipping a default in
 //    config/settings-registry.json from false to true therefore cannot enable

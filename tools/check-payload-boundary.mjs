@@ -279,7 +279,7 @@ function loadManifest(file) {
   // RATIFICATION MUST FORCE A DECISION ON EVERY PENDING ITEM.
   //
   // "The owner has decided" and "these items are undecided" cannot both be true.
-  // Making that contradiction a hard error is what turns their decision into
+  // Making that contradiction a hard error is what turns his decision into
   // enforcement: flipping status to owner-ratified is impossible until every
   // pending path has been moved into open, paid or excluded. Nothing can be
   // ratified by being overlooked.
@@ -412,8 +412,39 @@ function trackedFiles(repository) {
 // finding list where the alarming label is mostly noise is a finding list nobody
 // reads, which costs exactly the one real hit it was built to surface. Object
 // types come from `cat-file --batch-check` over the ids rev-list already gave us.
+// AN INCOMPLETE OBJECT DATABASE IS "NOT MEASURED", NOT A CRASH AND NEVER A PASS.
+//
+// MEASURED 2026-09-26 on the 1.0.48 lane: commit 2cb37e32 names a parent
+// (6881ec57) that is absent from every local clone and is published nowhere --
+// `git fetch` of that exact id answers "Server does not allow request for
+// unadvertised object", so it was never pushed. `rev-list --all` therefore aborts,
+// and this whole guard died on `fatal: Failed to traverse parents`, measuring
+// NOTHING. Both this gate and tools/check-dco.js had been unrunnable against that
+// lane, and the crash said only "git rev-list failed".
+//
+// That is the worst of the three possible behaviours. The tip classification -- the
+// question this file exists to answer, and the one it says the unit of is the
+// TRACKED FILE SET -- was perfectly answerable the whole time. So an incomplete
+// graph now degrades the HISTORY half to unmeasured, keeps the tip half, and exits
+// 3: not a pass, not a product failure, and a sentence naming the missing object so
+// somebody can go and find it.
+//
+// IT IS NOT A WAY TO MAKE THIS GATE GREEN. Exit 3 fails the build exactly as exit 1
+// does. What changes is that the failure now says which half was measured, what the
+// other half would have answered, and what to repair. Nothing here is skipped
+// because it was inconvenient; it is skipped because the data is gone, and the
+// report says so in those words.
+const MISSING_OBJECT = /(?:Could not read|Failed to traverse parents of commit|bad object|object not found|missing (?:blob|tree|commit))\s*([0-9a-f]{7,40})?/i;
+
 function historicalPaths(repository) {
-  const raw = git(repository, ["rev-list", "--all", "--objects"], "git rev-list");
+  let raw;
+  try {
+    raw = git(repository, ["rev-list", "--all", "--objects"], "git rev-list");
+  } catch (error) {
+    const match = MISSING_OBJECT.exec(`${error?.message || ""}`);
+    if (!match) throw error;
+    return { unmeasured: `${error.message}`.trim(), missingObject: match[1] || null };
+  }
   const records = [];
   const ids = [];
   for (const line of raw.split("\n")) {
@@ -500,13 +531,11 @@ function historicalPaths(repository) {
 // WHY THIS EXISTS, AND WHY RULE 4 ALONE STOPPED BEING ENOUGH. Rule 4 catches an
 // open file reaching a withheld file INSIDE this tree. The moment the relay
 // service was split into its own private repository, a second shape appeared
-// that rule 4 is structurally blind to: a require into a sibling checkout of
-// that other repository, for example
-// `require("../../<sibling-repository>/src/lib/online-fra-rendezvous-relay")`.
-// That specifier resolves to nothing in trackedSet, so resolveSpecifier()
-// returned null and the edge was skipped in silence -- the exact
-// absence-as-consent defect this file argues against everywhere else, arriving
-// through the door the split just opened.
+// that rule 4 is structurally blind to: `require("../../toolsenabled-relay-
+// private/src/lib/online-fra-rendezvous-relay")`. That specifier resolves to
+// nothing in trackedSet, so resolveSpecifier() returned null and the edge was
+// skipped in silence -- the exact absence-as-consent defect this file argues
+// against everywhere else, arriving through the door the split just opened.
 //
 // The consequence is worse than a missed classification. An escaping require is
 // ALWAYS broken in a published clone, whatever it points at: the person who
@@ -715,11 +744,14 @@ function main() {
   // unmeetable gate is a disabled gate. Unclassified fails at the tip, where it
   // is both actionable and the thing that actually publishes.
   const history = historicalPaths(options.repository);
+  const historyUnmeasured = history instanceof Map ? null : history;
   const historyHits = [];
-  for (const file of [...history.keys()].sort()) {
-    const klass = classify(file, boundary).klass;
-    if (klass !== "paid" && klass !== "excluded") continue;
-    historyHits.push({ path: file, klass, versions: history.get(file) });
+  if (!historyUnmeasured) {
+    for (const file of [...history.keys()].sort()) {
+      const klass = classify(file, boundary).klass;
+      if (klass !== "paid" && klass !== "excluded") continue;
+      historyHits.push({ path: file, klass, versions: history.get(file) });
+    }
   }
   const historyOnly = historyHits.filter((hit) => !trackedSet.has(hit.path));
 
@@ -732,7 +764,11 @@ function main() {
   );
   console.log(`Require-closure: ${closure.length} open file(s) require a withheld module.`);
   console.log(`Repository escapes: ${escapes.length} open file(s) require a path above the repository root.`);
-  console.log(`History: ${history.size} distinct path(s) across all reachable refs.`);
+  if (historyUnmeasured) {
+    console.log("History: NOT MEASURED -- this repository's object database is incomplete.");
+  } else {
+    console.log(`History: ${history.size} distinct path(s) across all reachable refs.`);
+  }
 
   const violations =
     found.paid.length +
@@ -742,8 +778,37 @@ function main() {
     closure.length +
     escapes.length;
 
-  if (violations === 0 && historyHits.length === 0) {
+  if (violations === 0 && historyHits.length === 0 && !historyUnmeasured) {
     console.log("\nSource publish boundary: clean. Every tracked file is open, nothing withheld is present or in history.");
+    return;
+  }
+
+  // HALF MEASURED IS REPORTED AS HALF MEASURED. The tip is clean and the history
+  // could not be read, so this is neither a pass nor a product failure: exit 3, the
+  // same code the app's own gates use for "nothing could be measured, which is not
+  // a pass". The tip result above stands on its own and is worth printing, which is
+  // the whole reason this path exists instead of a crash.
+  if (violations === 0 && historyHits.length === 0) {
+    console.error(`\nSOURCE PUBLISH NOT FULLY MEASURED -- ${options.repository}`);
+    console.error(
+      "\nThe TIP is clean: every tracked file is classified and nothing withheld is present. What could not be " +
+        "answered is the history question -- whether a withheld module ever existed on a reachable ref -- because " +
+        "the object database cannot be walked:",
+    );
+    console.error(`\n  ${historyUnmeasured.unmeasured}`);
+    if (historyUnmeasured.missingObject) {
+      console.error(
+        `\nThe missing object is ${historyUnmeasured.missingObject}. Recover it and re-run: it exists in whichever ` +
+          "clone still has it, and `git fetch <that path> <the branch it is on>` brings it back. If it is genuinely " +
+          "gone everywhere, the history of this repository cannot be audited and that is a decision for the owner, " +
+          "not something this guard can decide or work around.",
+      );
+    }
+    console.error(
+      "\nThis is exit 3, not exit 0. A guard that cannot answer its question does not report a pass, and the " +
+        "half it did answer is printed above rather than thrown away with the half it could not.",
+    );
+    process.exitCode = 3;
     return;
   }
 

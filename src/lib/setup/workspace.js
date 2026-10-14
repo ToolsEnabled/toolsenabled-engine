@@ -41,6 +41,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { SetupRefusal } = require('./machine-record');
+const { resolveGitExecutable, spawnGitSync } = require('../git-command');
 
 const DEFAULT_WORKSPACE_LEAF = 'AI Workspace';
 
@@ -131,21 +132,28 @@ function assertWorkspaceAllowed(candidate, options = {}) {
 }
 
 // --- the history that makes Undo real ---------------------------------------
+//
+// THE FOLDER IS NEVER git's WORKING DIRECTORY. It is a folder a person picked,
+// and on Windows a bare `git` started with `cwd` set to it runs a git.exe placed
+// at its top level before the real one on PATH. ../git-command.js starts
+// git by absolute path and hands the folder over as `-C <folder>`; see there.
+// `runner` stays spawnSync-shaped and is given that real argv; `resolveGit`
+// answers where git is (tests pin it rather than depend on the host's git).
 
-function runGit(args, cwd, { runner = spawnSync } = {}) {
-  const result = runner('git', args, { cwd, encoding: 'utf8', windowsHide: true });
+function runGit(args, cwd, { runner = spawnSync, resolveGit = resolveGitExecutable } = {}) {
+  const result = spawnGitSync(cwd, args, { encoding: 'utf8', windowsHide: true }, { spawn: runner, resolveGit });
   if (result.error) return { ok: false, status: null, reason: result.error.code || result.error.message };
   return { ok: result.status === 0, status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
 }
 
-function gitAvailable({ runner = spawnSync } = {}) {
-  const result = runner('git', ['--version'], { encoding: 'utf8', windowsHide: true });
+function gitAvailable({ runner = spawnSync, resolveGit = resolveGitExecutable } = {}) {
+  const result = spawnGitSync(null, ['--version'], { encoding: 'utf8', windowsHide: true }, { spawn: runner, resolveGit });
   if (result.error) return result.error.code === 'ENOENT' ? false : null;
   return result.status === 0;
 }
 
-function isAlreadyRepository(directory, { runner = spawnSync } = {}) {
-  const result = runGit(['rev-parse', '--is-inside-work-tree'], directory, { runner });
+function isAlreadyRepository(directory, { runner = spawnSync, resolveGit = resolveGitExecutable } = {}) {
+  const result = runGit(['rev-parse', '--is-inside-work-tree'], directory, { runner, resolveGit });
   if (result.status === null) return null;
   return result.ok && String(result.stdout).trim() === 'true';
 }
@@ -158,13 +166,13 @@ function isAlreadyRepository(directory, { runner = spawnSync } = {}) {
  * nested repository they did not ask for and would confuse their own tooling.
  */
 function provisionWorkspace(candidate, options = {}) {
-  const { runner = spawnSync, makeDirectory = fs.mkdirSync, exists = fs.existsSync } = options;
+  const { runner = spawnSync, resolveGit = resolveGitExecutable, makeDirectory = fs.mkdirSync, exists = fs.existsSync } = options;
   const resolved = assertWorkspaceAllowed(candidate, options);
 
   const existedBefore = exists(resolved);
   makeDirectory(resolved, { recursive: true });
 
-  const availability = gitAvailable({ runner });
+  const availability = gitAvailable({ runner, resolveGit });
   if (availability !== true) {
     return Object.freeze({
       workspace: resolved,
@@ -175,7 +183,7 @@ function provisionWorkspace(candidate, options = {}) {
         : 'the version history tool could not be checked, so changes here cannot be undone automatically'
     });
   }
-  const repository = isAlreadyRepository(resolved, { runner });
+  const repository = isAlreadyRepository(resolved, { runner, resolveGit });
   if (repository === null) {
     return Object.freeze({
       workspace: resolved,
@@ -187,7 +195,7 @@ function provisionWorkspace(candidate, options = {}) {
   if (repository) {
     return Object.freeze({ workspace: resolved, created: !existedBefore, undoAvailable: true, alreadyTracked: true });
   }
-  const initialised = runGit(['init', '--quiet'], resolved, { runner });
+  const initialised = runGit(['init', '--quiet'], resolved, { runner, resolveGit });
   if (!initialised.ok) {
     return Object.freeze({
       workspace: resolved,
@@ -204,9 +212,9 @@ function provisionWorkspace(candidate, options = {}) {
  * Committing NOTHING when nothing changed is a success, not a failure: an empty
  * checkpoint is the correct outcome of "the assistant changed nothing".
  */
-function checkpointWorkspace(workspace, { runner = spawnSync, label = 'before the assistant ran' } = {}) {
-  const availability = gitAvailable({ runner });
-  const repository = availability === true ? isAlreadyRepository(workspace, { runner }) : false;
+function checkpointWorkspace(workspace, { runner = spawnSync, resolveGit = resolveGitExecutable, label = 'before the assistant ran' } = {}) {
+  const availability = gitAvailable({ runner, resolveGit });
+  const repository = availability === true ? isAlreadyRepository(workspace, { runner, resolveGit }) : false;
   if (availability !== true || repository !== true) {
     return {
       ok: false,
@@ -215,15 +223,15 @@ function checkpointWorkspace(workspace, { runner = spawnSync, label = 'before th
         : 'this folder has no history, so there is nothing to put back'
     };
   }
-  const added = runGit(['add', '--all'], workspace, { runner });
+  const added = runGit(['add', '--all'], workspace, { runner, resolveGit });
   if (!added.ok) return { ok: false, reason: 'the current state of this folder could not be recorded' };
   const committed = runGit(
     ['-c', 'user.name=ToolsEnabled', '-c', 'user.email=setup@localhost', 'commit', '--quiet', '--allow-empty', '-m', label],
     workspace,
-    { runner }
+    { runner, resolveGit }
   );
   if (!committed.ok) return { ok: false, reason: 'the current state of this folder could not be recorded' };
-  const head = runGit(['rev-parse', 'HEAD'], workspace, { runner });
+  const head = runGit(['rev-parse', 'HEAD'], workspace, { runner, resolveGit });
   if (!head.ok || String(head.stdout).trim() === '') {
     return { ok: false, reason: 'the recorded state of this folder could not be identified' };
   }
@@ -235,12 +243,12 @@ function checkpointWorkspace(workspace, { runner = spawnSync, label = 'before th
  * BOTH tracked changes and files the turn created: a user who presses Undo after
  * "it created three files" and still finds three files has been lied to.
  */
-function undoToCheckpoint(workspace, checkpoint, { runner = spawnSync } = {}) {
+function undoToCheckpoint(workspace, checkpoint, { runner = spawnSync, resolveGit = resolveGitExecutable } = {}) {
   if (typeof checkpoint !== 'string' || checkpoint.trim() === '') {
     return { ok: false, reason: 'there is no earlier state of this folder to go back to' };
   }
-  const availability = gitAvailable({ runner });
-  const repository = availability === true ? isAlreadyRepository(workspace, { runner }) : false;
+  const availability = gitAvailable({ runner, resolveGit });
+  const repository = availability === true ? isAlreadyRepository(workspace, { runner, resolveGit }) : false;
   if (availability !== true || repository !== true) {
     return {
       ok: false,
@@ -249,9 +257,9 @@ function undoToCheckpoint(workspace, checkpoint, { runner = spawnSync } = {}) {
         : 'this folder has no history, so there is nothing to put back'
     };
   }
-  const restored = runGit(['reset', '--hard', '--quiet', checkpoint], workspace, { runner });
+  const restored = runGit(['reset', '--hard', '--quiet', checkpoint], workspace, { runner, resolveGit });
   if (!restored.ok) return { ok: false, reason: 'this folder could not be put back the way it was' };
-  const cleaned = runGit(['clean', '-fdq'], workspace, { runner });
+  const cleaned = runGit(['clean', '-fdq'], workspace, { runner, resolveGit });
   if (!cleaned.ok) return { ok: false, reason: 'this folder could not be put back the way it was' };
   return { ok: true };
 }

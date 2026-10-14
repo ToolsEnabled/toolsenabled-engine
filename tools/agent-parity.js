@@ -1,6 +1,9 @@
 'use strict';
 
-// PROVIDER PARITY CHECK (R118): every capability works for every agent provider unless it cannot be extended.
+// PROVIDER PARITY CHECK -- owner request R118, verbatim:
+//   "not just codex though. any/all agents should be able to use it. that is a
+//    hard and permannent rule to apply. unless smething simply cant be expanded
+//    to be usable by all agents it should"
 //
 // The rule is permanent, so it needs a mechanical check rather than a habit.
 //
@@ -31,8 +34,8 @@ const asJson = process.argv.includes('--json');
 
 // Namespaces a profile may legitimately lack, with the reason. An entry here is
 // a DECISION, not a silencer: it has to say why expansion is impossible or
-// unwanted, which is the escape hatch the rule allows: a namespace is left out
-// only when it cannot be expanded.
+// unwanted, which is the escape hatch the rule allows ("unless something simply
+// cant be expanded").
 const EXEMPT = {
   'toolsenabled-readonly': {
     reason: 'Deliberately read-only. It exists so a client can be given inspection without write or '

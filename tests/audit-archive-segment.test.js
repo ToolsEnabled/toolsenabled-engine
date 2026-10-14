@@ -39,7 +39,7 @@
 // THE ARCHIVE MUST BE VERIFIABLE ON ITS OWN, TO THE SAME STANDARD AS THE LIVE
 // LEDGER -- NOT MERELY REACHABLE THROUGH THE BOUNDARY.
 //
-// Bounding the audit ledger (product rule) moves the oldest
+// Bounding the audit ledger (owner directive 2026-08-17) moves the oldest
 // events out of the live SQLite table into a flat, append-only cold-storage
 // file. A signed boundary roots the live chain above wherever the archive
 // ends, but the boundary only vouches for the archive's TAIL -- it says
@@ -246,8 +246,8 @@ check('a repeat that differs from the line it repeats by even one byte is still 
 
 // THE LIVE SHAPE: REPEATED BLOCKS, NOT REPEATED LINES.
 //
-// A full census of the live archive (all 512 duplicated sequences, every copy
-// byte-identical)
+// Worker 6's full census of the live archive (W4/REPORT-archive-duplicates-
+// full-20260907.md, all 512 duplicated sequences, every copy byte-identical)
 // found copy 2 of a repeated sequence ~501 lines after copy 1 -- the width
 // of the retried retention-roll batch, not the next line -- with copy 3 and
 // copy 4 further batches out, and a taper at each edge where fewer waves
@@ -256,7 +256,7 @@ check('a repeat that differs from the line it repeats by even one byte is still 
 // WRITTEN AS A RAW DUPLICATED FILE, NOT THROUGH THE WRITE SIDE.
 //
 // appendArchiveEvent()/rollOldestEventOut() are the WRITE side of this pair
-// (a sibling change, landing alongside this fix) and are expected to make a
+// (Worker 9's lane, landing alongside this fix) and are expected to make a
 // retry idempotent by sequence -- i.e. to stop producing a duplicated file
 // in the first place. This suite's job is the READ side: prove
 // verifyArchiveSegment tolerates a duplicated file regardless of how it came

@@ -2,9 +2,9 @@
 
 // WHAT AN AGENT DOES WHEN IT HAS TO ASK.
 //
-// Product requirement: what an agent does when it needs to ask a
-// question is a user preference -- stop, work on other work, or make a
-// judgement call -- and it may be set per node.
+// Owner, 2026-08-10: "An agent that needs to ask a question is a user
+// preference - what should the agent do? stop? work on other work? make a
+// judgement call? it might even be user preference per node."
 //
 // The failure this replaces is measured, not hypothetical: `approval_request`
 // is a frozen event type in the engine contract that BOTH adapters emit
@@ -136,8 +136,8 @@ function normalizeAction(value) {
 /**
  * Resolve the effective preference for one node.
  *
- * Per-node beats global, as the owner asked (the preference may be set per
- * node -- a research node and a node touching the filesystem should not
+ * Per-node beats global, as the owner asked ("it might even be user preference
+ * per node" -- a research node and a node touching the filesystem should not
  * share one policy). A per-node value that is unreadable does NOT silently fall
  * back to the global one: falling back would mean a typo in a node's override
  * quietly re-widened it to whatever the global says, which could be the most
@@ -197,7 +197,7 @@ function decideFromSettings(request, settings, options = {}) {
  * is terminal; only then does the preference get a say. Returns a frozen record
  * a UI can render and an audit log can keep, never a bare boolean -- a bare
  * boolean cannot say WHY, and "why" is the whole difference between an approval
- * the owner would stand behind and one they would not.
+ * the owner would stand behind and one he would not.
  *
  * `tierCheck` is injected rather than imported so that this module does not
  * reach into a file another lane owns, and so a test can prove the ordering by

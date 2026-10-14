@@ -362,7 +362,7 @@ function renderSlice(projection) {
     `- Active gates carried as acceptance criteria: ${gateCount}`,
     `- Of those active gates, ${citableGateCount} can show the owner's authority and ${gateCount - citableGateCount} cannot.`,
     '  A gate that is not OWNER STATED or OWNER RATIFIED may still be worth doing, but it',
-    '  MUST NOT be described back to the owner as their own requirement.',
+    '  MUST NOT be described back to the owner as his own requirement.',
     `- Queue status distribution: ${statusLine}.`,
     '',
     'This file carries no timestamp on purpose: it is a function of its sources alone, so a',
@@ -424,8 +424,8 @@ async function projectActiveGates(options = {}) {
    *
    * This used to be `ledger.length === 0 -> throw exit 4`, reasoning that
    * "absence is never a pass" and that an empty projection would silently
-   * delete the queued backlog. Measured 2026-08-12, on a ledger that had just
-   * been reset to zero on purpose:
+   * delete the queued backlog. Measured 2026-08-12, on the ledger the owner had
+   * just reset to zero at his own direction:
    *   node tools/queue-from-ledger.js --check  ->  exit 4, 72 ms
    *   "contains no requests; refusing to project an empty queue from it."
    * A fresh install is exactly that state, so the queue generator refused to

@@ -1,8 +1,8 @@
 'use strict';
 
-// The one tripwire the owner's request system keeps: a /Request* turn they
+// The one tripwire the owner's request system keeps: a /Request* turn he
 // typed that never reached a ledger. Everything else in the system is on
-// purpose in their hands (they mark requests, they edit the files); this is the
+// purpose in his hands (he marks requests, he edits the files); this is the
 // single mechanical check that the marking WORKED. It reads the ingress spool
 // (every owner turn lands there before any agent reasons) and the one owner
 // request ledger (every tier, src/lib/owner-request-store.js), and names any

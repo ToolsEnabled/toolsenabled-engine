@@ -38,7 +38,7 @@
 
 // THE AGENT API, PROVED ON BOTH SIDES OF ITS OWN SWITCH.
 //
-// Product rule (B9): a setting deciding whether an agent
+// The owner's directive (B9, 2026-08-24): a setting deciding whether an agent
 // may use its native tools or only ours, shipped on by default.
 //
 // A gate that is only ever exercised in the direction it is expected to take is
@@ -407,7 +407,7 @@ check('global support metadata is the same provider resolver used for plans', ()
   }
 });
 
-check('Optimized says plainly that it works with Claude only (release-candidate Codex decision)', () => {
+check('Optimized says plainly that it works with Claude only (rc-0922 Codex decision)', () => {
   // The installed Codex has no native-tool allowlist, so this release keeps
   // Optimized Claude-only. The setting and every refusal row must say that in
   // plain words instead of promising "supported providers" that do not exist.

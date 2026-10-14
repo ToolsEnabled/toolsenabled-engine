@@ -121,7 +121,7 @@ check('the ledger file parses as JSON', () => {
 
 // A ZERO-REQUEST LEDGER IS WELL FORMED. This contract checks that the record
 // obeys its own rules, and a record with nothing in it obeys them vacuously.
-// `requests.length > 0` used to be asserted here; the ledger was reset to
+// `requests.length > 0` used to be asserted here; the owner reset the ledger to
 // zero on 2026-08-12 and this test failed on its second check, reporting a
 // "broken contract" for what is in fact the normal state of a fresh install.
 // Every rule below is written as "no entry violates X", which is the form that
@@ -266,20 +266,20 @@ const normalizeDocumentedBearerPlaceholder = (text) => DOCUMENTED_BEARER_PLACEHO
   text,
 );
 
-// A ledger entry may preserve exact wording that includes a narrative ownership
+// R241 preserves the owner's exact wording, including one narrative ownership
 // statement whose English label happens to look like a structured credential
 // assignment to audit.scrubText(): "Owner direct authorization: Machine A
-// is owner-controlled". Exempt only that complete sentence prefix. A different
+// belongs to him". Exempt only that complete sentence prefix. A different
 // machine, a different value, or an actual authorization assignment remains
 // subject to the canonical scrubber below.
-const DOCUMENTED_MACHINE_OWNERSHIP = /Owner direct authorization:\s+Machine A is owner-controlled/gi;
+const DOCUMENTED_MACHINE_OWNERSHIP = /Owner direct authorization:\s+Machine A belongs to him/gi;
 const DOCUMENTED_MACHINE_OWNERSHIP_NORMALIZED = 'Owner direct authorization [documented machine-ownership statement]';
 const normalizeDocumentedMachineOwnership = (text) => text.replace(
   DOCUMENTED_MACHINE_OWNERSHIP,
   DOCUMENTED_MACHINE_OWNERSHIP_NORMALIZED,
 );
-// Lowercase English "basic" is also ambiguous with HTTP Basic auth. A
-// documented native-browser sentence is exempt only when its complete surrounding
+// Lowercase English "basic" is also ambiguous with HTTP Basic auth. The
+// owner's native-browser sentence is exempt only when its complete surrounding
 // grammar is present; an Authorization header, uppercase Basic scheme, or a
 // different sentence remains visible to scrubText().
 const DOCUMENTED_NATIVE_BROWSER = /queue a basic [A-Za-z][A-Za-z0-9._~+/-]{11,63} native browser/g;
@@ -327,12 +327,12 @@ check('only the exact documented bearer placeholder is exempt from secret scanni
 });
 
 check('only the exact documented machine-ownership sentence is exempt from secret scanning', () => {
-  const exact = 'Owner direct authorization: Machine A is owner-controlled';
+  const exact = 'Owner direct authorization: Machine A belongs to him';
   assert.equal(normalizeDocumentedMachineOwnership(exact), DOCUMENTED_MACHINE_OWNERSHIP_NORMALIZED);
 
   for (const nearMiss of [
-    'Owner direct authorization: Machine B is owner-controlled',
-    'Owner direct authorization: real_secret_value_123 A is owner-controlled',
+    'Owner direct authorization: Machine B belongs to him',
+    'Owner direct authorization: real_secret_value_123 A belongs to him',
     'authorization=real_secret_value_123',
   ]) {
     assert.equal(normalizeDocumentedMachineOwnership(nearMiss), nearMiss);
@@ -341,7 +341,7 @@ check('only the exact documented machine-ownership sentence is exempt from secre
 });
 
 check('only the lowercase documented native-browser sentence disambiguates Basic from auth', () => {
-  const exactShape = 'queue a basic privacy-focused native browser';
+  const exactShape = 'queue a basic privacyfocused native browser';
   assert.equal(normalizeDocumentedNativeBrowser(exactShape), DOCUMENTED_NATIVE_BROWSER_NORMALIZED);
 
   for (const nearMiss of [

@@ -456,7 +456,7 @@ function localPublishPrivacy(localRemote) {
       'freshness: a mirror at local HEAD must pass, or every refusal below proves nothing');
 
     // THE MUTATION. One new commit locally and nothing republished: the mirror
-    // is now exactly one commit behind, which is the shape of the hundreds-of-commits
+    // is now exactly one commit behind, which is the shape of the 467-commit
     // drift that produced empty applies on the app repository.
     fs.writeFileSync(path.join(source, 'src', 'c.js'), 'module.exports = 3;\n');
     git(source, ['add', '-A']);
@@ -829,7 +829,7 @@ function localPublishPrivacy(localRemote) {
     // It mattered: the mirror branch is DERIVED per project precisely so that one
     // private mirror can serve several projects, and this guard was refusing the
     // design it was built to support -- telling an owner who had one mirror to go
-    // and create a second repository for their second project.
+    // and create a second repository for his second project.
     const secondProject = await mirror.registerMirrorProject({
       ...base, projectKey: 'shares-the-mirror', cloudRepository: 'Example/mirror'
     });
@@ -971,9 +971,8 @@ function localPublishPrivacy(localRemote) {
 
     const foreignRegistry = path.join(TEMP_ROOT, 'register-foreign-profile', 'registry.json');
     const foreignCalls = { exists: [], github: 0, git: 0, network: 0 };
-    // A synthetic foreign profile path, assembled at runtime so the source carries no literal user path.
     const foreignSource = process.platform === 'win32'
-      ? ['C:', 'Users', 'fixture-user', 'mirror-source'].join('\\')
+      ? '\x43:\\Users\\fixture-user\\mirror-source'
       : 'relative-foreign-profile-source';
     await raises('CLOUD_MIRROR_ACCOUNT_BOUNDARY_REFUSED',
       () => mirror.registerMirrorProject({

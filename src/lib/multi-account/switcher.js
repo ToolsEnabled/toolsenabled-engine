@@ -1,43 +1,12 @@
 'use strict';
-// Selection and automatic failover across the registered accounts.
-//
-// THE FAILOVER RULE, and why it is narrow. Only positive evidence that an
-// account cannot serve moves us off it: the provider reporting a rate limit
-// reached, a spend control reached, usage at/above the threshold, a signed-out
-// home, or no home at all. Those are `FAILOVER_STATUSES`.
-//
-// Ordinarily a `transient` result stops the cascade and refuses. An explicit
-// per-node keepTryingAccounts choice may inspect later accounts while leaving
-// the unknown account unused and retaining its unknown status in the trail.
-// A timeout or a dead pipe is not evidence that an allowance is spent, and
-// rotating on it would abandon a perfectly good account and, over a flaky
-// hour, walk through every account the owner has. Refusing surfaces the real
-// fault instead of hiding an outage behind a rotation.
-//
-// An `account_mismatch` also stops the cascade. A home signed in as the wrong
-// person is a configuration fault the owner must see, not something to route
-// around silently -- routing around it is what made the 2026-08-09
-// wrong-identity incident invisible for a day.
-//
-// Every selection returns the full trail of what was tried and why it was
-// rejected, because a switch the user cannot see is its own trust problem.
-//
-// ONE RECORD, ONE ACTIVE NAME PER PROVIDER. The state file used to hold a
-// single `activeAccount` for the whole machine, and every provider wrote it:
-// a Codex start committed "team", and the next Claude start under manual
-// mode then preferred "team" -- a name that belonged to the other program.
-// With the ordinary case, the same person's account called the same thing on
-// both providers, a switch on one silently changed which account the other
-// started on. So the record now carries `activeByProvider`, one name per
-// provider, and every reader here asks for the provider it is serving. The
-// legacy `activeAccount` is still written (as the name most recently
-// committed by anyone) for readers that predate the map, and it is only
-// CONSULTED when the map is absent, which is what an old file looks like.
+// Explicit account selection and manual state. A refused account never
+// cascades to another account, regardless of usage, sign-in or probe status.
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 
-const { FAILOVER_STATUSES, STATUS } = require('./health.js');
+const { STATUS } = require('./health.js');
 const { MultiAccountError, PROVIDER_IDS, findAccount, requireAccount } = require('./registry.js');
 
 function plainObject(value) {
@@ -158,23 +127,79 @@ function withPinned(state, provider, name) {
 
 // The persisted state holds names and statuses only -- never a token, never an
 // account e-mail's credentials, never anything that would be unsafe in a log.
-/* A STATE FILE THAT CANNOT BE PARSED IS MOVED ASIDE, NOT OBEYED AND NOT
-   OVERWRITTEN. On 2026-09-02 a power loss left this file as 9,420 bytes of NUL
-   (and the copy seeded into a second instance carried the same bytes). The
-   refusal below is right about the REGISTRY -- a list of accounts that cannot
-   be read must not become an empty list -- but this file is only the memory of
-   the last switch, and refusing it forever meant every start lost rotation and
-   every "Use this one" answered "could not be read" until somebody renamed the
-   file by hand. So: the bytes are kept, under a name that says what they are,
-   and the record starts again from nothing. A file system that offers no
-   rename or exclusive directory creation cannot quarantine and keeps the
-   refusal. One rename into that newly owned directory preserves the current
-   source even if another writer replaces it; copy/link then unlink would
-   risk deleting that replacement after preserving only the older bytes. */
+// Quarantine preserves the damaged bytes and a durable choose-again record.
+// The owned quarantine directory also guards an interrupted tombstone write:
+// an absent state beside that directory cannot mean a never-chosen default.
+function unreadableChoices() {
+  return Object.fromEntries(PROVIDER_IDS.map(id => [id, true]));
+}
+
+function interruptedQuarantine(statePath, fsImpl) {
+  if (typeof fsImpl.readdirSync !== 'function') return false;
+  try {
+    const prefix = `${path.basename(statePath)}.corrupt-`;
+    return fsImpl.readdirSync(path.dirname(statePath)).some(name => name.startsWith(prefix));
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw new MultiAccountError('ACCOUNT_STATE_UNREADABLE',
+      'The saved account selection could not be read. Open Accounts and choose an account before starting again.');
+  }
+}
+
+function emptyState(selectionUnreadableByProvider = null) {
+  return { activeAccount: null, activeByProvider: null, manualPinByProvider: null,
+    selectionRevision: null, selectionUnreadableByProvider, lastSwitch: null, history: [] };
+}
+
+function choiceSnapshot(state) {
+  // Compare legacy choices as well as the revision. Older writers do not
+  // know the revision field and a pin-only change must still be detected.
+  return JSON.stringify([state.selectionRevision || null, state.manualPinByProvider,
+    state.manualPinByProvider ? null : state.history.filter(entry => entry?.outcome === 'manual-switch'),
+    state.selectionUnreadableByProvider]);
+}
+
+function automaticSwitchingRefusal(request) {
+  return ['excludeAccounts', 'keepTryingAccounts'].some(field => Object.hasOwn(request, field))
+    ? { code: 'ACCOUNT_AUTOMATIC_SWITCHING_DISABLED',
+      reason: 'Automatic account switching was removed. Choose an account before starting again.' } : null;
+}
+
+function accountStatusRefusal(status) {
+  switch (status) {
+    case STATUS.SIGNED_OUT: return { code: 'ACCOUNT_SIGNED_OUT', reason: 'The selected account is signed out. Open Accounts and sign in to that account before starting again.' };
+    case STATUS.NOT_PROVISIONED: return { code: 'ACCOUNT_NOT_PROVISIONED', reason: 'The selected account is not set up. Open Accounts and sign in to that account before starting again.' };
+    case STATUS.EXHAUSTED: return { code: 'ACCOUNT_EXHAUSTED', reason: 'The selected account has reached its allowance limit. Wait for its allowance to reset, or choose another account in Accounts.' };
+    case STATUS.ACCOUNT_MISMATCH: return { code: 'ACCOUNT_MISMATCH', reason: 'The selected account is signed in as a different account. Open Accounts and sign in as the expected account before starting again.' };
+    default: return { code: 'ACCOUNT_STATUS_UNKNOWN', reason: 'The selected account could not be checked. Open Accounts and check it again before starting.' };
+  }
+}
+
+function validSelectionRecord(state) {
+  if (!plainObject(state)) return false;
+  if (state.activeAccount != null && (typeof state.activeAccount !== 'string' || !state.activeAccount.trim())) return false;
+  if (state.selectionRevision != null && typeof state.selectionRevision !== 'string') return false;
+  if (state.history != null && !Array.isArray(state.history)) return false;
+  for (const field of ['activeByProvider', 'manualPinByProvider', 'selectionUnreadableByProvider']) {
+    const map = state[field];
+    if (map == null) continue;
+    if (!plainObject(map)) return false;
+    for (const provider of PROVIDER_IDS) {
+      const value = map[provider];
+      if (value == null) continue;
+      if (field === 'selectionUnreadableByProvider' ? typeof value !== 'boolean'
+        : typeof value !== 'string' || !value.trim()) return false;
+    }
+  }
+  return true;
+}
+
 function readState(statePath, { fsImpl = fs, now = () => new Date() } = {}) {
   let parsed;
   try {
     parsed = readJsonFile(statePath, fsImpl);
+    if (parsed && !validSelectionRecord(parsed)) throw new MultiAccountError('ACCOUNTS_JSON_INVALID',
+      'The saved account selection is unreadable. Choose an account before starting again.');
   } catch (error) {
     if (!(error && error.code === 'ACCOUNTS_JSON_INVALID') || typeof fsImpl.renameSync !== 'function'
       || typeof fsImpl.mkdtempSync !== 'function') throw error;
@@ -187,21 +212,22 @@ function readState(statePath, { fsImpl = fs, now = () => new Date() } = {}) {
       try { fsImpl.rmdirSync(directory); } catch { /* only our empty directory may be removed */ }
       throw renameError;
     }
-    return {
-      activeAccount: null, activeByProvider: null, manualPinByProvider: null, lastSwitch: null, history: [],
-      quarantined: Object.freeze({ from: statePath, to: aside, cause: error.message })
-    };
+    const state = emptyState(unreadableChoices());
+    writeState(statePath, state, { fsImpl });
+    return { ...state, quarantined: Object.freeze({ from: statePath, to: aside, cause: error.message }) };
   }
-  if (!parsed) return { activeAccount: null, activeByProvider: null, manualPinByProvider: null, lastSwitch: null, history: [] };
+  if (!parsed) return emptyState(interruptedQuarantine(statePath, fsImpl) ? unreadableChoices() : null);
   return {
+    selectionRevision: typeof parsed.selectionRevision === 'string' ? parsed.selectionRevision : null,
+    selectionUnreadableByProvider: plainObject(parsed.selectionUnreadableByProvider) ? parsed.selectionUnreadableByProvider : null,
     activeAccount: typeof parsed.activeAccount === 'string' ? parsed.activeAccount : null,
     activeByProvider: readNameByProvider(parsed.activeByProvider),
     /* THE ACCOUNT THE PERSON CHOSE, WHICH IS NOT THE ACCOUNT IN USE.
        `activeByProvider` is overwritten by every start, including one that
        failed over off the chosen account; this map is written only when a
        person picks one, so their choice outlives a start that could not use
-       it. MEASURED 2026-09-03 in a live record: a hand switch to
-       the pinned account, a start 87 seconds later that found it 92%
+       it. MEASURED 2026-09-03 in the owner's own record: a hand switch to
+       the pinned account at 13:16:57Z, a start 87 seconds later that found it 92%
        through its week and used another account, and from that point nothing
        on the machine remembered the choice had been made. */
     manualPinByProvider: readNameByProvider(parsed.manualPinByProvider),
@@ -213,6 +239,8 @@ function readState(statePath, { fsImpl = fs, now = () => new Date() } = {}) {
 function writeState(statePath, state, { fsImpl = fs } = {}) {
   writeJsonFile(statePath, {
     $comment: 'Runtime state for the multi-account switcher. Names and statuses only; no credentials.',
+    selectionRevision: state.selectionRevision || null,
+    selectionUnreadableByProvider: state.selectionUnreadableByProvider || null,
     activeAccount: state.activeAccount,
     /* Written beside the legacy name on every write, so a record that has
        been touched by this build always carries the map. Null only when the
@@ -270,81 +298,26 @@ function describeAttempt(probe) {
   });
 }
 
-// Order candidates: the preferred account first (an explicit request, or the
-// account already active), then everything else by registry priority.
-function candidateOrder(registry, preferredName) {
-  const preferred = preferredName ? findAccount(registry, preferredName) : null;
-  if (!preferred) return registry.accounts.slice();
-  return [preferred, ...registry.accounts.filter(account => account.name !== preferred.name)];
-}
+// Check only the account explicitly selected for this request.
 
-async function selectAccount({
-  registry,
-  preferred = null,
-  probe,
-  onAttempt = null,
-  keepTryingAccounts = false,
-  signal = null
-} = {}) {
+
+async function selectAccount({ registry, preferred = null, probe, onAttempt = null, signal = null, ...request } = {}) {
   signal?.throwIfAborted();
-  if (!registry || !Array.isArray(registry.accounts)) {
-    throw new MultiAccountError('ACCOUNTS_REGISTRY_INVALID', 'No account registry was given.');
-  }
-  if (typeof probe !== 'function') {
-    throw new MultiAccountError('ACCOUNTS_PROBE_MISSING', 'No health probe was given; selection must never guess.');
-  }
-
-  const attempts = [];
-  for (const account of candidateOrder(registry, preferred)) {
-    signal?.throwIfAborted();
-    const result = await probe(account);
-    signal?.throwIfAborted();
-    attempts.push(describeAttempt(result));
-    if (onAttempt) onAttempt(result);
-
-    if (result.status === STATUS.HEALTHY) {
-      return Object.freeze({
-        ok: true,
-        account,
-        probe: result,
-        attempts: Object.freeze(attempts),
-        switched: attempts.length > 1,
-        reason: attempts.length > 1
-          ? `Failed over to "${account.name}" after ${attempts.length - 1} unusable account(s).`
-          : `Using "${account.name}".`
-      });
-    }
-
-    // Not healthy, and not a state that justifies moving on. Stop here rather
-    // than spending another account on an unknown.
-    if (!FAILOVER_STATUSES.has(result.status)) {
-      // Explicit persistent recovery may inspect the next account after an
-      // uncertain free health check. It never uses this uncertain account or
-      // conceals an identity mismatch, and the full observation stays visible.
-      if (keepTryingAccounts === true && result.status === STATUS.TRANSIENT) continue;
-      return Object.freeze({
-        ok: false,
-        account: null,
-        probe: result,
-        attempts: Object.freeze(attempts),
-        switched: false,
-        code: result.status === STATUS.ACCOUNT_MISMATCH ? 'ACCOUNT_MISMATCH' : 'ACCOUNT_STATUS_UNKNOWN',
-        reason: `Stopped at "${result.account}": ${result.reason} Failover is reserved for accounts that are provably out of allowance, so this did not switch.`
-      });
-    }
-  }
-
-  return Object.freeze({
-    ok: false,
-    account: null,
-    probe: null,
-    attempts: Object.freeze(attempts),
-    switched: false,
-    code: attempts.some(attempt => attempt.status === STATUS.TRANSIENT) ? 'ACCOUNT_STATUS_UNKNOWN' : 'NO_ACCOUNT_USABLE',
-    reason: attempts.some(attempt => attempt.status === STATUS.TRANSIENT)
-      ? 'No account is currently proven eligible; some account health remains unknown. No account was used.'
-      : `No usable account: all ${attempts.length} registered account(s) are exhausted, signed out, or unprovisioned. Refusing to run. This never falls back to API-key billing.`
-  });
+  const retired = automaticSwitchingRefusal(request);
+  if (retired) return Object.freeze({ ok: false, account: null, probe: null, attempts: Object.freeze([]), switched: false, ...retired });
+  if (!registry || !Array.isArray(registry.accounts)) throw new MultiAccountError('ACCOUNTS_REGISTRY_INVALID', 'No account registry was given.');
+  if (typeof probe !== 'function') throw new MultiAccountError('ACCOUNTS_PROBE_MISSING', 'No health probe was given; selection must never guess.');
+  const account = preferred ? findAccount(registry, preferred) : null;
+  if (!account) return Object.freeze({ ok: false, account: null, probe: null, attempts: Object.freeze([]), switched: false,
+    code: preferred ? 'ACCOUNT_SELECTION_UNAVAILABLE' : 'ACCOUNT_SELECTION_REQUIRED',
+    reason: preferred ? 'The selected account is not registered. Choose an account before retrying.' : 'Choose an account before starting.' });
+  const result = await probe(account);
+  signal?.throwIfAborted();
+  if (onAttempt) onAttempt(result);
+  const attempts = Object.freeze([describeAttempt(result)]);
+  if (result?.status === STATUS.HEALTHY && result.canServe !== false) return Object.freeze({ ok: true, account, probe: result, attempts, switched: false, reason: `Using "${account.name}".` });
+  return Object.freeze({ ok: false, account: null, probe: result, attempts, switched: false,
+    ...accountStatusRefusal(result?.status) });
 }
 
 // Commit a previously resolved launch candidate only after the caller has
@@ -370,10 +343,11 @@ function commitLaunchSelection({
   signal?.throwIfAborted();
   if (!selection || selection.ok !== true || !selection.account
       || typeof selection.account.name !== 'string'
-      || !Object.hasOwn(selection, 'previousAccount')) {
+      || !Object.hasOwn(selection, 'previousAccount')
+      || typeof selection.choiceSnapshot !== 'string') {
     throw new MultiAccountError(
       'ACCOUNT_LAUNCH_SELECTION_INVALID',
-      'Only a successful resolved launch selection can be committed.'
+      'The checked account choice is missing or out of date. Start again to check your current choice.'
     );
   }
 
@@ -381,10 +355,11 @@ function commitLaunchSelection({
   const provider = typeof selection.account.provider === 'string' ? selection.account.provider : null;
   const expectedPrevious = selection.previousAccount || null;
   const observedPrevious = activeFor(state, provider);
-  if (observedPrevious !== expectedPrevious) {
+  if (observedPrevious !== expectedPrevious || state.selectionUnreadableByProvider?.[provider]
+      || choiceSnapshot(state) !== selection.choiceSnapshot) {
     throw new MultiAccountError(
       'ACCOUNT_LAUNCH_COMMIT_CONFLICT',
-      'The active account changed after launch selection. Refusing to overwrite the newer choice.',
+      'The selected account changed while it was being checked. Start again to use your current choice.',
       { expectedPrevious, observedPrevious }
     );
   }
@@ -393,6 +368,7 @@ function commitLaunchSelection({
   const changed = previous !== selection.account.name;
   if (codexConfigPath) syncCodexPin(codexConfigPath, selection.account, { fsImpl });
   writeState(statePath, {
+    ...state,
     activeAccount: selection.account.name,
     activeByProvider: withActive(state, provider, selection.account.name),
     manualPinByProvider: manualPin === undefined
@@ -425,7 +401,7 @@ function soleProviderOf(registry) {
   return providers.size === 1 ? [...providers][0] : null;
 }
 
-// Resolve an account for a launch. Existing rotation callers intentionally
+// Resolve the chosen account for a launch. Existing callers intentionally
 // persist immediately; transactional launch callers pass
 // `persistSelection:false` and invoke commitLaunchSelection only after the
 // external process acknowledges creation.
@@ -437,19 +413,28 @@ async function resolveForLaunch({
   statePath,
   codexConfigPath = null,
   persistSelection = true,
-  keepTryingAccounts = false,
   manualPin = undefined,
   fsImpl = fs,
   signal = null,
-  now = () => new Date().toISOString()
+  now = () => new Date().toISOString(),
+  observedState = null,
+  ...request
 } = {}) {
   signal?.throwIfAborted();
-  const state = readState(statePath, { fsImpl });
+  const retired = automaticSwitchingRefusal(request);
+  if (retired) return Object.freeze({ ok: false, account: null, attempts: Object.freeze([]), ...retired });
+  const state = observedState || readState(statePath, { fsImpl });
   /* The provider whose active name is the fallback head: the one the caller
      named, else the one the registry is entirely made of. */
   const served = typeof provider === 'string' ? provider : soleProviderOf(registry);
-  const wanted = preferred || activeFor(state, served) || null;
-  const selection = await selectAccount({ registry, preferred: wanted, probe, signal, keepTryingAccounts });
+  if (state.selectionUnreadableByProvider?.[served]) return Object.freeze({ ok: false, account: null,
+    attempts: Object.freeze([]), code: 'ACCOUNT_STATE_UNREADABLE',
+    reason: 'The saved account selection could not be read. Open Accounts and choose an account before starting again.' });
+  const pinned = plainObject(state.manualPinByProvider)
+    ? state.manualPinByProvider[served]
+    : [...state.history].reverse().find(entry => entry.outcome === 'manual-switch' && entry.provider === served)?.account;
+  const wanted = preferred || pinned || null;
+  const selection = await selectAccount({ registry, preferred: wanted, probe, signal });
   /* Both successful selections and refusals write state below, even when
      persistSelection is false. Cancel before either post-probe write. */
   signal?.throwIfAborted();
@@ -466,6 +451,7 @@ async function resolveForLaunch({
        record says now. */
     const current = readState(statePath, { fsImpl });
     writeState(statePath, {
+      ...current,
       activeAccount: current.activeAccount,
       activeByProvider: current.activeByProvider,
       /* A refusal is the LEAST reason to forget a choice: nothing served, so
@@ -479,7 +465,7 @@ async function resolveForLaunch({
 
   const previous = activeFor(state, selection.account.provider);
   const changed = previous !== selection.account.name;
-  const resolved = Object.freeze({ ...selection, previousAccount: previous, changed });
+  const resolved = Object.freeze({ ...selection, previousAccount: previous, changed, choiceSnapshot: choiceSnapshot(state) });
   if (persistSelection === false) return resolved;
   return commitLaunchSelection({
     selection: resolved,
@@ -522,6 +508,10 @@ async function switchTo({
   const previous = activeFor(state, provider);
   if (codexConfigPath) syncCodexPin(codexConfigPath, account, { fsImpl });
   writeState(statePath, {
+    ...state,
+    selectionRevision: randomUUID(),
+    selectionUnreadableByProvider: state.selectionUnreadableByProvider
+      ? { ...state.selectionUnreadableByProvider, [provider]: false } : null,
     activeAccount: account.name,
     activeByProvider: withActive(state, provider, account.name),
     /* THE CHOICE, RECORDED WHERE A FAILOVER CANNOT REACH IT. The history entry
@@ -544,7 +534,7 @@ async function switchTo({
 
 module.exports = Object.freeze({
   activeFor,
-  candidateOrder,
+  automaticSwitchingRefusal,
   commitLaunchSelection,
   readState,
   resolveForLaunch,

@@ -10,7 +10,7 @@
 //   node tools/agent-roster.js --explain <configKey> full evidence trail for one config
 //   node tools/agent-roster.js --attribution-table   the deterministic rule table, with observed counts
 //   node tools/agent-roster.js --allotment           what the owner's ceiling currently allows
-//   node tools/agent-roster.js --rebuild             delegate to roster/scoreboard.js when installed
+//   node tools/agent-roster.js --rebuild             delegate to roster/scoreboard.js (builder 2) when installed
 //
 // Honesty rules this CLI enforces on itself:
 //  * Counts come from state/agent-roster-events.jsonl only (destination-verified
@@ -52,7 +52,7 @@ function parseArgs(argv) {
   return args;
 }
 
-// --- events aggregation (counts only; statistics stay with roster/statistics.js) --------
+// --- events aggregation (counts only; statistics stay with builder 2) --------
 
 function keyOfConfig(config) {
   const part = (value) => (value === null || value === undefined ? 'null' : String(value));

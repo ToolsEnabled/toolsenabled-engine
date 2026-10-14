@@ -2,8 +2,8 @@
 
 // THE SESSIONSTART AUTOREGISTER HOOK MUST NEVER BLOCK A SESSION.
 //
-// tools/claude-session-autoregister.js is wired as a SessionStart hook (fix
-// note: live interactive sessions were invisible to the
+// tools/claude-session-autoregister.js is wired as a SessionStart hook (owner
+// fix directive 2026-08-12: live interactive sessions were invisible to the
 // presence registry because registration was optional prose). Its contract has
 // two halves and both are pinned here:
 //
@@ -49,7 +49,7 @@ function run(stdin, args = []) {
 
 // 3. Fail-open: JSON without a session id exits 0 and derives nothing.
 {
-  const result = run(JSON.stringify({ hook_event_name: 'SessionStart', cwd: 'C:/x' }), ['--dry-run']);
+  const result = run(JSON.stringify({ hook_event_name: 'SessionStart', cwd: '\x43:/x' }), ['--dry-run']);
   check(result.status === 0, 'payload without session_id must exit 0');
   check(!result.stdout.trim(), 'payload without session_id must not derive a registration');
 }
@@ -65,12 +65,12 @@ function run(stdin, args = []) {
 //    the observer placeholder role, and the full run id -- via the real
 //    register CLI, not a parallel write path.
 {
-  const sessionId = 'FA11BACC-0156-491f-a4c0-000000000001';
+  const sessionId = 'FE08BA95-0156-491f-a4c0-619bad83e0e6';
   const result = run(JSON.stringify({ session_id: sessionId }), ['--dry-run']);
   check(result.status === 0, 'valid payload must exit 0');
   const parsed = JSON.parse(result.stdout);
   check(parsed.dryRun === true, 'dry-run must label itself');
-  check(parsed.agentId === 'session-fa11bacc0156', 'agent id must be session-<first 12 hex of lowercased id>');
+  check(parsed.agentId === 'session-fe08ba950156', 'agent id must be session-<first 12 hex of lowercased id>');
   const argv = parsed.argv;
   check(argv[0].endsWith('claude-session-register.js'), 'must register through the existing R1186 register CLI');
   check(argv[argv.indexOf('--run-id') + 1] === sessionId.toLowerCase(), 'run id must be the full lowercased session id');

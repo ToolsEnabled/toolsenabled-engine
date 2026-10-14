@@ -42,7 +42,7 @@ const MODEL_ID_ANYWHERE = /gemini-[A-Za-z0-9][A-Za-z0-9.-]*/g;
 // anything else about this product.
 const ORDER_CITATION =
   'Configured model floor policy: delegated work runs only on the explicitly allowed '
-  + 'high-capability Gemini models. A model downgrade is a refusal, never a fallback.';
+  + 'high-capability Gemini models. A model downgrade is a REFUSAL, never a fallback.';
 
 let cache = null; // { path, doc }
 

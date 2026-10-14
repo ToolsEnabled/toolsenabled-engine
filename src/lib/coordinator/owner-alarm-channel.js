@@ -122,7 +122,7 @@ function journalledMessageId(record) {
  *
  * Signature and failure mode match what escalation-sink.js expects of a sender:
  * it is called as sendFn({ text }), it THROWS with a `.code` when the owner was
- * not reached, and it returns a record when they were. There is no partial answer,
+ * not reached, and it returns a record when he was. There is no partial answer,
  * because the caller's whole honesty contract rests on that distinction.
  *
  * Returns { channel, messageId, journalSequence, streamId, truncated }.
@@ -175,7 +175,7 @@ async function sendToOwner(input = {}, dependencies = {}) {
   }
 
   // THE READ-BACK. A second runtime over the same durable history, because the
-  // process that will actually show this to them is a different one. Reading the
+  // process that will actually show this to him is a different one. Reading the
   // single journal row this send claims to have written is the cheapest check
   // that answers the only question the caller asks: is it really there.
   const verifier = runtimeFactory(options);

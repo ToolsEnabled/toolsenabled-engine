@@ -20,7 +20,7 @@
 // looking.
 //
 // Three, and this is the reason: it makes the writes ENUMERABLE BEFORE THEY
-// HAPPEN. The standing question about anything that touches a person's machine
+// HAPPEN. The owner's standing question about anything that touches his machine
 // is what it will actually do. `mcsetup plan --json` answers that in full, in
 // advance, in paths -- and `assertWritesContained()` turns the answer into a
 // refusal rather than a document nobody reads.

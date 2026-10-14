@@ -66,7 +66,11 @@ function resolveInvocation(command, args, env) {
        it has to be the WHOLE list, and it has to be searched. See
        resolveOnSearchPath() below for why naming `codex.cmd` was wrong. */
     const resolved = resolveOnSearchPath('codex', env);
-    if (resolved) return { command: resolved, args };
+    if (resolved) {
+      const shimEntry = npmShimLauncher(resolved);
+      if (shimEntry) return { command: process.execPath, args: [shimEntry, ...args] };
+      return { command: resolved, args };
+    }
     /* Nothing on this machine. The bare `.cmd` is kept as the last resort so a
        computer that genuinely has no Codex still fails the way it always has:
        cmd.exe answers 9009, detectCodexVersion() reads that as missing, and the
@@ -74,6 +78,38 @@ function resolveInvocation(command, args, env) {
     return { command: 'codex.cmd', args };
   }
   return { command, args };
+}
+
+/* AN npm SHIM OUTSIDE %APPDATA%\npm IS STILL AN npm INSTALL (platform review
+ * 1.0.50 E1).
+ *
+ * nvm-windows, scoop and a custom `npm config set prefix` all put npm's global
+ * folder somewhere other than %APPDATA%\npm, so the check above misses them
+ * and the PATH search finds `<prefix>\codex.cmd`. hidden-spawn can only run a
+ * .cmd through cmd.exe, and cmd.exe refuses a command line over 8191
+ * characters. A Standard-level session's configuration overrides carry each
+ * tool server's allowlist inline (about 8,100 to 8,700 characters measured), so
+ * every Standard Codex start through such a shim failed with "The command line
+ * is too long." before initialize.
+ *
+ * npm writes that shim beside its own node_modules folder, so the launcher the
+ * shim would have run is at a fixed place next to it. Running that launcher
+ * directly takes the same route as the %APPDATA%\npm case: hidden-spawn rule 4
+ * resolves it to the native codex.exe, started without cmd.exe, under the
+ * 32,767-character CreateProcess limit. When the folder is absent the shim is
+ * kept, exactly as before. A folder that cannot be inspected is reported, not
+ * read as absent, for the same reason resolveOnSearchPath() reports it. */
+const CODEX_NPM_LAUNCHER = Object.freeze(['node_modules', '@openai', 'codex', 'bin', 'codex.js']);
+
+function npmShimLauncher(resolved) {
+  if (!/\.(?:cmd|bat)$/i.test(resolved)) return null;
+  const entry = path.join(path.dirname(resolved), ...CODEX_NPM_LAUNCHER);
+  try {
+    return fs.statSync(entry).isFile() ? entry : null;
+  } catch (error) {
+    if (!error || (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')) throw error;
+    return null;
+  }
 }
 
 const WINDOWS_DEFAULT_PATHEXT = '.COM;.EXE;.BAT;.CMD';
@@ -96,7 +132,7 @@ function windowsPathExtensions(env) {
  * So the branch reached only by "not installed through npm" resolved a filename
  * that only an npm install ever creates, and could not find anything else.
  *
- * MEASURED 2026-08-23 on a development machine: codex-cli 0.146.1 installed
+ * MEASURED 2026-08-23 on the owner's machine: codex-cli 0.146.1 installed
  * through winget and signed in, `codex --version` answering fine from a shell,
  * and every press of Start refused with CODEX_CLI_NOT_FOUND. cmd.exe returned
  * 9009 for `codex.cmd`, detectCodexVersion() reads 9009 as missing, and the
@@ -447,6 +483,52 @@ function startIncompatibility(error, codexVersion, { methodMissing }) {
   return refusal;
 }
 
+// The plan owns both the account and the restriction transport. Keep
+// confinement last so an effort/model argv cannot override the ceiling.
+function confinedCodexLaunchArgs(plan, args, env) {
+  if (!plan) return args;
+  if (plan.ok !== true || !plan.codexConfig || !Array.isArray(plan.codexArgs)
+      || typeof plan.codexHome !== 'string' || env?.CODEX_HOME !== plan.codexHome) {
+    throw new CodexAdapterError('AGENT_CODEX_CONFINEMENT_UNAVAILABLE',
+      'The Codex sign-in home and launch restrictions must come from one admitted session plan.');
+  }
+  return [...args, ...plan.codexArgs];
+}
+
+// Discover through the official client without starting a thread or MCP peer.
+// Close the owned discovery process before the one admitted root launch.
+async function prepareConfinedCodexLaunchArgs({ plan, args, command, env, cwd,
+  codexVersion, clientInfo, startup, cleanupTimeoutMs }) {
+  const confinedArgs = confinedCodexLaunchArgs(plan, args, env);
+  if (!plan) return confinedArgs;
+  let transport = null, adapter = null;
+  try {
+    startup.throwIfStopped();
+    transport = createCodexProcessTransport({ command, args: confinedArgs, cwd, env });
+    adapter = new CodexAdapter({ transport, codexVersion, clientInfo });
+    await startup.wait(() => adapter.initialize())
+      .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
+    const names = await startup.wait(() => adapter.configuredMcpServerNames(cwd));
+    await transport.closeForStartupFailure(cleanupTimeoutMs);
+    adapter.close();
+    startup.throwIfStopped();
+    const permitted = plan.codexConfig.mcp_servers || {};
+    const foreign = names.filter(name => !Object.hasOwn(permitted, name));
+    // Codex splits override paths on dots and does not decode quoted segments.
+    // Preserve complex names as TOML table keys; plain names get per-name flags.
+    const plainName = name => /^[A-Za-z0-9_-]+$/.test(name);
+    const launchArgs = foreign.every(plainName) ? confinedArgs
+      : [...args, ...require('../agent-session-confinement').codexConfigOverrideArgs({
+        ...plan.codexConfig,
+        mcp_servers: { ...permitted, ...Object.fromEntries(foreign.map(name => [name, { enabled: false }])) }
+      })];
+    return [...launchArgs, ...foreign.filter(plainName)
+      .flatMap(name => ['-c', `mcp_servers.${name}.enabled=false`])];
+  } catch (error) {
+    await cleanFailedStartup({ error, startup, adapter, transport, cleanupTimeoutMs });
+  }
+}
+
 async function cleanFailedStartup({ error, startup, adapter, transport, cleanupTimeoutMs, cleanupSource = null }) {
   const original = startup.signal.aborted && (error?.code === 'CODEX_VERSION_DETECTION_ABORTED'
     || error?.code === 'CODEX_VERSION_CLEANUP_UNPROVEN') ? startup.signal.reason : error;
@@ -476,17 +558,10 @@ async function cleanFailedStartup({ error, startup, adapter, transport, cleanupT
   throw withOwnedStartupCleanup(original, retryCleanup);
 }
 
-/* `env` exists so a caller can bind the session's CODEX_HOME.
- *
- * It is the mechanism src/lib/agent-session-confinement.js uses to keep a
- * `guided` or `standard` session out of the user's own Codex configuration --
- * measured as the only one that works, because `-c mcp_servers...` overrides on
- * the app-server argv are refused for HTTP-transport and plugin-declared servers
- * and silently ignored as a whole-table assignment. It is threaded through BOTH
- * spawns deliberately: version detection that read a different home than the
- * session would report the capabilities of a Codex the session is not running
- * under. Undefined keeps process.env, so every existing caller is unchanged. */
+// The account home stays with the official client. A confinement plan adds
+// one-run config overrides and checks effective configuration before a thread.
 async function startCodexSession({
+  plan = null,
   cwd,
   clientInfo,
   threadOptions = {},
@@ -512,12 +587,15 @@ async function startCodexSession({
     const codexVersion = await detectCodexVersion({ command, env, signal: startup.signal, containProcessTree: true, cleanupTimeoutMs });
     startup.throwIfStopped();
     assertPinnedVersion(codexVersion);
-    transport = createCodexProcessTransport({ command, args, cwd, env, rootLaunch });
+    const launchArgs = await prepareConfinedCodexLaunchArgs({ plan, args, command, env, cwd,
+      codexVersion, clientInfo, startup, cleanupTimeoutMs });
+    transport = createCodexProcessTransport({ command, args: launchArgs, cwd, env, rootLaunch });
     adapter = new CodexAdapter({ transport, codexVersion, clientInfo });
     if (onEvent) adapter.onEvent(onEvent);
     if (rootLaunch) await startup.wait(() => transport.rootReady);
     await startup.wait(() => adapter.initialize())
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
+    if (plan) await startup.wait(() => adapter.assertConfinement(plan.codexConfig, cwd));
     const started = await startup.wait(() => adapter.startThreadWithNativeModeSettings({ ...(cwd ? { cwd } : {}), ...threadOptions }))
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
     const { threadId } = started;
@@ -560,6 +638,7 @@ async function startCodexSession({
  * against the folder it means to run in before trusting the session.
  */
 async function restoreCodexSession({
+  plan = null,
   threadId,
   cwd,
   clientInfo,
@@ -640,13 +719,18 @@ async function restoreCodexSession({
     const codexVersion = await detectCodexVersion({ command, env, signal: startup.signal, containProcessTree: true, cleanupTimeoutMs });
     startup.throwIfStopped();
     assertPinnedVersion(codexVersion);
+    const launchArgs = await prepareConfinedCodexLaunchArgs({ plan, args, command, env, cwd,
+      codexVersion, clientInfo, startup, cleanupTimeoutMs });
     transport = createCodexProcessTransport({ command,
-      args: resumeDatabaseHome ? [...args, '-c', 'sqlite_home=' + JSON.stringify(resumeDatabaseHome)] : args, cwd, env, rootLaunch });
+      args: resumeDatabaseHome ? [...launchArgs, '-c', 'sqlite_home=' + JSON.stringify(resumeDatabaseHome)]
+        : launchArgs, cwd, env, rootLaunch });
     adapter = new CodexAdapter({ transport, codexVersion, clientInfo });
     if (onEvent) adapter.onEvent(onEvent);
     if (rootLaunch) await startup.wait(() => transport.rootReady);
     await startup.wait(() => adapter.initialize())
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
+    if (plan) await startup.wait(() => adapter.assertConfinement({ ...plan.codexConfig,
+      ...(resumeDatabaseHome ? { sqlite_home: resumeDatabaseHome } : {}) }, cwd));
     if ((forkSourcePath || resumeSourcePath) && typeof assertSource === 'function') assertSource();
     const resumed = await startup.wait(() => forkSourcePath
       ? adapter.forkThreadFromPath(threadId, importedSourcePath, threadOptions)

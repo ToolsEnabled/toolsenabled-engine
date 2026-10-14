@@ -98,7 +98,7 @@ function findShortCircuitedTestChains(scripts) {
 // ---------------------------------------------------------------------------
 // SELF-CHECK: the detector must reject the string this rule was written for.
 //
-// This is the exact `npm test` command as it stood before an earlier commit,
+// This is the exact `npm test` command as it stood before commit 7fb15e9,
 // abbreviated in the middle only. If a future edit loosens `runsTests` or the
 // joiner patterns, this goes red BEFORE the real-tree assertion below can go
 // quietly green.

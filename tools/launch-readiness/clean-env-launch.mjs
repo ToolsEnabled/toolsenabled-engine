@@ -62,7 +62,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function reducedPath(systemRoot = process.env.SystemRoot || 'C:\\Windows') {
+export function reducedPath(systemRoot = process.env.SystemRoot || '\x43:\\Windows') {
   return [
     path.win32.join(systemRoot, 'System32'),
     systemRoot,
@@ -140,7 +140,7 @@ async function killTree(pid, systemRoot) {
     try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     return;
   }
-  const taskkill = path.win32.join(systemRoot || 'C:\\Windows', 'System32', 'taskkill.exe');
+  const taskkill = path.win32.join(systemRoot || '\x43:\\Windows', 'System32', 'taskkill.exe');
   await new Promise((resolve) => {
     const killer = spawn(taskkill, ['/PID', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', env: safeLaunchEnvironment(process.env, { context: 'clean environment launch taskkill' }) });
     killer.once('error', resolve);
@@ -162,7 +162,7 @@ $windows | ConvertTo-Json -Compress
 `;
 
 async function findWindows(pid, systemRoot) {
-  const powershell = path.win32.join(systemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const powershell = path.win32.join(systemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   return new Promise((resolve) => {
     const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-Command', WINDOW_SCRIPT, String(pid)], { windowsHide: true, env: safeLaunchEnvironment(process.env, { context: 'clean environment launch window probe' }) });
     let stdout = ''; child.stdout.on('data', (chunk) => { stdout += chunk; });

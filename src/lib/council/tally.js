@@ -84,7 +84,7 @@ function tally(slate, ballots) {
         fail: 0,
         abstain: 0,
         outstanding: 0,
-        decidedBy: 'The owner reserved this to themselves; no vote could authorize it.',
+        decidedBy: 'The owner reserved this to himself; no vote could authorize it.',
         factsVotesTurnOn: Object.freeze([])
       });
     }

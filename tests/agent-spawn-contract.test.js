@@ -58,17 +58,18 @@ async function main() {
   assert.ok(tool, 'agent.spawn is registered');
   assert.equal(tool.effect, 'local-write');
   const tierHelp = tool.inputSchema.properties.tier.description;
-  assert.match(tierHelp, /Codex: astra, luna, terra, sol/);
+  // 1.0.50: luna names its model, and the GPT-6 rows are tree-only.
+  assert.match(tierHelp, /Codex: astra, luna \(GPT-5\.6-Luna\), terra, sol; gpt-6-luna and gpt-6\.1-sol are tree-only\./);
   assert.match(tierHelp, /Claude: claude-fable, claude-sonnet, claude-opus/);
   /* 1.0.48: one tier per Claude model, listed after the three aliases so the
      line above still reads as it always has, and every one the enum accepts is
      named in the help an agent reads before choosing. */
-  assert.ok(tierHelp.includes('Claude: claude-fable, claude-sonnet, claude-opus, claude-opus-5-5, claude-opus-5, '
+  assert.ok(tierHelp.includes('Claude: claude-fable, claude-sonnet, claude-opus, claude-sonnet-5-5, claude-haiku-5-5, claude-opus-5-5, claude-opus-5, '
     + 'claude-sonnet-5, claude-fable-5-1, claude-fable-5, claude-haiku-4-5, claude-opus-4-8, claude-opus-4-7, '
     + 'claude-opus-4-6, claude-sonnet-4-6.'), tierHelp);
   assert.match(tierHelp, /claude-fable, claude-sonnet and claude-opus run whichever model the installed Claude CLI currently serves/);
   for (const tier of tool.inputSchema.properties.tier.enum) {
-    assert.ok(new RegExp(`(?:^|[ :,])${tier}(?:[ ,.]|$)`).test(tierHelp), `the tier help never names ${tier}`);
+    assert.ok(new RegExp(`(?:^|[ :,])${tier}(?:[ ,.;]|$)`).test(tierHelp), `the tier help never names ${tier}`);
   }
   const effortHelp = tool.inputSchema.properties.effort.description;
   assert.match(effortHelp, /claude-opus-4-6 and claude-sonnet-4-6 have no xhigh/);

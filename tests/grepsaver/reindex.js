@@ -337,7 +337,7 @@ const writeCard = (d, id, opts) => fs.writeFileSync(path.join(d, `${id}.md`), ca
 // -----------------------------------------------------------------------
 {
   const under = path.join(os.homedir(), 'Desktop', 'SomeProject');
-  const outside = process.platform === 'win32' ? 'C:\\ProgramData\\SomeService' : '/opt/some-service';
+  const outside = process.platform === 'win32' ? '\x43:\\ProgramData\\SomeService' : '/opt/some-service';
   assert(lib.homeRelative(under).startsWith('~/'), 'a path under the home directory renders relative to it, with no hardcoded base letter');
   assert(!lib.homeRelative(outside).startsWith('~'), 'a path outside the home directory renders as a plain absolute path, not a fabricated alias');
 

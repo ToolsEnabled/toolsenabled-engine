@@ -132,7 +132,7 @@ function makeSupervisor() {
 // --- STARTUP REFUSAL (R100) -------------------------------------------------
 //
 // VERIFIED FAILURE THIS CLOSES, measured 2026-07-29, not inferred:
-//   live supervisor = `node.exe tools/fleet-supervisor.js --serve --quiet`
+//   live pid 21556 = `node.exe tools/fleet-supervisor.js --serve --quiet`
 //   config/managed-processes.json declares --project <id> --backend vertex
 //   logs/fleet-supervisor.log: FLEET_VERTEX_PROJECT_MISSING, and
 //   "fell back to WHOLE-PHASE dispatch. Decomposition is NOT running."

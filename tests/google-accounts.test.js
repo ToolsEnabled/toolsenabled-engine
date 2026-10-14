@@ -15,19 +15,19 @@ const runtime = require(runtimePath);
 let profile = {
   defaultAccount: 'personal',
   cwsLoginAccount: 'store',
-  duoAccount: 'institution',
-  vertexSeatAccount: 'institution',
+  duoAccount: 'school',
+  vertexSeatAccount: 'school',
   vertexApiAccount: null,
   accounts: {
     personal: { email: 'Owner@Example.com', label: 'Primary' },
     store: { email: 'publisher@example.com', label: 'Chrome Web Store' },
-    institution: { email: 'member@example.org', label: 'Organization' }
+    school: { email: 'student\x40example.edu', label: 'University' }
   }
 };
 const secrets = new Set([
   'google_refresh_token__personal',
   'google_client_id__personal',
-  'google_client_secret__institution'
+  'google_client_secret__school'
 ]);
 
 runtime.rootPath = (...parts) => `/fixture/${parts.join('/')}`;
@@ -43,19 +43,19 @@ assert.throws(() => googleAccounts.assertAlias('bad alias'), /Invalid account al
 assert.deepEqual(googleAccounts.load(), {
   defaultAccount: 'personal',
   cwsLoginAccount: 'store',
-  duoAccount: 'institution',
-  vertexSeatAccount: 'institution',
+  duoAccount: 'school',
+  vertexSeatAccount: 'school',
   vertexApiAccount: null,
   accounts: profile.accounts
 });
 assert.deepEqual(googleAccounts.list(), [
   { alias: 'personal', email: 'Owner@Example.com', label: 'Primary', isDefault: true, authorized: true },
   { alias: 'store', email: 'publisher@example.com', label: 'Chrome Web Store', isDefault: false, authorized: false },
-  { alias: 'institution', email: 'member@example.org', label: 'Organization', isDefault: false, authorized: false }
+  { alias: 'school', email: 'student\x40example.edu', label: 'University', isDefault: false, authorized: false }
 ]);
 
 assert.equal(googleAccounts.resolve(), 'personal');
-assert.equal(googleAccounts.resolve('INSTITUTION'), 'institution');
+assert.equal(googleAccounts.resolve('SCHOOL'), 'school');
 assert.equal(googleAccounts.resolve('owner@example.COM'), 'personal');
 let unknown;
 assert.throws(() => { try { googleAccounts.resolve('missing'); } catch (error) { unknown = error; throw error; } });
@@ -68,19 +68,19 @@ assert.deepEqual(googleAccounts.oauthKeysFor('personal'), {
   clientIdKey: 'google_client_id__personal',
   clientSecretKey: 'google_client_secret'
 });
-assert.deepEqual(googleAccounts.oauthKeysFor('institution'), {
-  account: 'institution',
-  accessKey: 'google_access_token__institution',
-  refreshKey: 'google_refresh_token__institution',
+assert.deepEqual(googleAccounts.oauthKeysFor('school'), {
+  account: 'school',
+  accessKey: 'google_access_token__school',
+  refreshKey: 'google_refresh_token__school',
   clientIdKey: 'google_client_id',
-  clientSecretKey: 'google_client_secret__institution'
+  clientSecretKey: 'google_client_secret__school'
 });
 
 assert.deepEqual(googleAccounts.cwsLoginAccount(), {
   alias: 'store', email: 'publisher@example.com'
 });
 assert.deepEqual(googleAccounts.duoAccount(), {
-  alias: 'institution', email: 'member@example.org'
+  alias: 'school', email: 'student\x40example.edu'
 });
 assert.throws(
   () => googleAccounts.validateCwsLoginConfig({ accounts: profile.accounts, cwsLoginAccount: null }),

@@ -132,8 +132,8 @@ assert.ok(bothPersisted.items.some(item => item.vaultKey === 'payment_card_defau
   'queueing a second key must never terminate the first');
 assert.equal(launches.length, launchesBeforeSecond + 1, 'each newly queued prompt starts the runner');
 
-// NOTHING EXPIRES A PROMPT THE OWNER HAS NOT ANSWERED. They are putting a secret
-// IN, not taking one out, so walking away must cost them nothing. This replaces
+// NOTHING EXPIRES A PROMPT THE OWNER HAS NOT ANSWERED. He is putting a secret
+// IN, not taking one out, so walking away must cost him nothing. This replaces
 // the two-hour queued / four-hour presenting sweep, whose only justification was
 // clearing the single slot that no longer exists.
 const aged = queue.readQueue(queueFile);
@@ -498,7 +498,7 @@ assert.equal(queue.readQueue(manyFile).items.filter(item => item.status === 'que
 assert.equal(queue.status({}, manyOptions).activeCount, 5);
 
 // ---------------------------------------------------------------------------
-// NO EXPIRY. A prompt the owner has not answered is not stale -- they are entering
+// NO EXPIRY. A prompt the owner has not answered is not stale -- he is entering
 // information, not taking it out. The two-hour queued / four-hour presenting
 // sweep existed solely to clear the single active slot; the slot is gone, so
 // the deadline went with it. What replaces it is RECOVERY of a form whose

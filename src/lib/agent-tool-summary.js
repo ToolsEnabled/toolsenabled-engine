@@ -2,13 +2,14 @@
 
 // THE STANDARD TOOL NOTE A PRODUCT AGENT IS HANDED AT THE START OF ITS SESSION.
 //
-// THE PROBLEM: having to tell agents what the tools are called, what to do,
-// and which tool to use is hard on a user. Product rule: a short standard note
-// shares exactly what exists -- small enough not to eat tokens, complete enough
-// that agents know. A setting may disable it; it is on by default.
+// THE PROBLEM, IN THE OWNER'S WORDS: "i have to tell agents what tools are
+// called and what to do and to use this or that tool etc. so thats really hard
+// on a user. We should have a really short standard file that just shares
+// exactly what exists - we dont wat to eat tokens but they need to knoiw. We
+// can give a specific setting to disable this but it should be standard."
 //
 // And the first outside user's version of the same failure: their agents
-// could not use the credential manager or vault -- on a default (Guided)
+// "weren't able to use credential manager or vault" -- on a default (Guided)
 // install, where the credential requester is deliberately withheld. Nothing
 // told the agent that, so the agent could not tell the person, so the limit
 // read as a breakage. The note this module writes is where that silence ends:
@@ -55,8 +56,8 @@ const TIER_NAMES = Object.freeze({
   unrestricted: 'Unrestricted'
 });
 
-/* The ids an agent reaches for constantly -- the ones a person would otherwise
- * teach by hand, session after session. Only the ones the level actually
+/* The ids an agent reaches for constantly -- the ones the owner found himself
+ * teaching by hand, session after session. Only the ones the level actually
  * offers are printed. */
 const REACH_FOR = Object.freeze([
   ['agent_comms.send_local', 'message another agent on this tree'],
@@ -262,7 +263,7 @@ function compose({ tierName, readOnly, allowed, allowedSet, families, absentFami
 
   /* PACKED COMPRESSES THIS SENTENCE, IT NEVER DROPS IT. The full sentence
    * carries two halves an agent needs, and this module's own review history
-   * (an internal review record, Finding 2)
+   * (evidence/controller5-tool-summary-review-20260908/REVIEW.md, Finding 2)
    * found that this line is the ONLY copy of that guidance actually delivered
    * to an agent anywhere in the codebase -- tests/mcp-initialize-instructions
    * .test.js proves this text is handed to a real agent verbatim as the MCP
@@ -353,8 +354,8 @@ function briefToolSummary({
      *    workspace families."
      *
      * The dropped sentence is the one this module's own header says it exists
-     * for -- the first outside user whose agents could not use the
-     * credential manager or vault. A note that silently stops naming the
+     * for -- the first outside user whose agents "weren't able to use
+     * credential manager or vault". A note that silently stops naming the
      * withheld credential tool is this file's founding failure, reinstated.
      *
      * TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM IS ABOUT THIS PROCESS.

@@ -281,7 +281,7 @@ async function privateRun(root, plaintext, componentArgs = null) {
      * vault file into a new state root, and reading it there then failed with
      * SECRET_BACKEND_KEY_MISSING -- every credential in it inaccessible --
      * while a write minted a SECOND key and orphaned the first forever.
-     * Measured on a development machine before the fix: 4,195 items labelled
+     * Measured on the owner's machine before the fix: 4,195 items labelled
      * "ToolsEnabled Linux vault key" in one login keyring, of which exactly
      * one can be current.
      *
@@ -410,7 +410,7 @@ async function privateRun(root, plaintext, componentArgs = null) {
 
     const readerRoot = path.join(root, 'desktop-reader');
     const readerFile = path.join(readerRoot, 'vault', 'secrets.json');
-    withFile(readerFile, () => runtime.setSecret('custom.desktop', 'desktop-fixture'));
+    withFile(readerFile, () => runtime.setSecret('custom.desktop', '\x64esktop-fixture'));
     const environmentBefore = { ...process.env };
     const reader = linux.createReader({ stateRoot: readerRoot, environment: { ...process.env, TOOLSENABLED_VAULT_PATH: '/unrelated/vault.json' } });
     let eventLoopTicked = false;
@@ -418,7 +418,7 @@ async function privateRun(root, plaintext, componentArgs = null) {
     assert.equal(await reader.presence('custom.desktop'), 'present');
     assert.equal(eventLoopTicked, true, 'the desktop reader must leave the event loop responsive');
     clearTimeout(tick);
-    assert.deepEqual(await reader.getMany(['custom.desktop', 'custom.missing']), new Map([['custom.desktop', 'desktop-fixture']]));
+    assert.deepEqual(await reader.getMany(['custom.desktop', 'custom.missing']), new Map([['custom.desktop', '\x64esktop-fixture']]));
     assert.ok(JSON.stringify(process.env) === JSON.stringify(environmentBefore), 'reader changed the process environment');
     assert.throws(() => linux.createReader({ stateRoot: 'relative' }), matches('SECRET_INPUT_INVALID'));
     assert.throws(() => linux.createReader({ stateRoot: readerRoot + ' ' }), matches('SECRET_INPUT_INVALID'));

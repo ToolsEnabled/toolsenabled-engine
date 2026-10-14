@@ -13,12 +13,15 @@ function roleStore(t) {
   t.after(() => stateStore.close());
   return { stateStore, store: createCustomRoleStore({ stateStore }) };
 }
-for (const id of ['controller', 'manager', 'builder']) test(id + ' defaults expose four independent slot controls with role-changing off', t => {
+// 1.0.50 review, accounts A: only the person moves an agent to another account,
+// so the shipped roles keep the model and effort controls and no longer carry
+// the account and provider ones (the application refuses both from any agent).
+for (const id of ['controller', 'manager', 'builder']) test(id + ' defaults expose the model and effort slot controls with account, provider and role changes off', t => {
   const { store } = roleStore(t);
   const role = store.getRole(id);
   const names = registry.listTools({ agentRole: role, permissionSession: { origin: 'local', tier: 'full' } }).map(row => row.name);
-  for (const field of fields) assert.ok(names.includes('agent.set_' + field));
-  assert.equal(names.includes('agent.set_role'), false);
+  for (const field of ['model', 'effort']) assert.ok(names.includes('agent.set_' + field), field);
+  for (const field of ['account', 'provider', 'role']) assert.equal(names.includes('agent.set_' + field), false, field);
   for (const name of ['agent.resume', 'agent.restart']) assert.ok(names.includes(name));
 });
 test('saved default denials and custom directions survive readback', t => {

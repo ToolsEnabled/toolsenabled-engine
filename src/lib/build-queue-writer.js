@@ -398,6 +398,27 @@ function insertCompletedReceipt(markdown, receipt) {
  * the complete live phase in one atomic replacement. Cross-file close is
  * refused because a single-file rename cannot make that pair atomic.
  */
+/* A VERIFIED WRITE IS A FACT; A LOCK THAT WILL NOT LET GO IS A SEPARATE FAULT.
+ *
+ * Both writers released in a bare `finally`, so an unlock fault replaced
+ * whatever the write had already become: process-claim-lock rethrows the
+ * quarantine rename's EPERM/EBUSY and an unreadable holder. MEASURED through
+ * the real mission bridge: a claim written AND verified came back as
+ * "EPERM 409 operation not permitted", the ledger kept only its intent, and
+ * the caller's retry met QUEUE_CONCURRENT_EDIT on a queue that already showed
+ * the claim. The same finally also swapped this module's own refusal for the
+ * unlock error. The answer is now what happened to the queue; the unlock fault
+ * is reported separately, and the lock it leaves behind is refused honestly by
+ * the next writer as QUEUE_LOCKED. */
+function releaseQueueLock(lock) {
+  try { lock.release(); }
+  catch (error) {
+    try {
+      process.stderr.write(`ToolsEnabled queue lock release failed: ${String(error && error.code || 'unknown').slice(0, 80)}\n`);
+    } catch { /* stderr is gone; the write's own answer still stands */ }
+  }
+}
+
 function transitionQueuePhase(input) {
   const request = transitionInput(input);
   const resolved = path.resolve(request.queueFile);
@@ -461,7 +482,7 @@ function transitionQueuePhase(input) {
       nextHash: persisted.sha256
     };
   } finally {
-    lock.release();
+    releaseQueueLock(lock);
   }
 }
 
@@ -549,7 +570,7 @@ function appendQueuePhase({ queueFile, expectedHash, phase, packageId = null }) 
       rendered: rendered.toString('utf8')
     };
   } finally {
-    lock.release();
+    releaseQueueLock(lock);
   }
 }
 

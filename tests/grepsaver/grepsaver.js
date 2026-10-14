@@ -168,7 +168,7 @@ const index = (d) => fs.readFileSync(path.join(d, 'SYSTEMS.md'), 'utf8');
     };
     const lib = require(${JSON.stringify(libPath)});
     let error;
-    try { lib.fingerprintWsl('ExampleGatewayDistro', ['/safe/manifest'], '/safe'); }
+    try { lib.fingerprintWsl('OpenClawGateway', ['/safe/manifest'], '/safe'); }
     catch (e) { error = e; }
     process.stdout.write(JSON.stringify({ code: error && error.code, calls }));
   `;

@@ -156,12 +156,10 @@ test('a Codex home whose stored credential was revoked is signed out, in a sente
 });
 
 test('an allowance permission refusal does not prove that Codex authentication expired', () => {
-  const { FAILOVER_STATUSES } = require('../src/lib/multi-account/health.js');
   for (const rateLimitsError of ['403 Forbidden', '403 Forbidden: allowance endpoint access is restricted by workspace policy']) {
     const result = classifyProbe({ account: ACCOUNT, accountRead: IDENTITY, rateLimitsError, exhaustedAtPercent: 99 });
     assert.equal(result.status, 'transient');
     assert.equal(result.canServe, false, 'an unavailable allowance must not authorize a start');
-    assert.equal(FAILOVER_STATUSES.has(result.status), false, 'a permission refusal must not spend another account');
     assert.equal(result.email, 'acct@example.test');
     assert.equal(result.usedPercent, null);
     assert.equal(result.windows.hourly, null);
@@ -243,7 +241,7 @@ test('a Gemini entry whose folder cannot be worked out is skipped without throwi
 });
 
 test('the Codex account surface refuses a non-Codex account on purpose, before building any environment', async () => {
-  const claude = { name: 'team', provider: 'claude', configDir: '.claude-team', home: '.claude-team', priority: 1 };
+  const claude = { name: 'school', provider: 'claude', configDir: '.claude-school', home: '.claude-school', priority: 1 };
   const result = await probeAccount(claude, {
     homeDir: '/users/tester',
     environmentFor: () => { throw new Error('a non-Codex account must not reach the launcher'); },
@@ -459,10 +457,10 @@ test('Antigravity /quota: the Gemini weekly bucket decides, every weekly bucket 
   const { antigravityQuotaWindows } = require('../src/lib/multi-account/health');
   const windows = antigravityQuotaWindows(AGY_QUOTA_FIXTURE);
   assert.equal(windows.hourly, null, 'Antigravity reported no short window and none was invented');
-  assert.deepEqual({ ...windows.weekly }, { kind: 'weekly', usedPercent: 4, remainingPercent: 96,
-    resetsAt: '2026-09-17T00:00:00.000Z', label: 'gemini-weekly', model: 'Gemini Models' });
+  assert.deepEqual({ ...windows.weekly }, { kind: 'weekly', usedPercent: 3.8, remainingPercent: 96.2,
+    resetsAt: '2026-09-17T21:40:36.000Z', label: 'gemini-weekly', model: 'Gemini Models' });
   assert.deepEqual(windows.weeklyWindows.map(window => [window.model, window.usedPercent, window.label]),
-    [['Gemini Models', 4, 'gemini-weekly'], ['Claude and GPT models', 0, '3p-weekly']]);
+    [['Gemini Models', 3.8, 'gemini-weekly'], ['Claude and GPT models', 0, '3p-weekly']]);
   const payload = JSON.parse(AGY_QUOTA_FIXTURE);
   assert.equal(payload.num_turns, 0, 'the captured read started no turn');
   assert.equal(payload.usage.total_tokens, 0, 'the captured read spent no tokens');
@@ -482,8 +480,8 @@ test('Antigravity /quota classification: measured healthy, spent Gemini bucket e
   const healthy = classifyAntigravityQuota(catalog, { stdout: AGY_QUOTA_FIXTURE, code: 0 }, THRESHOLDS);
   assert.equal(healthy.status, STATUS.HEALTHY);
   assert.equal(healthy.canServe, true);
-  assert.equal(healthy.usedPercent, 4);
-  assert.equal(healthy.resetsAt, '2026-09-17T00:00:00.000Z');
+  assert.equal(healthy.usedPercent, 3.8);
+  assert.equal(healthy.resetsAt, '2026-09-17T21:40:36.000Z');
   assert.equal(healthy.email, null, 'the quota payload names no address and none was invented');
   assert.equal(healthy.identityScope, 'current-user');
   assert.match(healthy.reason, /does not provide a separate account/);
@@ -495,7 +493,7 @@ test('Antigravity /quota classification: measured healthy, spent Gemini bucket e
   assert.equal(exhausted.status, STATUS.EXHAUSTED);
   assert.equal(exhausted.canServe, false);
   assert.equal(exhausted.windows.weekly.usedPercent, 100);
-  assert.equal(exhausted.resetsAt, '2026-09-17T00:00:00.000Z', 'the reset the client reported rides on the row');
+  assert.equal(exhausted.resetsAt, '2026-09-17T21:40:36.000Z', 'the reset the client reported rides on the row');
 
   const spentOther = JSON.parse(AGY_QUOTA_FIXTURE);
   spentOther.command.data.groups[1].buckets[0].remaining_fraction = 0;
@@ -529,7 +527,7 @@ test('Antigravity probe runs the catalogue, then the print-mode /quota read, und
   const result = await probeAntigravityAccount({ ...AGY, home: os.tmpdir() }, { spawnImpl: fake.spawnImpl, ...THRESHOLDS });
   assert.deepEqual(fake.calls.map(call => call.args), [['models'], ['-p', '/quota', '--output-format', 'json']]);
   assert.equal(result.status, STATUS.HEALTHY);
-  assert.equal(result.windows.weekly.remainingPercent, 96);
+  assert.equal(result.windows.weekly.remainingPercent, 96.2);
   const signedOut = fakeProgram(['']);
   const refused = await probeAntigravityAccount({ ...AGY, home: os.tmpdir() }, {
     spawnImpl: (command, args, options) => signedOut.spawnImpl(command, args, options) });
@@ -540,9 +538,9 @@ test('Antigravity probe runs the catalogue, then the print-mode /quota read, und
 test('Grok billing: the captured reply gives plan and period end, and no percentage is invented', () => {
   const { grokBillingReading, classifyGrokBilling } = require('../src/lib/multi-account/health');
   const reading = grokBillingReading(GROK_FIXTURE.billing);
-  assert.equal(reading.planType, 'Example Tier');
+  assert.equal(reading.planType, 'X Premium+');
   assert.equal(reading.period, 'week');
-  assert.equal(reading.resetsAt, '2026-09-17T00:00:00.000Z');
+  assert.equal(reading.resetsAt, '2026-09-17T08:47:13.160Z');
   assert.equal(reading.percent, null, 'the reply carried no creditUsagePercent and none was invented');
   assert.deepEqual(reading.windows, { hourly: null, weekly: null, weeklyWindows: [] });
 
@@ -553,9 +551,9 @@ test('Grok billing: the captured reply gives plan and period end, and no percent
   assert.equal(result.status, STATUS.HEALTHY);
   assert.equal(result.canServe, true);
   assert.equal(result.usedPercent, null);
-  assert.equal(result.planType, 'Example Tier');
+  assert.equal(result.planType, 'X Premium+');
   assert.equal(result.email, 'owner@example.test');
-  assert.equal(result.resetsAt, '2026-09-17T00:00:00.000Z');
+  assert.equal(result.resetsAt, '2026-09-17T08:47:13.160Z');
   assert.match(result.reason, /not how much of it is used/);
   assert.doesNotMatch(result.reason, /\d{4}-\d{2}-\d{2}T/);
 
@@ -564,7 +562,7 @@ test('Grok billing: the captured reply gives plan and period end, and no percent
   assert.equal(measured.status, STATUS.HEALTHY);
   assert.equal(measured.usedPercent, 42);
   assert.deepEqual({ ...measured.windows.weekly }, { kind: 'weekly', usedPercent: 42, remainingPercent: 58,
-    resetsAt: '2026-09-17T00:00:00.000Z', label: 'creditUsagePercent', model: null });
+    resetsAt: '2026-09-17T08:47:13.160Z', label: 'creditUsagePercent', model: null });
   const spent = classifyGrokBilling(account, presence, { authMeta: GROK_FIXTURE.authenticateMeta, billing: withPercent(100) }, THRESHOLDS);
   assert.equal(spent.status, STATUS.EXHAUSTED);
   assert.equal(spent.canServe, false);
@@ -611,7 +609,7 @@ test('Grok probe: clean inspection, then initialize/authenticate/_x.ai/billing o
     assert.deepEqual(seen, ['inspect', 'initialize', 'authenticate', 'reply:agent-1', '_x.ai/billing'],
       'the usage read sent something other than initialize, authenticate and the billing request');
     assert.equal(result.status, STATUS.HEALTHY);
-    assert.equal(result.planType, 'Example Tier');
+    assert.equal(result.planType, 'X Premium+');
     assert.equal(result.email, 'owner@example.test');
     assert.equal(result.usedPercent, null);
 

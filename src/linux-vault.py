@@ -304,7 +304,7 @@ def master_key(service, file, identity, create=False, metadata_only=False):
             # the vault file into a new state root, and reading it there then
             # failed with SECRET_BACKEND_KEY_MISSING -- every credential in it
             # inaccessible -- while a write minted a SECOND key and left the
-            # first orphaned forever. Measured on a development machine: 4,195
+            # first orphaned forever. Measured on the owner's machine: 4,195
             # items labelled "ToolsEnabled Linux vault key" in one login
             # keyring, of which exactly one can be current.
             #
@@ -520,9 +520,10 @@ def write_vault(directory, name, data, mutation=None):
             refuse("SECRET_VAULT_WRITE_UNCERTAIN" if replacement_attempted else "SECRET_VAULT_WRITE_FAILED")
 
 
-# The access log is append-only metadata and nothing prunes it. Measured on a
-# development install, it grew by tens of megabytes in a few days beside a live
-# vault -- on that trajectory a customer carries gigabytes of it. One previous generation is kept, so the pair
+# The access log is append-only metadata and nothing prunes it. Measured on the
+# owner's machine: 26.4 MB and 279,371 lines in three and a half days beside a
+# live vault, plus 11.9 MB left in a migration copy -- on that trajectory a
+# customer carries gigabytes of it. One previous generation is kept, so the pair
 # is bounded and the recent history a person would actually read survives a
 # rotation.
 ACCESS_LOG_MAX_BYTES = 4 * 1024 * 1024
@@ -532,6 +533,74 @@ ACCESS_LOG_MAX_BYTES = 4 * 1024 * 1024
 # stall: a log that cannot rotate is a large log, which is survivable, while a
 # log that cannot write is no log at all.
 ACCESS_LOG_ROTATE_LOCK_TIMEOUT_MS = 2000
+
+
+def rotations_so_far(directory, log_name):
+    """How many times this log has EVER rotated, read back from its own head.
+
+    The count has to survive the rotation that discards the file carrying it, so
+    each marker copies the previous one's total forward. Only the live log is
+    consulted: it holds the newest marker, and once it is renamed to <log>.1 the
+    fresh log written below carries the number on.
+
+    A log with no marker has rotated zero times as far as anything can tell, and
+    saying so is the honest answer for an install that predates this.
+    """
+    try:
+        with open(log_name, "rb", opener=lambda path, flags: os.open(
+                path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)) as stream:
+            head = stream.readline(4096)
+        entry = decode_json(head.decode("utf-8"))
+        total = entry.get("rotations")
+        if type(total) is int and 0 <= total < MAX_SEQUENCE:
+            return total
+    except Exception:
+        pass
+    return 0
+
+
+def write_rotation_marker(directory, log_name, total, discarded_bytes):
+    """First line of every rotated-into log: this history was cut, and by how much.
+
+    WITHOUT THIS, TRUNCATING THE ACCESS LOG IS INVISIBLE. Entries carry ts, pid,
+    action and key and no sequence, so nothing in a log says how much came before
+    it. One generation is retained, so about 8 MiB of entries rolls the oldest
+    off the end -- and a caller that can make the vault log can make 8 MiB of it.
+    A confined agent cannot write this directory, but it can call a vault-reading
+    tool in a loop, which is the whole prerequisite: the record of what it read an
+    hour ago simply stops existing, and no reader can tell that it ever did.
+
+    The marker does not stop the rolling, which is a bound the product wants. It
+    makes the rolling ATTRIBUTABLE: `rotations` only ever counts up and is copied
+    forward across every rotation, so the newest log always states how many times
+    history has been discarded and how many bytes went in the most recent one. A
+    reader who sees rotations=37 on a desktop install knows to ask why.
+
+    Best-effort and silent for the same reason rotate_access_log() is: a marker
+    that could not be written must never cost the entry that triggered it.
+    """
+    try:
+        fd = os.open(log_name,
+                     os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                     0o600, dir_fd=directory)
+    except OSError:
+        return
+    try:
+        private_file(fd)
+        os.write(fd, encoded({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "pid": os.getpid(),
+            "action": "access-log-rotated",
+            "rotations": total,
+            "discardedBytes": discarded_bytes,
+        }) + b"\n")
+    except Exception:
+        pass
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 def rotate_access_log(directory, log_name):
@@ -578,8 +647,11 @@ def rotate_access_log(directory, log_name):
         # the generation that logger saved; there is nothing here to rotate and
         # renaming again would destroy it.
         if os.stat(log_name, dir_fd=directory).st_size >= ACCESS_LOG_MAX_BYTES:
+            carried = rotations_so_far(directory, log_name)
+            size = os.stat(log_name, dir_fd=directory).st_size
             os.rename(log_name, log_name + ".1",
                       src_dir_fd=directory, dst_dir_fd=directory)
+            write_rotation_marker(directory, log_name, carried + 1, size)
     except Exception:
         pass  # best-effort, and deliberately silent -- see the docstring
     finally:

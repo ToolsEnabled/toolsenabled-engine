@@ -3,6 +3,11 @@ vault/
 profiles/
 logs/
 state/
+# Browser profiles outside profiles/ — cookies/session tokens live here
+scratch/browser-debug-profile/
+scratch/report-6h-verify-profile/
+scratch/report-6h-html-verify-profile/
+gptaddon/playwright-user-data/
 # Scratch and tmp working trees — snapshots and PoCs, never source of truth
 scratch/
 tmp/
@@ -12,8 +17,8 @@ tmp/
 KILLSWITCH
 config/jobs.json
 config/jobs.json.legacy-*
-# Machine topology is a per-installation USER SETTING (product rule): this
-# file holds one person's machine names, addresses, and
+# Machine topology is a per-installation USER SETTING (owner directive
+# 2026-08-10): this file holds one person's machine names, addresses, and
 # checkout paths. config/machines.example.json is the shipped, address-free
 # template; this is the live file and must never be committed.
 config/machines.profile.json
@@ -85,7 +90,7 @@ scratch/mcp-call-output/
 scratch/playwright-call-output/
 
 # Q53 archive-only quarantine: bytes stay on disk; these paths are not corpus.
-/old-plans/
+/newplan delet after/
 /reports/desktop-archive-2026-07-29/
 /reports/fleet-worktree-archive/
 
@@ -94,6 +99,7 @@ scratch/playwright-call-output/
 /reports/luna-fleet/
 /reports/gemini-fleet/
 /reports/shadow-manager-log.jsonl
+/node_modules.from-machine-a-*/
 /output/
 /.tmp-*
 /tmp-code-intel-test/
@@ -123,7 +129,7 @@ scratch/playwright-call-output/
 # grandfathered, so every NEW skill was silently unshippable -- present on the
 # machine that wrote it, absent from every fresh clone, packaged install and
 # other machine. Caught by adversarial review when the /goal skill was added
-# (product rule).
+# (owner directive 2026-08-13).
 /.tmp/
 /.cursor/
 /.codex/
@@ -162,9 +168,9 @@ scratch/playwright-call-output/
 
 # Grepsaver OUTPUT is per-machine, its generator is product. The cards record
 # absolute paths, live ports, git-dirty flags and observation dates for whatever
-# projects happen to sit on THIS box -- a card resolves ToolsEnabled to one
-# machine's absolute checkout path, which is wrong on every other machine it is
-# checked out on. Versioning them couples per-machine state to
+# projects happen to sit on THIS box -- context/SYSTEMS.md currently resolves
+# ToolsEnabled to <profile-root> which is wrong on the
+# machine it is checked out on. Versioning them couples per-machine state to
 # shared source, which is the same mistake as pinning a routinely edited
 # document into a security digest. Regenerate with `npm run grepsaver:refresh`.
 #
@@ -240,7 +246,7 @@ REPORT-*.md
 # lowercase names, dodging the pattern above. The rule is the rule.
 .swarm/
 
-# THIRD SPELLING, found as an untracked <name>-REPORT.md sitting in
+# THIRD SPELLING, found 2026-08-27 as an untracked F47-FIX-REPORT.md sitting in
 # the repository root. "REPORT-*.md" only catches the word at the START of the
 # name, so any agent that writes <something>-REPORT.md walks straight past it.
 #

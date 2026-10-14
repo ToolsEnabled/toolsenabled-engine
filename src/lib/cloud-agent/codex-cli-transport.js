@@ -94,9 +94,9 @@ function isPlainObject(value) {
 }
 
 function excerpt(text) {
-  const value = typeof text === 'string' ? text.trim() : '';
-  if (!value) return '(no output)';
-  return value.length <= MAX_STDERR_EXCERPT_CHARS ? value : `${value.slice(0, MAX_STDERR_EXCERPT_CHARS)}...[truncated]`;
+  // CLI output can contain its own confidential authentication material.
+  // Classification may inspect it internally; diagnostics never echo it.
+  return typeof text === 'string' && text.trim() ? '[provider diagnostics withheld]' : '(no output)';
 }
 
 function boundedField(value, maxLength) {
@@ -140,7 +140,7 @@ function detectReportedError(stdout, stderr, opLabel, taskId) {
   }
   const envMatch = ENV_NOT_FOUND_PATTERN.exec(combined);
   if (envMatch) {
-    fail('CODEX_CLI_ENV_NOT_FOUND', `codex ${opLabel}: environment '${envMatch[1]}' is not a known Codex Cloud environment.`);
+    fail('CODEX_CLI_ENV_NOT_FOUND', `codex ${opLabel}: the environment is not a known Codex Cloud environment for the selected account.`);
   }
   const reported = REPORTED_ERROR_PATTERN.exec(combined);
   if (reported) {

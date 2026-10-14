@@ -202,7 +202,7 @@ async function main() {
   if (tokens.access_token) setSecret(`google_access_token__${account}`, tokens.access_token);
   accounts.register(account, email || `${account}@unknown`, { makeDefault: false });
   console.error(`\nStored refresh token for account '${account}' in the vault and registered it.`);
-  console.error(`Test with:  node tools/drive-upload.js --account ${account} --find "Quarterly Report"\n`);
+  console.error(`Test with:  node tools/drive-upload.js --account ${account} --find "Example Pickard"\n`);
 }
 
 if (require.main === module) {

@@ -14,7 +14,7 @@ const IDS = Object.freeze({
 const GPU_POLICIES = Object.freeze(['Require GPU', 'Allow CPU fallback', 'CPU only']);
 const THINKING_MODES = Object.freeze(['Fast', 'Reasoning', 'Model default']);
 const DEFAULTS = Object.freeze({ gpuPolicy: 'Require GPU', contextTokens: 8192, thinking: 'Fast', keepAliveMinutes: 10 });
-const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,127}$/;
+const { validateNativeModelId } = require('./model-dispatch-tiers');
 
 function invalid(message) {
   const error = new Error(message);
@@ -40,10 +40,9 @@ function readSettings(dependencies = {}) {
 function explicitModel(model) {
   if (model === undefined || model === null || model === '') return null;
   if (typeof model !== 'string') throw invalid('The local model name must be text.');
-  const named = model.startsWith('local/') ? model.slice(6) : model;
-  if (named === 'auto') return null;
-  if (!MODEL_ID_RE.test(named)) throw invalid('The local model name must be a bounded model identifier.');
-  return named;
+  if (model === 'auto' || model === 'local/auto') return null;
+  try { return validateNativeModelId(model); }
+  catch (error) { throw invalid(error.message); }
 }
 
 function parseOllamaEndpoint(endpoint) {
@@ -58,11 +57,11 @@ function parseOllamaEndpoint(endpoint) {
 function modelFor(values, role, override) {
   const explicit = explicitModel(override);
   if (explicit) return explicit;
-  const configured = String(values[IDS[role]] || '').trim();
+  const configured = values[IDS[role]] || '';
   if (configured) return explicitModel(configured);
   // A remote tool model is not a local-agent choice.
   const legacy = role === 'agent' && values['model.provider'] !== 'Ollama'
-    ? '' : String(values['model.name'] || '').trim();
+    ? '' : values['model.name'] || '';
   return legacy ? explicitModel(legacy) : null;
 }
 
@@ -83,8 +82,9 @@ function invalidSettingValue(id, value) {
       return 'Use an HTTP or HTTPS service address without credentials, a query, or a fragment.';
     }
   }
-  if ([IDS.agent, IDS.tool].includes(id) && value !== '' && (typeof value !== 'string' || !MODEL_ID_RE.test(value))) {
-    return 'Use an exact model identifier, without spaces.';
+  if ([IDS.agent, IDS.tool, 'model.name'].includes(id) && value !== '') {
+    try { validateNativeModelId(value); }
+    catch (error) { return error.message; }
   }
   if (id === IDS.context && (!Number.isInteger(value) || value < 512 || value > 131072)) {
     return 'Local context must be a whole number from 512 through 131072 tokens.';

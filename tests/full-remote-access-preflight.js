@@ -43,7 +43,7 @@ const excludedTools = [
 ];
 const allowedToolNames = ['system.status'];
 
-// an earlier change added repo.patch_file to REQUIRED_EXCLUDED_TOOLS and updated the
+// f061ec5 added repo.patch_file to REQUIRED_EXCLUDED_TOOLS and updated the
 // manifest fixture next door but not this one, so this preflight then died on
 // an opaque FRA_MANIFEST_SAFETY_INVALID from inside the bridge rather than
 // saying which list had drifted.  The two literals above stay literal on
@@ -70,8 +70,8 @@ assert.deepEqual(
 const lab = {
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '203.0.113.1', root: 'C:\\a', role: 'development-host' },
-    'machine-b': { address: '203.0.113.2', root: 'C:\\b', role: 'disconnected-peer' }
+    'machine-a': { address: '203.0.113.1', root: '\x43:\\a', role: 'development-host' },
+    'machine-b': { address: '203.0.113.2', root: '\x43:\\b', role: 'disconnected-peer' }
   },
   services: {}
 };

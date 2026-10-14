@@ -33,7 +33,7 @@
 
 'use strict';
 
-require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
+require('./helpers/isolated-state-root'); // FINDING 1, REPORT-ledger-kinds-tools-20260907.md: redirect TOOLSENABLED_STATE_ROOT off the live root before anything below can resolve it.
 
 // WHAT THIS SUITE IS FOR.
 //
@@ -46,7 +46,7 @@ require('./helpers/isolated-state-root'); // FINDING 1, the ledger-kinds review:
 // was before. If that assertion ever fails, the defect is back.
 //
 // The fixtures are built here rather than read from the tree: the real ledger
-// was reset to revision 1 with zero requests on 2026-08-12,
+// was reset to revision 1 with zero requests at owner direction on 2026-08-12,
 // and the archived old record is off limits.
 
 const assert = require('node:assert/strict');
@@ -100,8 +100,8 @@ async function main() {
   const r4 = { ...request('R4', 'open'), request: 'R4 replaces R3 outright' };
   const r5 = request('R5', 'open');
   const r6 = { id: 'R6', request: '', verbatim: '', status: 'open' };
-  const r7 = request('R7', 'done', [metGate('done', 'node tests/smoke.js exit 0')], { verbatim: 'keep the owner ledger append-only when something is retired' });
-  const r8 = request('R8', 'open', undefined, { verbatim: 'keep the owner ledger append-only when something is retired, as a standing rule' });
+  const r7 = request('R7', 'done', [metGate('done', 'node tests/smoke.js exit 0')], { verbatim: 'stop rewriting the owner ledger when you retire something please' });
+  const r8 = request('R8', 'open', undefined, { verbatim: 'stop rewriting the owner ledger when you retire something please, I mean it' });
   const r9 = request('R9', 'done', [{ ...metGate('authorized', 'node tests/smoke.js exit 0'), clauseKind: 'grant' }]);
   const r10 = request('R10', 'done', [metGate('done', 'node tests/smoke.js exit 0')]);
   const r11 = request('R11', 'blocked-external', [metGate('done', 'node tests/smoke.js exit 0')]);
@@ -242,7 +242,7 @@ async function main() {
     throws(() => retire('R1'), 'LEDGER_ARCHIVE_TARGET_INELIGIBLE', 'an admitted candidate is still refused when the rule is not met');
 
     // ---- one independent, verbatim-quoting judgement closes the gap ------
-    throws(() => archiveTool.archiveLedger({ operation: 'judge', dryRun: false, target: target('R1'), actor: 'judge-lane', sessionId: 'session-judge', quote: 'words that were never theirs' }, deps),
+    throws(() => archiveTool.archiveLedger({ operation: 'judge', dryRun: false, target: target('R1'), actor: 'judge-lane', sessionId: 'session-judge', quote: 'words that were never his' }, deps),
       'LEDGER_ARCHIVE_JUDGEMENT_UNQUOTED', 'a judgement that does not quote the verbatim is refused');
     archiveTool.archiveLedger({ operation: 'judge', dryRun: false, target: target('R1'), actor: 'judge-lane', sessionId: 'session-judge', quote: 'must never rewrite the append only owner record', why: 'independently re-ran the named test' }, deps);
     equal(archiveTool.explainTarget(target('R1'), { ...deps, sessionId: 'session-judge' }).score.decision, 'hold', 'the judging session cannot then use its own judgement to retire the entry');
@@ -282,7 +282,7 @@ async function main() {
       request('R101', 'open', undefined, { verbatim: `${banner} second unrelated instruction` })
     ] }, null, 2), 'utf8');
     const bannerDeps = { ...deps, ledgerFile: bannerLedger, overlayFile: path.join(bannerRoot, 'events.jsonl'), scopeStoreFile: path.join(bannerRoot, 'missing.json') };
-    equal(archiveTool.explainTarget(target('R100'), bannerDeps).score.vetoes.map(item => item.id), [], 'a shared editorial banner is not the owner restating themselves');
+    equal(archiveTool.explainTarget(target('R100'), bannerDeps).score.vetoes.map(item => item.id), [], 'a shared editorial banner is not the owner restating himself');
     fs.rmSync(bannerRoot, { recursive: true, force: true });
 
     // ---- the owner-gated confirm protocol is unchanged -------------------
@@ -316,7 +316,7 @@ async function main() {
     // ---- the overlay is append-only and tamper-evident -------------------
     const beforeTamper = fs.readFileSync(overlayFile, 'utf8');
     const lines = beforeTamper.split('\n').filter(line => line.trim());
-    const forged = JSON.parse(lines[0]); forged.detail = 'a reason they never gave';
+    const forged = JSON.parse(lines[0]); forged.detail = 'a reason he never gave';
     fs.writeFileSync(overlayFile, [JSON.stringify(forged), ...lines.slice(1)].join('\n') + '\n', 'utf8');
     throws(() => archiveTool.readDispositions(deps), 'LEDGER_ARCHIVE_OVERLAY_CHAIN_BROKEN', 'editing a past disposition in place is detected, not accepted');
     fs.writeFileSync(overlayFile, beforeTamper, 'utf8');

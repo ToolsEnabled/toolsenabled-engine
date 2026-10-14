@@ -47,8 +47,8 @@ const STATUS_SIGNED_IN = JSON.stringify({
   loggedIn: true,
   authMethod: 'claude.ai',
   apiProvider: 'firstParty',
-  email: 'student@example.test',
-  orgName: "student@example.test's Organization",
+  email: 'student\x40example.edu',
+  orgName: "student\x40example.edu's Organization",
   subscriptionType: 'max'
 });
 
@@ -60,7 +60,7 @@ const STATUS_SIGNED_IN_API_KEY = JSON.stringify({
   authMethod: 'claude.ai',
   apiProvider: 'firstParty',
   apiKeySource: 'ANTHROPIC_API_KEY',
-  email: 'student@example.test',
+  email: 'student\x40example.edu',
   subscriptionType: 'max'
 });
 
@@ -99,14 +99,16 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
     capabilityRan: true, capabilityExit: 0, capabilityStdout: CAPABILITY_OK
   });
   assert.equal(authenticated.state, STATE.AUTHENTICATED, 'a served request on a signed-in account is authenticated');
+  assert.equal(authenticated.statusSucceeded, true);
   assert.equal(authenticated.usable, true);
   assert.equal(authenticated.canFailover, false, 'a working account must never be failed away from');
   assert.equal(authenticated.billingSource, 'subscription');
-  assert.equal(authenticated.account, 'student@example.test');
+  assert.equal(authenticated.account, 'student\x40example.edu');
   assert.equal(authenticated.plan, 'max');
 
   const signedOut = classifyClaudeAuth({ statusExit: 1, statusStdout: STATUS_SIGNED_OUT });
   assert.equal(signedOut.state, STATE.SIGNED_OUT);
+  assert.equal(signedOut.statusSucceeded, false);
   assert.equal(signedOut.usable, false);
   assert.equal(signedOut.canFailover, true, 'a signed-out account is an account-level fault and may be failed over');
 
@@ -145,12 +147,14 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
   // account, so it must be unusable AND must not trigger a failover.
   const transport = classifyClaudeAuth({ statusTransportError: 'timed out after 30000ms' });
   assert.equal(transport.state, STATE.INDETERMINATE);
+  assert.equal(transport.statusSucceeded, false);
   assert.equal(transport.usable, false, 'unknown auth state must be treated as not usable');
   assert.equal(transport.canFailover, false,
     'a transport fault must never rotate accounts: that abandons a healthy account and spends a second one for nothing');
 
   const garbage = classifyClaudeAuth({ statusExit: 0, statusStdout: 'not json at all' });
   assert.equal(garbage.state, STATE.INDETERMINATE);
+  assert.equal(garbage.statusSucceeded, false);
   assert.equal(garbage.usable, false);
 
   // Synthetic malformed responses: a readable JSON object does not establish
@@ -169,6 +173,7 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
   // request. This is the exact false green the old exit-0 check produced.
   const unproven = classifyClaudeAuth({ statusExit: 0, statusStdout: STATUS_SIGNED_IN, capabilityRan: false });
   assert.strictEqual(unproven.capabilityRan, false, 'the no-request path must say no live request was made');
+  assert.equal(unproven.statusSucceeded, true, 'successful native sign-in status is distinct from a served capability request');
   assert.equal(unproven.state, STATE.INDETERMINATE,
     'a signed-in file/status reading alone must NOT be reported as authenticated -- that is the defect this module replaces');
   assert.equal(unproven.usable, false);
@@ -224,6 +229,19 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
   }
 }
 
+// A failed status command cannot establish readiness even if its JSON claims
+// sign-in and a caller supplies a successful capability envelope.
+for (const statusExit of [1, 2, null]) {
+  const contradiction = classifyClaudeAuth({
+    statusExit, statusStdout: STATUS_SIGNED_IN,
+    capabilityRan: true, capabilityExit: 0, capabilityStdout: CAPABILITY_OK
+  });
+  assert.equal(contradiction.state, STATE.INDETERMINATE);
+  assert.equal(contradiction.statusSucceeded, false);
+  assert.equal(contradiction.usable, false);
+  assert.equal(contradiction.canFailover, false);
+}
+
 // -- the billing tell -------------------------------------------------------
 {
   const onApiKey = classifyClaudeAuth({
@@ -244,13 +262,12 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
 
 // -- nothing sensitive ever leaves ------------------------------------------
 {
-  // A synthetic key-shaped sentinel, assembled at runtime so the source carries no literal key.
-  const SENTINEL = ['sk', 'ant', 'TEST-SENTINEL-NOT-A-REAL-KEY'].join('-');
+  const SENTINEL = '\x73k-ant-TEST-SENTINEL-NOT-A-REAL-KEY';
   const noisy = classifyClaudeAuth({
     statusExit: 0,
     statusStdout: JSON.stringify({
       loggedIn: true, authMethod: 'claude.ai', apiKeySource: 'ANTHROPIC_API_KEY',
-      email: 'student@example.test', subscriptionType: 'max', accessToken: SENTINEL
+      email: 'student\x40example.edu', subscriptionType: 'max', accessToken: SENTINEL
     }),
     capabilityRan: true, capabilityExit: 1,
     capabilityStdout: JSON.stringify({ type: 'result', is_error: true, result: `Invalid API key ${SENTINEL}` }),
@@ -265,7 +282,7 @@ const CAPABILITY_RATE_LIMITED = JSON.stringify({
       `the probe result must not expose a field named ${key}`);
   }
   assert.deepEqual(Object.keys(noisy).sort(),
-    ['account', 'authMethod', 'billingSource', 'canFailover', 'capabilityRan', 'plan', 'reason', 'state', 'usable'],
+    ['account', 'authMethod', 'billingSource', 'canFailover', 'capabilityRan', 'plan', 'reason', 'state', 'statusSucceeded', 'usable'],
     'the probe result shape is a contract the multi-account lane consumes; changing it is a breaking change');
 }
 

@@ -4,10 +4,10 @@
 // THE CLAIM, AS A COMMAND -- the one surface every other surface drives.
 //
 //   node tools/online-fra-claim-cli.js open --name "Desk PC"
-//   node tools/online-fra-claim-cli.js poll --token <pollToken>
-//   node tools/online-fra-claim-cli.js poll --token <pollToken> --accept true
-//   node tools/online-fra-claim-cli.js poll --token <pollToken> --accept false
-//   node tools/online-fra-claim-cli.js wait --token <pollToken>
+//   node tools/online-fra-claim-cli.js poll --token-env TOOLSENABLED_CLAIM_POLL_TOKEN
+//   node tools/online-fra-claim-cli.js poll --token-env TOOLSENABLED_CLAIM_POLL_TOKEN --accept true
+//   node tools/online-fra-claim-cli.js poll --token-env TOOLSENABLED_CLAIM_POLL_TOKEN --accept false
+//   node tools/online-fra-claim-cli.js wait --token-env TOOLSENABLED_CLAIM_POLL_TOKEN
 //   node tools/online-fra-claim-cli.js status
 //   node tools/online-fra-claim-cli.js disconnect
 //
@@ -38,13 +38,13 @@ function out(object) { process.stdout.write(`${JSON.stringify(object)}\n`); }
 
 const VERB_FLAGS = Object.freeze({
   open: ['--name'],
-  poll: ['--token', '--accept'],
-  wait: ['--token', '--deadline-ms'],
+  poll: ['--token', '--token-env', '--accept'],
+  wait: ['--token', '--token-env', '--deadline-ms'],
   status: [],
   disconnect: []
 });
 const ALL_FLAGS = new Set(Object.values(VERB_FLAGS).flat());
-const USAGE = 'usage: online-fra-claim-cli <open --name N | poll --token T [--accept true|false] | wait --token T [--deadline-ms N] | status | disconnect>';
+const USAGE = 'usage: online-fra-claim-cli <open --name N | poll (--token-env NAME | --token T) [--accept true|false] | wait (--token-env NAME | --token T) [--deadline-ms N] | status | disconnect>';
 
 function usage(message) {
   const error = new Error(message);
@@ -69,7 +69,9 @@ function parseArguments(args) {
     flags.set(flag, value);
   }
   if (verb === 'open' && !flags.has('--name')) usage('open needs --name "<what the account page should call this computer>"');
-  if ((verb === 'poll' || verb === 'wait') && !flags.has('--token')) usage(`${verb} needs --token <pollToken from open>`);
+  if ((verb === 'poll' || verb === 'wait') && flags.has('--token') === flags.has('--token-env')) {
+    usage(`${verb} needs exactly one of --token-env or --token.`);
+  }
   if (flags.has('--accept') && !['true', 'false'].includes(flags.get('--accept'))) {
     usage('poll needs --accept to be exactly true or false.');
   }
@@ -77,7 +79,16 @@ function parseArguments(args) {
   if (flags.has('--deadline-ms') && (!/^\d+$/.test(flags.get('--deadline-ms')) || !Number.isSafeInteger(deadlineMs) || deadlineMs <= 0)) {
     usage('wait needs --deadline-ms to be a positive integer.');
   }
-  return { verb, flags, deadlineMs };
+  let token = flags.get('--token'); // Retain the existing terminal API.
+  if (flags.has('--token-env')) {
+    const name = flags.get('--token-env');
+    token = process.env[name];
+    if (typeof token !== 'string' || !token.trim()) usage('The poll token environment variable is absent or empty.');
+    // Consume it before runtime loads or starts any credential helpers. Never
+    // interpolate the value (or a mistaken variable name) into a refusal.
+    delete process.env[name];
+  }
+  return { verb, flags, deadlineMs, token };
 }
 
 function pollAnswer(result) {
@@ -93,7 +104,7 @@ function pollAnswer(result) {
 }
 
 async function main() {
-  const { verb, flags, deadlineMs } = parseArguments(process.argv.slice(2));
+  const { verb, flags, deadlineMs, token } = parseArguments(process.argv.slice(2));
   // Parse the entire invocation before even loading runtime's state resolver.
   // An ambiguous local decision must not touch the vault or the account API.
   const { getSecret, setSecret, clearDeviceCredential } = require('../src/lib/runtime');
@@ -122,7 +133,6 @@ async function main() {
   }
 
   if (verb === 'poll') {
-    const token = flags.get('--token');
     const client = createDeviceClaimClient({ baseUrl: BASE, vault });
     if (flags.has('--accept')) {
       // Acceptance only parks the grant. A later ordinary poll collects and
@@ -140,7 +150,6 @@ async function main() {
     /* Wait until there is a local decision to make, a stored connection, an
        expired claim, or the deadline. A reservation is not passive progress:
        surface its account and stop so a terminal can explicitly accept/decline. */
-    const token = flags.get('--token');
     const client = createDeviceClaimClient({ baseUrl: BASE, vault });
     const startedAt = Date.now();
     for (;;) {

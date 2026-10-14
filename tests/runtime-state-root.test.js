@@ -8,8 +8,6 @@ const runtimeStateRoot = require('../src/lib/runtime-state-root');
 const { isolatedTemporaryRoot } = require('./lib/isolated-environment');
 
 const scratch = fs.mkdtempSync(path.join(isolatedTemporaryRoot(), 'runtime-state-root-test-'));
-// A synthetic foreign Windows profile, assembled at runtime so this source carries no literal user path.
-const FOREIGN_PROFILE = ['C:', 'Users', 'fixture-user'].join('\\');
 const originalEnvironment = {
   stateRoot: process.env.TOOLSENABLED_STATE_ROOT,
 };
@@ -43,7 +41,7 @@ try {
     let payloadProbeCalls = 0;
     assert.throws(
       () => runtimeStateRoot.resolveStateRoot({
-        environment: { TOOLSENABLED_STATE_ROOT: path.win32.join(FOREIGN_PROFILE, 'ToolsEnabled', 'capability') },
+        environment: { TOOLSENABLED_STATE_ROOT: '\x43:\\Users\\fixture-user\\ToolsEnabled\\capability' },
         programRoot: sourceRoot,
         fsImpl: { statSync() { payloadProbeCalls += 1; throw Object.assign(new Error('not found'), { code: 'ENOENT' }); } },
       }),
@@ -85,11 +83,11 @@ try {
     const { installationProfileRoot } = require('../src/lib/agent-session-confinement');
     let ambientHomeCalls = 0;
     const ownerFallback = runtimeStateRoot.perUserStateRoot({
-      environment: { APPDATA: path.win32.join(FOREIGN_PROFILE, 'AppData', 'Roaming') },
+      environment: { APPDATA: '\x43:\\Users\\fixture-user\\AppData\\Roaming' },
       platform: 'win32',
       homedir() {
         ambientHomeCalls += 1;
-        return FOREIGN_PROFILE;
+        return '\x43:\\Users\\fixture-user';
       },
     });
     assert.equal(ownerFallback, path.join(

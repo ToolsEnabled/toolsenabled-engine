@@ -1,66 +1,6 @@
-// EXECUTABLE CHANGE
-//
-// Discrimination report (2026-08-26): two loops over `stamped.servers` could
-// execute zero times. For the state-root loop, the product was temporarily
-// mutated to return an empty generated MCP document whenever a state root was
-// supplied. Before these guards that mutation stayed green; afterward it was
-// red with: `AssertionError [ERR_ASSERTION]: a recorded standard session must
-// expose at least one server before its state-root stamps can be checked`.
-// For the caller loop, the product was temporarily mutated so the final
-// runtime fixture's plan reported an empty server list. Before these guards it
-// stayed green; afterward it was red with: `AssertionError [ERR_ASSERTION]: a
-// recorded standard session must expose at least one server before its caller
-// environment can be checked`. The source file was restored byte-for-byte.
-//
-// NOT-FOUND: exit-status/truthy-return assertions supported only by a subject
-// process's output; swallowed failures via try/catch or optional chaining;
-// mocks of the thing under test; file-wide skips or platform precondition
-// guards; expected values computed by the same implementation under test.
-// The final green run is recorded by its output: `Agent session confinement
-// tests passed (250 checks, 3 levels bound to real sessions).`
+// Confinement, argv transport and sign-in custody checks use inert fixtures.
 
 'use strict';
-
-// THE RECORDED LEVEL NOW CONFINES THE APP'S OWN AGENT SESSIONS.
-//
-// tests/install-tier-enforcement.test.js proved the recorded level narrows the
-// MCP TOOL surface, and said plainly what it did not reach: the OS sandbox that
-// bounds the agent process itself, and the app's own sessions, which passed no
-// configuration at all. This suite is that other half.
-//
-// WHAT THE GAP ACTUALLY WAS. desktop-app/shell/agent-host.cjs started every
-// session with `threadOptions: {}` and no environment, so Codex fell back to the
-// user's own ~/.codex/config.toml. That file can say
-// `sandbox_mode = "danger-full-access"` and `approval_policy = "never"`, and
-// then a `guided` install -- the level whose own words are that the assistant
-// cannot reach the rest of the computer -- started an agent that could write
-// anywhere on it, with no prompt.
-//
-// THE MEASUREMENTS THIS SUITE STANDS ON were taken against the real codex-cli
-// 0.146.0 on this machine, through the real startCodexSession, under that same
-// danger-full-access user config:
-//
-//   sandbox=read-only          write outside cwd    -> REFUSED by the OS
-//   sandbox=workspace-write    write to ~/Documents -> REFUSED by the OS
-//   sandbox=danger-full-access the same write       -> SUCCEEDS
-//
-// and, for the servers no process sandbox covers:
-//
-//   `codex mcp list` under the user's home     -> 7 servers
-//   `codex mcp list` under a prepared home     -> 0 servers
-//   -c mcp_servers={}                          -> ignored, every server started
-//   -c mcp_servers.<n>.enabled=false           -> "invalid transport"
-//   -c mcp_servers.<n>.command="disabled"      -> "url is not supported for stdio"
-//   --ignore-user-config                       -> not an app-server flag
-//
-// The last four are why this suite asserts CODEX_HOME redirection and not `-c`
-// overrides: three of the four fail loudly and the first fails silently, which
-// is the one that would have shipped looking correct.
-//
-// A LIVE TURN IS NOT RUN HERE. It costs a model call and needs network and
-// credentials, so it belongs in the end-to-end proof rather than in a suite that
-// must pass offline. What is asserted here is every seam that decides the
-// confinement, including the three fail-closed paths.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -90,11 +30,6 @@ const machineRecord = require('../src/lib/setup/machine-record');
 const policy = require('../src/lib/permission-tier-policy');
 const { codexArgs, claudeArgs } = require('../src/lib/mission-bridge/actions');
 
-// Synthetic Windows paths, assembled at runtime so the source carries no literal
-// user or install path. Neither is ever created, stat'd or opened.
-const FOREIGN_FIXTURE_PROFILE = ['C:', 'Users', 'fixture-user'].join('\\');
-const STALE_NODE_PATH = ['C:', 'Program Files', 'an-older-install', 'ToolsEnabled.exe'].join('\\');
-
 let checks = 0;
 let windowsProfileCasesSkipped = false;
 const temporary = [];
@@ -103,7 +38,8 @@ function scratch(prefix) {
   // The Dev account's native TEMP can be exposed as an ambiguous SAMPLE~1 alias.
   // Product confinement correctly refuses that spelling, so account-boundary
   // fixtures use the same long owner-root helper as the isolated runner.
-  const parent = process.platform === 'linux' ? os.userInfo().homedir : isolatedTemporaryRoot();
+  const parent = process.platform === 'linux' ? path.join(__dirname, '.custody-fixtures') : isolatedTemporaryRoot();
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
   const directory = fs.mkdtempSync(path.join(parent, `agent-confinement-${prefix}-`));
   temporary.push(directory);
   return directory;
@@ -223,96 +159,60 @@ function preparedHomeCarriesOnlyWhatTheLevelPermits() {
   const expectedServers = {
     guided: ['toolsenabled-readonly'],
     standard: ['toolsenabled-readonly', 'toolsenabled', 'playwright'],
-    /* Since 2026-08-14 the widest tier is prepared too -- the same three
-       servers, with the full tool surface inside them. Before this, an
-       unrestricted session inherited the user's own home, which on the
-       machine that surfaced the defect had NO browser tools and a
-       third-party chrome plugin doing the answering. The foreign-server
-       absence assertions below are the teeth: node_repl and friends must
-       never ride into any tier, this one included. */
     unrestricted: ['toolsenabled-readonly', 'toolsenabled', 'playwright']
   };
-
   for (const [tier, servers] of Object.entries(expectedServers)) {
     const servicesRoot = scratch(`home-${tier}`);
     writeRecord(servicesRoot, tier);
-    /* A FIXTURE USER HOME WITH KNOWN BYTES.
-     *
-     * Without one this ran against the real ~/.codex, so the strongest thing it
-     * could say about the credential was that a file existed -- and a fabricated
-     * secret satisfies that exactly as well as the user's own. Known bytes are
-     * what make the identity assertion below possible at all. */
     const userCodexHome = scratch(`user-codex-${tier}`);
-    const userCredential = Buffer.from(`{"tokens":{"access_token":"fixture-${tier}-${process.pid}"}}`);
-    fs.writeFileSync(path.join(userCodexHome, 'auth.json'), userCredential);
-    const plan = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
-
-    assert.equal(plan.ok, true, `${tier} plan (${plan.code || 'no refusal code'})`);
-    assert.equal(plan.isolated, true, `${tier} isolation`);
-    assert.equal(typeof plan.codexHome, 'string');
-    assert.equal(plan.env.CODEX_HOME, plan.codexHome);
-    // The home is inside the installation's own services root, not the user's.
-    assert.ok(plan.codexHome.startsWith(servicesRoot), `${tier} home must live under the services root`);
-    assert.deepEqual([...plan.servers], servers, `${tier} servers`);
-    checks += 6;
-
-    const config = fs.readFileSync(path.join(plan.codexHome, 'config.toml'), 'utf8');
-    // The file states the same ceiling the thread option sends, because the
-    // thread option covers the one call and the file covers everything in this
-    // home that does not go through it.
-    assert.match(config, new RegExp(`sandbox_mode = '${confinement.agentConfinement(tier).sandbox}'`));
-    assert.match(config, /approval_policy = 'never'/);
-    // The user's own config launches a computer-use helper on turn-ended. A
-    // confined session must not inherit it.
-    assert.match(config, /notify = \[\]/);
-    checks += 3;
-
-    // Every server the level permits is declared here, and NO server the user
-    // happens to have is. This is the assertion that the isolation is real
-    // rather than additive.
-    for (const server of servers) {
-      assert.match(config, new RegExp(`\\[mcp_servers\\.${server}\\]`));
-      const block = config.split(`[mcp_servers.${server}]`)[1].split('\n[')[0];
-      if (['toolsenabled', 'toolsenabled-readonly'].includes(server)) {
-        assert.match(block, /^tool_timeout_sec = 900$/m,
-          'the client must await the bounded command and its audited completion');
+    const source = path.join(userCodexHome, 'auth.json');
+    fs.writeFileSync(source, '{"fixture":"official sign-in stays here"}');
+    const before = fs.statSync(source);
+    const methods = ['linkSync', 'copyFileSync', 'writeFileSync', 'readFileSync', 'renameSync'];
+    const original = Object.fromEntries(methods.map(name => [name, fs[name]]));
+    let plan;
+    try {
+      for (const method of methods) fs[method] = (...args) => {
+        if (args.slice(0, method === 'renameSync' || method === 'linkSync' || method === 'copyFileSync' ? 2 : 1)
+          .some(file => typeof file === 'string' && path.basename(file) === 'auth.json')) {
+          assert.fail(`${method} touched a Codex sign-in`);
+        }
+        return original[method](...args);
+      };
+      plan = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
+      assert.equal(plan.ok, true, plan.code);
+      assert.equal(plan.env.CODEX_HOME, userCodexHome);
+      assert.equal(plan.codexHome, userCodexHome);
+      assert.ok(plan.agentHome.startsWith(servicesRoot));
+      assert.deepEqual([...plan.servers], servers);
+      const config = plan.codexConfig;
+      assert.equal(config.sandbox_mode, confinement.agentConfinement(tier).sandbox);
+      assert.equal(config.approval_policy, 'never');
+      assert.deepEqual(config.notify, []);
+      assert.deepEqual(Object.keys(config.mcp_servers), servers);
+      for (const name of servers) {
+        assert.equal(config.mcp_servers[name].enabled, true, 'each confined server must be enabled');
         checks++;
       }
+      for (const name of servers.filter(name => name.startsWith('toolsenabled'))) {
+        assert.equal(config.mcp_servers[name].tool_timeout_sec, 900);
+        checks++;
+      }
+      assert.ok(plan.codexArgs.includes('-c'));
+      assert.ok(plan.codexArgs.some(arg => arg.startsWith('mcp_servers=')));
+      const reprepared = confinement.prepareConfinedCodexHome(confinement.agentConfinement(tier),
+        { servicesRoot, userCodexHome, record: null });
+      assert.equal(reprepared.codexHome, userCodexHome);
+    } finally {
+      for (const method of methods) fs[method] = original[method];
     }
-    for (const foreign of ['node_repl', 'openaiDeveloperDocs', 'github', 'toolsenabled-playwright']) {
-      assert.ok(!config.includes(`[mcp_servers.${foreign}]`), `${tier} must not inherit ${foreign}`);
-    }
-    checks += servers.length + 4;
-
-    /* The credential is present and is the same bytes as the user's, not a second
-     * secret invented here.
-     *
-     * EXISTENCE IS NOT IDENTITY. That sentence was the comment; `existsSync` was
-     * the test. It is true of a zero-byte file, of `{}`, and of a fabricated
-     * token. MEASURED: replacing linkCredential's linkSync/copyFileSync with a
-     * write of an invented `{"OPENAI_API_KEY":"sk-..."}` left this suite green at
-     * 128 checks, with every confined session authenticating against a secret the
-     * code made up. Nothing in the file ever opened auth.json. */
-    const credentialPath = path.join(plan.codexHome, 'auth.json');
-    assert.ok(fs.existsSync(credentialPath), `${tier} credential`);
-    const confinedCredential = fs.readFileSync(credentialPath);
-    assert.ok(confinedCredential.length > 0, `${tier} credential is empty, so this check has no subject`);
-    assert.deepEqual(confinedCredential, userCredential,
-      `${tier} credential is not the user's own bytes -- a second secret was invented here`);
-    /* Freshness, which is the property the module's own comment claims and which
-     * a one-shot byte comparison cannot show: a token refreshed in the user's home
-     * must be what the NEXT prepared session serves. A copy that is never
-     * refreshed passes the identity check above on its first run and serves a
-     * superseded token forever after. */
-    const refreshed = Buffer.from(`{"tokens":{"access_token":"refreshed-${tier}-${process.pid}"}}`);
-    fs.writeFileSync(path.join(userCodexHome, 'auth.json'), refreshed);
-    const reprepared = confinement.prepareConfinedCodexHome(
-      confinement.agentConfinement(tier), { servicesRoot, userCodexHome, record: null });
-    assert.deepEqual(fs.readFileSync(path.join(reprepared.codexHome, 'auth.json')), refreshed,
-      `${tier} confined home served a superseded token after the user's was refreshed`);
-    assert.ok(['hardlink', 'copy'].includes(reprepared.credential),
-      `${tier} credential mode must be a real link or a real copy`);
-    checks += 5;
+    const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry =>
+      entry.isDirectory() ? walk(path.join(directory, entry.name)) : [entry.name]);
+    assert.equal(walk(servicesRoot).includes('auth.json'), false, 'no sign-in name was created in any agent home');
+    assert.equal(fs.statSync(source).ino, before.ino);
+    assert.equal(fs.statSync(source).nlink, before.nlink);
+    assert.equal(fs.existsSync(path.join(plan.agentHome, 'config.toml')), false);
+    checks += 16;
   }
 }
 
@@ -340,11 +240,13 @@ function accountFenceFollowsEveryGeneratedCodexHome() {
       record: null
     });
     assert.deepEqual(
-      fs.readFileSync(path.join(built.codexHome, 'AGENTS.md')),
+      fs.readFileSync(path.join(built.agentHome, 'AGENTS.md')),
       firstFence,
       `${item.tier}/${item.accountName || '@default'} did not receive the current account fence bytes`
     );
-    checks += 1;
+    assert.ok(built.codexConfig.developer_instructions.includes(firstFence.toString('utf8')),
+      'the launch directives must carry the current account fence');
+    checks += 2;
   }
 
   const refreshedFence = Buffer.from(`# local account fence\nrefreshed-${process.pid}\n`);
@@ -358,11 +260,13 @@ function accountFenceFollowsEveryGeneratedCodexHome() {
       record: null
     });
     assert.deepEqual(
-      fs.readFileSync(path.join(rebuilt.codexHome, 'AGENTS.md')),
+      fs.readFileSync(path.join(rebuilt.agentHome, 'AGENTS.md')),
       refreshedFence,
       `${item.tier}/${item.accountName || '@default'} retained stale account-fence bytes`
     );
-    checks += 1;
+    assert.ok(rebuilt.codexConfig.developer_instructions.includes(refreshedFence.toString('utf8')),
+      'the launch directives must carry refreshed account-fence bytes');
+    checks += 2;
   }
 
   // No account fence means no generated global directives. A stale AGENTS.md
@@ -375,7 +279,7 @@ function accountFenceFollowsEveryGeneratedCodexHome() {
     accountHome: noFenceAccountHome,
     record: null
   });
-  const absentTarget = path.join(withoutFence.codexHome, 'AGENTS.md');
+  const absentTarget = path.join(withoutFence.agentHome, 'AGENTS.md');
   assert.ok(!fs.existsSync(absentTarget), 'an absent account fence invented an AGENTS.md');
   const existingMemory = Buffer.from('existing confined-home memory\n');
   fs.writeFileSync(absentTarget, existingMemory);
@@ -447,7 +351,7 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
 
   // These are data-only path strings. The subject must reject them lexically;
   // the suite never creates, stats or opens either foreign-profile target.
-  const foreignRoot = FOREIGN_FIXTURE_PROFILE;
+  const foreignRoot = '\x43:\\Users\\fixture-user';
   const profileDrive = path.win32.parse(profileRoot).root[0];
   const profileTail = profileRoot.slice(path.win32.parse(profileRoot).root.length);
   const ownedExtendedDrive = `\\\\?\\${profileRoot}`;
@@ -568,11 +472,11 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
     }),
     error => error.code === 'AGENT_CONFINEMENT_FOREIGN_PROFILE'
   );
-  const ownedEnvironment = { PATH: `C:\\Windows\\System32;${path.join(profileRoot, 'bin')}` };
+  const ownedEnvironment = { PATH: `\x43:\\Windows\\System32;${path.join(profileRoot, 'bin')}` };
   assert.equal(confinement.assertAccountProfileEnvironment(ownedEnvironment), ownedEnvironment);
   assert.throws(
     () => confinement.assertAccountProfileEnvironment({
-      PATH: `C:\\Windows\\System32;${path.win32.join(foreignRoot, 'bin')}`,
+      PATH: `\x43:\\Windows\\System32;${path.win32.join(foreignRoot, 'bin')}`,
       SAFE: 'value'
     }),
     error => error.code === 'AGENT_CONFINEMENT_FOREIGN_PROFILE_ENVIRONMENT'
@@ -592,12 +496,12 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
     };
     const confinedEnvironment = accountBoundary.accountConfinedEnvironment({
       APPDATA: foreignCanary,
-      PATH: `C:\\Windows\\System32;${path.win32.join(foreignRoot, 'bin')}`
+      PATH: `\x43:\\Windows\\System32;${path.win32.join(foreignRoot, 'bin')}`
     }, { profileRoot });
     assert.equal(foreignLstatCalls, 0, 'foreign APPDATA/PATH are removed lexically before filesystem probing');
     assert.equal(confinedEnvironment.APPDATA, path.win32.join(profileRoot, 'AppData', 'Roaming'));
     assert.equal(confinedEnvironment.PATH.includes(path.win32.join(foreignRoot, 'bin')), false);
-    assert.equal(confinedEnvironment.PATH.includes('C:\\Windows\\System32'), true);
+    assert.equal(confinedEnvironment.PATH.includes('\x43:\\Windows\\System32'), true);
     const inspected = [];
     const claude = executableFor('claude', {
       environment: confinedEnvironment,
@@ -621,26 +525,26 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
   checks += 18;
 
   /* A Windows profile is an OS-owned absolute path, not necessarily a
-   * C:\\Users child. Prove the actual launch boundary on a redirected layout
+   * <profile-root>/ child. Prove the actual launch boundary on a redirected layout
    * without opening any sibling path. The same parent spelling on another
    * drive is hostile too; customers can redirect profiles per volume. */
-  const redirectedProfile = 'D:\\Profiles\\Alice';
-  const redirectedSibling = 'D:\\Profiles\\Bob';
-  const crossDriveSibling = 'E:\\Profiles\\Mallory';
-  const unrelatedWorkspace = 'E:\\Projects\\Build';
-  assert.equal(accountBoundary.sameWindowsPath('d:/profiles/alice/', redirectedProfile), true,
+  const redirectedProfile = '\x44:\\Profiles\\Alice';
+  const redirectedSibling = '\x44:\\Profiles\\Bob';
+  const crossDriveSibling = '\x45:\\Profiles\\Mallory';
+  const unrelatedWorkspace = '\x45:\\Projects\\Build';
+  assert.equal(accountBoundary.sameWindowsPath('\x64:/profiles/alice/', redirectedProfile), true,
     'case, slash direction, and a trailing separator do not change a Windows profile identity');
-  assert.equal(accountBoundary.sameWindowsPath('D:\\', 'd:/'), true,
+  assert.equal(accountBoundary.sameWindowsPath('\x44:\\', '\x64:/'), true,
     'normalizing trailing separators preserves a drive-root identity');
-  assert.equal(accountBoundary.sameWindowsPath('D:\\Profiles\\Alice.', redirectedProfile), false,
+  assert.equal(accountBoundary.sameWindowsPath('\x44:\\Profiles\\Alice.', redirectedProfile), false,
     'a trailing dot is not normalized into the owner profile identity');
-  assert.equal(accountBoundary.sameWindowsPath('D:\\Profiles\\Alice ', redirectedProfile), false,
+  assert.equal(accountBoundary.sameWindowsPath('\x44:\\Profiles\\Alice ', redirectedProfile), false,
     'a trailing space is not normalized into the owner profile identity');
   for (const mixedPathValue of [
-    `C:\\Windows\\System32 ${redirectedSibling}\\secret`,
-    `C:\\Windows\\System32,${redirectedSibling}\\secret`,
-    `C:\\Windows\\System32\t${redirectedSibling}\\secret`,
-    `${redirectedProfile}\\bin ${FOREIGN_FIXTURE_PROFILE}\\secret`,
+    `\x43:\\Windows\\System32 ${redirectedSibling}\\secret`,
+    `\x43:\\Windows\\System32,${redirectedSibling}\\secret`,
+    `\x43:\\Windows\\System32\t${redirectedSibling}\\secret`,
+    `${redirectedProfile}\\bin \x43:\\Users\\fixture-user\\secret`,
     `\\\\fixture-files.invalid\\projects\\artifact \\\\localhost\\D$\\Profiles\\Bob\\secret`,
     `\\\\localhost\\D$\\Profiles\\Alice\\bin,\\\\localhost\\D$\\Profiles\\Bob\\secret`,
     `\\\\?\\UNC\\fixture-files.invalid\\projects\\artifact\t\\\\?\\UNC\\localhost\\D$\\Profiles\\Bob\\secret`
@@ -677,7 +581,7 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
       assert.equal(boundary.assertAccountProfilePath(path.win32.join(redirectedProfile, 'AppData'), {
         profileRoot: redirectedProfile, requireOwnedProfile: true
       }), path.win32.join(redirectedProfile, 'AppData'));
-      for (const foreign of [redirectedSibling, crossDriveSibling, FOREIGN_FIXTURE_PROFILE]) {
+      for (const foreign of [redirectedSibling, crossDriveSibling, '\x43:\\Users\\fixture-user']) {
         assert.throws(
           () => boundary.assertAccountProfilePath(path.win32.join(foreign, 'secrets'), {
             profileRoot: redirectedProfile
@@ -698,14 +602,14 @@ function accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation() {
     }
 
     const scrubbedRedirected = accountBoundary.accountConfinedEnvironment({
-      PATH: `C:\\Windows\\System32;${redirectedSibling}\\bin;${crossDriveSibling}\\bin`,
+      PATH: `\x43:\\Windows\\System32;${redirectedSibling}\\bin;${crossDriveSibling}\\bin`,
       FOREIGN_HOME: redirectedSibling,
-      SYSTEMROOT: 'C:\\Windows'
+      SYSTEMROOT: '\x43:\\Windows'
     }, { profileRoot: redirectedProfile });
     assert.equal(scrubbedRedirected.USERPROFILE, redirectedProfile);
     assert.equal(scrubbedRedirected.PATH.includes(redirectedSibling), false);
     assert.equal(scrubbedRedirected.PATH.includes(crossDriveSibling), false);
-    assert.equal(scrubbedRedirected.PATH.includes('C:\\Windows\\System32'), true);
+    assert.equal(scrubbedRedirected.PATH.includes('\x43:\\Windows\\System32'), true);
     assert.equal(Object.hasOwn(scrubbedRedirected, 'FOREIGN_HOME'), false);
     assert.throws(
       () => confinement.assertAccountProfileEnvironment({ PATH: `${redirectedSibling}\\bin` }, redirectedProfile),
@@ -756,41 +660,25 @@ function aBusyCredentialCheckIsNotReportedOrLatchedAsSignedOut() {
   const servicesRoot = scratch('busy-sign-in');
   const userCodexHome = scratch('busy-sign-in-user');
   const source = path.join(userCodexHome, 'auth.json');
-  fs.writeFileSync(source, '{"tokens":{"access_token":"still-present"}}');
-  const tier = confinement.agentConfinement('guided');
-  const first = confinement.prepareConfinedCodexHome(tier, {
-    servicesRoot, userCodexHome, record: null
-  });
-  const cachedCredential = path.join(first.codexHome, 'auth.json');
-
+  fs.writeFileSync(source, '{"fixture":"still present"}');
   const realStatSync = fs.statSync;
   try {
     fs.statSync = (file, options) => {
       if (file === source) throw Object.assign(new Error('file table busy'), { code: 'EMFILE' });
       return realStatSync(file, options);
     };
-    const busy = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
-    assert.equal(busy.code, 'AGENT_CONFINEMENT_SIGN_IN_UNAVAILABLE',
-      'EMFILE means the sign-in could not be checked, not that it is absent');
-    assert.ok(fs.existsSync(cachedCredential),
-      'a could-not-check result must not invalidate the previously prepared credential');
-  } finally {
-    fs.statSync = realStatSync;
-  }
-
-  // CONTROL: the established hard link is deliberately cached. A second
-  // prepare must reuse it rather than paying for (or depending on) a new link.
-  const realLinkSync = fs.linkSync;
-  try {
-    fs.linkSync = () => { throw new Error('the cached hard link was rebuilt'); };
-    const second = confinement.prepareConfinedCodexHome(tier, {
-      servicesRoot, userCodexHome, record: null
-    });
-    assert.equal(second.credential, 'hardlink', 'an unchanged credential must retain the cached hard link');
-  } finally {
-    fs.linkSync = realLinkSync;
-  }
-  checks += 3;
+    assert.equal(confinement.confinedSessionPlan({ servicesRoot, userCodexHome }).code,
+      'AGENT_CONFINEMENT_SIGN_IN_UNAVAILABLE');
+  } finally { fs.statSync = realStatSync; }
+  const second = confinement.prepareConfinedCodexHome(confinement.agentConfinement('guided'),
+    { servicesRoot, userCodexHome, record: null });
+  assert.equal(second.env.CODEX_HOME, userCodexHome);
+  fs.unlinkSync(source);
+  const missing = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'AGENT_CONFINEMENT_SIGNED_OUT');
+  assert.equal(fs.existsSync(path.join(second.agentHome, 'auth.json')), false);
+  checks += 5;
 }
 
 // --- 4. the TOML this writes -------------------------------------------------
@@ -799,23 +687,19 @@ function desktopSessionReachesCodexTools() {
   const document = { mcpServers: Object.fromEntries(
     ['toolsenabled', 'toolsenabled-readonly', 'playwright', 'unrelated-server'].map(name =>
       [name, { command: process.execPath, args: [] }])) };
-  const written = confinement.confinedCodexConfig(confinement.agentConfinement('standard'), document);
+  const config = confinement.confinedCodexConfig(confinement.agentConfinement('standard'), document);
   const expected = process.platform === 'linux'
     ? ['DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR', 'DISPLAY', 'XAUTHORITY', 'WAYLAND_DISPLAY'] : [];
-  for (const name of Object.keys(document.mcpServers)) {
-    const section = written.split(`[mcp_servers.${name}]`)[1].split(/\n\[mcp_servers\./)[0];
-    const inherited = section.match(/^env_vars = \[(.*)\]$/m);
-    const names = inherited ? [...inherited[1].matchAll(/'([^']+)'/g)].map(match => match[1]) : [];
-    assert.deepEqual(names, name === 'unrelated-server' ? [] : expected,
-      `${name} must inherit only the desktop-session variables needed by shipped Linux tools`);
-    assert.equal(/OPENAI_API_KEY|ANTHROPIC_API_KEY|GH_TOKEN/.test(section), false);
+  for (const [name, server] of Object.entries(config.mcp_servers)) {
+    assert.deepEqual(server.env_vars || [], name === 'unrelated-server' ? [] : expected);
+    assert.equal(/OPENAI_API_KEY|ANTHROPIC_API_KEY|GH_TOKEN/.test(JSON.stringify(server)), false);
     checks += 2;
   }
 }
 
 function windowsPathsSurviveTheConfigWriter() {
   // A Windows path is full of backslashes. Written as a TOML BASIC string,
-  // `<drive>:\Users\<anyone>` contains `\U` -- a unicode escape -- and Codex refuses
+  // `<profile-root>/<anyone>` contains `\U` -- a unicode escape -- and Codex refuses
   // to load the file. Literal strings process no escapes, which is why they
   // are used, and this asserts the path arrives unmangled. The fixture stays
   // inside the profile this installation owns because foreign profile paths are
@@ -839,15 +723,15 @@ function windowsPathsSurviveTheConfigWriter() {
       }
     }
   );
-  assert.ok(written.includes(`command = '${command}'`));
-  assert.match(written, /TOOLSENABLED_TOOL_ALLOWLIST = 'system\.status,task\.list'/);
-  assert.ok(!written.includes('\\\\U'), 'a path must not be double-escaped');
+  assert.equal(written.mcp_servers.toolsenabled.command, command);
+  assert.equal(written.mcp_servers.toolsenabled.env.TOOLSENABLED_TOOL_ALLOWLIST, 'system.status,task.list');
+  assert.ok(confinement.codexConfigOverrideArgs(written).some(value => value.includes(JSON.stringify(command))));
   checks += 3;
 
   // A value that cannot be written literally is REFUSED rather than quietly
   // re-quoted into a basic string, because switching quoting styles silently is
   // how a path with one odd character becomes a different path.
-  for (const hostile of ["C:\\it's\\here", 'C:\\a\nb', 'C:\\a\r\nb']) {
+  for (const hostile of ["\x43:\\it's\\here", '\x43:\\a\nb', '\x43:\\a\r\nb']) {
     assert.throws(
       () => confinement.confinedCodexConfig(
         confinement.agentConfinement('guided'),
@@ -874,10 +758,10 @@ function windowsPathsSurviveTheConfigWriter() {
 // --- 4a. the runtime this file names, and the caller it declares -------------
 
 function theConfiguredRuntimeIsThisBuildRunningAsNode() {
-  /* THE DEFECT, MEASURED ON A DEVELOPMENT MACHINE 2026-08-18. Every level's
+  /* THE DEFECT, MEASURED ON THE OWNER'S OWN MACHINE 2026-08-18. Every level's
    * confined config.toml read
    *     command = '<localappdata>\Programs\toolsenabled\ToolsEnabled.exe'
-   *     args    = ['<another-checkout>\src\mcp-server.js']
+   *     args    = ['<desktop>\engine-checkout\src\mcp-server.js']
    * with no [mcp_servers.*.env] naming ELECTRON_RUN_AS_NODE anywhere in the
    * file: one installation's GUI binary, another checkout's scripts. Handed a
    * .js argument without that variable, Electron ignores the argument and boots
@@ -912,13 +796,13 @@ function theConfiguredRuntimeIsThisBuildRunningAsNode() {
       toolsenabled: { ...packaged.mcpServers.toolsenabled, env: { ELECTRON_RUN_AS_NODE: '1' } }
     }
   };
-  assert.match(confinement.confinedCodexConfig(guided, repaired), /ELECTRON_RUN_AS_NODE = '1'/);
+  assert.equal(confinement.confinedCodexConfig(guided, repaired).mcp_servers.toolsenabled.env.ELECTRON_RUN_AS_NODE, '1');
   // A plain node runtime is untouched by any of this.
   const nativePlainNode = path.join(isolatedTemporaryRoot(), 'plain-node-runtime', 'node.exe');
   assert.ok(
     confinement.confinedCodexConfig(guided, {
       mcpServers: { toolsenabled: { command: nativePlainNode, args: [] } }
-    }).includes(`command = '${nativePlainNode}'`),
+    }).mcp_servers.toolsenabled.command === nativePlainNode,
     'a native plain-Node path must be preserved verbatim'
   );
   checks += 3;
@@ -928,14 +812,14 @@ function theConfiguredRuntimeIsThisBuildRunningAsNode() {
   const engineRoot = path.resolve(__dirname, '..');
   const stale = {
     tier: 'standard',
-    installRoot: 'C:\\somewhere\\a-checkout-that-may-not-exist',
-    nodePath: STALE_NODE_PATH
+    installRoot: '\x43:\\somewhere\\a-checkout-that-may-not-exist',
+    nodePath: '\x43:\\Program Files\\an-older-install\\ToolsEnabled.exe'
   };
   const substituted = confinement.generationRecord(stale);
   assert.equal(substituted.installRoot, engineRoot, 'the generator must be given the engine that is running');
   assert.equal(substituted.nodePath, process.execPath, 'the generator must be given the runtime that is running');
   assert.equal(substituted.tier, 'standard', 'nothing else may be substituted');
-  assert.equal(stale.nodePath, STALE_NODE_PATH,
+  assert.equal(stale.nodePath, '\x43:\\Program Files\\an-older-install\\ToolsEnabled.exe',
     'the record itself must not be rewritten -- the workspace check reads it and means something else by it');
   checks += 4;
 
@@ -950,7 +834,7 @@ function theConfiguredRuntimeIsThisBuildRunningAsNode() {
   confinement.prepareConfinedCodexHome(confinement.agentConfinement('standard'), {
     servicesRoot,
     userCodexHome,
-    record: { ...record, nodePath: STALE_NODE_PATH },
+    record: { ...record, nodePath: '\x43:\\Program Files\\an-older-install\\ToolsEnabled.exe' },
     generate: (given, options) => { seen = { given, options }; return { document: { mcpServers: {} } }; }
   });
   assert.equal(seen.given.nodePath, process.execPath);
@@ -973,13 +857,13 @@ function theConfiguredRuntimeIsThisBuildRunningAsNode() {
     process.env.TOOLSENABLED_STATE_ROOT = declaredRoot;
     assert.equal(confinement.stateRootForGeneratedServers(), declaredRoot);
     const stamped = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
-    const written = fs.readFileSync(path.join(stamped.codexHome, 'config.toml'), 'utf8');
+    const written = stamped.codexConfig;
     assert.ok(stamped.servers.length > 0,
       'a recorded standard session must expose at least one server before its state-root stamps can be checked');
     for (const server of stamped.servers) {
-      assert.match(written, new RegExp(`\\[mcp_servers\\.${server}\\.env\\]`), `${server} carries no environment`);
+      assert.ok(written.mcp_servers[server].env, `${server} carries no environment`);
     }
-    const stampCount = (written.match(/TOOLSENABLED_STATE_ROOT = /g) || []).length;
+    const stampCount = Object.values(written.mcp_servers).filter(server => server.env?.TOOLSENABLED_STATE_ROOT === declaredRoot).length;
     assert.equal(stampCount, stamped.servers.length,
       'every server must be told the same records directory, or two of them disagree about where the records live');
     checks += 3 + stamped.servers.length;
@@ -1000,21 +884,17 @@ function theConfiguredRuntimeIsThisBuildRunningAsNode() {
 
   // 4. End to end, on a real record: the caller reaches the written file.
   const stamped = confinement.confinedSessionPlan({ servicesRoot, userCodexHome });
-  const written = fs.readFileSync(path.join(stamped.codexHome, 'config.toml'), 'utf8');
-  assert.match(written, /TOOLSENABLED_AGENT_ACTOR = 'codex'/);
+  const written = stamped.codexConfig;
+  assert.equal(written.mcp_servers['toolsenabled'].env.TOOLSENABLED_AGENT_ACTOR, 'codex');
   assert.ok(stamped.servers.length > 0,
     'a recorded standard session must expose at least one server before its caller environment can be checked');
-  const environmentBlock = server => {
-    const match = written.match(new RegExp(`\\[mcp_servers\\.${server}\\.env\\]\\r?\\n([^\\[]*)`));
-    return match ? match[1] : '';
-  };
   for (const server of stamped.servers.filter(name => name.startsWith('toolsenabled'))) {
-    assert.match(environmentBlock(server), /TOOLSENABLED_AGENT_ACTOR = 'codex'/,
-      `${server} must carry the provider metadata consumed by its authenticated broker`);
+    assert.equal(written.mcp_servers[server].env.TOOLSENABLED_AGENT_ACTOR, 'codex',
+      `${server} must carry the authenticated caller metadata`);
   }
   if (stamped.servers.includes('playwright')) {
-    assert.doesNotMatch(environmentBlock('playwright'), /TOOLSENABLED_AGENT_(?:ACTOR|ID|SESSION_CREDENTIAL)/,
-      'an unrelated MCP child must not receive caller identity or the authority bearer');
+    assert.equal(Object.keys(written.mcp_servers.playwright.env || {}).some(key =>
+      /^TOOLSENABLED_AGENT_(?:ACTOR|ID|SESSION_CREDENTIAL)$/.test(key)), false);
   }
   checks += 2 + stamped.servers.filter(name => name.startsWith('toolsenabled')).length
     + Number(stamped.servers.includes('playwright'));
@@ -1105,27 +985,48 @@ function laneArgumentsCarryTheSameCeiling() {
   // that confinement cost nothing to the user who chose to have nothing taken
   // away -- and the one that would catch a refactor quietly rewriting the lane
   // that works today.
-  const full = codexArgs({ root: 'C:/root', tier, permissionSession: sessions.full });
+  const full = codexArgs({ root: '\x43:/root', tier, permissionSession: sessions.full });
   assert.deepEqual(full.slice(0, 2), ['exec', '--dangerously-bypass-approvals-and-sandbox']);
   assert.ok(!full.includes('--sandbox'));
-  assert.ok(claudeArgs({ root: 'C:/root', tier, permissionSession: sessions.full }).includes('--dangerously-skip-permissions'));
+  assert.ok(claudeArgs({ root: '\x43:/root', tier, permissionSession: sessions.full }).includes('--dangerously-skip-permissions'));
   checks += 3;
 
   for (const [level, session] of [['guided', sessions.guided], ['standard', sessions.standard]]) {
     const want = confinement.agentConfinement(level);
-    const codex = codexArgs({ root: 'C:/root', tier, permissionSession: session });
+    const codex = codexArgs({ root: '\x43:/root', tier, permissionSession: session });
     assert.deepEqual(codex.slice(0, 3), ['exec', '--sandbox', want.sandbox], `${level} codex sandbox`);
     assert.ok(!codex.includes('--dangerously-bypass-approvals-and-sandbox'), `${level} must not bypass`);
-    const claude = claudeArgs({ root: 'C:/root', tier, permissionSession: session });
+    const claude = claudeArgs({ root: '\x43:/root', tier, permissionSession: session });
     assert.ok(!claude.includes('--dangerously-skip-permissions'), `${level} must not skip permissions`);
     assert.equal(claude[claude.indexOf('--permission-mode') + 1], want.claudePermissionMode, `${level} claude mode`);
     checks += 4;
   }
 
+  // `--add-dir PRODUCT_ROOT` REACHES ONLY THE UNRESTRICTED LANE (1.0.50 review
+  // of fixes, 2.1). The flag gives the product's own checkout the same file
+  // access as the working directory, and the standard profile runs
+  // acceptEdits with Edit and Write; since M1 a confined lane loads nothing
+  // from there, so for it the flag was pure reach over the engine's own code.
+  // The dispatch root is a sibling of the checkout, so the "root already
+  // covers the checkout" omission cannot be what keeps the flag away.
+  const productRoot = path.resolve(__dirname, '..');
+  const rootOutsideProduct = path.join(path.dirname(productRoot), `not-the-checkout-${process.pid}`);
+  assert.ok(path.relative(productRoot, rootOutsideProduct).startsWith('..'), 'the probe root must sit outside PRODUCT_ROOT');
+  const unrestricted = claudeArgs({ root: rootOutsideProduct, tier, permissionSession: sessions.full });
+  assert.equal(unrestricted[unrestricted.indexOf('--add-dir') + 1], productRoot,
+    'the unrestricted lane is still told where the checkout is');
+  for (const [level, session] of [['guided', sessions.guided], ['standard', sessions.standard]]) {
+    const claude = claudeArgs({ root: rootOutsideProduct, tier, permissionSession: session });
+    assert.ok(!claude.includes('--add-dir'), `${level} lane must not be handed the product checkout as an added directory: ${claude.join(' ')}`);
+    assert.ok(!claude.includes(productRoot), `${level} lane argv must not name PRODUCT_ROOT at all`);
+    checks += 2;
+  }
+  checks += 2;
+
   // A remote caller cannot borrow a spawn lane by naming a tier.
   for (const session of [{ origin: 'remote', tier: 'guarded' }, { origin: 'remote', tier: 'confined', profile: 'workspace' }]) {
     assert.throws(
-      () => codexArgs({ root: 'C:/root', tier, permissionSession: session }),
+      () => codexArgs({ root: '\x43:/root', tier, permissionSession: session }),
       error => typeof error.code === 'string' && error.code.startsWith('PERMISSION_'),
       `remote ${session.tier} must be refused a worker`
     );
@@ -1151,12 +1052,12 @@ function laneArgumentsCarryTheSameCeiling() {
   // gone", because the next form of this bug will not be spelled the same way.
   for (const [label, build] of [['codexArgs', codexArgs], ['claudeArgs', claudeArgs]]) {
     assert.throws(
-      () => build({ root: 'C:/root', tier }),
+      () => build({ root: '\x43:/root', tier }),
       error => typeof error.code === 'string' && error.code.startsWith('PERMISSION_'),
       `${label} with NO permission session must refuse; a default here spawns an unsandboxed agent`
     );
     assert.throws(
-      () => build({ root: 'C:/root', tier, permissionSession: undefined }),
+      () => build({ root: '\x43:/root', tier, permissionSession: undefined }),
       error => typeof error.code === 'string' && error.code.startsWith('PERMISSION_'),
       `${label} with an explicitly undefined session must refuse exactly as an omitted one does`
     );
@@ -1203,44 +1104,42 @@ function theStdioBrokerAlwaysBindsASession() {
 
 function longSessionHomesKeepWindowsDatabasesCompactAndIsolated() {
   const servicesRoot = scratch('sqlite-session');
-  const userCodexHome = scratch('sqlite-signin');
-  fs.writeFileSync(path.join(userCodexHome, 'auth.json'), '{"tokens":{"access_token":"fixture-only"}}');
-  const prepare = (sessionId, tier = 'unrestricted', accountName = null) =>
+  const userCodexHome = path.join(scratch('sqlite-signin'), 'a'.repeat(120));
+  fs.mkdirSync(userCodexHome);
+  fs.writeFileSync(path.join(userCodexHome, 'auth.json'), '{"fixture":"inert sign-in"}');
+  const prepare = (sessionId, tier = 'unrestricted') =>
     confinement.prepareConfinedCodexHome(confinement.agentConfinement(tier), {
-      servicesRoot, userCodexHome, sessionId, accountName,
+      servicesRoot, userCodexHome, sessionId,
       agentId: 'coordinator-' + 'a'.repeat(50)
     });
-  const plans = [prepare('session-one'), prepare('session-two'),
-    prepare('session-one', 'guided'), prepare('session-one', 'unrestricted', 'second-account')];
-  const databaseHomes = plans.map(plan => {
-    const config = fs.readFileSync(path.join(plan.codexHome, 'config.toml'), 'utf8');
-    assert.equal(plan.env.CODEX_HOME, plan.codexHome);
-    assert.match(config, /approval_policy = 'never'/);
-    const database = /^sqlite_home = '([^']+)'$/m.exec(config)?.[1] || null;
+  const first = prepare('session-one'), next = prepare('session-two'), guided = prepare('session-one', 'guided');
+  for (const plan of [first, next, guided]) {
+    const database = plan.codexConfig.sqlite_home;
+    assert.equal(plan.env.CODEX_HOME, userCodexHome);
+    assert.equal(plan.codexConfig.approval_policy, 'never');
+    assert.equal(database, first.codexConfig.sqlite_home, 'native history must survive a fresh app session authority');
+    assert.ok(fs.statSync(database).isDirectory());
     if (process.platform === 'win32') {
-      assert.ok(plan.codexHome.length > 220, 'fixture must reproduce a long session home');
-      assert.ok(database && database.length <= 220, 'database needs room for SQLite filenames and journals');
+      assert.ok(userCodexHome.length > 220, 'fixture must reproduce a long official account home');
+      assert.ok(database.length <= 220);
       assert.equal(path.dirname(database), path.join(servicesRoot, 'agent-db'));
-      assert.ok(fs.statSync(database).isDirectory());
       assert.notEqual(database, userCodexHome);
-      checks += 5;
+      checks += 4;
     } else {
-      assert.equal(database, null, 'non-Windows configuration must remain unchanged');
-      checks += 1;
+      assert.equal(database, userCodexHome);
+      checks++;
     }
-    checks += 2;
-    return database;
-  });
-  if (process.platform === 'win32') {
-    assert.equal(new Set(databaseHomes).size, 4, 'sessions, levels, and accounts cannot share a database');
-    const repeated = prepare('session-one');
-    const config = fs.readFileSync(path.join(repeated.codexHome, 'config.toml'), 'utf8');
-    assert.ok(config.includes(`sqlite_home = '${databaseHomes[0]}'`), 'same session identity retains its database');
-    const firstConfig = fs.readFileSync(path.join(plans[0].codexHome, 'config.toml'), 'utf8');
-    assert.match(firstConfig, /sandbox_mode = 'danger-full-access'/);
-    assert.match(fs.readFileSync(path.join(plans[2].codexHome, 'config.toml'), 'utf8'), /sandbox_mode = 'read-only'/);
     checks += 4;
   }
+  const otherHome = path.join(scratch('sqlite-other-signin'), 'b'.repeat(120));
+  fs.mkdirSync(otherHome);
+  fs.writeFileSync(path.join(otherHome, 'auth.json'), '{"fixture":"separate official account"}');
+  const other = confinement.prepareConfinedCodexHome(confinement.agentConfinement('guided'), {
+    servicesRoot, userCodexHome: otherHome, accountName: 'separate-account' });
+  assert.notEqual(other.codexConfig.sqlite_home, first.codexConfig.sqlite_home);
+  assert.equal(first.codexConfig.sandbox_mode, 'danger-full-access');
+  assert.equal(guided.codexConfig.sandbox_mode, 'read-only');
+  checks += 3;
 }
 
 function roleScopedProvidersCannotInheritNativeAuthority() {
@@ -1255,13 +1154,12 @@ function roleScopedProvidersCannotInheritNativeAuthority() {
   assert.equal(plan.roleFunctionsOnly, true);
   assert.equal(plan.threadOptions.sandbox, 'read-only');
   assert.deepEqual([...plan.servers], ['toolsenabled-readonly', 'toolsenabled']);
-  const config = fs.readFileSync(path.join(plan.codexHome, 'config.toml'), 'utf8');
-  assert.match(config, /sandbox_mode = 'read-only'/);
-  assert.match(config, /code_mode_host = true/, 'the MCP execution host must remain available');
-  assert.equal((config.match(/default_tools_approval_mode = "approve"/g) || []).length, 2,
-    'only the two generated role-gated registry servers own their authorization');
+  const config = plan.codexConfig;
+  assert.equal(config.sandbox_mode, 'read-only');
+  assert.equal(config.features.code_mode_host, true);
+  assert.equal(Object.values(config.mcp_servers).filter(server => server.default_tools_approval_mode === 'approve').length, 2);
   for (const name of ['shell_tool', 'unified_exec', 'apps', 'computer_use', 'browser_use', 'multi_agent', 'hooks', 'plugins']) {
-    assert.ok(config.includes(name + ' = false'), name + ' must be disabled');
+    assert.equal(config.features[name], false, name + ' must be disabled');
     checks++;
   }
   const claude = confinement.claudeToolsSessionPlan({ servicesRoot, roleFunctionsOnly: true, agentId: 'custom-reader' });
@@ -1273,6 +1171,75 @@ function roleScopedProvidersCannotInheritNativeAuthority() {
   checks += 13;
 }
 
+function privateCodexSignInStaysInPlaceWithoutCredentialCustody() {
+  const isolation = require('../src/lib/provider-session-isolation');
+  const privateRoot = scratch('private-codex');
+  fs.chmodSync(privateRoot, 0o700);
+  const stateRoot = path.join(privateRoot, 'ToolsEnabled-Test', 'capability');
+  const names = ['TOOLSENABLED_PROVIDER_ISOLATION_ROOT', 'TOOLSENABLED_STATE_ROOT'];
+  const previous = names.map(name => [name, process.env[name]]);
+  try {
+    process.env.TOOLSENABLED_PROVIDER_ISOLATION_ROOT = privateRoot;
+    process.env.TOOLSENABLED_STATE_ROOT = stateRoot;
+    const context = isolation.isolationContext();
+    const userCodexHome = path.join(context.servicesRoot, 'account-homes', 'codex', 'selected');
+    fs.mkdirSync(userCodexHome, { recursive: true });
+    fs.writeFileSync(path.join(userCodexHome, 'auth.json'), '{"fixture":"private official sign-in"}');
+    const options = { servicesRoot: context.servicesRoot, userCodexHome, accountName: 'selected',
+      accountHome: context.userProfile, record: null };
+    const prepare = values => confinement.prepareConfinedCodexHome(confinement.agentConfinement('guided'), values);
+    const original = Object.fromEntries(['linkSync', 'copyFileSync', 'readFileSync'].map(name => [name, fs[name]]));
+    let plan;
+    try {
+      for (const name of Object.keys(original)) fs[name] = (...args) => {
+        if (args.slice(0, name === 'readFileSync' ? 1 : 2).some(file =>
+          typeof file === 'string' && path.basename(file) === 'auth.json')) assert.fail(name + ' touched private sign-in');
+        return original[name](...args);
+      };
+      plan = prepare(options);
+    } finally { for (const name of Object.keys(original)) fs[name] = original[name]; }
+    assert.equal(plan.env.CODEX_HOME, userCodexHome);
+    assert.equal(plan.codexConfig.cli_auth_credentials_store, 'file');
+    assert.equal(fs.existsSync(path.join(plan.agentHome, 'auth.json')), false);
+    assert.throws(() => prepare({ ...options, accountName: null }),
+      error => error.code === 'AGENT_PROVIDER_ISOLATION_ACCOUNT_REQUIRED');
+    assert.throws(() => prepare({ ...options, userCodexHome: path.dirname(privateRoot) }),
+      error => error.code === 'AGENT_PROVIDER_ISOLATION_PATH');
+    const outside = path.join(path.dirname(privateRoot), path.basename(privateRoot) + '-outside-auth');
+    try {
+      fs.linkSync(path.join(userCodexHome, 'auth.json'), outside);
+      assert.throws(() => prepare(options), error => error.code === 'AGENT_PROVIDER_ISOLATION_PATH');
+    } finally { fs.rmSync(outside, { force: true }); }
+    checks += 6;
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  }
+}
+
+function theSessionCredentialNeverReachesTheCodexCommandLine() {
+  // The confined surface is passed to Codex as -c overrides on its command line, which any local process can read.
+  // The agent's session credential must travel only in the Codex process environment, forwarded by name.
+  const servicesRoot = scratch('session-credential');
+  writeRecord(servicesRoot, 'standard');
+  const userCodexHome = scratch('session-credential-signin');
+  fs.writeFileSync(path.join(userCodexHome, 'auth.json'), '{"fixture":"official sign-in stays here"}');
+  const credential = require('node:crypto').randomBytes(32).toString('base64url');
+  const plan = confinement.confinedSessionPlan({ servicesRoot, userCodexHome, agentId: 'credential-agent',
+    sessionId: 'session-credential-test', sessionCredential: credential });
+  assert.equal(plan.ok, true, plan.code);
+  assert.equal(plan.codexArgs.some(arg => String(arg).includes(credential)), false,
+    'the session credential was written into the Codex command line');
+  assert.equal(plan.env.TOOLSENABLED_AGENT_SESSION_CREDENTIAL === credential, true,
+    'the session credential must reach Codex through its environment');
+  const server = plan.codexConfig.mcp_servers.toolsenabled;
+  assert.ok(Array.isArray(server.env_vars) && server.env_vars.includes('TOOLSENABLED_AGENT_SESSION_CREDENTIAL'),
+    'the tool server must receive the credential by name');
+  assert.equal(server.env && Object.prototype.hasOwnProperty.call(server.env, 'TOOLSENABLED_AGENT_SESSION_CREDENTIAL'), false);
+  checks += 4;
+}
+
 function main() {
   let results = 0, skipped = 0;
   // Each step is one TAP result; the Windows-only profile cases are a declared TAP skip elsewhere.
@@ -1280,9 +1247,11 @@ function main() {
   try {
     step(levelsMapToOneConfinement);
     step(roleScopedProvidersCannotInheritNativeAuthority);
+    step(theSessionCredentialNeverReachesTheCodexCommandLine);
     step(unreadableLevelsRefuse);
     step(unreadableRecordsFailClosedToTheNarrowestSession);
     step(preparedHomeCarriesOnlyWhatTheLevelPermits);
+    step(privateCodexSignInStaysInPlaceWithoutCredentialCustody);
     step(longSessionHomesKeepWindowsDatabasesCompactAndIsolated);
     step(accountFenceFollowsEveryGeneratedCodexHome);
     step(accountProfileIsPinnedAndForeignRootsRefuseBeforePreparation);

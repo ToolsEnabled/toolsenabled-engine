@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -49,77 +48,31 @@ const SHIPPED_FILES = Object.freeze([
   'tools/coordinator-duty-host.js'
 ]);
 
-// PRIVATE MARKERS LIVE OUTSIDE THE TREE. Exact historical customer quotes and
-// the names of private working trees or repositories are what this gate keeps
-// out of shipped source, so the gate cannot carry them itself -- not as text,
-// not split into fragments, and not as digests: a digest published with its
-// length and first/last characters confirms a guessed phrase. A maintainer who
-// holds such a list supplies it out of tree, as JSON of the shape
-//   { "schemaVersion": 1, "quotes": ["..."], "treeNames": ["..."] }
-// named by TE_PAYLOAD_PRIVACY_MARKERS, or else found as
-// payload-privacy-markers.json in the per-user directory that also holds the
-// owner-data identity profile (tools/check-no-owner-data.mjs). A file named
-// explicitly must exist; the default location may be absent, and then these
-// two private assertions are skipped and the summary line says so. Every
-// generic check below runs either way. Generic product vocabulary does not
-// belong in the list: owner, provenance, verbatim, and request ids are valid.
-const PRIVATE_MARKERS_ENV = 'TE_PAYLOAD_PRIVACY_MARKERS';
-const PRIVATE_MARKERS_BASENAME = 'payload-privacy-markers.json';
-function defaultPrivateMarkersPath() {
-  if (process.platform === 'win32') {
-    const base = process.env.LOCALAPPDATA || process.env.APPDATA;
-    if (base) return path.join(base, 'ToolsEnabled', PRIVATE_MARKERS_BASENAME);
-  }
-  const xdg = process.env.XDG_CONFIG_HOME;
-  if (xdg) return path.join(xdg, 'toolsenabled', PRIVATE_MARKERS_BASENAME);
-  const home = os.homedir();
-  return home ? path.join(home, '.config', 'toolsenabled', PRIVATE_MARKERS_BASENAME) : null;
-}
-function markerList(parsed, key, file) {
-  const list = parsed[key] === undefined ? [] : parsed[key];
-  assert.ok(Array.isArray(list), `${file}: "${key}" must be an array of strings`);
-  for (const [index, value] of list.entries()) {
-    assert.ok(typeof value === 'string' && value.trim().length >= 3,
-      `${file}: ${key}[${index}] must be a string of at least 3 characters`);
-  }
-  return Object.freeze(list.map(value => value.toLowerCase()));
-}
-function loadPrivateMarkers() {
-  const named = typeof process.env[PRIVATE_MARKERS_ENV] === 'string' && process.env[PRIVATE_MARKERS_ENV].trim();
-  const file = named ? path.resolve(named) : defaultPrivateMarkersPath();
-  if (!file || (!named && !fs.existsSync(file))) return null;
-  assert.ok(fs.existsSync(file), `${PRIVATE_MARKERS_ENV} names a private marker file that does not exist`);
-  const relative = path.relative(ROOT, file);
-  assert.ok(relative.startsWith('..') || path.isAbsolute(relative),
-    'the private marker file must live outside this checkout, where no commit can pick it up');
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    // Name the file and the error class only: never echo the private contents.
-    assert.fail(`private marker file ${file} is unreadable (${error.name})`);
-  }
-  assert.ok(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.schemaVersion === 1,
-    `private marker file ${file} must be a JSON object with schemaVersion 1`);
-  return Object.freeze({
-    quotes: markerList(parsed, 'quotes', file),
-    treeNames: markerList(parsed, 'treeNames', file)
-  });
-}
-const PRIVATE_MARKERS = loadPrivateMarkers();
-
+// Assemble exact historical fragments so this gate does not itself preserve a
+// complete customer quote in source. Generic product vocabulary is deliberately
+// absent from this list: owner, provenance, verbatim, and request ids are valid.
 const FORBIDDEN = Object.freeze([
+  ['who put a $100', 'day cap'].join(' '),
+  ['why are agent rules', 'stille being pushed as mine'].join(' '),
+  ['how are you guys', 'losing all my work'].join(' '),
+  ['literally machine A', 'and machine B questions'].join(' '),
+  ['issue with trying to have it', 'reach coordinator through agent comms'].join(' '),
+  ['couldnt verify if the comms page', 'is wired'].join(' '),
+  ['only thing we really need', 'is to be able to track the type'].join(' '),
+  ['bring up the purchase list', 'before any purchases'].join(' '),
+  ['if R/Q wasnt failing', 'you would already know'].join(' '),
+  ['OWNER RULING', '2026-08-16'].join(' '),
+  ['repository we', 'own'].join(' '),
+  ["owner's design", 'for it'].join(' '),
   'R1186 outage',
-  'publishes the whole working tree'
+  'publishes the whole working tree',
+  'RESERVED TO HIM',
+  'under his name',
+  'his words, verbatim'
 ]);
 
 for (const relative of SHIPPED_FILES) {
   const source = fs.readFileSync(path.join(ROOT, relative), 'utf8').toLowerCase();
-  if (PRIVATE_MARKERS) {
-    // Report the marker's position in the private list, never its text.
-    const hit = PRIVATE_MARKERS.quotes.findIndex(quote => source.includes(quote));
-    assert.equal(hit, -1, `${relative} contains a known customer quote (private marker quotes[${hit}])`);
-  }
   for (const phrase of FORBIDDEN) {
     assert.equal(source.includes(phrase.toLowerCase()), false,
       `${relative} contains a known customer-specific phrase or incident marker: ${phrase}`);
@@ -138,15 +91,19 @@ for (const relative of SHIPPED_FILES) {
     `${relative} is privacy-scanned but is no longer in the real publishable manifest`);
 }
 
-// Private builder tree and repository names come from the same out-of-tree
-// marker file as the quotes above, for the same reason: a list of names to
-// keep out of published source must not itself publish them.
-if (PRIVATE_MARKERS && PRIVATE_MARKERS.treeNames.length) {
-  for (const relative of sourceBoundary.open.paths) {
-    const source = fs.readFileSync(path.join(ROOT, relative), 'utf8').toLowerCase();
-    const hit = PRIVATE_MARKERS.treeNames.findIndex(name => source.includes(name));
-    assert.equal(hit, -1,
-      `${relative} contains a private builder tree/repository marker (private marker treeNames[${hit}])`);
+const staleTreeMarkers = Object.freeze([
+  ['wt', 'capability'].join('-'),
+  ['agent', 'mirror'].join('_'),
+  ['toolsenabled', 'paid'].join('-'),
+  ['toolsenabled', 'relay', 'private'].join('-'),
+  ['AI', 'Calendar'].join(''),
+  ['master', 'google', 'sso'].join('-')
+]);
+for (const relative of sourceBoundary.open.paths) {
+  const source = fs.readFileSync(path.join(ROOT, relative), 'utf8');
+  for (const marker of staleTreeMarkers) {
+    assert.equal(source.toLowerCase().includes(marker.toLowerCase()), false,
+      `${relative} contains a private builder tree/repository marker`);
   }
 }
 for (const relative of SHIPPED_FILES) {
@@ -297,7 +254,4 @@ const liveAuthorization = [authorization.authorizationHeadline(grant), ...author
 assert.equal(/\b(?:his|him)\b/i.test(liveAuthorization), false,
   'live owner-authorization output must be gender neutral');
 
-const privateSummary = PRIVATE_MARKERS
-  ? `${PRIVATE_MARKERS.quotes.length} private quote and ${PRIVATE_MARKERS.treeNames.length} private tree markers`
-  : 'private markers SKIPPED (no out-of-tree marker file)';
-console.log(`customer payload privacy gate passed (${SHIPPED_FILES.length} shipped files, ${FORBIDDEN.length} exact markers, ${privateSummary}, transcript audit absent from ledger closure)`);
+console.log(`customer payload privacy gate passed (${SHIPPED_FILES.length} shipped files, ${FORBIDDEN.length} exact markers, transcript audit absent from ledger closure)`);

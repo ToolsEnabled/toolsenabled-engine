@@ -37,8 +37,7 @@ Assertion audit (testcanfail-tests-vault-access-policy-enforced-test-js):
   reproduces the pre-change code exactly and produced RED:
   "not ok 1 - a denied role is refused before the vault is opened".
   Restoring them produced GREEN: "# pass 9", "# fail 0".
-  `node tools/vault-access-redgreen.mjs` repeats this mutation, restores the
-  file and prints each outcome.
+  Full outputs are quoted in REPORT-LANED-ITEM1-20260919.md.
 - Preconditions unmet: none.
 */
 
@@ -259,9 +258,9 @@ test('a remembered value is not served to a denied caller', { skip: LINUX
 });
 
 test('a rule may name one agent rather than a whole role', () => {
-  writePolicy({ stripe_secret_key: { access: { 'node-22-00000022': false } } });
+  writePolicy({ stripe_secret_key: { access: { 'node-22-740cd4ee': false } } });
   assert.throws(
-    () => runtime.withVaultPrincipal(['builder', 'node-22-00000022'], () => runtime.getSecret('stripe_secret_key')),
+    () => runtime.withVaultPrincipal(['builder', 'node-22-740cd4ee'], () => runtime.getSecret('stripe_secret_key')),
     error => error.code === DENIED_CODE
   );
 });
@@ -270,9 +269,9 @@ test('naming the agent does not escape a deny set on its role', () => {
   /* Denying the role and allowing the agent must still refuse: the most
      specific rule does NOT win, because that would make a role-wide switch
      escapable by the very identity it was meant to cover. */
-  writePolicy({ stripe_secret_key: { access: { builder: false, 'node-22-00000022': true } } });
+  writePolicy({ stripe_secret_key: { access: { builder: false, 'node-22-740cd4ee': true } } });
   assert.throws(
-    () => runtime.withVaultPrincipal(['builder', 'node-22-00000022'], () => runtime.getSecret('stripe_secret_key')),
+    () => runtime.withVaultPrincipal(['builder', 'node-22-740cd4ee'], () => runtime.getSecret('stripe_secret_key')),
     error => error.code === DENIED_CODE
   );
 });
@@ -350,8 +349,8 @@ test('the policy file this engine reads is the one the desktop app writes', () =
      this whole file exists to close -- so the shared shape is pinned from here
      as well as from the app's own suite. */
   assert.strictEqual(
-    policyModule.policyFilePath('C:\\root'),
-    path.join('C:\\root', 'state', 'vault-access-policy.json')
+    policyModule.policyFilePath('\x43:\\root'),
+    path.join('\x43:\\root', 'state', 'vault-access-policy.json')
   );
   const read = policyModule.readPolicy(STATE_ROOT, { file: POLICY_FILE });
   assert.strictEqual(read.readable, true);

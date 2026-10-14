@@ -25,8 +25,8 @@
 //     process hosting it -- an ordinary, non-elevated user session. Nothing
 //     here escalates, requests UAC, or routes through the elevated
 //     uac-delegation helper. That helper stays what it is: a fixed,
-//     per-operation allowlist with no caller-supplied argv. Full control of
-//     the owner's machine is satisfied at the owner's own privilege level; an
+//     per-operation allowlist with no caller-supplied argv. "Full control of
+//     my machine" is satisfied at the owner's own privilege level; an
 //     arbitrary-argv elevated exec is a different and much larger thing that
 //     was not asked for and that no audit trail can undo.
 //   * NOT a credential reader. vault/ and the DPAPI store stay excluded from
@@ -133,7 +133,17 @@ const EXCLUDED_PATH_PATTERNS = [
   // ToolsEnabled repo AND every ToolsEnabled-fleet-lane-* worktree sibling
   // (see the WRITE_EXCLUDED comment below for why the name must be a
   // prefix match, not an exact segment match).
-  /[\\/]ToolsEnabled[^\\/]*[\\/]state([\\/]|$)/i
+  //
+  // 1.0.50 review L3: the desktop app moves this state to
+  // <userData>/capability/state (TOOLSENABLED_STATE_ROOT, set by
+  // app/shell/main.cjs), which the old `ToolsEnabled*/state` spelling did not
+  // match, so the per-boot bearers in it were readable. The live state
+  // directory is also refused by path at call time (isLiveStatePath below).
+  /[\\/]ToolsEnabled[^\\/]*[\\/](?:capability[\\/])?state([\\/]|$)/i,
+  // The generated per-session Claude tool surface (<services root>/agent-tools,
+  // agent-session-confinement.js CLAUDE_TOOLS_LEAF): its .mcp.json files carry
+  // the session credential for the ToolsEnabled broker entry.
+  /[\\/]ToolsEnabled[^\\/]*[\\/]agent-tools([\\/]|$)/i
 ];
 
 // A small, extension-bounded set of conventional credential/session stores.
@@ -159,7 +169,7 @@ const COMMON_CREDENTIAL_STORE_PATTERN = /[\\/](?:\.(?:auth|token|tokens|cookie|c
 // conventional basename anchored to a path separator with a narrow extension
 // tail that carries no pem/key/p12/pfx. Between them, a file named
 // private_key.pem sitting in an ordinary folder inside the profile was READABLE
-// through host.read_file -- measured at an earlier revision, refused by neither this sink
+// through host.read_file -- measured at 80f08ecb, refused by neither this sink
 // nor egress.
 //
 // This is the same four CLEAN stem groups and the same extension tail that
@@ -195,8 +205,39 @@ function isCredentialShapedName(candidatePath) {
   return CREDENTIAL_SHAPED_NAME_PATTERN.test(path.basename(candidatePath));
 }
 
+/* THE LIVE STATE DIRECTORY, WHEREVER IT WAS PUT (1.0.50 review L3).
+ *
+ * The folder-name patterns above cover the shipped layouts. The state root is
+ * configurable, though (a relocated profile, --user-data-dir, a portable
+ * install), so the directory this process actually keeps its bearers and
+ * capabilities in is refused by path as well, resolved at call time in both
+ * its lexical and canonical spellings. An unresolvable state root adds no
+ * refusal here; the patterns above still apply. */
+let liveStateMemo = null;
+function liveStateDirectories() {
+  let lexical;
+  try { lexical = path.resolve(require('../runtime-state-root').statePath('state')); }
+  catch { return []; }
+  if (liveStateMemo && liveStateMemo.lexical === lexical) return liveStateMemo.directories;
+  const directories = [lexical];
+  try {
+    const canonical = canonicalizeForContainment(lexical);
+    if (canonical !== lexical) directories.push(canonical);
+  } catch { /* the lexical spelling still fences */ }
+  liveStateMemo = { lexical, directories };
+  return directories;
+}
+
+function isLiveStatePath(candidatePath) {
+  return liveStateDirectories().some(directory => {
+    const relative = path.relative(directory, candidatePath);
+    return relative === '' || (relative.split(/[\\/]/)[0] !== '..' && !path.isAbsolute(relative));
+  });
+}
+
 function isCredentialProtectedPath(candidatePath) {
   return EXCLUDED_PATH_PATTERNS.some(pattern => pattern.test(candidatePath))
+    || isLiveStatePath(candidatePath)
     || COMMON_CREDENTIAL_STORE_PATTERN.test(candidatePath)
     || isCredentialShapedName(candidatePath)
     || isProtectedEnvironmentPath(candidatePath);
@@ -297,7 +338,7 @@ const WRITE_EXCLUDED_CODE_PATTERNS = [
 // discovered by walking UP from the candidate and asking the filesystem, so
 // they hold wherever a customer put their checkout and whatever they named it.
 // The list above is kept as-is: it still covers sibling-lane layouts
-// (ToolsEnabled-copy/config) and the non-repo anchors (.gitconfig, Startup),
+// (ToolsEnabled-lane1/config) and the non-repo anchors (.gitconfig, Startup),
 // and deleting rules to replace them would be a wider change than this defect
 // warrants.
 //
@@ -333,7 +374,7 @@ const PRODUCT_TREE_CODE_PATTERNS = [
 // lockfiles are part of the product's source too: a lane that changes a
 // setting's registry row or a dependency has to write them. They stay refused
 // unless the owner lifted the code-folder rule (the same switch), and never in
-// the running product. Product note: lanes were still refused on
+// the running product. Owner, 2026-09-20: lanes were still refused on
 // config/*.json and package.json after the switch ("protected-config",
 // "protected package edits").
 const WRITE_EXCLUDED_LIFTABLE_PATTERNS = [
@@ -412,11 +453,11 @@ function productTreeRootFor(candidatePath) {
 // AN OWNER MAY LET AGENTS EDIT THE PRODUCT'S OWN SOURCE IN A CHECKOUT.
 //
 // The code-folder rule exists so a lane cannot stage replacement product code
-// through this surface. Measured 2026-09-19 on a development machine: with
+// through this surface. Measured 2026-09-19 on the owner's machine: with
 // "Available tool sets" set to Only, every Codex lane writes through THIS
 // surface and nothing else, so the same rule refused every edit to the
 // checkouts the owner had cloned for those lanes to develop in
-// (HOST_PATH_WRITE_PROTECTED on temporary app checkouts' src, on
+// (HOST_PATH_WRITE_PROTECTED on Temp\te-home-circle-hotload-app-*\src, on
 // isolated worktrees' src/views/computers.js and shell/fleet-profile-preload.cjs)
 // -- eight lanes blocked in one day, with no switch anywhere. That is the fence
 // gating the person, which this product's own rule forbids: at most a warning,
@@ -661,7 +702,7 @@ function readFileLegacy({ path: target } = {}, dependencies = {}) {
   if (stat.size > MAX_FILE_BYTES) fail('HOST_FILE_TOO_LARGE', `file exceeds the ${MAX_FILE_BYTES}-byte limit.`);
   // The file contents are the outward result. Admission must be durable
   // before the read so an unavailable/corrupt audit ledger fails closed.
-  // Same pattern as host.exec: validation above still throws
+  // Same pattern as host.exec (32faaf7): validation above still throws
   // synchronously; admission is awaited off this thread before the read.
   const requireRecordAsync = dependencies.requireRecordAsync || auditAdmission.requireRecordAsync;
   const admitted = requireRecordAsync('host.read_file.intent', resolved, { bytes: stat.size });
@@ -1226,7 +1267,7 @@ function listDir({ path: target = HOME } = {}, dependencies = {}) {
   return admitted.then(() => {
     const entries = researchListing ? researchListing.read() : listDirEntries(resolved);
     // The result record rides the same off-thread admission as the intent,
-    // same shape as host.exec's result record: a failed record
+    // same shape as host.exec's result record (32faaf7): a failed record
     // write is reported on stderr, redacted, and never turns a completed
     // listing into a lost answer.
     return Promise.resolve()
@@ -1364,7 +1405,7 @@ function appendBoundedOutput(chunks, bytes, chunk) {
 
 // Real command execution at the owner's own (non-elevated) privilege level.
 // The command string is passed to a shell deliberately -- pipelines and
-// redirection are part of what running commands on the owner's machine means, and
+// redirection are part of what "run commands on my machine" means, and
 // pretending otherwise while still handing over arbitrary argv would be
 // security theater, not a boundary. The genuine boundaries are: no
 // elevation, kill-switch gated, wall-clock bounded, output bounded, cwd
@@ -1411,7 +1452,7 @@ function exec({ command, cwd, timeoutMs, shell } = {}, dependencies = {}) {
   // set-monotonic-stdin): 1.2 s idle on this machine and 2 to 4 s under load.
   // The owner host runs inside the desktop app's main process, so every
   // agent's shell command parked the thread the person's window is drawn on
-  // for that long. MEASURED 2026-09-04 on a live process with four
+  // for that long. MEASURED 2026-09-04 on the owner's Live process with four
   // circles: 46 of 53 main-thread stalls in fifteen minutes contained this
   // record. The guarantee is unchanged -- nothing is spawned until the
   // admission has answered durable, and a refusal is thrown to the caller as
@@ -1426,8 +1467,17 @@ function exec({ command, cwd, timeoutMs, shell } = {}, dependencies = {}) {
   const file = platform === 'linux' ? `/bin/${shell}` : shell === 'cmd'
     ? '\\\\.\\GLOBALROOT\\SystemRoot\\System32\\cmd.exe'
     : '\\\\.\\GLOBALROOT\\SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+  /* cmd.exe IS GIVEN THE COMMAND AS WRITTEN (platform review 1.0.50 E2).
+     Passed as an ordinary argument, a command containing a space or a quote
+     was wrapped and each inner `"` written as `\"` -- C runtime escaping,
+     which cmd.exe does not read -- so `"C:\Program Files\...\git.exe" status`
+     failed and `echo "hi"` printed backslashes. This is Node's own spelling of
+     a cmd.exe line (what shell:true builds): one pair of quotes around the
+     command, passed verbatim, which /s strips before running the rest as
+     written. The audit record and the result keep the command itself. */
+  const verbatimCmd = platform === 'win32' && shell === 'cmd';
   const args = platform === 'linux' ? (shell === 'bash' ? ['--noprofile', '--norc', '-c', command] : ['-c', command]) : shell === 'cmd'
-    ? ['/d', '/s', '/c', command]
+    ? ['/d', '/s', '/c', `"${command}"`]
     : ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', command];
 
   const launchImpl = dependencies.spawnInJobImpl || (platform === 'linux' ? spawnLinuxOwned : windowsJob.spawnInJob);
@@ -1607,6 +1657,7 @@ function exec({ command, cwd, timeoutMs, shell } = {}, dependencies = {}) {
         cwd: resolvedCwd,
         windowsHide: true,
         shell: false,
+        ...(verbatimCmd ? { windowsVerbatimArguments: true } : {}),
         stdio: ['ignore', 'pipe', 'pipe'],
         /* CARRY THE OWNER'S SWITCH INTO THE COMMAND.
          *

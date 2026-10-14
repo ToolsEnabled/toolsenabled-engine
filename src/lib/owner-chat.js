@@ -22,7 +22,7 @@
 // leaves the directive unread on purpose, so the owner stays visibly waiting
 // rather than being silently marked as answered.
 //
-// THE CONDITION. An unread directive from the owner themselves is not one more
+// THE CONDITION. An unread directive from the owner himself is not one more
 // queue item; it is a person waiting. Past STALE_UNREAD_MS it is reported as
 // the named condition OWNER_WAITING_FOR_REPLY, which is the loudest state this
 // module can express, and it is surfaced by every reader that embeds
@@ -458,7 +458,7 @@ function replyHistoryFor(chat, directiveId) {
 }
 
 /**
- * THE DRAIN CALL. Unread directives, oldest first (the order they said them in),
+ * THE DRAIN CALL. Unread directives, oldest first (the order he said them in),
  * bounded, each annotated with how long it has been waiting and whether a reply
  * was already put on the wire for it. Read-only apart from an optional,
  * best-effort drain stamp so any later reader can see when this was last done.
@@ -596,7 +596,7 @@ function pending(input = {}, overrides = {}) {
  * "threading" story: the owner's messages already carry their own timestamps in
  * the inbox and every reply carries the directive it answered, so a coherent
  * back-and-forth needs no conversation ids -- the merged transcript IS the
- * thread. Their next message just lands as a new directive and appears here.
+ * thread. His next message just lands as a new directive and appears here.
  */
 function transcript(input = {}, overrides = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -617,7 +617,7 @@ function transcript(input = {}, overrides = {}) {
   // conversation when the outbound half could not be measured.
   const chat = readChatLog(chatFile);
 
-  // 'owner' is reserved for words THEY actually typed. A machine-generated
+  // 'owner' is reserved for words HE actually typed. A machine-generated
   // directive (for example a dashboard write) is 'system' -- a
   // transcript that labels a scheduled-task observation as something the owner
   // said is a transcript nobody can trust.
@@ -789,7 +789,7 @@ function resolveTargets(inbox, ids) {
  * directive UNREAD, with the failure recorded in the chat log.
  *
  * `alsoAcknowledge` acknowledges further unread directives against this same
- * delivered reply -- the honest shape for "they sent three messages and I
+ * delivered reply -- the honest shape for "he sent three messages and I
  * answered all three in one".
  */
 async function reply(input = {}, dependencies = {}, overrides = {}) {
@@ -943,7 +943,7 @@ function acknowledgeWithoutReply(input = {}, dependencies = {}, overrides = {}) 
   // convenient way to make the loud condition go away.
   if (OWNER_SOURCES.includes(item.source)) {
     fail('OWNER_CHAT_NEEDS_A_REPLY',
-      `Directive ${input.id} came from the owner (source ${item.source}). They are waiting for an answer, not a filing. Use --reply.`);
+      `Directive ${input.id} came from the owner (source ${item.source}). He is waiting for an answer, not a filing. Use --reply.`);
   }
 
   const atMs = nowFn();

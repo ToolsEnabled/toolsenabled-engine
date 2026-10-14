@@ -25,6 +25,7 @@ const DEFAULT_HISTORY_MESSAGE_BYTES = 28 * 1024;
 const DEFAULT_HISTORY_CHANNEL_BYTES = 32 * 1024;
 const TRACKED_KINDS = new Set(['ask', 'answer']);
 const IDENTIFIER_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const REFUSAL_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,95}$/;
 const OWNER_JOURNAL_STREAM = 'owner.journal';
 const OWNER_PROJECTION_VERSION = 1;
 
@@ -74,6 +75,14 @@ function exactKeys(value, required, optional, label, code = 'FABRIC_ARGUMENT_INV
   if (Object.keys(value).some(key => !allowed.has(key))) {
     fail(code, `${label} contains an unsupported field.`, { field: label });
   }
+}
+
+function normalizeRefusalCode(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !REFUSAL_CODE_PATTERN.test(value)) {
+    fail('FABRIC_ARGUMENT_INVALID', 'refusalCode is invalid.', { field: 'refusalCode' });
+  }
+  return value;
 }
 
 function identifier(value, label, code = 'FABRIC_ARGUMENT_INVALID') {
@@ -564,6 +573,107 @@ function createAgentCommsFabric({
     return lifecycle.getMessage(messageId);
   }
 
+  function isTerminalDeadLetter(message, agent) {
+    if (!message || message.audience?.type !== 'direct'
+      || !message.audience.agent || !sameIdentity(message.audience.agent, agent)
+      || typeof activeBroker.getState !== 'function') return false;
+    const state = activeBroker.getState();
+    const terminalRecords = [
+      ...(Array.isArray(state?.terminalMarkers) ? state.terminalMarkers : []),
+      ...(Array.isArray(state?.deadLetters) ? state.deadLetters : [])
+    ];
+    return terminalRecords.some(record => {
+      const entry = record && record.entry;
+      return record.reason === 'RECIPIENT_QUEUE_DISCARDED'
+        && entry && entry.messageId === message.id
+        && entry.recipientAgentId === agent.agentId
+        && entry.recipientMachineId === agent.machineId;
+    });
+  }
+
+  /* A broker dead letter is a terminal transport disposition, not a model
+     read. The durable direct stream still needs to pass that slot or the next
+     authenticated read receipt can never advance. Keep the cursor mutation
+     here, beside markRead, and expose only the terminal disposition; do not
+     call lifecycle.recordRead or invent a handoff acknowledgement. */
+  async function settlePassedTerminalDeadLetters(agent, channelId, cursor, settled) {
+    if (typeof activeBroker.getState !== 'function'
+      || typeof activeBroker.settleTerminalDelivery !== 'function') return;
+    let state;
+    try { state = activeBroker.getState(); } catch { return; }
+    const markers = Array.isArray(state?.terminalMarkers) ? state.terminalMarkers : [];
+    if (!markers.length) return;
+    let snapshot;
+    try { snapshot = history.read({ channelId, afterSequence: 0 }); } catch { return; }
+    if (!Array.isArray(snapshot?.records)) return;
+    for (const marker of markers) {
+      const entry = marker && marker.entry;
+      if (!entry || entry.recipientAgentId !== agent.agentId
+        || entry.recipientMachineId !== agent.machineId) continue;
+      const record = snapshot.records.find(candidate => candidate.message?.id === entry.messageId);
+      // A retained history record whose authenticated cursor is already past
+      // this marker proves the cross-store ordering. If history compacted the
+      // record, leave custody in place rather than guessing.
+      if (!record || record.sequence > cursor.sequence) continue;
+      try {
+        const result = await activeBroker.settleTerminalDelivery({ message: record.message });
+        if (result?.accepted === true) {
+          settled.push(Object.freeze({
+            messageId: record.message.id,
+            sequence: record.sequence,
+            disposition: 'dead-lettered'
+          }));
+        }
+      } catch {
+        // The cursor is authoritative and already passed this terminal slot;
+        // retain the marker for a later authenticated reconciliation attempt.
+      }
+    }
+  }
+
+  async function settleLeadingTerminalDeadLetters(agent, audience) {
+    const channelId = streamIdForAudience(audience);
+    const settled = [];
+    let cursor = history.getCursor({ agentId: agent.agentId, channelId });
+    await settlePassedTerminalDeadLetters(agent, channelId, cursor, settled);
+    while (true) {
+      const unread = history.read({ channelId, afterSequence: cursor.sequence });
+      if (unread.status === 'TRUNCATED') break;
+      const next = unread.records[0];
+      if (!next || !isTerminalDeadLetter(next.message, agent)) break;
+      const acknowledged = history.acknowledge({
+        agentId: agent.agentId,
+        channelId,
+        sequence: next.sequence
+      });
+      if (typeof activeBroker.settleTerminalDelivery === 'function') {
+        try {
+          const result = await activeBroker.settleTerminalDelivery({ message: next.message });
+          if (result && result.accepted === false) {
+            // The authenticated cursor may advance only once; retain the
+            // terminal marker for the passed-cursor reconciliation above when
+            // the broker reports that custody is no longer settleable here.
+            cursor = acknowledged;
+            continue;
+          }
+        } catch {
+          // History acknowledgement is the authenticated cursor transition;
+          // a failed marker cleanup must not turn a delivered later read into
+          // an uncertain model outcome. The next read retries reconciliation.
+          cursor = acknowledged;
+          continue;
+        }
+      }
+      cursor = acknowledged;
+      settled.push(Object.freeze({
+        messageId: next.message.id,
+        sequence: next.sequence,
+        disposition: 'dead-lettered'
+      }));
+    }
+    return Object.freeze(settled);
+  }
+
   function recordBrokerDelivery(messageId, code) {
     const existing = deliverySnapshot(messageId);
     if (!existing || existing.state !== STATES.SENT) return existing;
@@ -943,9 +1053,10 @@ function createAgentCommsFabric({
   // Internal host receipt transition. The broker requires the original
   // envelope and its retained delivery fingerprint before changing state.
   function transitionRecipientDelivery(input, verb) {
-    return serialize(() => {
+    return serialize(async () => {
       const source = plainObject(input, 'discard delivery input');
-      exactKeys(source, ['agent', 'message'], [], 'discard delivery input');
+      exactKeys(source, ['agent', 'message'], verb === 'deadLetter' ? ['refusalCode'] : [], 'discard delivery input');
+      const refusalCode = verb === 'deadLetter' ? normalizeRefusalCode(source.refusalCode) : undefined;
       const agent = knownIdentity(source.agent);
       const message = plainObject(source.message, 'discarded message');
       const recipient = message.audience?.type === 'direct' && message.audience.agent;
@@ -955,7 +1066,12 @@ function createAgentCommsFabric({
       if (typeof activeBroker[verb] !== 'function') {
         fail('FABRIC_DELIVERY_RECEIPTS_UNAVAILABLE', 'This broker cannot retain recipient handoff state.');
       }
-      return activeBroker[verb]({ message, ...(verb === 'deadLetter' ? { reason: 'RECIPIENT_QUEUE_DISCARDED' } : {}) });
+      const result = await activeBroker[verb]({ message,
+        ...(verb === 'deadLetter' ? { reason: 'RECIPIENT_QUEUE_DISCARDED',
+          ...(refusalCode === undefined ? {} : { refusalCode }) } : {}) });
+      if (verb !== 'deadLetter' || result?.accepted !== true) return result;
+      const terminalSettled = await settleLeadingTerminalDeadLetters(agent, normalizeAudience(message.audience, agent));
+      return deepFreeze({ ...result, ...(terminalSettled.length ? { terminalSettled } : {}) });
     });
   }
 
@@ -985,14 +1101,19 @@ function createAgentCommsFabric({
       : activeBroker.getState();
     const visible = (recipientId, recipientMachine, senderId, senderMachine) =>
       wanted.get(recipientId) === recipientMachine || (senderId && wanted.get(senderId) === senderMachine);
-    const failures = state.deadLetters.flatMap(record => {
+    const diagnosticDeadLetters = Array.isArray(state.deadLetters) ? state.deadLetters : [];
+    const diagnosticIds = new Set(diagnosticDeadLetters.map(record => record?.entry?.messageId));
+    const terminalMarkers = (Array.isArray(state.terminalMarkers) ? state.terminalMarkers : [])
+      .filter(record => !diagnosticIds.has(record?.entry?.messageId));
+    const failures = [...diagnosticDeadLetters, ...terminalMarkers].flatMap(record => {
       const entry = record.entry;
       const sender = entry.message.sender;
       if (wanted.get(entry.recipientAgentId) !== entry.recipientMachineId
         && (!sender || wanted.get(sender.agentId) !== sender.machineId)) return [];
       return [{ messageId: entry.messageId, senderAgentId: sender?.agentId || null,
         recipientAgentId: entry.recipientAgentId, code: 'BROKER_MESSAGE_DEAD_LETTERED',
-        reason: record.reason, at: record.deadLetteredAtMs }];
+        reason: record.reason, at: record.deadLetteredAtMs,
+        ...(record.refusalCode === undefined ? {} : { refusalCode: record.refusalCode }) }];
     });
     const deferred = (state.deferred || []).flatMap(record => {
       const entry = record.entry, sender = entry.message.sender;
@@ -1220,7 +1341,7 @@ function createAgentCommsFabric({
   }
 
   function markRead(input) {
-    return serialize(() => {
+    return serialize(async () => {
       const source = plainObject(input, 'markRead input');
       exactKeys(source, ['agent', 'audience', 'evidence', 'messageId', 'sequence'], [], 'markRead input');
       const agent = knownIdentity(source.agent);
@@ -1232,6 +1353,7 @@ function createAgentCommsFabric({
         fail('FABRIC_ARGUMENT_INVALID', 'messageId is invalid.', { field: 'messageId' });
       }
       const channelId = streamIdForAudience(audience);
+      const terminalSettled = await settleLeadingTerminalDeadLetters(agent, audience);
       const cursor = history.getCursor({ agentId: agent.agentId, channelId });
       const unread = history.read({ channelId, afterSequence: cursor.sequence });
       if (unread.status === 'TRUNCATED') {
@@ -1240,12 +1362,14 @@ function createAgentCommsFabric({
           code: 'FABRIC_CURSOR_TRUNCATED',
           cursor: cursor.sequence,
           floorSequence: unread.floorSequence,
-          headSequence: unread.headSequence
+          headSequence: unread.headSequence,
+          ...(terminalSettled.length ? { terminalSettled } : {})
         });
       }
       const next = unread.records[0];
       if (!next || next.sequence !== sequence || next.message.id !== source.messageId) {
-        return Object.freeze({ accepted: false, code: 'FABRIC_READ_OUT_OF_ORDER', cursor: cursor.sequence });
+        return Object.freeze({ accepted: false, code: 'FABRIC_READ_OUT_OF_ORDER', cursor: cursor.sequence,
+          ...(terminalSettled.length ? { terminalSettled } : {}) });
       }
 
       let delivery = lifecycle.getMessage(source.messageId);
@@ -1262,7 +1386,8 @@ function createAgentCommsFabric({
             accepted: false,
             code: 'DELIVERY_TRANSITION_REJECTED',
             action: 'READ',
-            state: delivery.state
+            state: delivery.state,
+            ...(terminalSettled.length ? { terminalSettled } : {})
           });
         }
       } else {
@@ -1292,7 +1417,8 @@ function createAgentCommsFabric({
         messageId: source.messageId,
         sequence,
         delivery,
-        cursor: acknowledged.sequence
+        cursor: acknowledged.sequence,
+        ...(terminalSettled.length ? { terminalSettled } : {})
       });
     });
   }

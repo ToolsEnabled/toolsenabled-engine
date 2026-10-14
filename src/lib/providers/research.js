@@ -332,6 +332,8 @@ class ResearchControl {
       // Registration and queue submission commit together. Admission/audit
       // runs before the first insert; any later refusal rolls both back.
       const spec = plainObject(source.experiment, 'experiment');
+      // The same name check experimentSave applies to this field.
+      if (spec.name !== undefined) safeText(spec.name, 'experiment.name', { min: 1, max: 120 });
       fencedJsonValue(spec.runnerConfig, 'experiment.runnerConfig');
       const submitted = this.state.registerAndSubmitResearchRun({ ...run, experiment: spec }, admit);
       return { ...submitted, ...UNTRUSTED_CONTENT };
@@ -375,6 +377,16 @@ class ResearchControl {
     const who = actor(source.actor);
     safeText(source.claim, 'claim', { min: 1, max: 500 });
     if (source.evidence !== undefined && source.evidence !== null) fencedJsonValue(source.evidence, 'evidence');
+    // Every free-text field of the register passes the same fence as the claim:
+    // agents write it and every later reader (research.finding_list, the
+    // Research page) is served it as written. Shape and length stay the
+    // store's to check.
+    for (const field of ['method', 'confidence', 'falsifier']) {
+      if (containsProhibitedMaterial(source[field])) {
+        throw new ResearchError('RESEARCH_SENSITIVE_CONTENT', `${field} appears to contain credential or private-vault material.`);
+      }
+    }
+    if (source.dissents !== undefined && source.dissents !== null) fencedJsonValue(source.dissents, 'dissents');
     this._audit('research.finding_save', source.projectId, {
       actor: who, update: source.findingId !== undefined, status: source.status || 'open'
     });

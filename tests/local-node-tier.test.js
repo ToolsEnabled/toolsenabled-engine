@@ -30,9 +30,9 @@
 
 /* CAN A USER RUN A MODEL ON THEIR OWN GPU AS A FLEET NODE?
  *
- * Product requirement: local nodes on a person's own computer -- they
- * should be able to launch a local model such as Qwen2.5 on their GPU as a
- * node, not only Claude or Codex.
+ * Owner, 2026-08-12: "i just meant local nodes like on someones computer they
+ * should be able to launch a qwen2.5 on their gpu or something as a node, not
+ * just claude or codex."
  *
  * These cases pin the parts of that which can be checked without a GPU and
  * without downloading weights. They run in two modes:

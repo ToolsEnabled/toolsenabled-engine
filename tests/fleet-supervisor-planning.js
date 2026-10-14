@@ -16,10 +16,10 @@
 // "9 !== 8"
 // Source restoration was byte-for-byte (SHA-256 de46d8a876c62e36876d29632a86ea40031584ad1e90f2438ee7e42197f5304a).
 
-// Tests for the fleet supervisor's planning pass (request R91):
+// Tests for the fleet supervisor's planning pass (owner ledger R91):
 //
-//   the manager does more than review work: it dispatches work effectively,
-//   and more up-front planning may help the Gemini models too.
+//   "the manager is not just reviewing work they dispatch work effectively...
+//    more pre planning to help the gemini models might help too."
 //
 // Covers what src/lib/fleet-supervisor/planning.js and its wiring into
 // supervisor.js exist to guarantee:

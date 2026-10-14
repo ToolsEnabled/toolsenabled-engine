@@ -6,8 +6,8 @@
 // into plain Node: launched with no script it reads stdin, hits EOF, and exits
 // 0 silently with no window. The signature is indistinguishable from a crash.
 // It produced a confident and wrong "the product silently exits on launch"
-// root cause, cost an afternoon, and is very likely an earlier launch blocker
-// as well.
+// root cause, cost an afternoon, and is very likely the original Machine-B
+// launch blocker behind days of work across two machines.
 //
 // The Electron app itself lives in the mission-control repo, and the guard for
 // its harnesses lives there too (tools/test/electron-run-as-node-harness-guard

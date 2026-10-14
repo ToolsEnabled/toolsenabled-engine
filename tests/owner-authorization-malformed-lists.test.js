@@ -37,7 +37,7 @@ const VALID = Object.freeze({
   authorizedOn: '2026-08-27',
   subject: 'agents',
   publisherIdentity: 'owner',
-  inScope: [{ statement: 'act under the person\'s name' }],
+  inScope: [{ statement: 'act under his name' }],
   reserved: [{ statement: 'nothing irreversible without a same-moment yes' }],
   doesNotGrant: ['new spending'],
   decisionProcedure: ['ask first, in writing'],

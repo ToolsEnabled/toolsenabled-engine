@@ -232,7 +232,7 @@ function makeRoomOrRefuse(inbox) {
  * Append one directive, verbatim. `text` is stored exactly as given (only
  * bounded for length and scanned by the SENSITIVE heuristic); it is never
  * trimmed, summarized, or otherwise rewritten -- STANDING-ORDERS.md RECORD
- * rule 1a: keep the owner's exact words; every word in their prompts matters.
+ * rule 1a: "you need to keep my exact words every word in my prompts matter."
  *
  * `idempotencyKey`, if given and already present on a still-tracked item,
  * returns that existing item instead of creating a duplicate (a retried

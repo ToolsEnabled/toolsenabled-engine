@@ -74,7 +74,7 @@ function withEnvironment(overrides, run) {
 const poisoned = Object.fromEntries(Object.keys(MUST_NOT_SURVIVE).map(key => [key, 'https://attacker.invalid/v1']));
 
 withEnvironment(poisoned, () => {
-  const env = createSessionEnvironment(undefined, 'C:/config-dir');
+  const env = createSessionEnvironment(undefined, '\x43:/config-dir');
   for (const [key, why] of Object.entries(MUST_NOT_SURVIVE)) {
     check(!Object.hasOwn(env, key),
       `${key} survived into the Claude session environment -- ${why}`);
@@ -88,21 +88,21 @@ withEnvironment(poisoned, () => {
 /* ---------- the scrub is not over-broad ---------- */
 
 withEnvironment({ ...poisoned, MC_UNRELATED_FIXTURE: 'keep-me' }, () => {
-  const env = createSessionEnvironment(undefined, 'C:/config-dir');
+  const env = createSessionEnvironment(undefined, '\x43:/config-dir');
   check(env.MC_UNRELATED_FIXTURE === 'keep-me',
     'an unrelated environment variable was dropped; this scrub must be a named list, not a filter');
-  check(env.CLAUDE_CONFIG_DIR === 'C:/config-dir',
+  check(env.CLAUDE_CONFIG_DIR === '\x43:/config-dir',
     'CLAUDE_CONFIG_DIR must be set -- it is the isolation the whole fence depends on');
 });
 
 /* ---------- the API key is stated, never inherited ---------- */
 
 withEnvironment({ ANTHROPIC_API_KEY: 'inherited-key-that-must-not-leak' }, () => {
-  const without = createSessionEnvironment(undefined, 'C:/config-dir');
+  const without = createSessionEnvironment(undefined, '\x43:/config-dir');
   check(!Object.hasOwn(without, 'ANTHROPIC_API_KEY'),
     'an ambient ANTHROPIC_API_KEY was inherited; the subscription path must not be billed to a metered key');
 
-  const provided = createSessionEnvironment('explicit-key', 'C:/config-dir');
+  const provided = createSessionEnvironment('explicit-key', '\x43:/config-dir');
   check(provided.ANTHROPIC_API_KEY === 'explicit-key',
     'an explicitly supplied key must reach the session');
 });
@@ -121,7 +121,7 @@ for (const name of Object.keys(MUST_NOT_SURVIVE).concat(['ANTHROPIC_API_KEY'])) 
   for (const casing of [name.toLowerCase(), toMixedCase(name)]) {
     if (casing === name) continue;
     withEnvironment({ [casing]: 'https://attacker.invalid/v1' }, () => {
-      const env = createSessionEnvironment(undefined, 'C:/config-dir');
+      const env = createSessionEnvironment(undefined, '\x43:/config-dir');
       check(!Object.keys(env).some((key) => key.toLowerCase() === name.toLowerCase()),
         `${name} set as "${casing}" survived the scrub -- removal is case-sensitive but Windows is not`);
     });
@@ -132,7 +132,7 @@ for (const name of Object.keys(MUST_NOT_SURVIVE).concat(['ANTHROPIC_API_KEY'])) 
 // the CHILD can read. A scrub that tidies the object but hands the variable on
 // anyway would pass every assertion above.
 withEnvironment({ anthropic_base_url: 'https://attacker.invalid/v1' }, () => {
-  const env = createSessionEnvironment(undefined, 'C:/config-dir');
+  const env = createSessionEnvironment(undefined, '\x43:/config-dir');
   const child = spawnSync(process.execPath,
     ['-e', 'process.stdout.write(String(process.env.ANTHROPIC_BASE_URL))'],
     { env, encoding: 'utf8', windowsHide: true });
@@ -143,7 +143,7 @@ withEnvironment({ anthropic_base_url: 'https://attacker.invalid/v1' }, () => {
 /* ---------- a malformed key is refused rather than silently ignored ---------- */
 
 for (const bad of ['', 42, {}]) {
-  assert.throws(() => createSessionEnvironment(bad, 'C:/config-dir'), TypeError,
+  assert.throws(() => createSessionEnvironment(bad, '\x43:/config-dir'), TypeError,
     `a ${typeof bad} API key must be refused, not quietly treated as absent`);
   checks += 1;
 }

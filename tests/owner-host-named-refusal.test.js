@@ -6,7 +6,7 @@
 // and its classification discarded unconditionally, and the calling agent read
 // "Internal error." instead.
 //
-// This is why an earlier change (error-taxonomy: register the tree-command refusal
+// This is why 24e60a96 (error-taxonomy: register the tree-command refusal
 // family) could not do what it exists for: reclassifying a code cannot help at
 // a seam that never looks at the error. That commit is LIVE in the running
 // engine, so its own ledger verification is measuring a rescue that never
@@ -43,7 +43,7 @@ process.once('exit', () => { try { fs.rmSync(SCRATCH_ROOT, { recursive: true, fo
 // asserted rather than assumed.
 const RAW_MESSAGE_SENTINEL = 'raw-handler-detail-that-must-not-reach-the-wire';
 
-// The six codes an earlier change rescued. Their sentences are read from the taxonomy at
+// The six codes 24e60a96 rescued. Their sentences are read from the taxonomy at
 // assertion time; nothing here pins a spelling.
 const NAMED_REFUSAL_CODES = Object.freeze([
   'MC_TREE_COMMAND_NOT_BELOW_CALLER',
@@ -201,7 +201,7 @@ async function main() {
           assert.ok(response.error, `${code}: a refused line must come back as an error`);
 
           // The taxonomy already knows this code is a refusal, not a crash.
-          // That is the whole point of an earlier change, so assert it here rather than
+          // That is the whole point of 24e60a96, so assert it here rather than
           // trusting it: if this fails, the fixture is wrong, not the seam.
           assert.notEqual(expected.code, 'INTERNAL_ERROR',
             `${code}: fixture check -- the taxonomy must classify this code away from INTERNAL_ERROR`);

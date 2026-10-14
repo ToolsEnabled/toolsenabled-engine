@@ -1,6 +1,6 @@
 'use strict';
 
-// FIRST REQUIRE, PER THE STANDING RULE: redirects TOOLSENABLED_STATE_ROOT
+// FIRST REQUIRE, PER THE 06:12Z STANDING RULE: redirects TOOLSENABLED_STATE_ROOT
 // off the live capability root before any other module in this file can
 // resolve it, and throws if the redirect did not take. This file's own
 // sandbox() below always passes an explicit rootPath to every store call, so

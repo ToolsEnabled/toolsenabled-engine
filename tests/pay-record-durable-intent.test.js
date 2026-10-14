@@ -24,7 +24,7 @@ function assertIsolated() {
 }
 assertIsolated();
 
-// The owner has NOT reserved purchase approval for themselves, so a spend with
+// The owner has NOT reserved purchase approval for himself, so a spend with
 // no cart-line authorization auto-approves up to the daily cap
 // (purchase-authority.js's PURCHASE_AUTO_APPROVED_BY_SETTING path). This is
 // the only way to reach state.recordSpend at all through the REAL registry

@@ -152,7 +152,7 @@ function scrubbedSystemEnvironment(environment) {
 }
 
 function windowsPowerShellPath(environment) {
-  const configured = envValue(environment, 'SystemRoot') || envValue(environment, 'WINDIR') || 'C:\\Windows';
+  const configured = envValue(environment, 'SystemRoot') || envValue(environment, 'WINDIR') || '\x43:\\Windows';
   if (!path.win32.isAbsolute(configured)) {
     throw new AgentDigestProcessIdentityError(process.pid,
       new Error('Windows system root is not absolute.'));

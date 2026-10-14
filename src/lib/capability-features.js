@@ -2,7 +2,7 @@
 
 // WHICH FEATURES THIS SESSION CAN ACTUALLY REACH, RESOLVED RATHER THAN DECLARED.
 //
-// Product note: an onboarding line naming the enabled features, tagged
+// Owner, 2026-08-13: an onboarding line naming the enabled features, tagged
 // `[filekeeper] [grepsaver]`, so an agent knows what it has instead of
 // rediscovering it or ignoring it.
 //

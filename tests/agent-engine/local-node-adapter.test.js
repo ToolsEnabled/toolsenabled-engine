@@ -258,21 +258,25 @@ test('interrupt aborts the in-flight request and completes the turn as interrupt
   }
 });
 
-test('a model the runtime does not hold is refused by name, before any turn', async () => {
-  const ollama = await fakeOllama({ models: ['other-model:3b'] });
+test('an uncatalogued model reaches the runtime and its named refusal is shown without rotation', async () => {
+  const ollama = await fakeOllama({ models: ['other-model:3b'], answer: (_request, response) => {
+    response.writeHead(404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: 'Requested model not found' }));
+  } });
+  let session;
   try {
-    await assert.rejects(
-      () => startLocalSession({ threadOptions: {}, settings: ollama.settings, dependencies: { probeResources: RESOURCES } }),
-      error => {
-        assert.equal(error.name, 'LocalNodeError');
-        assert.equal(error.code, 'LOCAL_NODE_MODEL_NOT_INSTALLED');
-        assert.deepEqual(error.details.available, ['other-model:3b']);
-        assert.match(error.message, /ollama pull fake-model:1b/);
-        return true;
-      }
-    );
-    assert.equal(ollama.chats.length, 0, 'no chat request is made for a model that is not there');
+    session = await startLocalSession({ settings: { ...ollama.settings, 'model.local_gpu_policy': 'Allow CPU fallback' },
+      dependencies: { toolSurface: null, threadStore: null } });
+    assert.equal(session.model, MODEL);
+    assert.equal(ollama.chats.length, 0, 'startup sends no prompt');
+    const result = await session.adapter.sendTurn({ threadId: session.threadId, text: 'work' });
+    assert.equal(result.status, 'error');
+    assert.equal(result.isError, true);
+    assert.match(result.failure, /Requested model not found/);
+    assert.equal(ollama.chats.length, 1, 'a refusal never rotates to another model');
+    assert.equal(ollama.chats[0].model, MODEL);
   } finally {
+    session?.close();
     await ollama.close();
   }
 });
@@ -320,7 +324,7 @@ test('with no Ollama configured, the runtime module\'s own detection picks the e
       settings: {},
       dependencies: { probeResources: RESOURCES, runtimePorts: { ollama: ollama.port } }
     });
-    assert.equal(explicit.model, 'tiny:1b-instruct', 'a tier naming a model gets that model');
+    assert.equal(explicit.model, 'local/tiny:1b-instruct', 'an explicit native prefix is part of the model ID');
   } finally {
     await ollama.close();
   }

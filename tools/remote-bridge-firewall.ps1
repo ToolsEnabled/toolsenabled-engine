@@ -1,7 +1,8 @@
 #requires -Version 5.1
 <#
-    ONE-TIME, IDEMPOTENT firewall rule for the remote-agent-bridge
-    (request R117: remote-agent bridge between paired computers). Same reasoning as tools/link-bus-firewall.ps1:
+    ONE-TIME, IDEMPOTENT firewall rule for the remote-agent-bridge (owner
+    request R117, "get the other computer complete access to the
+    toolsenabled system"). Same reasoning as tools/link-bus-firewall.ps1:
     this needs elevation because creating an inbound Windows Firewall rule is
     admin-only, and the owner's interactive session carries
     BUILTIN\Administrators as deny-only.

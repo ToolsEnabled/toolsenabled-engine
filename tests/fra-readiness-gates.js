@@ -263,7 +263,7 @@ check('secretValuesEmitted true is refused', () => {
 });
 
 check('a path-disclosing bridgeRoot property is refused', () => {
-  const result = runGate(validReceipt({ bridgeRoot: 'C:\\somewhere' }));
+  const result = runGate(validReceipt({ bridgeRoot: '\x43:\\somewhere' }));
   assert.equal(result.ready, false);
   assert.equal(result.reason, 'peer_receipt_invalid');
 });

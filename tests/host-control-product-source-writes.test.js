@@ -3,15 +3,15 @@
 /* THE OWNER'S SWITCH LIFTS THE CODE-FOLDER RULE, AND ONLY THAT RULE, AND NEVER
  * FOR THE RUNNING PRODUCT.
  *
- * Measured 2026-09-19 on a development machine: with "Available tool sets" on
+ * Measured 2026-09-19 on the owner's machine: with "Available tool sets" on
  * Only, every Codex lane writes through host.write_file / host.patch_file and
  * nothing else, and the code-folder rule in
  * src/lib/providers/host-control.js refused every edit to the checkouts the
  * owner had cloned for them (HOST_PATH_WRITE_PROTECTED on
- * temporary app checkouts' src, on isolated worktrees'
+ * Temp\te-home-circle-hotload-app-*\src, on isolated worktrees'
  * src/views/computers.js and shell/fleet-profile-preload.cjs). Eight lanes were
- * blocked in one day and there was no switch. The owner asked for a switch in
- * settings for this.
+ * blocked in one day and there was no switch. The owner: "there needs to be a
+ * switch in settings for this".
  *
  * These checks drive the PRODUCT'S OWN resolveHostPath, both ways round, with
  * the switch handed in through the seam so no settings file is needed, and
@@ -95,7 +95,7 @@ try {
       assert.equal(refuses(path.join(checkout, leaf)), null, leaf + ' must be writable once the owner lifted the rule');
     }
     for (const leaf of ['package.json', 'package-lock.json', path.join('config', 'settings-registry.json'), path.join('config', 'payload-boundary.json')]) {
-      assert.equal(refuses(path.join(checkout, leaf)), null, leaf + ' is source too once the owner lifted the rule (product note)');
+      assert.equal(refuses(path.join(checkout, leaf)), null, leaf + ' is source too once the owner lifted the rule (owner, 2026-09-20)');
     }
     setProductSourceWritesPolicyForTests(OFF);
     assert.equal(refuses(path.join(checkout, 'package.json')), 'HOST_PATH_WRITE_PROTECTED', 'CONTROL: off keeps package.json anchored');
@@ -111,9 +111,9 @@ try {
 
   check('the name-anchored sibling-lane rule lifts with the switch too, its anchors do not', () => {
     setProductSourceWritesPolicyForTests(ON);
-    const lane = path.join(HOME, 'work', 'ToolsEnabled-copy');
+    const lane = path.join(HOME, 'Desktop', 'ToolsEnabled-lane1');
     assert.equal(refuses(path.join(lane, 'src', 'x.js')), null);
-    assert.equal(refuses(path.join(lane, 'config', 'x.json')), null, 'config/ lifts with the switch (product note)');
+    assert.equal(refuses(path.join(lane, 'config', 'x.json')), null, 'config/ lifts with the switch (owner, 2026-09-20)');
     assert.equal(refuses(path.join(lane, 'KILLSWITCH')), 'HOST_PATH_WRITE_PROTECTED');
     assert.equal(refuses(path.join(lane, 'state', 'x.json')), 'HOST_PATH_FORBIDDEN', 'state/ is a credential store: refused harder than an anchor');
     setProductSourceWritesPolicyForTests(OFF);

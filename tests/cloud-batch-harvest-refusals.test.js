@@ -60,30 +60,34 @@ function assertNoDiffWritten(run) {
 }
 
 (async () => {
+  const confidential = require('node:crypto').randomBytes(24).toString('base64url');
   const errored = await run('errored', async () => ({
     state: 'errored',
-    detail: 'sandbox exited before the task ran',
+    detail: confidential,
   }));
   assert.deepEqual(errored.result.tally, { ERRORED: 1 });
   assert.equal(errored.manifest.tasks[0].verdict, 'ERRORED');
-  assert.match(errored.manifest.tasks[0].note, /sandbox exited/);
+  assert.equal(JSON.stringify(errored.manifest).includes(confidential), false);
+  assert.match(errored.manifest.tasks[0].note, /provider.*failed/i);
   assert.equal(errored.calls, 1, 'an errored terminal task is not fetched or spawned again');
   assertNoDiffWritten(errored);
 
   const fetchError = await run('fetch-error', async () => {
-    throw new Error('transport executable is unavailable');
+    throw new Error(confidential);
   });
   assert.deepEqual(fetchError.result.tally, { FETCH_ERROR: 1 });
   assert.equal(fetchError.manifest.tasks[0].verdict, 'FETCH_ERROR');
-  assert.match(fetchError.manifest.tasks[0].note, /transport executable/);
+  assert.equal(JSON.stringify(fetchError.manifest).includes(confidential), false);
+  assert.match(fetchError.manifest.tasks[0].note, /could not be fetched/);
   assert.equal(fetchError.calls, 1, 'a non-throttle transport refusal is not retried or spawned');
   assertNoDiffWritten(fetchError);
 
   const throttled = await run('throttled', async () => {
-    throw new Error('provider replied 429 Too Many Requests');
+    throw new Error('429 Too Many Requests ' + confidential);
   });
   assert.deepEqual(throttled.result.tally, { THROTTLED: 1 });
   assert.equal(throttled.manifest.tasks[0].verdict, 'THROTTLED');
+  assert.equal(JSON.stringify(throttled.manifest).includes(confidential), false);
   assert.match(throttled.manifest.tasks[0].note, /429 Too Many Requests/);
   assert.equal(throttled.calls, 1, 'an exhausted (zero-delay) retry ladder makes no extra provider call');
   assertNoDiffWritten(throttled);

@@ -41,7 +41,7 @@ const SCHEMA_VERSION = 'honest-retrieval-fts-v1';
 // tools/prior-work-index.js documents at WEIGHT_PATH: naming is an act of
 // intent. `R1246` in a request's identity is a much stronger claim to the topic
 // "R1246" than a body that mentions it in passing, and ranking those equally is
-// how a licensing-cost question got answered with a CSV about alarm clocks.
+// how a trademark-cost question got answered with a CSV about alarm clocks.
 const WEIGHT_IDENTITY = 8.0;
 const WEIGHT_TITLE = 4.0;
 const WEIGHT_BODY = 1.0;

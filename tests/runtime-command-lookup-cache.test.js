@@ -6,7 +6,7 @@
 // terraform/firebase it then runs the resolved binary with a 5,000 ms timeout.
 // system.doctor asks about gcloud, terraform, firebase, node and npx across
 // several provider modules per call, and system.status pays one on every poll.
-// Measured on a live install: 6.6 s of process spawning per four
+// Measured on the owner's install: 6.6 s of process spawning per four
 // system.doctor calls.
 //
 // The asymmetry is the whole design, and it is not an optimisation detail:

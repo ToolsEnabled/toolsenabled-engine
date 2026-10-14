@@ -150,7 +150,7 @@ function recordApprovedPurchase(promptId, dependencies = {}) {
 
   // Mirror the owner's now-settled decision, and any resulting charge, onto
   // the SAME P record purchase.request filed for this promptId
-  // (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS ruling: "the settled
+  // (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS ruling 05:12Z: "the settled
   // decision ... marks the record approved or declined; each recordSpend it
   // performs marks that line recorded"), so the shopping list, its decision
   // and its recorded charge read as ONE record. `actor: 'owner'` on the

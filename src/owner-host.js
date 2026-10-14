@@ -359,9 +359,9 @@ function installedOrgAuthority(env = process.env) {
  *   ON EVERY LATER LINE (`fresh: false`): the session is already running. Here
  *   the org's revision is NOT compared, and that is the whole point of the
  *   split. The revision moves on every write to the org, and a tree spawn is
- *   one: the new circle's seat is declared before it starts. Measured on a
- *   live tree, 2026-09-03: the overlay went 12 -> 13 when
- *   a Manager circle was drawn, and within twenty seconds every socket of the
+ *   one: the new circle's seat is declared before it starts. Measured on the
+ *   owner's own tree, 2026-09-03: the overlay went 12 -> 13 at 01:11:12Z when
+ *   a Manager circle was drawn, and by 01:11:30Z every socket of the
  *   CONTROLLER that drew it had been destroyed by this check -- "Connection
  *   closed" as the reward for a spawn that worked. It happened three times in
  *   one evening, and a circle whose tools die when its first child is seated
@@ -371,12 +371,12 @@ function installedOrgAuthority(env = process.env) {
  * change ABOUT IT: its seat must still exist, be enabled, and carry the role
  * and provider its credential names, and a role of that name must still be
  * defined. The role record's REVISION is not compared on a later line either,
- * and that is the second half of the same lesson. MEASURED on a live tree,
- * 2026-09-19: services/custom-roles.json moved default:controller to
+ * and that is the second half of the same lesson. MEASURED on the owner's own
+ * tree, 2026-09-19: services/custom-roles.json moved default:controller to
  * rev 10 and default:manager to rev 9 while both were running, and
  * capability/logs/owner-host-retirements.jsonl records six controller and
- * manager sessions retired with reason per-line-recheck within ten minutes
- * -- every one of them "MCP server is not connected" from that line
+ * manager sessions retired with reason per-line-recheck between 03:03Z and
+ * 03:12Z -- every one of them "MCP server is not connected" from that line
  * on. Editing role text in the Role library is an ordinary owner action and
  * must not end the sessions doing the work. A moved revision REBINDS the
  * running session in place instead (rebindRoleRevision in createOwnerHost):
@@ -692,7 +692,7 @@ const REFUSAL_CODE_SHAPE = /^[A-Z][A-Z0-9_]{2,79}$/;
 // bound and every refusal -- however precisely the tool had already worked it
 // out -- reached the calling agent as "Internal error.".
 //
-// That is why an earlier change (registering the MC_TREE_COMMAND_* refusal family in
+// That is why 24e60a96 (registering the MC_TREE_COMMAND_* refusal family in
 // src/lib/error-taxonomy.js) could not do what it exists for: reclassifying a
 // code cannot help at a seam that never looks at the error.
 //
@@ -1296,9 +1296,9 @@ function createOwnerHost(options = {}) {
 
   /* STOP THIS SESSION'S WORK WITHOUT ENDING THE SESSION.
    *
-   * MEASURED on the native build: a
+   * MEASURED on the native build (evidence grok-final-stop-report.json): a
    * provider Stop cancelled the model turn while the host.exec child it had
-   * asked for -- an owned sixty-second command -- REMAINED ALIVE
+   * asked for -- an owned sixty-second command, pid 874779 -- REMAINED ALIVE
    * until root killed that exact pid by hand. Nothing here could have stopped
    * it: cancellation authority lives on the connection, and the only verbs
    * that reached it were revokeSession and close(), both of which retire the
@@ -1438,7 +1438,7 @@ function createOwnerHost(options = {}) {
        is authorized, BOTH listeners fire on every future 'timeout' event, so
        an idle window that armIdleTimeout correctly decided to survive was
        still ended by this stale handshake listener destroying the socket in
-       the same tick. MEASURED directly: a fresh net.Socket given two
+       the same tick. MEASURED by Manager 5: a fresh net.Socket given two
        setTimeout calls carries listenerCount('timeout') === 2, and a 31
        minute and, injected, a 4-second idle-survival run both died with the
        proxy reporting "ToolsEnabled ended this session's tool access" until
@@ -1465,7 +1465,7 @@ function createOwnerHost(options = {}) {
        check enforces rather than assumes: an authorized session that has
        simply been thinking or working for one idle window, with its binding
        still live, is recorded and re-armed, never destroyed -- destroying it
-       is the defect the M1 measurement names ("a bound session surviving
+       is the defect Manager 5's M1 measures ("a bound session surviving
        thirty minutes"). Only a socket whose binding is ALREADY gone -- a
        state that should be unreachable given the invariant above, but which
        this still guards rather than trusts -- is destroyed here. Keep the
@@ -1809,12 +1809,27 @@ function createOwnerHost(options = {}) {
       linuxAuthority.prepareSocketDirectory(pipeName);
     }
     if (!hygieneComplete) {
+      // Before any session can connect, discard 1.0.48's generated sign-ins.
+      // A partial pass is retried next boot; cleanup never refuses host startup.
+      const observe = typeof options.onLegacySignInCleanup === 'function'
+        ? options.onLegacySignInCleanup : row => process.stderr.write(JSON.stringify(row) + '\n');
+      try {
+        await require('./lib/legacy-signin-cleanup').cleanupLegacySignIns({
+          ...(options.allowTestPaths === true
+            ? { servicesRoot: options.legacySignInServicesRoot || path.join(path.dirname(capabilityFile), 'services') } : {}),
+          observe,
+        });
+      } catch {
+        try { observe({ event: 'summary', complete: false,
+          sentence: 'Legacy provider sign-in cleanup could not finish; ToolsEnabled will retry next start.' }); } catch {}
+      }
       try { await credentialHygiene(); }
       catch {
         fail('OWNER_HOST_CREDENTIAL_HYGIENE_FAILED', 'Credential hygiene failed, so the owner host was not started.');
       }
       hygieneComplete = true;
     }
+    if (closed) fail('OWNER_HOST_CLOSED', 'The owner host closed while startup hygiene was running.');
     await new Promise((resolve, reject) => {
       const onError = error => { server.off('listening', onListening); reject(error); };
       const onListening = () => { server.off('error', onError); resolve(); };

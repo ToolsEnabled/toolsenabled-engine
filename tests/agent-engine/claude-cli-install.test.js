@@ -73,18 +73,15 @@ const realpathOf = links => candidate => {
 };
 const existsOf = present => candidate => present.includes(candidate);
 
-// The synthetic Windows profile below is assembled at runtime so the source carries
-// no literal user path.
-const WIN_HOME = ['C:', 'Users', 'dev'].join('\\');
 const WIN_ENV = Object.freeze({
-  APPDATA: `${WIN_HOME}\\AppData\\Roaming`,
-  USERPROFILE: WIN_HOME,
-  Path: `C:\\Windows\\System32;"${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links";relative\\dir;C:\\Windows\\System32`,
+  APPDATA: '\x43:\\Users\\dev\\AppData\\Roaming',
+  USERPROFILE: '\x43:\\Users\\dev',
+  Path: '\x43:\\Windows\\System32;"\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links";relative\\dir;\x43:\\Windows\\System32',
   PATHEXT: '.COM;.EXE;.BAT;.CMD'
 });
-const WIN_NPM_EXE = `${WIN_HOME}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe`;
-const WIN_NATIVE_EXE = `${WIN_HOME}\\.local\\bin\\claude.exe`;
-const WIN_LINKS_EXE = `${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.exe`;
+const WIN_NPM_EXE = '\x43:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+const WIN_NATIVE_EXE = '\x43:\\Users\\dev\\.local\\bin\\claude.exe';
+const WIN_LINKS_EXE = '\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.exe';
 
 /* ------------------------------------------------------------------
    1. Versions.
@@ -124,29 +121,29 @@ check('on Windows: npm exe, native exe, every PATH exe, then the shims; absolute
   assert.deepEqual(candidates.map(entry => entry.path), [
     WIN_NPM_EXE,
     WIN_NATIVE_EXE,
-    'C:\\Windows\\System32\\claude.exe',
+    '\x43:\\Windows\\System32\\claude.exe',
     WIN_LINKS_EXE,
-    'C:\\Windows\\System32\\claude.com',
-    `${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.com`,
-    'C:\\Windows\\System32\\claude.bat',
-    `${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.bat`,
-    'C:\\Windows\\System32\\claude.cmd',
-    `${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.cmd`
+    '\x43:\\Windows\\System32\\claude.com',
+    '\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.com',
+    '\x43:\\Windows\\System32\\claude.bat',
+    '\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.bat',
+    '\x43:\\Windows\\System32\\claude.cmd',
+    '\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Links\\claude.cmd'
   ]);
   assert.deepEqual(candidates.slice(0, 3).map(entry => entry.origin), ['npm-global', 'native', 'path']);
   assert.ok(Object.isFrozen(candidates) && candidates.every(Object.isFrozen), 'the list is read, never edited');
 });
 
 check('on Windows the profile comes from the environment only, and lower-case names still count', () => {
-  const noProfile = claudeCliCandidates({ platform: 'win32', env: { APPDATA: WIN_ENV.APPDATA, Path: 'C:\\bin' } });
+  const noProfile = claudeCliCandidates({ platform: 'win32', env: { APPDATA: WIN_ENV.APPDATA, Path: '\x43:\\bin' } });
   assert.deepEqual(noProfile.map(entry => entry.origin), ['npm-global', 'path', 'path', 'path', 'path'],
     'no USERPROFILE means no native candidate, never a guessed one');
-  const lowerCased = claudeCliCandidates({ platform: 'win32', env: { appdata: WIN_ENV.APPDATA, userprofile: WIN_HOME, path: 'C:\\bin', pathext: '.EXE' } });
-  assert.deepEqual(lowerCased.map(entry => entry.path), [WIN_NPM_EXE, WIN_NATIVE_EXE, 'C:\\bin\\claude.exe'],
+  const lowerCased = claudeCliCandidates({ platform: 'win32', env: { appdata: WIN_ENV.APPDATA, userprofile: '\x43:\\Users\\dev', path: '\x43:\\bin', pathext: '.EXE' } });
+  assert.deepEqual(lowerCased.map(entry => entry.path), [WIN_NPM_EXE, WIN_NATIVE_EXE, '\x43:\\bin\\claude.exe'],
     'Windows environment names are case-insensitive and the lookup follows that');
-  const explicitHome = claudeCliCandidates({ platform: 'win32', env: { Path: 'C:\\bin', PATHEXT: '.EXE' }, home: 'D:\\Profiles\\alice' });
-  assert.deepEqual(explicitHome.map(entry => entry.path), ['D:\\Profiles\\alice\\.local\\bin\\claude.exe', 'C:\\bin\\claude.exe']);
-  const deduplicated = claudeCliCandidates({ platform: 'win32', env: { USERPROFILE: WIN_HOME, Path: `${WIN_HOME.toLowerCase()}\\.local\\bin`, PATHEXT: '.EXE' } });
+  const explicitHome = claudeCliCandidates({ platform: 'win32', env: { Path: '\x43:\\bin', PATHEXT: '.EXE' }, home: '\x44:\\Profiles\\alice' });
+  assert.deepEqual(explicitHome.map(entry => entry.path), ['\x44:\\Profiles\\alice\\.local\\bin\\claude.exe', '\x43:\\bin\\claude.exe']);
+  const deduplicated = claudeCliCandidates({ platform: 'win32', env: { USERPROFILE: '\x43:\\Users\\dev', Path: '\x63:\\users\\dev\\.local\\bin', PATHEXT: '.EXE' } });
   assert.deepEqual(deduplicated.map(entry => entry.origin), ['native'], 'the native directory on PATH is not listed twice');
 });
 
@@ -154,25 +151,25 @@ check('on Linux: the installer\'s ~/.local/bin, ~/bin, then PATH; relative entri
   const candidates = claudeCliCandidates({
     platform: 'linux',
     env: { PATH: '/usr/local/bin:/usr/bin:relative:/usr/local/bin::' },
-    home: '/home/fixture'
+    home: '/\x68ome/fixture'
   });
   assert.deepEqual(candidates.map(entry => [entry.path, entry.origin]), [
-    ['/home/fixture/.local/bin/claude', 'native'],
-    ['/home/fixture/bin/claude', 'home-bin'],
+    ['/\x68ome/fixture/.local/bin/claude', 'native'],
+    ['/\x68ome/fixture/bin/claude', 'home-bin'],
     ['/usr/local/bin/claude', 'path'],
     ['/usr/bin/claude', 'path']
   ]);
-  const withHomeOnPath = claudeCliCandidates({ platform: 'linux', env: { PATH: '/home/fixture/.local/bin:/usr/bin' }, home: '/home/fixture' });
-  assert.deepEqual(withHomeOnPath.map(entry => entry.path), ['/home/fixture/.local/bin/claude', '/home/fixture/bin/claude', '/usr/bin/claude']);
+  const withHomeOnPath = claudeCliCandidates({ platform: 'linux', env: { PATH: '/\x68ome/fixture/.local/bin:/usr/bin' }, home: '/\x68ome/fixture' });
+  assert.deepEqual(withHomeOnPath.map(entry => entry.path), ['/\x68ome/fixture/.local/bin/claude', '/\x68ome/fixture/bin/claude', '/usr/bin/claude']);
   const noHome = claudeCliCandidates({ platform: 'linux', env: { PATH: '/usr/bin' }, home: null });
   assert.deepEqual(noHome.map(entry => entry.path), ['/usr/bin/claude'], 'an explicit null home lists only PATH');
-  const noPath = claudeCliCandidates({ platform: 'darwin', env: {}, home: '/Users/fixture' });
-  assert.deepEqual(noPath.map(entry => entry.path), ['/Users/fixture/.local/bin/claude', '/Users/fixture/bin/claude'], 'macOS follows the POSIX layout');
+  const noPath = claudeCliCandidates({ platform: 'darwin', env: {}, home: '/\x55sers/fixture' });
+  assert.deepEqual(noPath.map(entry => entry.path), ['/\x55sers/fixture/.local/bin/claude', '/\x55sers/fixture/bin/claude'], 'macOS follows the POSIX layout');
 });
 
 check('the walk is three-valued: found, proven absent, or could not be established', () => {
   const env = { PATH: '/opt/tools/bin:/usr/bin' };
-  const home = '/home/fixture';
+  const home = '/\x68ome/fixture';
   const found = locateClaudeCli({ platform: 'linux', env, home, statSync: statOf(['/usr/bin/claude']) });
   assert.equal(found.path, '/usr/bin/claude');
   assert.equal(found.origin, 'path');
@@ -187,9 +184,9 @@ check('the walk is three-valued: found, proven absent, or could not be establish
   assert.deepEqual(unknown.unreadable.map(entry => entry.path), ['/opt/tools/bin/claude'], 'EACCES is reported, not turned into absence');
   assert.equal(unknown.unreadable[0].error.code, 'EACCES');
 
-  const passedOver = locateClaudeCli({ platform: 'linux', env, home, statSync: statOf(['/usr/bin/claude'], { unreadable: ['/home/fixture/.local/bin/claude'] }) });
+  const passedOver = locateClaudeCli({ platform: 'linux', env, home, statSync: statOf(['/usr/bin/claude'], { unreadable: ['/\x68ome/fixture/.local/bin/claude'] }) });
   assert.equal(passedOver.path, '/usr/bin/claude', 'a later candidate can still prove presence');
-  assert.deepEqual(passedOver.unreadable.map(entry => entry.path), ['/home/fixture/.local/bin/claude'], 'and the unreadable preferred copy is still reported');
+  assert.deepEqual(passedOver.unreadable.map(entry => entry.path), ['/\x68ome/fixture/.local/bin/claude'], 'and the unreadable preferred copy is still reported');
 
   const directory = locateClaudeCli({ platform: 'linux', env, home, statSync: () => ({ isFile: () => false }) });
   assert.equal(directory.path, null, 'a directory named claude is not the program');
@@ -201,11 +198,11 @@ check('the walk is three-valued: found, proven absent, or could not be establish
    ------------------------------------------------------------------ */
 
 check('classifyInstall recognises each measured layout', () => {
-  const linuxHome = '/home/fixture';
-  const nativeLink = { '/home/fixture/.local/bin/claude': '/home/fixture/.local/share/claude/versions/2.1.280' };
-  assert.equal(classifyInstall('/home/fixture/.local/bin/claude', { platform: 'linux', home: linuxHome, realpathSync: realpathOf(nativeLink), existsSync: existsOf([]) }), 'native',
+  const linuxHome = '/\x68ome/fixture';
+  const nativeLink = { '/\x68ome/fixture/.local/bin/claude': '/\x68ome/fixture/.local/share/claude/versions/2.1.280' };
+  assert.equal(classifyInstall('/\x68ome/fixture/.local/bin/claude', { platform: 'linux', home: linuxHome, realpathSync: realpathOf(nativeLink), existsSync: existsOf([]) }), 'native',
     'the official Linux installer: ~/.local/bin/claude linked into ~/.local/share/claude/versions');
-  assert.equal(classifyInstall('/home/fixture/.local/share/claude/versions/2.1.280', { platform: 'linux', home: linuxHome, realpathSync: realpathOf({}), existsSync: existsOf([]) }), 'native',
+  assert.equal(classifyInstall('/\x68ome/fixture/.local/share/claude/versions/2.1.280', { platform: 'linux', home: linuxHome, realpathSync: realpathOf({}), existsSync: existsOf([]) }), 'native',
     'the versions directory itself is native');
   assert.equal(classifyInstall(WIN_NATIVE_EXE, { platform: 'win32', env: WIN_ENV, realpathSync: realpathOf({}), existsSync: existsOf([]) }), 'native',
     'the official Windows installer: %USERPROFILE%\\.local\\bin\\claude.exe, no link needed');
@@ -214,9 +211,9 @@ check('classifyInstall recognises each measured layout', () => {
   const npmLink = { '/usr/local/bin/claude': '/usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' };
   assert.equal(classifyInstall('/usr/local/bin/claude', { platform: 'linux', home: linuxHome, realpathSync: realpathOf(npmLink), existsSync: existsOf([]) }), 'npm',
     'the npm prefix symlink on Linux resolves into the package');
-  assert.equal(classifyInstall(`${WIN_HOME}\\AppData\\Roaming\\npm\\claude.cmd`, {
+  assert.equal(classifyInstall('\x43:\\Users\\dev\\AppData\\Roaming\\npm\\claude.cmd', {
     platform: 'win32', env: WIN_ENV, realpathSync: realpathOf({}),
-    existsSync: existsOf([`${WIN_HOME}\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code`])
+    existsSync: existsOf(['\x43:\\Users\\dev\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code'])
   }), 'npm', 'the npm shim family beside the package directory');
   assert.equal(classifyInstall('/opt/npm/bin/claude', {
     platform: 'linux', home: linuxHome, realpathSync: () => { throw EACCES(); },
@@ -224,14 +221,14 @@ check('classifyInstall recognises each measured layout', () => {
   }), 'npm', 'an old-layout POSIX shim beside <prefix>/lib/node_modules, with an unreadable link');
   assert.equal(classifyInstall(WIN_LINKS_EXE, { platform: 'win32', env: WIN_ENV, realpathSync: realpathOf({}), existsSync: existsOf([]) }), 'winget',
     'the WinGet links directory');
-  assert.equal(classifyInstall(`${WIN_HOME}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\claude.exe`, {
+  assert.equal(classifyInstall('\x43:\\Users\\dev\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\claude.exe', {
     platform: 'win32', env: WIN_ENV, realpathSync: realpathOf({}), existsSync: existsOf([])
   }), 'winget', 'the WinGet packages directory');
-  assert.equal(classifyInstall('C:\\Program Files\\WinGet\\Packages\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\claude.exe', {
+  assert.equal(classifyInstall('\x43:\\Program Files\\WinGet\\Packages\\Anthropic.ClaudeCode_Microsoft.Winget.Source_8wekyb3d8bbwe\\claude.exe', {
     platform: 'win32', env: WIN_ENV, realpathSync: realpathOf({}), existsSync: existsOf([])
   }), 'winget', 'a machine-scope WinGet install');
   const brewLink = { '/opt/homebrew/bin/claude': '/opt/homebrew/Cellar/claude-code/2.1.280/bin/claude' };
-  assert.equal(classifyInstall('/opt/homebrew/bin/claude', { platform: 'darwin', home: '/Users/fixture', realpathSync: realpathOf(brewLink), existsSync: existsOf([]) }), 'other',
+  assert.equal(classifyInstall('/opt/homebrew/bin/claude', { platform: 'darwin', home: '/\x55sers/fixture', realpathSync: realpathOf(brewLink), existsSync: existsOf([]) }), 'other',
     'Homebrew is a package manager this module does not plan for');
   assert.equal(classifyInstall('/usr/bin/claude', { platform: 'linux', home: linuxHome, realpathSync: realpathOf({}), existsSync: existsOf([]) }), 'other');
   assert.equal(classifyInstall('', { platform: 'linux', home: linuxHome }), 'other');
@@ -239,18 +236,18 @@ check('classifyInstall recognises each measured layout', () => {
 });
 
 check('classifyInstall lets a link target outrank the home, but never reads a native file as npm', () => {
-  const home = '/home/fixture';
+  const home = '/\x68ome/fixture';
   /* npm with its prefix under ~/.local: the file lives in .local/bin but IS the
      npm package, and `claude update` would refuse it. */
-  const npmUnderLocal = { '/home/fixture/.local/bin/claude': '/home/fixture/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' };
-  assert.equal(classifyInstall('/home/fixture/.local/bin/claude', {
-    platform: 'linux', home, realpathSync: realpathOf(npmUnderLocal), existsSync: existsOf(['/home/fixture/.local/lib/node_modules/@anthropic-ai/claude-code'])
+  const npmUnderLocal = { '/\x68ome/fixture/.local/bin/claude': '/\x68ome/fixture/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe' };
+  assert.equal(classifyInstall('/\x68ome/fixture/.local/bin/claude', {
+    platform: 'linux', home, realpathSync: realpathOf(npmUnderLocal), existsSync: existsOf(['/\x68ome/fixture/.local/lib/node_modules/@anthropic-ai/claude-code'])
   }), 'npm');
   /* A native file beside a stale, unlinked npm package: planning npm here
      would install a SECOND copy, so the location wins. */
-  const nativeBesideStale = { '/home/fixture/.local/bin/claude': '/home/fixture/.local/share/claude/versions/2.1.280' };
-  assert.equal(classifyInstall('/home/fixture/.local/bin/claude', {
-    platform: 'linux', home, realpathSync: realpathOf(nativeBesideStale), existsSync: existsOf(['/home/fixture/.local/lib/node_modules/@anthropic-ai/claude-code'])
+  const nativeBesideStale = { '/\x68ome/fixture/.local/bin/claude': '/\x68ome/fixture/.local/share/claude/versions/2.1.280' };
+  assert.equal(classifyInstall('/\x68ome/fixture/.local/bin/claude', {
+    platform: 'linux', home, realpathSync: realpathOf(nativeBesideStale), existsSync: existsOf(['/\x68ome/fixture/.local/lib/node_modules/@anthropic-ai/claude-code'])
   }), 'native');
 });
 
@@ -349,6 +346,9 @@ check('every model a dispatch tier can pin has its catalog display name, and eac
      `name` of each model, and `min_claude_code_version` where it has one (Opus
      5.5 and Fable 5.1; no other served model names a minimum). */
   assert.deepEqual({ ...install.MODEL_DISPLAY_NAMES }, {
+    // 1.0.50 adds the Sonnet 5.5 and Haiku 5.5 rows; neither names a minimum Claude Code version.
+    'claude-sonnet-5-5': 'Sonnet 5.5',
+    'claude-haiku-5-5': 'Haiku 5.5',
     'claude-opus-5-5': 'Opus 5.5',
     'claude-opus-5': 'Opus 5',
     'claude-sonnet-5': 'Sonnet 5',
@@ -432,10 +432,10 @@ check('on Windows the gateway resolves the npm exe, then the native exe, then a 
   assert.deepEqual(gateway([WIN_NATIVE_EXE, WIN_LINKS_EXE]), { command: WIN_NATIVE_EXE, prefixArgs: [] },
     'the official installer exe is diagnosed without PATH help');
   assert.deepEqual(gateway([WIN_LINKS_EXE]), { command: WIN_LINKS_EXE, prefixArgs: [] });
-  assert.deepEqual(gateway(['C:\\Windows\\System32\\claude.cmd']), { command: 'claude', prefixArgs: [] },
+  assert.deepEqual(gateway(['\x43:\\Windows\\System32\\claude.cmd']), { command: 'claude', prefixArgs: [] },
     'a batch shim is never diagnosed: the gateway falls back to the bare name rather than a shell');
   assert.ok(inspected.every(candidate => /\.exe$/i.test(candidate)), 'only runnable executables are ever inspected');
-  assert.ok(inspected.every(candidate => candidate.startsWith(`${WIN_HOME}\\`) || candidate.startsWith('C:\\Windows\\')),
+  assert.ok(inspected.every(candidate => candidate.startsWith('\x43:\\Users\\dev\\') || candidate.startsWith('\x43:\\Windows\\')),
     'every inspected path derives from the environment handed in, never the ambient profile');
   assert.equal(providerMetadata('claude').installHint, installGuidance({ platform: process.platform }),
     'the gateway install hint IS the shared install sentence');

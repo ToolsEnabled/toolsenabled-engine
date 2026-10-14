@@ -5,7 +5,7 @@
 // THE CASE THIS FILE PINS. At 2026-07-29 ~08:0xZ the live fleet supervisor was
 // captured verbatim from Win32_Process:
 //
-//   "C:\Program Files\nodejs\node.exe" tools/fleet-supervisor.js --serve --quiet
+//   pid 21556  "C:\Program Files\nodejs\node.exe" tools/fleet-supervisor.js --serve --quiet
 //
 // while config/managed-processes.json declared --concurrency 4 --project <id>
 // --backend vertex. The supervisor booted fine and then failed every lane one
@@ -36,8 +36,8 @@ function check(name, fn) {
 // --- Fixtures ---------------------------------------------------------------
 
 // Verbatim, including the trailing space Win32_Process reports.
-const LIVE_FLEET_COMMAND_LINE = '"C:\\Program Files\\nodejs\\node.exe" tools/fleet-supervisor.js --serve --quiet ';
-const LIVE_BRIDGE_COMMAND_LINE = '"C:\\Program Files\\nodejs\\node.exe" tools\\telegram-bridge.js --serve --quiet ';
+const LIVE_FLEET_COMMAND_LINE = '"\x43:\\Program Files\\nodejs\\node.exe" tools/fleet-supervisor.js --serve --quiet ';
+const LIVE_BRIDGE_COMMAND_LINE = '"\x43:\\Program Files\\nodejs\\node.exe" tools\\telegram-bridge.js --serve --quiet ';
 const DECLARED_FLEET_ARGV = ['--serve', '--quiet', '--concurrency', '4', '--project', 'example-vertex-project', '--backend', 'vertex'];
 
 function tempRoot() {
@@ -93,7 +93,7 @@ process.stdout.write('argv-drift\n');
 
 check('tokenizes the captured live fleet command line, quoted node path and all', () => {
   assert.deepEqual(drift.tokenizeCommandLine(LIVE_FLEET_COMMAND_LINE), [
-    'C:\\Program Files\\nodejs\\node.exe', 'tools/fleet-supervisor.js', '--serve', '--quiet'
+    '\x43:\\Program Files\\nodejs\\node.exe', 'tools/fleet-supervisor.js', '--serve', '--quiet'
   ]);
 });
 
@@ -158,7 +158,7 @@ check('REPRODUCES THE VERIFIED LIVE BUG: declared --project, live argv has none'
   const record = drift.detectDrift('fleet-supervisor', {
     registryFile,
     root,
-    processes: [{ pid: 4101, startedAt: '2026-07-29T05:40:00.000Z', commandLine: LIVE_FLEET_COMMAND_LINE }]
+    processes: [{ pid: 21556, startedAt: '2026-07-29T05:40:00.000Z', commandLine: LIVE_FLEET_COMMAND_LINE }]
   });
 
   assert.equal(record.state, drift.DRIFT.DRIFT, 'the captured live argv MUST be reported as drift');
@@ -172,7 +172,7 @@ check('REPRODUCES THE VERIFIED LIVE BUG: declared --project, live argv has none'
   assert.ok(record.missing.includes('example-vertex-project'));
   assert.ok(record.missing.includes('vertex'));
   assert.deepEqual([...record.extra], [], 'the live argv added nothing, it only dropped tokens');
-  assert.equal(record.candidates[0].pid, 4101);
+  assert.equal(record.candidates[0].pid, 21556);
 });
 
 check('the drift description prints BOTH argv strings so a human can judge', () => {
@@ -180,7 +180,7 @@ check('the drift description prints BOTH argv strings so a human can judge', () 
   const registryFile = writeRegistry(root, { 'fleet-supervisor': FLEET_ENTRY });
   const text = drift.describeDrift(drift.detectDrift('fleet-supervisor', {
     registryFile, root,
-    processes: [{ pid: 4101, commandLine: LIVE_FLEET_COMMAND_LINE }]
+    processes: [{ pid: 21556, commandLine: LIVE_FLEET_COMMAND_LINE }]
   }));
   assert.match(text, /declared: --serve --quiet --concurrency 4 --project example-vertex-project --backend vertex/);
   assert.match(text, /running : --serve --quiet/);
@@ -257,24 +257,24 @@ check('no state this module produces is ever a health state', () => {
 
 check('an S4U process with a null CommandLine is UNREADABLE, not "not running"', () => {
   // Measured 2026-07-29: once fleet-supervisor was launched by its scheduled
-  // task, Win32_Process returned CommandLine = NULL for its pid from an
+  // task, Win32_Process returned CommandLine = NULL for pid 36128 from an
   // unelevated session. Reporting that as NO_MATCHING_PROCESS would be the same
   // lie as reporting UNKNOWN as DOWN.
   const root = tempRoot();
   const registryFile = writeRegistry(root, { 'fleet-supervisor': FLEET_ENTRY });
   fs.mkdirSync(path.join(root, 'state'), { recursive: true });
   fs.writeFileSync(path.join(root, 'state', 'fleet-supervisor.pid.lock'),
-    JSON.stringify({ pid: 4102, startedAt: '2026-07-29T08:10:00.000Z' }), 'utf8');
+    JSON.stringify({ pid: 36128, startedAt: '2026-07-29T08:10:00.000Z' }), 'utf8');
 
   const record = drift.detectDrift('fleet-supervisor', {
     registryFile, root,
-    processes: [{ pid: 4102, commandLine: null }, { pid: 99, commandLine: 'node other.js' }]
+    processes: [{ pid: 36128, commandLine: null }, { pid: 99, commandLine: 'node other.js' }]
   });
 
   assert.equal(record.state, drift.DRIFT.UNKNOWN);
   assert.equal(record.notObservable, drift.NOT_OBSERVABLE.COMMAND_LINE_UNREADABLE);
-  assert.equal(record.lockedPid, 4102);
-  assert.match(record.reason, /IS running as pid 4102/);
+  assert.equal(record.lockedPid, 36128);
+  assert.match(record.reason, /IS running as pid 36128/);
   assert.match(record.reason, /Elevation would settle it/);
 });
 
@@ -283,7 +283,7 @@ check('a transient pid-lock read failure is UNKNOWN, is not absence, and is not 
   const registryFile = writeRegistry(root, { 'fleet-supervisor': FLEET_ENTRY });
   const lockFile = path.join(root, 'state', 'fleet-supervisor.pid.lock');
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
-  fs.writeFileSync(lockFile, JSON.stringify({ pid: 4102 }), 'utf8');
+  fs.writeFileSync(lockFile, JSON.stringify({ pid: 36128 }), 'utf8');
 
   const originalReadFileSync = fs.readFileSync;
   let lockReads = 0;
@@ -298,7 +298,7 @@ check('a transient pid-lock read failure is UNKNOWN, is not absence, and is not 
   try {
     const options = {
       registryFile, root,
-      processes: [{ pid: 4102, commandLine: null }]
+      processes: [{ pid: 36128, commandLine: null }]
     };
     const busy = drift.detectDrift('fleet-supervisor', options);
     assert.equal(busy.state, drift.DRIFT.UNKNOWN);
@@ -308,7 +308,7 @@ check('a transient pid-lock read failure is UNKNOWN, is not absence, and is not 
     const retry = drift.detectDrift('fleet-supervisor', options);
     assert.equal(retry.notObservable, drift.NOT_OBSERVABLE.COMMAND_LINE_UNREADABLE,
       'the could-not-tell result must not be cached or latched; a retry must read the lock again');
-    assert.equal(retry.lockedPid, 4102);
+    assert.equal(retry.lockedPid, 36128);
     assert.equal(lockReads, 2);
   } finally {
     fs.readFileSync = originalReadFileSync;
@@ -320,7 +320,7 @@ check('opaque rows with no pid lock still block a false "not found"', () => {
   const registryFile = writeRegistry(root, { 'telegram-bridge': BRIDGE_ENTRY });
   const record = drift.detectDrift('telegram-bridge', {
     registryFile, root,
-    processes: [{ pid: 4103, commandLine: null }]
+    processes: [{ pid: 29420, commandLine: null }]
   });
   assert.equal(record.notObservable, drift.NOT_OBSERVABLE.COMMAND_LINE_UNREADABLE);
   assert.match(record.reason, /could not be examined at all/);
@@ -375,7 +375,7 @@ check('detectAllDrift collects the process table exactly once', () => {
   let calls = 0;
   const report = drift.detectAllDrift({
     registryFile, root,
-    collect: () => { calls += 1; return [{ pid: 4101, commandLine: LIVE_FLEET_COMMAND_LINE }]; }
+    collect: () => { calls += 1; return [{ pid: 21556, commandLine: LIVE_FLEET_COMMAND_LINE }]; }
   });
   assert.equal(calls, 1, 'the collector shells out to PowerShell; once per sweep, not once per subsystem');
   assert.deepEqual(report.drifted, ['fleet-supervisor']);

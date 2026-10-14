@@ -303,11 +303,12 @@ const LANE_PROVENANCE_ENV_NAMES = Object.freeze([
   laneScope.ENV_VAR
 ]);
 
-function laneChildEnvironment(cleanEnvironment, callerEnvironment) {
+function laneChildEnvironment(cleanEnvironment, callerEnvironment, nativeClaudeCode = false) {
   // Fail closed before merging: a null/undefined base is node's spelling of
   // "inherit everything", and a base that still carries a billing credential
   // must refuse the launch loudly rather than charge silently.
-  const child = { ...assertNoBillingCredentials(cleanEnvironment, { context: 'mission-bridge lane child' }) };
+  const child = { ...(nativeClaudeCode ? cleanEnvironment
+    : assertNoBillingCredentials(cleanEnvironment, { context: 'mission-bridge lane child' })) };
   // This service's private app connection never becomes a provider connection.
   // Node normally consumes these at startup; scrub every casing explicitly too.
   deleteEnvNames(child, ['NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE']);
@@ -325,9 +326,11 @@ function boundedSpawn(spawnImpl, cleanEnvironment, capMs, timeoutState, timers =
   const setTimeoutImpl = timers.setTimeoutImpl || setTimeout;
   const clearTimeoutImpl = timers.clearTimeoutImpl || clearTimeout;
   const killTree = timers.killLaneTree || killLaneTree;
+  const nativeClaudeCode = timers.nativeClaudeCode === true;
+  const prepareEnvironment = nativeClaudeCode ? environment => ({ ...environment }) : safeLaunchEnvironment;
   return (command, args, options) => {
-    const childEnvironment = safeLaunchEnvironment(
-      laneChildEnvironment(cleanEnvironment, options?.env),
+    const childEnvironment = prepareEnvironment(
+      laneChildEnvironment(cleanEnvironment, options?.env, nativeClaudeCode),
       { context: 'mission-bridge bounded lane child' }
     );
     const childOptions = {
@@ -358,7 +361,7 @@ function boundedSpawn(spawnImpl, cleanEnvironment, capMs, timeoutState, timers =
           ...(timers.windowsJobDependencies || {}),
           platform,
           spawnImpl,
-          safeLaunchEnvironment,
+          safeLaunchEnvironment: prepareEnvironment,
           prepareRootSpawn: reservation?.prepareRootSpawn ? () => reservation.prepareRootSpawn() : undefined,
           beforeRootSpawn: (timers.assertPermissionCurrent || reservation?.beforeRootSpawn) ? () => {
             timers.assertPermissionCurrent?.();
@@ -375,7 +378,8 @@ function boundedSpawn(spawnImpl, cleanEnvironment, capMs, timeoutState, timers =
           // Keep the actual child-process boundary mechanically self-proving to
           // the spawn-environment release gate. The first scrub above protects
           // the Windows wrapper too; this second pass is idempotent.
-          env: safeLaunchEnvironment(childEnvironment, { context: 'mission-bridge bounded lane fallback' })
+          nativeClaudeCode,
+          env: prepareEnvironment(childEnvironment, { context: 'mission-bridge bounded lane fallback' })
         });
     } catch (error) {
       reservation?.release();
@@ -446,7 +450,7 @@ function startAgentLane(laneOptions, dependencies = {}) {
     ...(dependencies.laneDependencies || {}),
     presence: observedPresence(basePresence, resolveStarted),
     beforeSpawn: prepareResources,
-    spawnImpl: boundedSpawn(spawnImpl, cleanEnvironment, dependencies.capMs, timeoutState, { ...dependencies, reserveResources: consumeResources })
+    spawnImpl: boundedSpawn(spawnImpl, cleanEnvironment, dependencies.capMs, timeoutState, { ...dependencies, nativeClaudeCode: laneOptions.kind === 'claude', reserveResources: consumeResources })
   };
   let completion;
   try { completion = Promise.resolve(runLaneImpl(laneOptions, laneDependencies)); }

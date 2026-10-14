@@ -17,9 +17,11 @@ $RegistryHelper = Join-Path $Root 'tools\lib\service-registry.ps1'
 if (-not (Test-Path -LiteralPath $RegistryHelper -PathType Leaf)) { throw 'SERVICE_REGISTRY_UNAVAILABLE' }
 . $RegistryHelper
 $MinimumNodeVersion = [Version]'22.19.0'
-# The ordinary system install. It is version-gated below, so an unacceptable
-# runtime is never used.
+# Ordered: a pinned side-by-side runtime first, the ordinary system install
+# second. Both are version-gated below, so the order only decides which of two
+# acceptable runtimes wins -- never whether an unacceptable one is used.
 $OwnedNodeCandidates = @(
+    'C:\agent-apps\node-v22.19.0\node.exe',
     'C:\Program Files\nodejs\node.exe'
 )
 

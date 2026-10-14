@@ -186,6 +186,12 @@ function classifySourceCode(code, status, timedOut, matches) {
   // Exact exception: this 403 is an organisation-policy decision, not an
   // expired sign-in. Keep every other historical 403 on the existing path.
   if (code === 'BRIDGE_ACTOR_REFUSED') return 'POLICY_DENIED';
+  // A plugin whose bytes changed after the person allowed it is a permission
+  // decision to make again, and its sentence says where; without this exact rule
+  // it reached the agent as an internal error. A plugin tool stopped with its
+  // call is a cancellation, not a fault. (src/lib/plugin-host/tool-bridge.js)
+  if (code === 'PLUGIN_CHANGED_SINCE_ALLOWED') return 'POLICY_DENIED';
+  if (code === 'PLUGIN_TOOL_ABORTED') return 'OPERATION_CANCELLED';
   // These exact settings decisions must retain the sentence naming the
   // disabled standing-rule control in the public MCP result.
   if (code === 'R_LEDGER_AGENT_FILING_OFF' || code === 'R_LEDGER_AGENT_FILING_PROPOSE_ONLY') return 'POLICY_DENIED';
@@ -242,7 +248,7 @@ function classifySourceCode(code, status, timedOut, matches) {
   // holding the single active slot" is "The operation stopped safely because of
   // an internal error.", classified terminal. That is what made a stale prompt
   // look like a broken tool to every agent that hit it for eight hours on
-  // 2026-08-11 (one owner prompt for a vault key).
+  // 2026-08-11 (owner-prompt-189a7e9f, vault key github_pat).
   if (matches(code, ['OWNER_PROMPT_DIFFERENT_ACTIVE', 'OWNER_PROMPT_QUEUED',
     'PROMPT_IN_PROGRESS', 'CAPTURE_IN_PROGRESS', 'PROMPT_QUEUE_FULL'])) return 'INPUT_REQUIRED';
   // THE REFUSAL THAT COST A LANE ITS RE-DIAGNOSIS. A card or identity form
@@ -264,6 +270,17 @@ function classifySourceCode(code, status, timedOut, matches) {
   if (matches(code, ['RESOURCE', 'ENOMEM', 'ENOSPC', 'THERMAL', 'HEADROOM', 'OVERLOADED', 'QUEUE_FULL'])) return 'RESOURCE_PRESSURE';
   if (code === 'MC_TREE_COMMAND_SESSION_CHANGED') return 'STALE_DATA';
   if (code === 'MC_TREE_COMMAND_SESSION_ENDED') return 'INVALID_REQUEST';
+  // A TREE CIRCLE WHOSE AGENT DID NOT START IS A RETRY, NOT A CRASH (B38, the
+  // 1.0.48 soak). The application drew the circle and its start did not
+  // happen -- the Computers page was rebuilt under it, or the start itself
+  // answered no -- and no word of either code matches anything in this
+  // ladder, so both fell to INTERNAL_ERROR and the agent that asked read "The
+  // operation stopped safely because of an internal error." over a circle
+  // that was still standing "not started yet". Exact codes only, both passes:
+  // the rest of the MC_TREE_COMMAND_ family keeps its own classification
+  // (MC_TREE_COMMAND_STOP_FAILED is still not evidence of anything). Each has
+  // a named sentence below (RETRYABLE_SOURCE_SENTENCES).
+  if (code === 'MC_TREE_COMMAND_START_FAILED' || code === 'MC_TREE_COMMAND_VIEW_DESTROYED') return 'UNAVAILABLE';
   if (matches(code, ['STALE', 'EXPIRED', 'FENCE_LOST']) || /(?:^|_)FENCE_LOST$/.test(code)) return 'STALE_DATA';
   if (matches(code, ['EXTERNAL_CHANGE', 'CONFLICT', 'OWNERSHIP_CHANGED', 'FOREIGN_TASK', 'MUTATION_CHANGED'])
     || /(?:^|_)(?:FOREIGN|OWNERSHIP_CHANGED|MUTATION_CHANGED)(?:_|$)/.test(code)) return 'EXTERNAL_CHANGE';
@@ -314,7 +331,7 @@ function classifySourceCode(code, status, timedOut, matches) {
    * MC_TREE_SPAWN_PARENT_NOT_RUNNING. Those are answers, not outages, and no
    * amount of waiting changes them.
    *
-   * MEASURED 2026-09-03 on a live fleet: agent.spawn was refused 41
+   * MEASURED 2026-09-03 on the owner's own fleet: agent.spawn was refused 41
    * times out of 51 attempts in three hours, and every refusal reached the
    * agent as "The required service is temporarily unavailable. Try again
    * later." A manager retried on that sentence eleven times across half an
@@ -335,7 +352,7 @@ function classifySourceCode(code, status, timedOut, matches) {
   // "the person has sent it a message" -- and none of their words matched
   // anything else in this ladder, so they fell to INTERNAL_ERROR exactly like
   // OWNER_PROMPT_ATTRIBUTION_REQUIRED did. Measured 2026-09-07 on
-  // node-1-1a2b3c4d (an orphaned tree circle, parentId null): agent.remove
+  // node-1-11bbb999 (an orphaned tree circle, parentId null): agent.remove
   // and agent.restart both answered "The operation stopped safely because of
   // an internal error." while the real sentence sat in the audit ledger the
   // whole time, reachable only there. MC_TREE_COMMAND_REMOVE_REFUSED and
@@ -365,6 +382,37 @@ function mapSource(error, options = {}) {
   const head = classifySourceCode(code, status, timedOut, includesCode);
   if (head !== 'INTERNAL_ERROR') return head;
   return classifySourceCode(code, status, timedOut, includesCodeSegments);
+}
+
+// NAMED SENTENCES FOR RETRYABLE SOURCE CODES (B38).
+//
+// A retryable failure answers with its class's fixed summary -- "The required
+// service is temporarily unavailable. Try again later." -- which is right for
+// a transport that dropped and says nothing about a tree circle whose agent
+// did not start. These exact source codes get a fixed, reviewed sentence
+// instead: what happened, that nothing is running, and when a retry is worth
+// it. `withSource` marks a code whose own message is the application's
+// bounded sentence for it (shell/tree-command-refusal-sentences.cjs, reason
+// capped at 600 characters) and names WHY the start failed -- a spent usage
+// limit is the difference between retrying and reporting. The caller
+// (src/mcp-server.js toolError) redacts that message before appending it.
+// Exact own-property lookup: an inherited name is never a sentence.
+const RETRYABLE_SOURCE_SENTENCES = freeze({
+  MC_TREE_COMMAND_START_FAILED: freeze({
+    sentence: 'The circle is on the tree, but its agent did not start, so nothing is running there yet. Starting can fail for a passing reason: send the same request once more. If it fails the same way again, report the reason instead of retrying.',
+    withSource: true
+  }),
+  MC_TREE_COMMAND_VIEW_DESTROYED: freeze({
+    sentence: 'The Computers page was rebuilt while this request was being carried out, so nothing was started. Nothing was refused: send the same request again.',
+    withSource: false
+  })
+});
+
+function retryableSourceSentence(error) {
+  const code = error && typeof error === 'object' && own(error, 'code') ? error.code : undefined;
+  if (typeof code !== 'string' || !own(RETRYABLE_SOURCE_SENTENCES, code)) return null;
+  const policy = policyFor(mapSource(error));
+  return policy.retryable ? RETRYABLE_SOURCE_SENTENCES[code] : null;
 }
 
 function protectedDetail(error, source) {
@@ -525,6 +573,6 @@ async function runIdempotentSideEffect(input = {}) {
 module.exports = freeze({
   CLASSIFICATIONS, ERROR_CODES, ERROR_CODE_VALUES, RETRY_CEILINGS, SCHEMA_VERSION,
   TypedOperationalError, adaptError, adaptProviderError, adaptToolError, assertPublicFailure,
-  decideRetry, isCode, operationCeiling, policyFor, publicFailure, runIdempotentSideEffect,
-  stableIdempotencyKey
+  decideRetry, isCode, operationCeiling, policyFor, publicFailure, retryableSourceSentence,
+  runIdempotentSideEffect, stableIdempotencyKey
 });

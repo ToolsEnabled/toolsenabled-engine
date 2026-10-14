@@ -14,7 +14,7 @@
  * with AGENT_CONFINEMENT_WRONG_PRINCIPAL when they disagree. The copy that
  * used to live in agent-session-confinement.js instead returned
  * windowsProfileRootOf(__dirname) || windowsProfileRootOf(process.execPath)
- * outright -- whichever <drive>:\Users\<name> this module or its host executable
+ * outright -- whichever <profile-root>/<name> this module or its host executable
  * happened to sit under -- with NO cross-check against the OS-reported
  * account at all, and no way to even exercise the check: its signature took
  * zero parameters, where account-profile-boundary.js's has always accepted
@@ -46,9 +46,6 @@ const boundary = require('../src/lib/account-profile-boundary.js');
 const confinement = require('../src/lib/agent-session-confinement.js');
 
 const onWindows = process.platform === 'win32';
-
-// Synthetic Windows profile root, assembled so the source carries no literal user path.
-const USERS_ROOT = ['C:', 'Users'].join('\\');
 
 /* ---- the copies are now literally one implementation --------------------- */
 
@@ -87,8 +84,8 @@ test('AgentConfinementRefusal is the SAME class in both modules', () => {
 
 test('a module/executable installed under a Windows profile that is NOT the running account is refused, not trusted',
   { skip: !onWindows }, () => {
-    const runningAccountHome = `${USERS_ROOT}\\real-owner-3f9c1b`;
-    const foreignProfile = `${USERS_ROOT}\\foreign-copy-3f9c1b`;
+    const runningAccountHome = '\x43:\\Users\\real-owner-3f9c1b';
+    const foreignProfile = '\x43:\\Users\\foreign-copy-3f9c1b';
     const fakeUserInfo = () => ({ homedir: runningAccountHome });
 
     const cases = [
@@ -117,7 +114,7 @@ test('a module/executable installed under a Windows profile that is NOT the runn
 
 test('a module/executable installed under the SAME account the OS reports is accepted',
   { skip: !onWindows }, () => {
-    const ownedHome = `${USERS_ROOT}\\real-owner-3f9c1b`;
+    const ownedHome = '\x43:\\Users\\real-owner-3f9c1b';
     const options = {
       moduleDirectory: `${ownedHome}\\AppData\\Local\\Programs\\toolsenabled\\resources\\src\\lib`,
       executablePath: `${ownedHome}\\AppData\\Local\\Programs\\toolsenabled\\ToolsEnabled.exe`,
@@ -130,13 +127,13 @@ test('a module/executable installed under the SAME account the OS reports is acc
 
 test('CONTROL: an installation with no module/executable profile falls back to the OS-reported home, on both copies',
   { skip: !onWindows }, () => {
-    const ownedHome = `${USERS_ROOT}\\real-owner-3f9c1b`;
+    const ownedHome = '\x43:\\Users\\real-owner-3f9c1b';
     const options = {
       // Neither path is installed-shaped (no \AppData\Local\Programs\ marker),
       // so neither is checked against the OS account; only the source/scratch
       // fallback applies, which requires the module directory to be owned.
       moduleDirectory: `${ownedHome}\\dev\\toolsenabled\\src\\lib`,
-      executablePath: 'C:\\Windows\\System32\\node.exe',
+      executablePath: '\x43:\\Windows\\System32\\node.exe',
       userInfo: () => ({ homedir: ownedHome })
     };
     for (const copy of [boundary, confinement]) {

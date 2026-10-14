@@ -17,12 +17,12 @@
 //
 // What went wrong without this guard, measured rather than theorised: the same
 // two-line manifest change was lost twice in twenty minutes -- once from the
-// working tree, and once between verification and commit, so an earlier change recorded
+// working tree, and once between verification and commit, so 52ed785 recorded
 // packages/entry.setup/PACKAGE.md and a matching tests/package-charters.js
 // edit while its config/packages.json edit vanished. The commit message
 // described a rename that the commit did not contain. Nothing local
 // disagreed; the loss surfaced only when a remote gate contradicted a local
-// run. an earlier change re-applied it.
+// run. d34ea99 re-applied it.
 //
 // So this file asserts the two properties that make that loss loud:
 //
@@ -31,7 +31,7 @@
 //      set are in exact bijection, minus a short list of named exemptions. A
 //      lost manifest write breaks that agreement, because a package is
 //      recorded in two places that no single careless write touches at once.
-//      Run against an earlier change this fails twice over: `setup` in the manifest with
+//      Run against 52ed785 this fails twice over: `setup` in the manifest with
 //      no charter, and `entry.setup` chartered with no manifest entry.
 
 const assert = require('node:assert/strict');
@@ -148,7 +148,7 @@ assert.deepEqual(
   charterWithoutManifest,
   [],
   `packages/<id>/PACKAGE.md charters exist with no config/packages.json entry: ${charterWithoutManifest.join(', ')}.\n`
-  + '  This is the exact shape of the lost write in an earlier change: the charter landed, the manifest edit did not.\n'
+  + '  This is the exact shape of the lost write in 52ed785: the charter landed, the manifest edit did not.\n'
   + `  Add the package to config/packages.json, or -- if it is deliberately a reserved boundary with no file claims --\n`
   + `  add it to CHARTERED_WITHOUT_MANIFEST_ENTRY here WITH a reason.\n  ${REMEDY}\n`
 );

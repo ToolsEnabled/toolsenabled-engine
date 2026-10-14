@@ -16,6 +16,7 @@ must move to a named package or be retired when its successor lands.
 - `tools/register-managed-tasks.js` — deprecated: move to `sched`.
 - `tools/run-vertex-report-wave.js` — deprecated: move to `fleet`.
 - `tools/verify-evidence-store.js` — deprecated: move to `evidence`.
+- `tools/wepa-email-print.js` — deprecated: retire or move to a named provider family.
 
 ## Allowed dependencies
 

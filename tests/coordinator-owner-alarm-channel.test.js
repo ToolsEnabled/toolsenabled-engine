@@ -145,7 +145,7 @@ function fakeRuntime({
 (async () => {
   // --- 1. The real thing, with nothing injected ----------------------------
   //
-  // This is the claim the requirement turns on: the coordinator points at
+  // This is the claim the owner's sentence turns on: the coordinator points at
   // our own product. No sendToOwner is passed, so the sink uses its default,
   // and the message has to turn up in the journal the app reads.
   await check('an escalation with NO injected sender lands in the owner journal', async () => {
@@ -182,7 +182,7 @@ function fakeRuntime({
     assert.match(shown.text, /COORDINATOR ESCALATION: fleet-supervisor is DOWN/);
     assert.match(shown.text, /pid lock holder is gone/);
     assert.match(shown.text, /not a reply to a message/,
-      'the alarm must keep saying it is a notice, not an answer from them');
+      'the alarm must keep saying it is a notice, not an answer from him');
     assert.equal(shown.sender, 'coordinator');
     assert.equal(shown.contentTrust, 'untrusted');
     assert.equal(shown.grantsAuthority, false);
@@ -226,7 +226,7 @@ function fakeRuntime({
     assert.equal(result.error, 'OWNER_ALARM_NOT_IN_JOURNAL');
 
     const status = sink.sinkStatus({ stateFile, now: () => T0 + 1_000, killSwitch: () => ({ active: false }) });
-    assert.equal(status.channel.broken, true, 'a channel that cannot show them the message must not look quiet');
+    assert.equal(status.channel.broken, true, 'a channel that cannot show him the message must not look quiet');
     assert.equal(status.channel.lastSentAtMs, null, 'nothing may be recorded as sent');
 
     // And the condition is still owed: the next attempt is not deduped away.
@@ -281,7 +281,7 @@ function fakeRuntime({
       .filter(line => !line.trim().startsWith('//') && !line.trim().startsWith('*') && !line.trim().startsWith('/*'))
       .join('\n');
     assert.equal(/\breply\s*\(/.test(code), false,
-      'the alarm channel must never gain a way to answer them');
+      'the alarm channel must never gain a way to answer him');
     assert.equal(/ownerChat/.test(code), false,
       'it must not reach the owner-chat surface at all');
     assert.equal(/input\.recipient|input\.to\b|dependencies\.recipient/.test(code), false,

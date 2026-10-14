@@ -11,6 +11,10 @@ tests/agent-comms/broker-delivered-dead-letter.test.js
 tests/agent-comms/broker-deferred-handoff.test.js
 tests/agent-comms/local-delivery-failure-receipts.test.js
 tests/agent-comms/local-deferred-handoff.test.js
+tests/agent-comms/local-read-receipt-terminal-gap.test.js
+tests/agent-comms/owner-journal-circle-identity.test.js
+tests/agent-comms/refusal-code-retention.test.js
+tests/agent-comms/terminal-dead-letter-settlement.test.js
 tests/agent-comms/orphan-manager.test.js
 tests/agent-comms/tree-node-directory.test.js
 tests/agent-comms/tree-directory-node-identity.test.js

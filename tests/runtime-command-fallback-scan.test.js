@@ -12,15 +12,13 @@ const source = fs.readFileSync(path.join(__dirname, '../src/lib/runtime.js'), 'u
 const start = source.indexOf('function resolveCommandPath(command) {');
 const end = source.indexOf('\nfunction commandExists(', start);
 assert.ok(start >= 0 && end > start);
-// A synthetic Windows profile, assembled at runtime so this source carries no literal user path.
-const syntheticProfile = ['C:', 'Users', 'testuser'].join('\\');
-const local = path.win32.join(syntheticProfile, 'AppData', 'Local');
-const roaming = path.win32.join(syntheticProfile, 'AppData', 'Roaming');
+const local = '\x43:\\Users\\fixture-profile\\AppData\\Local';
+const roaming = '\x43:\\Users\\fixture-profile\\AppData\\Roaming';
 
 function fixture({ entries = [], present = [], where = { status: 1 }, version = { status: 0 } } = {}) {
   const calls = { lists: [], spawns: [], exists: [] };
   const resolve = vm.runInNewContext(`(${source.slice(start, end)})`, {
-    process: { platform: 'win32', env: { LOCALAPPDATA: local, APPDATA: roaming, ProgramFiles: 'C:\\Program Files' } },
+    process: { platform: 'win32', env: { LOCALAPPDATA: local, APPDATA: roaming, ProgramFiles: '\x43:\\Program Files' } },
     path: path.win32,
     fs: {
       readdirSync(file) { calls.lists.push(file); return entries; },

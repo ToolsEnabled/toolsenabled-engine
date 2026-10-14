@@ -33,9 +33,9 @@ const DEFAULT_MD_PATH = path.join(__dirname, '..', '..', 'STANDING-ORDERS.md');
 // the number space stays stable and the revocation stays auditable.
 //
 // It exists because the alternative was a lie with a component name attached.
-// BROWSER 1 was retired on 2026-08-10 (agents may drive the browsers as
-// needed; that was a thread-specific rule that needed cleaning
-// up). STANDING-ORDERS.md was updated and tools/standing-orders-hook.js
+// BROWSER 1 was retired by the owner on 2026-08-10 ("literally you can drive
+// the browsers as needed that was a thread specific rule and needs to be
+// cleaned up"). STANDING-ORDERS.md was updated and tools/standing-orders-hook.js
 // was updated -- checkBrowser() now logs and returns null on every path -- but
 // this machine-readable mirror still recorded enforcement:'mechanical',
 // wired:true, and an enforcingComponent asserting the hook "refuses
@@ -668,9 +668,10 @@ function checkWiredDrift({ jsonPath = DEFAULT_JSON_PATH, root = path.join(__dirn
 
 // --- enforcement gaps: prose-only orders, surfaced instead of accepted -------
 //
-// The loop this whole file exists inside: a person states what they want and
-// how to do it, agents follow it for a while and then forget, a system is
-// requested to prevent that, and the cycle repeats.
+// R95, the owner, on the loop this whole file exists inside: "its like a loop
+// of me telling you things i want and how to do things, you doing it for a
+// bit, and then forgetting, me telling you to build a system to prevent it,
+// and then it repeats".
 //
 // The evidence from 2026-07-28/29 is unambiguous: every instruction that was
 // MECHANICALLY WIRED held, and every instruction that existed only as PROSE
@@ -696,7 +697,7 @@ function checkWiredDrift({ jsonPath = DEFAULT_JSON_PATH, root = path.join(__dirn
 const BACKSTOP_CLAIM = /mechanical\s+backstop/i;
 
 // The retirement marker STANDING-ORDERS.md actually uses: a BOLD, block-leading
-// "RETIRED" ("**RETIRED 2026-08-10.**"). Bold-and-leading is not
+// "RETIRED" ("**RETIRED 2026-08-10 by the owner.**"). Bold-and-leading is not
 // decoration, it is the discrimination: BROWSER 1's own block also contains the
 // sentence "**Rule 2 below is NOT retired and is unaffected**", and a bare
 // /retired/i would read that as retiring rule 2 -- inverting the one fact the
@@ -731,7 +732,7 @@ function parseOrderBlocks(sectionText) {
  *   - `unenforced` -- enforcement:'advisory', or 'mechanical' with wired!==true.
  *                     A correct mechanism exists and is callable, but nothing
  *                     blocks the wrong path. This is the exact shape the
- *                     R44 upload incident exposed: egress-preflight.js was written,
+ *                     R44 incident exposed: egress-preflight.js was written,
  *                     correct, and called by nobody.
  *
  *   - `partial`    -- mechanical and wired, but carrying a `coverageGap`: a

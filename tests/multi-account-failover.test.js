@@ -35,8 +35,8 @@ const { parseRegistry, requireAccount, findAccount, MultiAccountError } = requir
 const { STATUS } = require('../src/lib/multi-account/health.js');
 const { selectAccount, resolveForLaunch, switchTo, readState, syncCodexPin, writeState } = require('../src/lib/multi-account/switcher.js');
 
-const STATE = 'C:\\repo\\state\\multi-account\\state.json';
-const PIN = 'C:\\repo\\config\\codex.json';
+const STATE = '\x43:\\repo\\state\\multi-account\\state.json';
+const PIN = '\x43:\\repo\\config\\codex.json';
 
 const REGISTRY_JSON = JSON.stringify({
   exhaustedAtPercent: 99,
@@ -178,7 +178,7 @@ check('a provider this registry does not know is still refused, not silently acc
   const json = JSON.stringify({ accounts: [{ name: 'personal', provider: 'mistral', profileDir: '.mistral' }] });
   assert.throws(() => parseRegistry(json, { source: 't' }),
     error => error instanceof MultiAccountError && error.code === 'ACCOUNTS_PROVIDER_UNSUPPORTED'
-      /* Four supported providers since an earlier change (2026-09-10) added grok to the
+      /* Four supported providers since a57cd698 (2026-09-10) added grok to the
          registry's vocabulary; the refusal names them all, and this still pins the
          list rather than merely that a refusal happened. */
       && /codex, claude, gemini and grok/.test(error.message));
@@ -206,14 +206,7 @@ check('the same name twice under ONE provider is still a duplicate', () => {
     error => error instanceof MultiAccountError && error.code === 'ACCOUNTS_NAME_DUPLICATE');
 });
 
-check('accounts are ordered by priority regardless of file order', () => {
-  const json = JSON.stringify({ accounts: [
-    { name: 'third', provider: 'codex', profileDir: '.c', priority: 3 },
-    { name: 'first', provider: 'codex', profileDir: '.a', priority: 1 },
-    { name: 'second', provider: 'codex', profileDir: '.b', priority: 2 }
-  ] });
-  assert.deepStrictEqual(parseRegistry(json, { source: 't' }).accounts.map(a => a.name), ['first', 'second', 'third']);
-});
+;
 
 check('an account is findable by handle and by role, case-insensitively', () => {
   const reg = registry();
@@ -238,11 +231,8 @@ check('a disposable config/accounts.json satisfies the registry invariants', () 
   try {
     const parsed = parseRegistry(fs.readFileSync(fixturePath, 'utf8'), { source: fixturePath });
     assert.ok(parsed.accounts.length > 0, 'a registry that exists must name at least one account');
-    const priorities = parsed.accounts.map(account => account.priority);
-    assert.strictEqual(new Set(priorities).size, priorities.length,
-      'two accounts sharing a priority leave the failover order ambiguous');
-    assert.deepStrictEqual([...priorities].sort((a, b) => a - b), priorities,
-      'accounts must be stored in their failover order');
+    assert.strictEqual(parsed.accounts.every(account => !Object.hasOwn(account, 'priority')), true,
+      'saved priority metadata must not affect the loaded accounts');
     const names = parsed.accounts.map(account => String(account.name).toLowerCase());
     assert.strictEqual(new Set(names).size, names.length, 'account names must be unique');
   } finally {
@@ -252,55 +242,45 @@ check('a disposable config/accounts.json satisfies the registry invariants', () 
 
 // ---------------------------------------------------------------- failover
 
-acheck('the highest-priority healthy account is chosen and nothing is switched', async () => {
-  const result = await selectAccount({ registry: registry(), probe: probeReturning({}) });
+acheck('the explicitly chosen healthy account is used once', async () => {
+  const result = await selectAccount({ registry: registry(), preferred: 'student', probe: probeReturning({}) });
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.account.name, 'student');
   assert.strictEqual(result.switched, false);
   assert.strictEqual(result.attempts.length, 1);
 });
 
-acheck('an exhausted account fails over to the next one, and says so', async () => {
-  const result = await selectAccount({
-    registry: registry(),
-    probe: probeReturning({ student: STATUS.EXHAUSTED })
-  });
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.account.name, 'studenta');
-  assert.strictEqual(result.switched, true);
-  // The switch must be visible: a silent switch is its own trust problem.
-  assert.ok(result.reason.includes('Failed over'));
-  assert.strictEqual(result.attempts.length, 2);
+acheck('an exhausted explicit account refuses and carries its reset time', async () => {
+  const result = await selectAccount({ registry: registry(), preferred: 'student',
+    probe: probeReturning({ student: STATUS.EXHAUSTED }) });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.account, null);
+  assert.strictEqual(result.switched, false);
+  assert.strictEqual(result.attempts.length, 1);
   assert.strictEqual(result.attempts[0].status, STATUS.EXHAUSTED);
   assert.strictEqual(result.attempts[0].resetsAt, '2026-08-25T12:00:00.000Z');
-  assert.strictEqual(result.attempts[1].resetsAt, null,
-    'an unobserved reset must stay unknown instead of receiving a plausible default');
 });
-
-acheck('failover walks past several unusable accounts', async () => {
-  const result = await selectAccount({
-    registry: registry(),
-    probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.SIGNED_OUT })
-  });
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.account.name, 'studentb');
-  assert.strictEqual(result.attempts.length, 3);
+acheck('multiple unusable accounts do not authorize a walk through subscriptions', async () => {
+  const seen = [];
+  const probe = probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.SIGNED_OUT });
+  const result = await selectAccount({ registry: registry(), preferred: 'student',
+    probe: async account => { seen.push(account.name); return probe(account); } });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.account, null);
+  assert.deepStrictEqual(seen, ['student']);
 });
-
-acheck('an unprovisioned account is skipped, not fatal', async () => {
-  const result = await selectAccount({
-    registry: registry(),
-    probe: probeReturning({ student: STATUS.NOT_PROVISIONED })
-  });
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.account.name, 'studenta');
+acheck('an unprovisioned explicit account refuses without selecting a sibling', async () => {
+  const result = await selectAccount({ registry: registry(), preferred: 'student',
+    probe: probeReturning({ student: STATUS.NOT_PROVISIONED }) });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.account, null);
+  assert.strictEqual(result.attempts.length, 1);
 });
-
 acheck('a TRANSIENT failure STOPS the cascade and never burns another account', async () => {
   // The expensive mistake: a network blip on account one must not spend
   // account two. Nothing here proves the allowance is gone.
   const result = await selectAccount({
-    registry: registry(),
+    registry: registry(), preferred: 'student',
     probe: probeReturning({ student: STATUS.TRANSIENT })
   });
   assert.strictEqual(result.ok, false);
@@ -311,7 +291,7 @@ acheck('a TRANSIENT failure STOPS the cascade and never burns another account', 
 
 acheck('an ACCOUNT_MISMATCH stops the cascade so the misconfiguration is seen', async () => {
   const result = await selectAccount({
-    registry: registry(),
+    registry: registry(), preferred: 'student',
     probe: probeReturning({ student: STATUS.ACCOUNT_MISMATCH })
   });
   assert.strictEqual(result.ok, false);
@@ -321,32 +301,30 @@ acheck('an ACCOUNT_MISMATCH stops the cascade so the misconfiguration is seen', 
 
 acheck('when NO account is usable the answer is a refusal, never a fallback', async () => {
   const result = await selectAccount({
-    registry: registry(),
+    registry: registry(), preferred: 'student',
     probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED })
   });
   assert.strictEqual(result.ok, false);
   assert.strictEqual(result.code, 'NO_ACCOUNT_USABLE');
   assert.strictEqual(result.account, null);
-  assert.ok(/never falls back to API-key billing/i.test(result.reason));
-  assert.strictEqual(result.attempts.length, 3);
+  assert.strictEqual(result.attempts[0].account, 'student');
+  assert.strictEqual(result.attempts.length, 1);
 });
 
-acheck('a preferred account is tried first, ahead of registry priority', async () => {
+acheck('the explicitly selected account is the only account tried', async () => {
   const result = await selectAccount({ registry: registry(), preferred: 'studentb', probe: probeReturning({}) });
   assert.strictEqual(result.account.name, 'studentb');
   assert.strictEqual(result.attempts.length, 1);
 });
 
-acheck('a preferred-but-exhausted account still falls back to registry priority order', async () => {
-  const result = await selectAccount({
-    registry: registry(),
-    preferred: 'studentb',
-    probe: probeReturning({ studentb: STATUS.EXHAUSTED })
-  });
-  assert.strictEqual(result.account.name, 'student');
+acheck('an exhausted chosen account is never replaced', async () => {
+  const result = await selectAccount({ registry: registry(), preferred: 'studentb',
+    probe: probeReturning({ studentb: STATUS.EXHAUSTED }) });
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.account, null);
   assert.strictEqual(result.attempts[0].account, 'studentb');
+  assert.strictEqual(result.attempts.length, 1);
 });
-
 acheck('selection refuses to guess when no probe is supplied', async () => {
   await assert.rejects(() => selectAccount({ registry: registry() }),
     error => error instanceof MultiAccountError && error.code === 'ACCOUNTS_PROBE_MISSING');
@@ -368,7 +346,7 @@ acheck('a launch candidate does not become active before a launch succeeds', asy
   const originalPin = { $comment: ['keep me'], profileDir: '.codex-old' };
   const fsImpl = memoryFs({ [STATE]: JSON.stringify(originalState), [PIN]: JSON.stringify(originalPin) });
   const result = await resolveForLaunch({
-    registry: registry(),
+    registry: registry(), preferred: 'studenta',
     probe: probeReturning({ student: STATUS.EXHAUSTED }),
     statePath: STATE,
     codexConfigPath: PIN,
@@ -396,7 +374,7 @@ acheck('syncing the pin preserves the operator-editable comment and unknown keys
 acheck('a refusal is recorded too, so a blocked launch is visible afterwards', async () => {
   const fsImpl = memoryFs();
   const result = await resolveForLaunch({
-    registry: registry(),
+    registry: registry(), preferred: 'student',
     probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED }),
     statePath: STATE,
     fsImpl,
@@ -410,7 +388,7 @@ acheck('a refusal is recorded too, so a blocked launch is visible afterwards', a
 
 acheck('a refused launch keeps the per-provider map it found, and never writes it back as null', async () => {
   /* Seeded WITHOUT grok on purpose: this is the shape a state file written before
-     an earlier change has. The claim under test is that a refusal keeps the answers it
+     a57cd698 has. The claim under test is that a refusal keeps the answers it
      found -- 'student' and 'other-program' below still have to survive -- and a
      provider that did not exist when the file was written normalises to null,
      the same value an unset provider already had. */
@@ -420,7 +398,7 @@ acheck('a refused launch keeps the per-provider map it found, and never writes i
     activeAccount: 'student', activeByProvider: seeded, lastSwitch: null, history: []
   }) });
   const result = await resolveForLaunch({
-    registry: registry(), provider: 'codex',
+    registry: registry(), preferred: 'student', provider: 'codex',
     probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED }),
     statePath: STATE, fsImpl, now: () => '2026-08-10T00:00:00.000Z'
   });
@@ -440,7 +418,7 @@ acheck('a refusal written after the probes keeps a commit the other program made
   const fsImpl = memoryFs();
   const probe = probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED });
   const interleaved = async account => {
-    if (account.name === 'studentb') {
+    if (account.name === 'student') {
       writeState(STATE, {
         activeAccount: 'other-program',
         activeByProvider: { codex: null, claude: 'other-program', gemini: null },
@@ -451,7 +429,7 @@ acheck('a refusal written after the probes keeps a commit the other program made
     return probe(account);
   };
   const result = await resolveForLaunch({
-    registry: registry(), provider: 'codex', probe: interleaved, statePath: STATE, fsImpl,
+    registry: registry(), preferred: 'student', provider: 'codex', probe: interleaved, statePath: STATE, fsImpl,
     now: () => '2026-08-10T00:00:02.000Z'
   });
   assert.strictEqual(result.ok, false);
@@ -471,7 +449,7 @@ acheck('without a named provider, a registry of one program still starts from th
     lastSwitch: null, history: []
   }) });
   const result = await resolveForLaunch({
-    registry: registry(), probe: probeReturning({}), statePath: STATE, fsImpl, persistSelection: false
+    registry: registry(), preferred: 'studenta', probe: probeReturning({}), statePath: STATE, fsImpl, persistSelection: false
   });
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.account.name, 'studenta', 'the legacy name outranked the map for a single-program registry');
@@ -482,7 +460,7 @@ acheck('without a named provider, a registry of one program still starts from th
 acheck('a manual switch records which program it was for', async () => {
   const fsImpl = memoryFs();
   const result = await switchTo({
-    registry: registry(), selector: 'studenta', probe: probeReturning({}),
+    registry: registry(), preferred: 'student', selector: 'studenta', probe: probeReturning({}),
     statePath: STATE, fsImpl, now: () => '2026-08-10T00:00:00.000Z'
   });
   assert.strictEqual(result.ok, true);
@@ -496,7 +474,7 @@ acheck('a manual switch records which program it was for', async () => {
 acheck('a manual switch verifies the target before committing to it', async () => {
   const fsImpl = memoryFs();
   const refused = await switchTo({
-    registry: registry(), selector: 'studenta',
+    registry: registry(), preferred: 'student', selector: 'studenta',
     probe: probeReturning({ studenta: STATUS.SIGNED_OUT }),
     statePath: STATE, codexConfigPath: PIN, fsImpl
   });
@@ -507,7 +485,7 @@ acheck('a manual switch verifies the target before committing to it', async () =
 acheck('a manual switch by ROLE works and is attributed as manual', async () => {
   const fsImpl = memoryFs();
   const result = await switchTo({
-    registry: registry(), selector: 'institutional', probe: probeReturning({}),
+    registry: registry(), preferred: 'student', selector: 'institutional', probe: probeReturning({}),
     statePath: STATE, codexConfigPath: PIN, fsImpl, now: () => '2026-08-10T00:00:00.000Z'
   });
   assert.strictEqual(result.ok, true);
@@ -520,7 +498,7 @@ acheck('a manual switch by ROLE works and is attributed as manual', async () => 
 acheck('--force can override a refusal, and records that it was forced', async () => {
   const fsImpl = memoryFs();
   const result = await switchTo({
-    registry: registry(), selector: 'studenta',
+    registry: registry(), preferred: 'student', selector: 'studenta',
     probe: probeReturning({ studenta: STATUS.SIGNED_OUT }),
     statePath: STATE, codexConfigPath: PIN, fsImpl, force: true
   });
@@ -532,7 +510,7 @@ acheck('--force can override a refusal, and records that it was forced', async (
 acheck('persisted state contains no credential-shaped value', async () => {
   const fsImpl = memoryFs();
   await resolveForLaunch({
-    registry: registry(), probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED }),
+    registry: registry(), preferred: 'student', probe: probeReturning({ student: STATUS.EXHAUSTED, studenta: STATUS.EXHAUSTED, studentb: STATUS.EXHAUSTED }),
     statePath: STATE, codexConfigPath: PIN, fsImpl, now: () => '2026-08-10T00:00:00.000Z'
   });
   const raw = fsImpl.readFileSync(STATE);
@@ -557,7 +535,7 @@ acheck('a refused launch cannot revert a switch that landed while it was probing
    * launch has finished committing. */
   const fsImpl = memoryFs();
   await switchTo({
-    registry: registry(), selector: 'studenta', probe: probeReturning({}),
+    registry: registry(), preferred: 'student', selector: 'studenta', probe: probeReturning({}),
     statePath: STATE, fsImpl, now: () => '2026-08-10T00:00:00.000Z'
   });
   assert.strictEqual(readState(STATE, { fsImpl }).activeAccount, 'studenta',
@@ -566,7 +544,7 @@ acheck('a refused launch cannot revert a switch that landed while it was probing
   let releaseWalk;
   const gate = new Promise(resolve => { releaseWalk = resolve; });
   const refusing = resolveForLaunch({
-    registry: registry(),
+    registry: registry(), preferred: 'student',
     probe: async account => {
       await gate;
       return Object.freeze({
@@ -578,7 +556,7 @@ acheck('a refused launch cannot revert a switch that landed while it was probing
   });
 
   const switched = await resolveForLaunch({
-    registry: registry(),
+    registry: registry(), preferred: 'studentb',
     probe: probeReturning({ studenta: STATUS.EXHAUSTED, student: STATUS.EXHAUSTED }),
     statePath: STATE, fsImpl, now: () => '2026-08-10T00:00:01.000Z'
   });
@@ -608,7 +586,7 @@ acheck('a refused launch cannot revert a switch that landed while it was probing
   // These are collection cardinality assertions, not merely non-empty checks:
   // dropping even one registration must make the runner fail rather than
   // silently reducing the amount of behavior exercised.
-  assert.strictEqual(checks.length, 13, 'every synchronous check must be registered');
+  assert.strictEqual(checks.length, 12, 'every synchronous check must be registered');
   assert.strictEqual(asyncChecks.length, 22, 'every asynchronous check must be registered');
   for (const [name, fn] of checks) {
     try { fn(); process.stdout.write(`ok   ${name}\n`); }

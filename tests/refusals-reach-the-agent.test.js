@@ -1,7 +1,7 @@
 'use strict';
 /* A REFUSAL HAS TO REACH THE AGENT THAT CAUSED IT.
  *
- * MEASURED 2026-09-03 on a live fleet. agent.spawn was refused 41
+ * MEASURED 2026-09-03 on the owner's own fleet. agent.spawn was refused 41
  * times out of 51 attempts in three hours, and every single refusal reached the
  * calling agent as one sentence:
  *
@@ -159,7 +159,7 @@ test('the refusals agent.spawn raises for a bad effort, provider or model reach 
     'done      the dispatcher receives evidence and one verdict',
     'report    REPORT-refusal-worker.md'
   ].join('\n');
-  const workspace = process.platform === 'win32' ? 'C:\\fixture\\workspace' : '/fixture/workspace';
+  const workspace = process.platform === 'win32' ? '\x43:\\fixture\\workspace' : '/fixture/workspace';
   const context = {
     agentId: 'controller',
     agentPrincipal: { sessionId: 'chat-parent-1' },

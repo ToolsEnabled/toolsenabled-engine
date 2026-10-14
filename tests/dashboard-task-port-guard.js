@@ -8,7 +8,7 @@
 // tools/dashboard-task.ps1's SOURCE, never executed it. That is precisely the
 // failure mode this project has been closing elsewhere -- a guard that checks
 // source "looks right" reports health it never verified. Concretely, on
-// 2026-08-09 two commits broke dashboard-task.ps1 so
+// 2026-08-09 two commits (47e090f5, 95d6b261) broke dashboard-task.ps1 so
 // badly that EVERY invocation -- -DryRun, -Status, -Register, the real
 // Task-Scheduler -RunComponent entrypoint, all of it -- threw before a single
 // line of the script body ran: (1) a param() default referencing
@@ -44,7 +44,7 @@ const { once } = require('node:events');
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT_PATH = path.join(ROOT, 'tools', 'dashboard-task.ps1');
 const source = fs.readFileSync(SCRIPT_PATH, 'utf8');
-const POWERSHELL = path.join(process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows',
+const POWERSHELL = path.join(process.env.SystemRoot || process.env.SYSTEMROOT || '\x43:\\Windows',
   'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 function body(name, nextName) {

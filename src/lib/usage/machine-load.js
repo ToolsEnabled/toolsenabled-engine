@@ -8,7 +8,7 @@
 //   1. os.loadavg() is NOT a real measurement on Windows.  Node's own docs
 //      say the return value on Windows is ALWAYS [0, 0, 0], and this was
 //      reconfirmed live on this machine before writing a line of this file
-//      (win32: os.loadavg() -> [0, 0, 0]).  A reader that
+//      (win32, 16 logical cores, os.loadavg() -> [0, 0, 0]).  A reader that
 //      trusts loadavg() here reports "zero load" forever -- a plausible-
 //      looking number that is actually a platform stub with nothing behind
 //      it.  This module never calls os.loadavg().  It measures utilization
@@ -50,7 +50,7 @@ const UNKNOWN_REASON = Object.freeze({
 //
 // The old comment claimed 200ms was "long enough that the counters move enough
 // to divide by without noise dominating". Measured concurrently against
-// Get-Counter '\Processor(_Total)\% Processor Time' on a development machine under
+// Get-Counter '\Processor(_Total)\% Processor Time' on a 16-core machine under
 // real load, that is false in BOTH directions:
 //
 //   this reader @200ms   38, 14, 12, 12, 13, 10, 15, 12  percent

@@ -19,7 +19,8 @@ Assertion audit (testcanfail-tests-vault-access-policy-dispatch-test-js):
 - Mutation: replacing `vaultReadPrincipals(context)` in src/lib/tool-registry.js
   with `[]` -- the shape a forgotten wiring would have -- produced RED:
   "not ok 1 - a denied role is refused when the real dispatcher runs the tool".
-  Restoring produced GREEN: "# pass 2", "# fail 0".
+  Restoring produced GREEN: "# pass 2", "# fail 0". Outputs quoted in
+  REPORT-LANED-ITEM1-20260919.md.
 - Preconditions unmet: none.
 */
 

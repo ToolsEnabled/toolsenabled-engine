@@ -174,3 +174,16 @@ test('MCP does not surface arbitrary error fields or malformed owner request ids
     assert.ok(!packet.content[0].text.includes(requestId));
   }
 });
+
+
+require('node:test')('PowerShell literals preserve typographic delimiters and inert command text', () => {
+  const { powerShellSingleQuoted } = require('../src/lib/powershell-quote');
+  const { spawnSync } = require('node:child_process');
+  const executable = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+  const values = ["plain path", "an'apostrophe", "left‘middle’right‚end‛", 'literal$(throw "executed"); `x', '界/é'];
+  const script = '[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; @(' + values.map(powerShellSingleQuoted).join(',') + ') | ConvertTo-Json -Compress';
+  const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+  assert.equal(result.error, undefined, 'PowerShell execution is required to verify literals');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout.trim()), values);
+});

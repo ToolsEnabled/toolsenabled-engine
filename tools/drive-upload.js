@@ -3,8 +3,8 @@
 // Thin CLI over the Drive provider so uploads are hands-off from the shell or a
 // scheduled job. Requires a one-time `node tools/google-oauth-login.js` first.
 //
-//   node tools/drive-upload.js --find "Quarterly Report"
-//   node tools/drive-upload.js --file "C:\path\report.docx" --folder <folderId> [--name "report.docx"]
+//   node tools/drive-upload.js --find "Example Pickard"
+//   node tools/drive-upload.js --file "C:\path\Personal Statement.docx" --folder <folderId> [--name "Personal Statement.docx"]
 //
 // With no credentials in the vault the provider throws a clear setup error.
 

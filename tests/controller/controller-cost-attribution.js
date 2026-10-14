@@ -30,10 +30,10 @@ const meter = require('../../src/lib/controller-metering');
 
 // The roster this file validates against is DECLARED here, not read from
 // config/google-accounts.profile.json. That file is gitignored, so a test that
-// spelled out the developer's own registered alias passed on their machine and
+// spelled out the developer's own registered alias passed on his machine and
 // failed in every fresh checkout and detached worktree -- which is exactly how
-// an engine baseline stopped being measurable from a worktree at all
-// (R1531). These two aliases exist only in this file.
+// an engine baseline stopped being measurable from a worktree at all (R1531
+// w8). These two aliases exist only in this file.
 const ROSTER = meter.accountRosterOf(['acct-a', 'acct-b']);
 
 const hash = character => character.repeat(64);

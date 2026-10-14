@@ -23,7 +23,7 @@
       - it is bound to loopback (127.0.0.1 or ::1), never 0.0.0.0,
       - the owning process is node.exe,
       - its command line is READABLE and names the one entry point fixed for the
-        literal port (agent-dashboard\server\index.js for 3889,
+        literal port (AgentActivityVisualizer\server\index.js for 3889,
         sidecars\local-coder\bin\server.js for 3888, or
         tools\mission-bridge.js for the bounded 4610-4619 range). An unreadable
         command line is a REFUSAL: being unable to identify the holder is exactly
@@ -82,7 +82,7 @@ $logFile = Join-Path $repoRoot 'logs\uac-reap.log'
 switch ($Port) {
     3889 {
         $componentName = 'dashboard'
-        $expectedEntryPattern = 'agent-dashboard[\\/]server[\\/]index\.js'
+        $expectedEntryPattern = 'AgentActivityVisualizer[\\/]server[\\/]index\.js'
         $siblingPort = $null
     }
     { $_ -ge 4610 -and $_ -le 4619 } {

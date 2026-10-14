@@ -8,9 +8,9 @@
 // is honest about what it did not look at:
 //
 //   * `node tools/prior-work-index.js` reads docs/, reports/ and context/ as
-//     whole FILES. reports/OWNER-REQUEST-LEDGER.json can hold hundreds of owner
+//     whole FILES. reports/OWNER-REQUEST-LEDGER.json is 1.3 MB of 560 owner
 //     requests, and the index reads a bounded 96 KB head of it as ONE document.
-//     So "what was said about the spend cap" cannot reach R-number granularity
+//     So "what did he say about the spend cap" cannot reach R-number granularity
 //     at all -- the verbatims are on disk and unreachable.
 //   * The agent-coord board (durable memory) is searched by a SQL `LIKE '%x%'`
 //     over key/note/tags/value with no ranking, no stemming, and a hard cap of
@@ -20,7 +20,7 @@
 //
 // A session therefore asks one of the three, gets nothing, and concludes
 // nothing exists. That is the absence-read-as-consent class this codebase has
-// now hit nine times, and it is what made a body of licensing research get
+// now hit nine times, and it is what made four nights of trademark research get
 // redone.
 //
 // THIS MODULE IS THE SOURCE REGISTRY, and it is deliberately a closed list.
@@ -175,7 +175,7 @@ function ledgerDocuments(options = {}) {
     } catch (error) {
       // A ledger we cannot parse is an UNKNOWN. Reporting the requests we did
       // manage to read as if they were all of them is how a partial read
-      // becomes a confident "they never asked for that".
+      // becomes a confident "he never asked for that".
       unavailable('LEDGER_UNPARSEABLE', `${toPosix(entry.file)} is present but could not be parsed: ${error.message}`);
     }
     const requests = Array.isArray(parsed && parsed.requests) ? parsed.requests : null;

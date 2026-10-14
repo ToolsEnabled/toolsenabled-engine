@@ -5,7 +5,7 @@
  * (`Object.defineProperty(output, '__mcpImage', { enumerable: false, ... })`)
  * on purpose: mcp-server.js's `structured()` copies only enumerable fields, so
  * the pixels can never reach `structuredContent` or ordinary JSON logging by
- * accident. That worked while the call ran on the main thread. Since an earlier change
+ * accident. That worked while the call ran on the main thread. Since 46189b9b
  * ("Keep tool metering and desktop capture off the main thread") every
  * screen.read_capture goes through `runDesktopAsync` -> a worker_threads
  * worker -> `postMessage`, and the structured-clone algorithm postMessage uses
@@ -29,7 +29,7 @@
  * bought is preserved by a deliberate delete rather than by a JavaScript
  * visibility flag that a structured clone does not respect -- and everything
  * downstream (toolResult, structured, every other runDesktopAsync caller) is
- * unchanged and still sees exactly what it saw before an earlier change.
+ * unchanged and still sees exactly what it saw before 46189b9b.
  *
  *   node tests\run-isolated.js tests/desktop-worker-image-boundary.test.js
  */

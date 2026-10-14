@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
-    Register (or remove) the Windows scheduled task that keeps the agent
-    activity dashboard (port 3889) running without a live Claude
+    Register (or remove) the Windows scheduled task that keeps the Agent
+    Activity Visualizer dashboard (port 3889) running without a live Claude
     Code / controller session.
 
     WHY A SCHEDULED TASK AT ALL: today the process is started ad hoc from
@@ -18,7 +18,7 @@
     console on at all.
 
     WHY A POWERSHELL WRAPPER INSTEAD OF CALLING node.exe DIRECTLY (the one
-    difference from the two reference scripts): the task needs a health
+    difference from the two reference scripts): the owner asked for a health
     self-check -- on task start, confirm the process actually opens its port
     within a few seconds, not just that node.exe is still alive. A bare
     node.exe action gives Task Scheduler no way to tell "started but never
@@ -207,9 +207,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # authority). Every later reference to $managedRegistry.processes.* -- the
 # dashboard port used in -RunComponent, -ReapComponent, and the
 # registration plans below -- depends on this variable existing. It did not:
-# a prior commit switched five call sites from hardcoded ports to
+# a prior commit (95d6b261) switched five call sites from hardcoded ports to
 # $managedRegistry.processes.*.port on the stated assumption that "$managedRegistry
-# [was] already loaded for the taskName fix", but the taskName fix
+# [was] already loaded for the taskName fix", but the taskName fix (47e090f5)
 # only ever read the file into two param-default expressions, never into a
 # script-scope $managedRegistry -- so every one of those five references was
 # reading an undefined variable. tests/dashboard-task-port-guard.js could not
@@ -218,12 +218,23 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $managedRegistry = Get-Content -LiteralPath (Join-Path $repoRoot 'config\managed-processes.json') -Raw | ConvertFrom-Json
 if ([string]::IsNullOrWhiteSpace($DashboardTaskName)) { $DashboardTaskName = $managedRegistry.processes.dashboard.taskName }
 
-# The dashboard checkout location, resolved rather than assumed: the sibling
-# agent-dashboard folder next to this ToolsEnabled root. Take the first
-# candidate that actually contains server\index.js; otherwise keep the first so
-# -DryRun validation reports "Entry point missing" with the path it tried.
+# The AgentActivityVisualizer repo location, resolved rather than assumed.
+#
+# This was `Join-Path (Split-Path -Parent $repoRoot) 'AgentActivityVisualizer'`
+# -- i.e. "my sibling". That held on Machine A, where the two repos sat side by
+# side on the Desktop. The Machine B migration split them up: ToolsEnabled was
+# promoted to C:\ToolsEnabled-live and the visualizer landed in
+# C:\agent-apps\AgentActivityVisualizer, so the sibling guess resolved to
+# C:\AgentActivityVisualizer and -DryRun failed with "Entry point missing".
+# The registrar could therefore no longer register the dashboard at all, while
+# the hand-registered live task kept working -- so the breakage was invisible
+# until someone tried to re-register. Search known roots and take the first that
+# actually contains server\index.js.
 $visualizerCandidates = @(
-    (Join-Path (Split-Path -Parent $repoRoot) 'agent-dashboard')  # sibling checkout
+    (Join-Path (Split-Path -Parent $repoRoot) 'AgentActivityVisualizer'),  # sibling (Machine A layout)
+    'C:\agent-apps\AgentActivityVisualizer',                               # Machine B layout
+    (Join-Path $env:USERPROFILE 'OneDrive\Desktop\AgentActivityVisualizer'),
+    (Join-Path $env:USERPROFILE 'Desktop\AgentActivityVisualizer')
 )
 $visualizerRoot = $visualizerCandidates |
     Where-Object { Test-Path -LiteralPath (Join-Path $_ 'server\index.js') } |
@@ -255,7 +266,7 @@ function Write-TaskLog {
 #
 # This function used to return $true as soon as ANYTHING listened on the port.
 # On 2026-07-28 an orphaned node.exe held 3889, so every restart logged
-# "Health check OK: port 3889 is listening (PID <n>)" one second before
+# "Health check OK: port 3889 is listening (PID 25836)" one second before
 # "Process exited with code 1" -- the child had already died of EADDRINUSE and
 # the ORPHAN answered the check. Two deploys shipped nothing, and Task
 # Scheduler's RestartCount burned against a condition no restart could fix.
@@ -547,7 +558,7 @@ if ($ReapComponent) {
 # ---------------------------------------------------------------------------
 # Resolved via tools/resolve-node.js's probed, capability-checked search
 # (explicit TOOLSENABLED_NODE override, then common install locations
-# including a historical hardcoded pin, then PATH -- each candidate is
+# including the historical C:\agent-apps pin, then PATH -- each candidate is
 # verified with a real node:sqlite DatabaseSync.isOpen probe, not just a
 # version string) instead of a hardcoded machine-specific path with an
 # unverified PATH-only fallback.
@@ -558,7 +569,7 @@ if ($ReapComponent) {
 # (_open -> _migrate -> transaction -> _open) and every task.list dies with
 # "Maximum call stack size exceeded", which reads like database corruption
 # rather than a runtime mismatch. See AGENT-GUIDE.md section 7, landmine 0.
-# A hardcoded machine-specific pin with that same unverified PATH fallback only
+# A hardcoded C:\agent-apps pin with that same unverified PATH fallback only
 # moves the landmine: on any machine other than the one it was written for,
 # the pin misses and this silently falls back to whatever `node` is first on
 # PATH, with no version or sqlite-capability check -- exactly the failure
@@ -733,7 +744,7 @@ foreach ($plan in $plans) {
         -RepetitionDuration (New-TimeSpan -Days 3650)
     . (Join-Path $PSScriptRoot 'lib\StartupPolicy.ps1')
     # Boot and sign-in triggers come from the startup.services_at_logon switch
-    # (product rule), never from a literal in this file.
+    # (owner directive 2026-08-13), never from a literal in this file.
     $triggers = New-ToolsEnabledTaskTriggers -Repeating $repeatTrigger -OwnerUser ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -IncludeStartup -IncludeLogon
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet `

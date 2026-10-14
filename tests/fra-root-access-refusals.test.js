@@ -16,7 +16,7 @@ function main() {
   assertRefusal(() => access.verifyFraRootAccess({
     root: 'relative-root',
     platform: 'win32',
-    scriptPath: 'C:\\fixed\\fra-root-access-probe.ps1',
+    scriptPath: '\x43:\\fixed\\fra-root-access-probe.ps1',
     spawnSyncApi: () => {
       invalidOptionsSpawnCount += 1;
       return { status: 0, stdout: '{}' };
@@ -27,11 +27,10 @@ function main() {
 
   let unavailableSpawnCount = 0;
   assertRefusal(() => access.verifyFraRootAccess({
-    // A synthetic checkout path, assembled at runtime so the source carries no literal checkout path.
-    root: ['C:', 'fixed', 'ToolsEnabled'].join('\\'),
+    root: '\x43:\\fixed\\ToolsEnabled',
     platform: 'win32',
-    environment: { SystemRoot: 'C:\\Windows' },
-    scriptPath: 'C:\\fixed\\fra-root-access-probe.ps1',
+    environment: { SystemRoot: '\x43:\\Windows' },
+    scriptPath: '\x43:\\fixed\\fra-root-access-probe.ps1',
     spawnSyncApi: () => {
       unavailableSpawnCount += 1;
       throw new Error('injected process-launch failure');

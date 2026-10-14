@@ -399,7 +399,8 @@ function assertToolAllowed(entry, input) {
      * error handling. classify() is a pure table lookup that returns null for a
      * non-string rather than throwing, so the only realistic way here is the
      * confinement module failing to load: exactly the case where nothing has
-     * been checked and admitting by effect alone is worst. Caught in review.
+     * been checked and admitting by effect alone is worst. Caught in review by
+     * reviewer.
      *
      * Refusing the single tool rather than rethrowing keeps one unreadable entry
      * from emptying the whole surface by exception, and guardedToolNames filters

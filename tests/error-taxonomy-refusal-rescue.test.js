@@ -113,9 +113,9 @@ const SWEEP_BLANKETED = Object.freeze({
   WORKSTATION_ROOT_INVALID: 'INVALID_REQUEST',            // workstation.status (1)
 });
 
-// The historical sweep included retired integrations. An earlier commit removed
-// one retired integration's refusal code and reconciled 21 -> 20. A later commit
-// then removed another retired integration's code, but left the
+// The historical sweep included retired integrations. Commit 81b14e1 removed
+// RETIRED_PROVIDER_ACCOUNT_INVALID and reconciled 21 -> 20. Commit fe64032
+// then removed JARVIS_CONTROL_RUN_NOT_FOUND with that integration, but left the
 // 20-count assertion behind. These are the 19 retained cases, not a newly
 // measured sweep. Keep a fixed independent count; never derive it from mapping.
 check('the retained sweep refusal fixture contains all 19 source cases', () => {
@@ -220,7 +220,7 @@ check('a rescued failure still carries only the closed public fields', () => {
 // code that names its own refusal, with no rule in this ladder recognizing
 // any word in it, answers the fixed INTERNAL_ERROR sentence instead of the
 // sentence the tool already worked out. Measured this time on
-// node-1-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d (an orphaned tree circle,
+// node-1-11bbb999-2218-44a6-893a-9a7a3e8e6716 (an orphaned tree circle,
 // parentId null): agent.remove and agent.restart both refused with "The
 // operation stopped safely because of an internal error." while the real
 // sentence ("...that circle is not below yours on the tree...") sat in the

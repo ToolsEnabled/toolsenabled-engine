@@ -97,11 +97,11 @@ const RELEASE_EXCLUDED_PAYMENT_LIBRARIES = Object.freeze([
   'src/lib/providers/license.js'
 ]);
 
-// Scope: work is desktop LIVE; leave the mobile/iPhone
+// Owner scope, 2026-09-05: work is desktop LIVE; leave the mobile/iPhone
 // prototype alone. Four exact test-only iPhone prototype libraries were excluded
 // here on that reasoning.
 //
-// Emptied 2026-09-06.  Those four paths no longer exist on this line: an earlier change
+// Emptied 2026-09-06.  Those four paths no longer exist on this line: ebd6447
 // "Retire inactive iPhone controller remnants after extraction" deleted them,
 // and this constant is the mechanism that then failed -- exactly as designed.
 // The comment above promised to "fail if any exact exclusion becomes stale",
@@ -1340,7 +1340,7 @@ function formatReport(result) {
 //
 // The first version of this function rebuilt `entries` from scratch. A builder
 // wrote a considered "manual" entry with a paragraph of reasoning TWICE, and a
-// regeneration erased it both times, resetting the file to {}. They correctly
+// regeneration erased it both times, resetting the file to {}. He correctly
 // stopped editing the file rather than fight the generator.
 //
 // That is the exact failure this registry exists to prevent, occurring inside

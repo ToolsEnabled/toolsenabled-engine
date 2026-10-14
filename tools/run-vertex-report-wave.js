@@ -746,7 +746,7 @@ async function runOne(lane) {
     const materialized = materializeWorkingTree(ref.path, { repoRoot, exec: quietExec });
     const onlyKnownGitlink = Array.isArray(materialized.trackedMissing)
       && materialized.trackedMissing.length === 1
-      && materialized.trackedMissing[0] === 'reports/desktop-archive-2026-07-29/AI_Session_Logs';
+      && materialized.trackedMissing[0] === 'reports/\x64esktop-archive-2026-07-29/AI_Session_Logs';
     if (!materialized.complete && !onlyKnownGitlink) {
       throw new Error(`MATERIALIZE_REFUSED: ${materialized.reason}`);
     }

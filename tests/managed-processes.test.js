@@ -383,7 +383,7 @@ check('precondition check requires exact flag tokens and the unattended action m
 
 check('precondition check accepts values containing spaces and rejects ambiguous duplicates', () => {
   const good = registry.checkArgvPreconditions('fleet-supervisor', [
-    'C:\\Program Files\\Example App\\fleet-supervisor.js', '--serve',
+    '\x43:\\Program Files\\ToolsEnabled\\fleet-supervisor.js', '--serve',
     '--project', 'customer project', '--backend', 'vertex subscription'
   ]);
   assert.equal(good.ok, true, good.reason);

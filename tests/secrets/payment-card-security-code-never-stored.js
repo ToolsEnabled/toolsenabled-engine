@@ -26,7 +26,7 @@
 //   each body at the next top-level `function` header --
 //   `.map(body => body.split(/^function /m)[0])` -- is the fix. Measured with the
 //   fence's own extraction: literals seen INSIDE capture forms fall 4 -> 2 and both
-//   survivors carry cardNumber; at a live build the same bounding is a no-op (2
+//   survivors carry cardNumber; at LIVE d9b44f96 the same bounding is a no-op (2
 //   before, 2 after). Removing the bound is RED "15 passed, 1 failed"; restoring it
 //   is GREEN "16 passed, 0 failed". The security scan is untouched and still reads
 //   payloadLiterals over the WHOLE executable source (4 literals), so this narrows
@@ -51,7 +51,7 @@
 
 // THE CARD SECURITY CODE IS NEVER STORED. THIS FILE IS THE GATE THAT SAYS SO.
 //
-// Product rule Q-O4 and legal's X3 launch gate (2026-08-18): the
+// Owner ruling Q-O4 (2026-08-14) and legal's X3 launch gate (2026-08-18): the
 // card security code (CVC / CVV) is never persisted, anywhere, by anyone. PCI
 // DSS Requirement 3.2 bars storing it after authorisation categorically -- not
 // encrypted, not hashed, not for a moment longer than the authorisation that
@@ -182,6 +182,27 @@ function accessLogLines() {
 
 function truncateAccessLog() {
   try { fs.writeFileSync(ACCESS_LOG, ''); } catch { /* not yet created */ }
+}
+
+// PLANTING A CARD RECORD WITHOUT THE GENERIC WRITER. set-stdin now refuses
+// 'payment_card_default' (1.0.50 security M2: the oracle denylist covers the
+// generic writers as well as the readers), and the product writes the record
+// only through the owner's card dialog, which a test cannot drive. So the
+// record is encrypted by set-stdin under an ordinary staging key and moved to
+// the card's name in the scratch vault file. DPAPI ciphertext from
+// ConvertFrom-SecureString is not bound to the record name, so the planted
+// record is exactly what an older build left on disk. Returns the set-stdin
+// result so a caller can report why staging failed.
+const CARD_STAGING_KEY = 'payment_card_security_code_staging';
+function plantCardRecord(value) {
+  const staged = vault(['set-stdin', CARD_STAGING_KEY], { input: value });
+  if (staged.status !== 0) return staged;
+  const records = JSON.parse(fs.readFileSync(VAULT_FILE, 'utf8'));
+  assert.equal(typeof records[CARD_STAGING_KEY], 'string', 'the staged card ciphertext is missing');
+  records[CARD_KEY] = records[CARD_STAGING_KEY];
+  delete records[CARD_STAGING_KEY];
+  fs.writeFileSync(VAULT_FILE, `${JSON.stringify(records, null, 2)}\n`);
+  return staged;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +480,7 @@ function scratchRecordShape() {
 }
 
 check('(c) setup: a pre-fix record carrying the code is planted in the scratch vault', () => {
-  const stored = vault(['set-stdin', CARD_KEY], { input: LEGACY_RECORD_WITH_CODE });
+  const stored = plantCardRecord(LEGACY_RECORD_WITH_CODE);
   assert.equal(stored.status, 0, `could not plant the legacy record (${stored.stderr || stored.spawnError})`);
   const shape = scratchRecordShape();
   assert.equal(shape.absent, false);
@@ -538,7 +559,7 @@ check('(c) the runtime wrapper the app can call answers the same three words, hi
   assert.equal(typeof runtime.scrubPaymentCardSecurityCode, 'function', 'runtime exports no scrub wrapper for the app to call');
   const clean = runtime.scrubPaymentCardSecurityCode();
   assert.deepEqual(clean, { key: CARD_KEY, status: 'clean' });
-  const planted = vault(['set-stdin', CARD_KEY], { input: LEGACY_RECORD_WITH_CODE });
+  const planted = plantCardRecord(LEGACY_RECORD_WITH_CODE);
   assert.equal(planted.status, 0);
   const scrubbed = runtime.scrubPaymentCardSecurityCode();
   assert.deepEqual(scrubbed, { key: CARD_KEY, status: 'scrubbed' });

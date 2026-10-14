@@ -1,6 +1,6 @@
 # Orphan files proven green before wiring on 2026-08-24.
 #
-# Direct admission evidence is recorded in the wiring report: the full
+# Direct admission evidence is recorded in REPORT-W6-orphan-wire.md: the full
 # 114-entry manifest passed in one run. Failures and named non-passing skips
 # remain in their original orphan classes.
 tests/agent-comms-cutover-gate.js
@@ -112,11 +112,11 @@ tests/health-observer-listener-cost.test.js
 tests/multi-account-rotation.test.js
 # tests/multi-account-registry-write.test.js -- UNWIRED 2026-08-26, ONE HALF FIXED,
 # one half owned elsewhere. It carried TWO failures: (1) a Windows SIGKILL
-# assertion an earlier strengthening introduced -- process.kill(pid,SIGKILL)
+# assertion the wave-29 strengthening introduced -- process.kill(pid,SIGKILL)
 # has no SIGKILL on Windows, so the child reports signal:null and the assertion
 # failed on the machine that cuts; FIXED IN THE TEST to assert force-kill by each
 # platform evidence without weakening the registry-integrity checks. (2) a
-# PRE-EXISTING services-root failure that strengthening itself flagged as outside its fence:
+# PRE-EXISTING services-root failure wave 29 itself flagged as outside its fence:
 # an account written through one resolver is not seen by the services-root caller
 # (null !== cloud-a) -- a real multi-account cross-resolver integration bug for
 # the account-router owner, not a test defect. Re-wire when (2) is fixed; (1) is
@@ -140,7 +140,7 @@ tests/cloud-mirror-bridge.test.js
 tests/cloud-batch-target.test.js
 
 # ---------------------------------------------------------------------------
-# 2026-08-24, second admission pass (an earlier session).
+# 2026-08-24, second admission pass (session b6a617e2).
 #
 # Twenty-one more test files that this chain did not run. NOT ONE of them was an
 # orphan by the census: tools/test-census.js calls all of them REACHABLE, because
@@ -267,7 +267,7 @@ tests/resource-alerts.test.js
 tests/status-injection.test.js
 tests/unit/providers/provider-registry.test.js
 # ---------------------------------------------------------------------------
-# 2026-08-24/25, third admission pass (an earlier session).
+# 2026-08-24/25, third admission pass (session b6a617e2).
 #
 # Source data: a 119-file orphan classification run (91 PASS, 28 FAIL) handed
 # to this lane. Of the 91 PASS files, the transitive closure of

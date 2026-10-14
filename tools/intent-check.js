@@ -7,7 +7,7 @@
 //   node tools/intent-check.js --returns           only the work currently FAILED back
 //   node tools/intent-check.js --list              what a cycle WOULD check, and why
 //   node tools/intent-check.js --request R44       check one ledger request now
-//   node tools/intent-check.js --lane <lane-id>    check one accepted fleet lane now
+//   node tools/intent-check.js --lane q22-ms5...   check one accepted fleet lane now
 //   node tools/intent-check.js --once              one bounded cycle over new completed work
 //   node tools/intent-check.js --serve             the persistent loop
 //   node tools/intent-check.js --stop              sentinel: a serving loop drains and exits
@@ -162,7 +162,7 @@ function summarizeInner() {
       workKey: entry.workKey, requestId: entry.requestId, checkedAt: entry.checkedAt,
       reason: entry.reason,
       // Only grounded, counting gaps are shown here: those are the ones that
-      // quote their actual words AND assert an actual absence.
+      // quote his actual words AND assert an actual absence.
       gaps: (entry.gaps || []).filter(gap => gap.counts).map(gap => ({ quote: gap.quote, source: gap.quoteSource, why: gap.why }))
     })),
     // MEASURED, from the provider's own reported usage. Null when nothing has

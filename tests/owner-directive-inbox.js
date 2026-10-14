@@ -137,8 +137,7 @@ assert.throws(() => inbox.list({ limit: 9999 }, overrides), error => error.code 
 // --- SENSITIVE heuristic backstop -----------------------------------------
 
 assert.throws(
-  // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-  () => inbox.append({ text: 'here is my token: sk-' + 'ABCDEFGHIJKLMNOPQRSTUVWX' }, overrides),
+  () => inbox.append({ text: 'here is my token: \x73k-ABCDEFGHIJKLMNOPQRSTUVWX' }, overrides),
   error => error.code === 'OWNER_DIRECTIVE_LOOKS_SENSITIVE'
 );
 assert.throws(

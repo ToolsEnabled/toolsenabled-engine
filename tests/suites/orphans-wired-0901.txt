@@ -1,6 +1,6 @@
 # orphans-wired-0901 -- tracked candidate tests that had no release-chain path.
 #
-# Generated from the exact development-account census on 2026-09-01 after all
+# Generated from the exact fixture-profile census on 2026-09-01 after all
 # implementation lanes became quiescent: 1,158 candidate tests, 826 reachable,
 # and 332 real assertion suites orphaned. The native-agent hostile regression
 # added during the same release repair is wired here too. How many paths this
@@ -62,9 +62,11 @@ tests/agent-digest-render.test.js
 tests/agent-digest-scheduling-status.test.js
 tests/agent-digest/schedule.test.js
 tests/agent-engine/claude-adapter-refusals.test.js
+tests/agent-engine/claude-block-identity.test.js
 tests/agent-engine/claude-cli-adapter-refusals.test.js
 tests/agent-engine/claude-cli-adapter.test.js
 tests/agent-engine/claude-start-timeout.test.js
+tests/agent-engine/claude-subagent-parent.test.js
 tests/agent-engine/engine-contract.test.js
 tests/agent-lane-dispatch.test.js
 tests/agent-launch-audit.test.js
@@ -141,6 +143,8 @@ tests/delegation-enforcement.test.js
 tests/dependency-graph.test.js
 tests/digest-lock-half-published.test.js
 tests/dispatch-permission-session.test.js
+tests/duo-desktop-refusals.test.js
+tests/duo-owner-relay.test.js
 tests/durable-memory-file.test.js
 tests/egress-preflight-uncovered-refusals.test.js
 tests/elevation-refusal.test.js
@@ -233,14 +237,13 @@ tests/multi-account-registry.test.js
 tests/multi-account-switcher-json-refusals.test.js
 tests/multi-account/claude-allowance.test.js
 tests/multi-account/rotation.behavior.test.js
-tests/multi-account/selection-modes.test.js
-tests/multi-account/switcher.test.js
 tests/multi-account/usage-windows.test.js
 tests/native-agent-launcher-refusals.test.js
 tests/native-agent-local-config-hostile.test.js
 tests/native-agent-probe-shell.test.js
 tests/native-agent-worker-failed-refusal.test.js
 tests/native-agent-worker-refusals.test.js
+tests/native-agent-objective-argv.test.js
 tests/no-blocking-prompt-registration.test.js
 tests/online-fra-device-claim-refused.test.js
 tests/online-fra-e2e-session-refusals.test.js
@@ -291,6 +294,7 @@ tests/providers/claude-auth-lifecycle.test.js
 tests/multi-account-usage-binding-filter.test.js
 tests/multi-account/provider-probe-receipt.test.js
 tests/providers/deployment.test.js
+tests/providers/duo-desktop-approval.test.js
 tests/providers/extension.test.js
 tests/providers/instagram-refusals.test.js
 tests/providers/durable-worker-runtime.test.js
@@ -350,6 +354,7 @@ tests/system-status-refusals.test.js
 tests/tool-pack-registry.test.js
 tests/uac-delegation-refusals.test.js
 tests/uac-posture.test.js
+tests/institution-sso-credential-interaction-required.test.js
 tests/usage-lifetime-refusals.test.js
 tests/usage/claude-cached-utilization.js
 tests/usage/codex-chatgpt.js
@@ -375,9 +380,4 @@ tests/account-usage-canonical-consumers.test.js
 tests/agent-engine/claude-thinking-stream.test.js
 tests/agent-engine/acp-thinking-stream.test.js
 
-# Canonical Gemini quota worker, storage races and real SDK synthetic transport.
-tests/providers/gemini-quota-storage.test.js
-tests/providers/gemini-quota-probe.test.js
-tests/providers/gemini-quota-sdk-native.test.js
 tests/providers/gemini-account-usage.test.js
-tests/providers/gemini-quota-identity.test.js

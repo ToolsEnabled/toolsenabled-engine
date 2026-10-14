@@ -94,7 +94,7 @@ async function run() {
 
   await check('validateRegistry REFUSES a judgement duty that carries a run()', () => {
     const verdict = registry.validateRegistry([
-      { id: 'sneaky', kind: registry.DUTY_KIND.JUDGEMENT, description: 'answer them for them', humanAction: 'none', run: async () => ({}) }
+      { id: 'sneaky', kind: registry.DUTY_KIND.JUDGEMENT, description: 'answer him for him', humanAction: 'none', run: async () => ({}) }
     ]);
     assert.equal(verdict.valid, false);
     assert.match(verdict.errors.join('; '), /judgement duty sneaky carries a run\(\)/);
@@ -182,7 +182,7 @@ async function run() {
     });
     const result = await registry._internals.runOwnerInboxDetect(ctx);
     assert.equal(result.outcome, DUTY_OUTCOME.UNAVAILABLE,
-      '"I cannot read the inbox" must never render as "they are not waiting"');
+      '"I cannot read the inbox" must never render as "he is not waiting"');
   });
 
   // --- ESCALATION IS A NOTICE, NOT A REPLY ---------------------------------
@@ -278,7 +278,7 @@ async function run() {
   // "it did not throw" as "the owner was told" is the false-OK-from-a-suppressed
   // -escalation failure, and it lands hardest on exactly the R100 condition:
   // the owner is waiting, an unrelated alarm trips the global 60s send floor,
-  // and their notice is dropped while the heartbeat claims escalated:true.
+  // and his notice is dropped while the heartbeat claims escalated:true.
   await check('a SUPPRESSED escalation never reports escalated:true', async () => {
     for (const decision of ['SUPPRESS_RATE_LIMIT', 'SUPPRESS_DUPLICATE', 'SUPPRESS_QUIET_HOURS']) {
       const ctx = makeCtx({
@@ -387,7 +387,7 @@ async function run() {
       deps: {
         ownerChat: {
           acknowledgeWithoutReply: () => {
-            const error = new Error('their messages get answered, not filed');
+            const error = new Error('his messages get answered, not filed');
             error.code = 'OWNER_CHAT_NEEDS_A_REPLY';
             throw error;
           }
@@ -577,7 +577,7 @@ async function run() {
   // --- DASHBOARD PROBE: PORT IS NOT PROCESS ---------------------------------
 
   await check('dashboard probe reports identity UNKNOWN even when the port is held', async () => {
-    const ctx = makeCtx({ probeListener: async () => ({ listeners: [{ pid: 4103 }] }) });
+    const ctx = makeCtx({ probeListener: async () => ({ listeners: [{ pid: 29420 }] }) });
     const result = await registry._internals.runDashboardListenerProbe(ctx);
     assert.equal(result.detail.listening, true);
     assert.equal(result.detail.identity, 'UNKNOWN',
@@ -717,7 +717,7 @@ async function run() {
   });
 
   // INTEGRATION SEAM (R100 integrate phase). Reproduces the MEASURED live case:
-  // the duty host was running healthily with a 5s-old heartbeat,
+  // the duty host was running healthily as pid 34848 with a 5s-old heartbeat,
   // yet observer.sweep() reported coordinator-duty-host DOWN with failedRung
   // 'registered' -- the ONLY rung evaluated, because health-invariants.js
   // returns at the first failure and maps registered->DOWN. Under --allow-restart

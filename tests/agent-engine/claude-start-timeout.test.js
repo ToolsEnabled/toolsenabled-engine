@@ -21,6 +21,10 @@ function fakeStream() {
   stream.destroyed = false;
   stream.writable = true;
   stream.setEncoding = () => {};
+  // Real child streams can be paused and resumed; the transport's event
+  // backpressure (and its close path) uses both.
+  stream.pause = () => {};
+  stream.resume = () => {};
   stream.write = chunk => {
     observations.writes.push(chunk);
     return true;

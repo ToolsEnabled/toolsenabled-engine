@@ -12,7 +12,7 @@ const capabilityManifests = require('./capability-manifests');
 const provenanceEnvelopes = require('../../schemas/generated/platform.provenance');
 const { validatePinnedFiles, assertProcessReceipt } = require('./research/provenance');
 const { validateStudyProtocol, assertStudyProtocolDeclaration } = require('./research/study-protocol');
-// Discord left the product on 2026-08-22 (product decision) and
+// Discord left the product on 2026-08-22 (owner ruling, O4) and
 // src/lib/discord-owner-commands.js went with it. The V19 migration below
 // still creates the three discord_* tables -- user_version numbering is
 // load-bearing and a shipped migration is never edited -- so the one value
@@ -223,7 +223,7 @@ const REQUIRED_SCHEMA_V16 = Object.freeze({
   scoped_approval_grants: ['approval_id', 'token_hash', 'approved_at_ms'],
   scoped_approval_events: ['sequence', 'approval_id', 'event_type', 'reason_code', 'event_hash', 'occurred_at_ms']
 });
-// V17 AND V18 STILL DECLARE THE RETIRED CORRECTION TABLES. That is not an oversight and it
+// V17 AND V18 STILL DECLARE THE review CORRECTION TABLES. That is not an oversight and it
 // is not a live feature: V20 below removes them. This ladder answers "what does a database
 // AT version N look like", and _migrate() consults it for the version a database is already
 // at before upgrading it. A real database at 17, 18 or 19 has these tables, so describing
@@ -246,7 +246,7 @@ const REQUIRED_SCHEMA_V19 = Object.freeze({
   discord_gateway_lease: ['provider', 'owner_id', 'token_hash', 'fence', 'expires_at_ms', 'updated_at_ms'],
   discord_command_events: ['event_id', 'gateway_sequence', 'channel_id', 'owner_user_id', 'content', 'event_hash', 'received_at_ms']
 });
-// V20 REMOVES THE RETIRED CORRECTION STORAGE. It is the only step in this ladder that
+// V20 REMOVES THE review CORRECTION STORAGE. It is the only step in this ladder that
 // SUBTRACTS, so it is spelled as an explicit delete of five named keys rather than as a
 // spread of some earlier version. Rebasing it on V16 would look equivalent and would not be:
 // V16 also predates the three discord tables V19 added, so that shortcut would silently stop
@@ -1572,9 +1572,9 @@ const MIGRATION_V16 = `
   PRAGMA user_version = 16;
 `;
 
-// MIGRATION_V17 AND V18 STILL CREATE THE RETIRED CORRECTION TABLES, AND THEY HAVE TO.
+// MIGRATION_V17 AND V18 STILL CREATE THE review CORRECTION TABLES, AND THEY HAVE TO.
 //
-// That correction subsystem is not part of this product -- MIGRATION_V20 below drops these tables
+// The review system is not part of this product -- MIGRATION_V20 below drops these tables
 // and every line of code that read or wrote them is gone. These two steps are kept intact
 // anyway, and an earlier version of this change deleted their bodies, which would have
 // BRICKED EVERY EXISTING INSTALLATION. _migrate() validates a database against the schema
@@ -1587,9 +1587,6 @@ const MIGRATION_V16 = `
 //
 // So the DDL here is HISTORY, not a live feature: it records what these versions did, so
 // that a database written by them can still be recognised and then upgraded past them.
-// For the same reason the table, trigger and message names inside it are frozen: the
-// schema fingerprint covers every name and every trigger body, so renaming any of them
-// would make a database written at 17, 18 or 19 unrecognisable.
 const MIGRATION_V17 = `
   CREATE TABLE review_correction_closures (
     closure_family_id TEXT PRIMARY KEY CHECK(length(closure_family_id) = 64 AND closure_family_id NOT GLOB '*[^0-9a-f]*'),
@@ -1745,21 +1742,21 @@ const MIGRATION_V19 = `
   PRAGMA user_version = 19;
 `;
 
-// V20 REMOVES THE RETIRED CORRECTION STORAGE FROM THIS PRODUCT.
+// V20 REMOVES THE review CORRECTION STORAGE FROM THIS PRODUCT.
 //
-// A retired external correction subsystem is not part of ToolsEnabled and was believed to
-// have been removed already. It had not: this store carried its five tables, ten triggers
-// and its whole projection path, and that subsystem's loop module shipped in the
+// The owner stated that the review system is not part of ToolsEnabled and believed it
+// had already been removed. It had not: this store carried its five tables, ten triggers
+// and its whole projection path, and `src/lib/review-correction-loop.js` shipped in the
 // installer payload because THIS FILE named it in a require().
 //
 // THE TABLES NAMED BELOW ARE THE REMOVAL, NOT A REMNANT. A table cannot be dropped without
-// being named, so these names exist here to delete what MIGRATION_V17 and MIGRATION_V18
-// above created on databases written at those versions.
+// being named, so these are the only occurrences of that name left here, and they exist to
+// delete it. MIGRATION_V17 and MIGRATION_V18 above no longer create them.
 //
 // THIS DROP WAS PROVEN NON-DESTRUCTIVE BEFORE IT WAS WRITTEN, not assumed to be. All five
 // tables held ZERO rows in the live database, and they could not have held any: the feature
-// was gated on a policy file that does not exist in either tree and has never been
-// shipped, so classifyContract() could never return eligible.
+// is gated on config/review-correction-policy.json, which does not exist in either tree
+// and has never been shipped, so classifyContract() could never return eligible.
 //
 // IF EXISTS is load-bearing rather than defensive noise. A database created fresh by this
 // build never had these tables, one at 17/18/19 does, and both must arrive at the same DDL
@@ -1898,7 +1895,8 @@ const MIGRATION_V21 = `
 
 // V22 REMOVES THE DISCORD CONNECTOR STORAGE FROM THIS PRODUCT.
 //
-// Discord is not part of ToolsEnabled (product rule). Its agent tools, its provider module, its UI row and its readiness surface were
+// The owner ruled that Discord is not part of ToolsEnabled and is not to be mentioned at
+// all. Its agent tools, its provider module, its UI row and its readiness surface were
 // removed on 2026-08-22; what survived was this schema, so a shipped installer went on
 // creating three tables named after a connector the product does not have, on every
 // machine it ran on. That is what this step ends.
@@ -1920,7 +1918,7 @@ const MIGRATION_V21 = `
 // hold owner content by construction: discord_gateway_state and discord_gateway_lease are
 // singletons whose CHECK constraints admit only connection bookkeeping -- a session id, a
 // resume URL, a sequence number, a token HASH and a fence -- and V19 inserts both rows
-// itself. On a live database both still hold exactly the row V19 inserted
+// itself. On the owner's live database both still hold exactly the row V19 inserted
 // (status 'idle', every nullable column NULL, fence 0, updated_at_ms 0): the Gateway never
 // connected. The third, discord_command_events, could hold relayed message text; it holds
 // zero rows there, and no code in this engine can add one -- the whole write path went
@@ -1949,8 +1947,8 @@ const MIGRATION_V22 = `
 
 // V23 REMOVES THE TELEGRAM CONNECTOR STORAGE FROM THIS PRODUCT.
 //
-// Telegram is no longer integrated (product rule), because the product now ships
-// its own mobile app. The bridge, the pulse, the command dispatcher,
+// The owner ruled that Telegram is no longer integrated ("you can rip out telegram"), because
+// the product now ships its own mobile app. The bridge, the pulse, the command dispatcher,
 // the five telegram.* MCP tools, system.ask_remote and the Telegram-only provider module were
 // removed on 2026-08-23; what would otherwise survive is this schema, so a shipped installer
 // would go on creating three tables named after a connector the product does not have, on
@@ -1970,7 +1968,7 @@ const MIGRATION_V22 = `
 // content by construction: telegram_cursor and telegram_poll_lease are singletons whose CHECK
 // constraints admit only polling bookkeeping -- a provider name pinned to 'telegram', an
 // update-id watermark, a lease owner, an opaque lease token, a fence and two timestamps --
-// and MIGRATION_V1 inserts both rows itself. On a live database both still hold
+// and MIGRATION_V1 inserts both rows itself. On the owner's live database both still hold
 // exactly the row V1 inserted (cursor next_update_id 0 and updated_at_ms 0; lease owner_id
 // NULL, token NULL, fence 0, expires_at_ms NULL): the bridge never advanced the cursor and
 // never took the lease. The third, telegram_updates, is the one that COULD hold relayed
@@ -3563,8 +3561,8 @@ class StateStore {
   // Leaving them would leave methods that can only ever raise "no such table".
   //
   // Their only caller was src/lib/providers/messaging.js, which was Telegram-only
-  // once Discord left and is deleted too. Telegram left the product by a product
-  // decision to remove it; the product now ships its own mobile app.
+  // once Discord left and is deleted too. Telegram left the product on the owner's
+  // ruling ("you can rip out telegram"); the product now ships its own mobile app.
 
   _validateOperationIdentity({ type, key, inputHash: digest }) {
     return {
@@ -6676,10 +6674,10 @@ class StateStore {
   // The constructor is deliberately lazy -- it resolves a path and returns --
   // so _open(), and with it _migrate() and the _validateSchema() call that
   // NAMES a missing or altered STRICT table, does not run until some operation
-  // needs the database. That laziness is what let the correction-table removal
-  // take this store down quietly on 2026-08-10: the product started clean, then
+  // needs the database. That laziness is what let the review removal take
+  // this store down quietly on 2026-08-10: the product started clean, then
   // every state-backed tool failed separately with its own error, and the only
-  // place that named the missing table was a nested field inside
+  // place that said `review_correction_closures` was a nested field inside
   // system.status. Measured 2026-08-11 on a probe database with a required
   // table dropped: getStateStore() returned a usable handle in 1 ms and threw
   // nothing.

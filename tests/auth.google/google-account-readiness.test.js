@@ -51,7 +51,7 @@ const { doctor, googleAccountReadiness, status } = require('../../src/lib/system
 const originalList = googleAccounts.list;
 googleAccounts.list = () => [
   { alias: 'acct-primary', email: 'personal@example.test', label: 'Personal', isDefault: true, authorized: true },
-  { alias: 'acct-secondary', email: 'team@example.test', label: 'Team', isDefault: false, authorized: true },
+  { alias: 'acct-secondary', email: 'school@example.test', label: 'School', isDefault: false, authorized: true },
   { alias: 'not-authorized', email: 'other@example.test', label: '', isDefault: false, authorized: false }
 ];
 try {

@@ -55,7 +55,6 @@ const REFUSAL_CODES = new Set([
   // Reachable since the provider block let this file supply `dispatch`; their
   // former hold-back comment said to add them in that same commit, and they
   // arrive one commit late with the harvest verb that exercises the journal.
-  'CLOUD_BATCH_RATE_UNSERVEABLE',   // fewer distinct accounts than the admitted rate was cleared for
   'CLOUD_BATCH_JOURNAL_MISMATCH',   // the journal on disk belongs to a different admission
   'CLOUD_BATCH_JOURNAL_UNIDENTIFIED', // the journal names no admission at all
   'CLOUD_HARVEST_NO_JOURNAL',       // asked to harvest a wave whose one complete record is unreadable
@@ -295,7 +294,7 @@ function createGitChangedSince({ mirror, projectKey, registryPath }) {
 }
 
 // EACH ACCOUNT'S OWN HOME, FROM THE ONE REGISTRY THAT KNOWS IT. Shared by
-// `batch` (roster from the sealed provider block) and `harvest` (roster from
+// `batch` (one chosen account in the sealed provider block) and `harvest` (roster from
 // the journal's launched lines). requireAccount refuses an unknown name with
 // the known roster in its sentence, and everything refuses BEFORE any
 // provider call, so a roster typo costs nothing.
@@ -316,6 +315,10 @@ function resolveCodexBinary(codexBinary) {
       `the resolved codex executable needs prefix arguments (${resolved.prefixArgs.join(' ')}), which the batch dispatcher's string-binary contract cannot carry. Pass --codex-binary with a directly-spawnable entry.`);
   }
   return resolved && resolved.command ? resolved.command : resolved;
+}
+
+function resolveAccountHome(accountName) {
+  return resolveAccountHomes([accountName])[accountName];
 }
 
 function resolveAccountHomes(accountNames) {
@@ -355,10 +358,16 @@ function createCodexHarvestFetch({ codexBinary, accountHomes }) {
     execFile(command, argv,
       { env: environment, encoding: 'utf8', timeout: 120_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
       (error, stdout, stderr) => {
-        if (error && !String(stderr || '').trim() && !String(stdout || '').trim()) return reject(error);
+        if (error && !String(stderr || '').trim() && !String(stdout || '').trim()) {
+          return reject(new CloudAgentError('CLOUD_HARVEST_FETCH', 'The official Codex CLI could not fetch this task.'));
+        }
         resolve({ error, stdout: String(stdout || ''), stderr: String(stderr || '') });
       });
   });
+  const fetchFailure = (outcome) => new CloudAgentError('CLOUD_HARVEST_FETCH',
+    /\b429\b|Too Many Requests/i.test(outcome.stderr + outcome.stdout)
+      ? '429 Too Many Requests: the provider throttled this task fetch.'
+      : 'The official Codex CLI could not fetch this task.');
   return async ({ taskId, account }) => {
     const home = accountHomes[account];
     if (!home) throw new CloudAgentError('CLOUD_HARVEST_MISCONFIGURED', `no CODEX_HOME resolved for account ${account}.`);
@@ -378,12 +387,12 @@ function createCodexHarvestFetch({ codexBinary, accountHomes }) {
      * could-not-succeed reported as a definite answer. The state is carried
      * out separately so the manifest can refuse to call it clean. */
     if (/^\[(ERROR|FAILED|CANCELLED|CANCELED|TIMED[_ ]?OUT)\]/im.test(status.stdout)) {
-      const line = (status.stdout.match(/^\[[A-Z_ ]+\].*$/im) || [''])[0].trim();
-      return { state: 'errored', diff: '', detail: line.slice(0, 200) };
+      return { state: 'errored', diff: '', detail: 'The provider reports this task as failed. Check its task page for details.' };
     }
+    if (status.error) throw fetchFailure(status);
     const diff = await call(['cloud', 'diff', taskId], home);
     if (/No diff available/i.test(diff.stdout + diff.stderr)) return { state: 'ready', diff: '' };
-    if (diff.error) throw new CloudAgentError('CLOUD_HARVEST_FETCH', (diff.stderr || diff.stdout).slice(0, 200));
+    if (diff.error) throw fetchFailure(diff);
     return { state: 'ready', diff: diff.stdout };
   };
 }
@@ -399,13 +408,13 @@ async function main(argv, deps = {}) {
   // (submit), queries it (status, verify), or declares what is permitted to
   // leave in a later submit (outbound) -- this is exactly the class of
   // first-party "bypass CLI" R1162 Stage 1b closed for tools/research-once.js
-  // (docs/coordinator/R1162-SWARM-STAGE1B-BYPASS-CLI-MEDIATION-REPORT.md): a
-  // script that calls into an outward-effect provider
+  // and tools/institution-login.js (docs/coordinator/R1162-SWARM-STAGE1B-BYPASS-CLI-
+  // MEDIATION-REPORT.md): a script that calls into an outward-effect provider
   // without ever importing assertActive, so an active KILLSWITCH file does
   // not stop it. This file was not part of that sweep and had the same gap.
   // No `provider` option is passed: cloud-lane has no entry in policy.js's
   // providerByAction map or config/toolsenabled.policy.json's providers
-  // block (same shape as the research-once fix), so only the kill-switch and
+  // block (same shape as the 'institution.login' fix), so only the kill-switch and
   // autonomous-mode gate apply -- there is no third-party API credential
   // this action is gated on.
   assertActive(`cloud_lane.${command}`);
@@ -540,34 +549,27 @@ async function main(argv, deps = {}) {
     // The journal is opened BEFORE the handoff, so the runner writes its first
     // intent into a file that already carries the admission it is running under.
     const journalFile = batchJournal.openBatch({ stateRoot, admission, at: nowIso });
-    // THE HANDOFF IS COMPLETE EXACTLY WHEN THE DECLARATION SEALED ITS
-    // DESTINATION. The old gap here was principled, not lazy: dispatch needs
-    // provider coordinates, and coordinates taken from FLAGS would sit outside
-    // the seal admission computed, so a sealed batch could be pointed somewhere
-    // nobody admitted. The fix is the `provider` block parseBatchTarget now
-    // validates -- branch, per-account environment ids, concurrency -- INSIDE
-    // the sealed declaration. What this CLI still supplies is only what is
-    // machine-local by nature: each account's CODEX_HOME from the multi-account
-    // registry, and the resolved codex executable (bare `codex` is an npm .cmd
-    // shim a shell-less spawn cannot run). A declaration with no provider block
-    // keeps the old contract: runBatch refuses the incomplete lane by name.
+    // The provider declaration seals the chosen account and destination.
+    // Resolve that account's machine-local home and the codex executable here.
+    // A declaration without provider coordinates needs a caller-supplied dispatch.
     const parsedTarget = batchTarget.parseBatchTarget(declaration);
     let dispatchSupply = {};
     if (parsedTarget.provider) {
       const { createCodexDispatcher } = require('../src/lib/cloud-agent/codex-dispatcher');
       const { safeLaunchEnvironment } = require('../src/lib/providers/subscription-launch-env');
-      const accountNames = Object.keys(parsedTarget.provider.environments);
-      const accountHomes = resolveAccountHomes(accountNames);
+      const account = parsedTarget.provider.account;
+      const accountHome = (deps.resolveAccountHomeImpl || resolveAccountHome)(account);
       const { codexExecutable } = require('../src/lib/multi-account/launch');
       dispatchSupply = {
         dispatch: createCodexDispatcher({
           codexBinary: options['codex-binary'] === undefined ? resolveCodexBinary(codexExecutable()) : options['codex-binary'],
-          accountHomes,
-          accountEnvironments: parsedTarget.provider.environments,
+          accountHome,
+          environment: parsedTarget.provider.environment,
           branch: parsedTarget.provider.branch,
-          scrubEnvironment: safeLaunchEnvironment
+          scrubEnvironment: safeLaunchEnvironment,
+          ...(deps.dispatchSpawnImpl ? { spawnImpl: deps.dispatchSpawnImpl } : {})
         }),
-        accounts: accountNames,
+        account,
         concurrency: parsedTarget.provider.concurrency
       };
     }
@@ -638,4 +640,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = Object.freeze({ parseCliArgs, COMMANDS, REFUSAL_CODES, main, resolveCodexBinary });
+module.exports = Object.freeze({ parseCliArgs, COMMANDS, REFUSAL_CODES, main, resolveCodexBinary, createCodexHarvestFetch });

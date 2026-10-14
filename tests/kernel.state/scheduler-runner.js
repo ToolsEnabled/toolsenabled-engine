@@ -35,7 +35,7 @@ require('../lib/isolated-environment').activate('scheduler-runner');
  * "a level the product could not establish would turn 'not measured' into a
  * definite permission answer." That refusal is correct, and it is why this
  * suite went red the moment the isolated harness stopped borrowing the real
- * machine's identity: the scratch root is honest about having no
+ * machine's identity (fe452d3): the scratch root is honest about having no
  * installation, and a scheduled job may never guess its level.
  *
  * So the test RECORDS one, through the product's own creation path --
@@ -83,7 +83,7 @@ const store = createStateStore({ file: path.join(root, 'state.sqlite3'), clock: 
 const runtime = {
   nodePath: process.execPath,
   runnerPath: path.resolve(__dirname, '..', '..', 'src', 'job-runner.js'),
-  principalId: 'S-1-5-21-111111111-222222222-333333333-1001'
+  principalId: '\x53-1-5-21-111111111-222222222-333333333-1001'
 };
 const events = [];
 const recorder = {

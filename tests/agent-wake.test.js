@@ -228,7 +228,7 @@ function builderLaunchSpecTests(directory) {
   throwsCode(() => wake.normalizeLaunchSpec({ ...boundSpec, directiveId: 'free text' }, bound), 'AGENT_WAKE_LAUNCH_SPEC_INVALID');
 
   const claude = baseRecord(directory, 'claude-a', { kind: 'claude', role: 'shadow-manager', tier: 'claude/opus' });
-  const claudeSpec = { ...writeLaunchFixture(claude, { checkpoint: false, command: 'C:\\tools\\claude.exe' }), kind: 'claude' };
+  const claudeSpec = { ...writeLaunchFixture(claude, { checkpoint: false, command: '\x43:\\tools\\claude.exe' }), kind: 'claude' };
   equal(wake.normalizeLaunchSpec(claudeSpec, claude).kind, 'claude', 'Claude launch kind survives wake normalization');
   equal(wake.laneRunArguments(wake.normalizeLaunchSpec(claudeSpec, claude), 1).includes('--kind'), true, 'respawn passes the explicit lane kind back through lane-run');
 }

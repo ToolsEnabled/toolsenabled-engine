@@ -53,10 +53,10 @@ function fakeFs(text) {
 
 test('a cache older than the default budget is not measured; a longer budget reads it', () => {
   const fsImpl = fakeFs(cacheText({ ageMs: 30 * MINUTE }));
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED,
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED,
     'thirty minutes is beyond the fifteen-minute default');
 
-  const aged = claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs: 2 * HOUR });
+  const aged = claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs: 2 * HOUR });
   assert.equal(aged.usedPercent, 46, 'the binding window is the active scoped weekly ceiling');
   assert.equal(aged.windows.hourly.usedPercent, 21);
   assert.equal(aged.windows.weekly.usedPercent, 46);
@@ -71,26 +71,26 @@ test('a cache older than the default budget is not measured; a longer budget rea
 
 test('a cache beyond even the given budget stays not measured', () => {
   const fsImpl = fakeFs(cacheText({ ageMs: 3 * HOUR }));
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs: 2 * HOUR }), NOT_MEASURED);
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs: 2 * HOUR }), NOT_MEASURED);
 });
 
 test('a fresh cache reads under the default budget with no option given', () => {
   const fsImpl = fakeFs(cacheText({ ageMs: 10 * MINUTE }));
-  const fresh = claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99 });
+  const fresh = claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99 });
   assert.equal(fresh.usedPercent, 46);
 });
 
 test('an unusable freshness budget answers not measured rather than throwing or reading unbounded', () => {
   for (const freshnessBudgetMs of [0, -5, 'an hour', Number.NaN, null]) {
     const fsImpl = fakeFs(cacheText({ ageMs: 1 * MINUTE }));
-    assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs }), NOT_MEASURED,
+    assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99, freshnessBudgetMs }), NOT_MEASURED,
       `budget ${String(freshnessBudgetMs)} must not become a reading`);
   }
 });
 
 test('the note names the window and the figure and carries no timestamp', () => {
   const fsImpl = fakeFs(cacheText({ ageMs: 1 * MINUTE }));
-  const measured = claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99 });
+  const measured = claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99 });
   assert.equal(measured.note, '46% of its weekly allowance is used.');
   assert.doesNotMatch(measured.note, /\d{4}-\d{2}-\d{2}T/, 'the raw reset time belongs on the window, not in the sentence');
   assert.doesNotMatch(measured.note, /resets/);
@@ -99,13 +99,13 @@ test('the note names the window and the figure and carries no timestamp', () => 
 
 test('the threshold is applied when valid and reported invalid when not', () => {
   const fsImpl = fakeFs(cacheText({ ageMs: 1 * MINUTE }));
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 46 }).exhausted, true, 'at the threshold is spent');
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 40 }).exhausted, true);
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 47 }).exhausted, false);
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 0 }).exhausted, true, 'zero is a valid, if severe, threshold here as in health.js');
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 46 }).exhausted, true, 'at the threshold is spent');
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 40 }).exhausted, true);
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 47 }).exhausted, false);
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 0 }).exhausted, true, 'zero is a valid, if severe, threshold here as in health.js');
 
   for (const exhaustedAtPercent of [undefined, Number.NaN, -1, 101, '50', null]) {
-    const answer = claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent });
+    const answer = claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent });
     assert.equal(answer.thresholdInvalid, true, `threshold ${String(exhaustedAtPercent)} must be reported invalid`);
     assert.equal(answer.exhausted, false, 'an invalid threshold never calls an account spent');
     assert.equal(answer.usedPercent, 46, 'the reading itself is still reported');
@@ -126,9 +126,9 @@ test('not measured has a stable shape and names no threshold fault', () => {
   assert.equal(claudeAllowance('', { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED);
   assert.equal(claudeAllowance(null, { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED);
   assert.deepEqual(fsImpl.opened, [], 'no home named, nothing opened');
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED, 'a cache without the key is nothing');
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl, exhaustedAtPercent: 99 }), NOT_MEASURED, 'a cache without the key is nothing');
   const throwing = { readFileSync() { throw Object.assign(new Error('gone'), { code: 'ENOENT' }); } };
-  assert.equal(claudeAllowance('/home/.claude-a', { fsImpl: throwing, exhaustedAtPercent: 99 }), NOT_MEASURED);
+  assert.equal(claudeAllowance('/\x68ome/.claude-a', { fsImpl: throwing, exhaustedAtPercent: 99 }), NOT_MEASURED);
 });
 
 /* THE CACHE ROUTE, READ OFF REAL BYTES, WITH A NON-ASCII WINDOW LABEL.

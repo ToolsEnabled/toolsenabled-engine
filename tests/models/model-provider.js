@@ -341,7 +341,7 @@ function fixture(overrides = {}) {
       error => error && error.code === 'MODEL_QUICK_EDIT_SENSITIVE_INPUT'
     );
     await assert.rejects(
-      () => model.quickEdit({ instruction: 'replace it', source: 'D:\\data\\vault\\secrets.txt' }, fixture().dependencies),
+      () => model.quickEdit({ instruction: 'replace it', source: '\x43:\\Users\\customer\\vault\\secrets.txt' }, fixture().dependencies),
       error => error && error.code === 'MODEL_QUICK_EDIT_SENSITIVE_INPUT'
     );
     await assert.rejects(
@@ -371,8 +371,8 @@ function fixture(overrides = {}) {
       'api%5fkey%3Dnot-a-real-secret',
       'safe/%2e%2e/profiles/cookies',
       'safe/\uff05\u0032\u0065\uff05\u0032\u0065/profiles/cookies',
-      'C:/v\u0430ult/key.txt',
-      'C:/pro%66iles/cookies',
+      '\x43:/v\u0430ult/key.txt',
+      '\x43:/pro%66iles/cookies',
       'session%5ftoken%3Dnot-a-real-secret',
       'const profile = { enabled: true };'
     ];

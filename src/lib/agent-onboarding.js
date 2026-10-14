@@ -7,7 +7,6 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 
 const agentOrg = require('./agent-org');
 const { ROLE_LIBRARY, storedRoleDefinition } = require('./agent-roles');
@@ -16,6 +15,7 @@ const presence = require('./agent-presence');
 const { parseQueuePhases } = require('./build-queue-projection');
 const { NON_CANONICAL_GUIDANCE, normalizeRoot, treeIdentity, treeIdentityHeadline } = require('./tree-identity');
 const { safeLaunchEnvironment } = require('./providers/subscription-launch-env');
+const { spawnGitSync } = require('./git-command');
 // WHOSE NAME MAY THIS SESSION ACT UNDER. Read from the same shipped module that
 // tools/agent-preflight.js uses -- not a second copy of the wording -- so the
 // grant and its reservations cannot say different things on the two surfaces an
@@ -497,8 +497,11 @@ function collectTreeIdentity(runtimeRoot, projectRoot, state) {
 }
 
 function gitIdentity(projectRoot, state, deps) {
-  const run = deps.git || ((cwd, args) => spawnSync('git', args, {
-    cwd,
+  // The project root (a lane worktree) is never git's working directory: on
+  // Windows a bare `git` with that cwd runs a git.exe planted at its top level.
+  // ./git-command.js starts git by absolute path with `-C <root>`
+  // (security review 1.0.50 U1, the same fix as M4).
+  const run = deps.git || ((directory, args) => spawnGitSync(directory, args, {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 5000,
@@ -1083,7 +1086,7 @@ function requireLiveMutationContext(input, state, org, presenceView, claims, dir
        fatal) with "does it have anything in it right now" (a fact about this
        machine, not about the software).
        A fresh install has an empty ledger. So did this one on 2026-08-12 after
-       it was reset to zero, and the conflation refused EVERY
+       the owner reset it to zero, and the conflation refused EVERY
        mutation-capable dispatch in the tree -- codex, claude and local alike --
        with a message about a file that was readable the whole time. An
        unreadable or stale ledger still fails here, which is the property that

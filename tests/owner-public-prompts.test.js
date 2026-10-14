@@ -279,15 +279,25 @@ async function main() {
   // -------------------------------------------------------------------------
   const candidates = [
     process.env.MISSION_CONTROL_POPUP,
-    // THE WORKING-FOLDER LAYOUT: this engine checkout sits beside the app
-    // checkout as siblings under one working folder. With no candidate ever
+    // THE WORKING-FOLDER LAYOUT, MEASURED 2026-09-03: this engine checkout sits
+    // beside the app checkout as siblings under one working folder, not under
+    // Desktop\wt-installer or Desktop\mission-control -- neither legacy name
+    // has existed in that role for a long time. With no candidate below ever
     // resolving, `rendererPath` was always undefined and this file's one load
     // -bearing check -- "the engine snapshot satisfies the renderer's OWN
     // validator", the exact regression this file's header names ("displayed
     // 'the owner prompt service is unavailable' forever") -- had not run a
-    // single time, in either possible outcome, while still exiting 0. `app` is
-    // the sibling app checkout.
-    path.join(__dirname, '..', '..', 'app', 'src', 'owner-popup.js')
+    // single time in this working folder, in either possible outcome, while
+    // still exiting 0. `wt-app-1.0.41-fixes` is the real, git-tracked
+    // app-integration sibling this engine checkout is developed beside;
+    // `app` is the working folder's base app checkout, kept as a second
+    // sibling candidate for the same reason the pre-existing entries below
+    // already tried more than one name.
+    path.join(__dirname, '..', '..', 'wt-app-1.0.41-fixes', 'src', 'owner-popup.js'),
+    path.join(__dirname, '..', '..', 'app', 'src', 'owner-popup.js'),
+    path.join(process.env.USERPROFILE || process.env.HOME || '', 'Desktop', 'wt-installer', 'src', 'owner-popup.js'),
+    path.join(process.env.USERPROFILE || process.env.HOME || '', 'Desktop', 'mission-control', 'src', 'owner-popup.js'),
+    path.join(__dirname, '..', '..', 'wt-installer', 'src', 'owner-popup.js')
   ].filter(Boolean);
   const rendererPath = candidates.find(candidate => { try { return fs.statSync(candidate).isFile(); } catch { return false; } });
 

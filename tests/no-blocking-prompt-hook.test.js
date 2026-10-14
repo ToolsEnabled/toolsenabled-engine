@@ -30,9 +30,9 @@
 'use strict';
 
 // Contract tests for tools/no-blocking-prompt-hook.js -- the NO-BLOCKING-PROMPT
-// PreToolUse gate for the product rule: agents never pop up
-// question boxes that stop their workflow, and the program enforces that
-// mechanically because it is a harness.
+// PreToolUse gate for the owner's 2026-08-13 directive ("do not ever pop up
+// question boxes that stop your workflow ... it should be mechanically enforced
+// in the program as our programs a harness").
 //
 // Same discipline as tests/clarify-gate.test.js: every process-level assertion
 // is checked by EXIT CODE read directly off spawnSync's own `status` field,
@@ -148,7 +148,7 @@ function readLogLines() {
   if (!fs.existsSync(LOG_FILE)) return [];
   return fs.readFileSync(LOG_FILE, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
-function writeSettings(value, source, { file = SETTINGS_FILE, directive = 'product rule' } = {}) {
+function writeSettings(value, source, { file = SETTINGS_FILE, directive = 'owner 2026-08-13' } = {}) {
   fs.writeFileSync(file, JSON.stringify({
     revision: 1,
     values: { [SETTING_ID]: value },
@@ -200,7 +200,7 @@ for (const [label, payload, expectedMode] of BLOCKED_TOOLS) {
   check(`RED: ${label} is refused (exit 2) and told what to do instead`, () => {
     const result = runHook(payload);
     assert.equal(result.status, 2, `${label} must be refused: stdout=${result.stdout} stderr=${result.stderr}`);
-    assert.match(result.stderr, /NO-BLOCKING-PROMPT: /);
+    assert.match(result.stderr, /NO-BLOCKING-PROMPT \(owner 2026-08-13\)/);
     assert.match(result.stderr, /halts your turn waiting for a human answer/);
     assert.match(result.stderr, /STATE the question/);
     assert.match(result.stderr, /keep working/);
@@ -390,7 +390,7 @@ for (const [label, value] of CONFIG_FAIL_CLOSED) {
     const result = runHook(toolCall('AskUserQuestion', {}), env);
     assert.equal(result.status, 2, `config ${label} must mean gate ON: stderr=${result.stderr}`);
     assert.equal(result.log.decision, 'block-blocking-prompt');
-    assert.match(result.stderr, /NO-BLOCKING-PROMPT: /);
+    assert.match(result.stderr, /NO-BLOCKING-PROMPT \(owner 2026-08-13\)/);
     // NOTE, measured not assumed: the resolved gateState here is
     // 'setting-default', NOT the loadGateConfig state ('config-absent-gate-on'
     // etc.). resolveGate consults the registry default before falling through
@@ -635,9 +635,9 @@ check('unit: evaluate() short-circuits an ungated tool without resolving a gate 
   assert.equal(outcome.source, undefined);
 });
 
-check('unit: refusalMessage carries the remedy, the product rule, and the setting id', () => {
+check('unit: refusalMessage carries the remedy, the owner quote, and the setting id', () => {
   const message = hook.refusalMessage('AskUserQuestion', 'harness', { file: hook.DEFAULT_CONFIG_FILE });
-  assert.match(message, /never pop up question boxes/, 'the product rule must be stated');
+  assert.match(message, /do not ever pop up question boxes/, 'the owner directive must be quoted verbatim');
   assert.match(message, /DO THIS INSTEAD/);
   assert.match(message, /STATE the assumption/);
   assert.match(message, /Do not wait for an answer/);

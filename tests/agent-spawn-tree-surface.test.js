@@ -37,7 +37,7 @@ const VALID_CONTRACT = [
   'report    REPORT-tree-worker.md'
 ].join('\n');
 
-const WORKSPACE = process.platform === 'win32' ? 'C:\\fixture\\workspace' : '/fixture/workspace';
+const WORKSPACE = process.platform === 'win32' ? '\x43:\\fixture\\workspace' : '/fixture/workspace';
 // This fixture tests downstream tree/tier guards after the owner binds a role.
 const TREE_ROLE = Object.freeze({
   functions: Object.freeze(['agent.spawn', 'agent.stop', 'agent.restart', 'agent.resume', 'agent.remove']),
@@ -108,7 +108,7 @@ test('the role defaults to the contract role in lower case, so a manager contrac
  * other six -- IMPLEMENTER, INVESTIGATOR, TESTER, VERIFIER, HARVESTER,
  * COORDINATOR -- produced a treeRole this computer does not declare, refused
  * downstream once the spawn reached the application (measured for
- * INVESTIGATOR in an internal bug report, "6 of the 9 valid contract
+ * INVESTIGATOR in REPORT-bugs-worker-20260906.md, "6 of the 9 valid contract
  * roles"). Each of the 9 is asserted here against tool-registry.js's own
  * CONTRACT_ROLE_TO_TREE_ROLE map, not against a re-derived expectation. */
 test('every CONTRACT/1 role maps to a declared tree role when treeRole is omitted, not just the three that already agreed', async () => {
@@ -173,7 +173,7 @@ test('a refusal from the route is raised with its own code, never downgraded to 
 });
 
 test("a circle on the tree gets no turn or timeout cap, and the answer names what was set aside", async () => {
-  /* Product requirement: no turn or timeout cap. Measured 2026-09-03
+  /* Owner, 2026-09-19: "i dont want a turn or timeout cap". Measured 2026-09-03
      before that: three spawns refused in one evening for `turns`, each a
      manager that had to read the refusal, drop the argument and try again.
      The argument means nothing here; it is not a reason to start nothing. */
@@ -221,17 +221,17 @@ test("a circle on the tree gets no turn or timeout cap, and the answer names wha
 
 /* EFFORT, PROVIDER AND MODEL ON THE TREE SURFACE.
  *
- * Product requirement: the effort level must be selectable when
- * spawning agents. Measured the same morning: the schema had no effort, provider or
+ * Owner, 2026-09-19: "you NEED to be able to select effort level when you spawn
+ * agents". Measured the same morning: the schema had no effort, provider or
  * model at all, so every circle an assistant made ran at its tier's default
  * depth.
  *
  * Each case below calls with values and asserts what the APPLICATION was
  * handed and what the caller was told, never how the check is spelled. */
 test('a chosen depth is applied, forwarded and echoed back, on Claude tiers as well as Codex ones', async () => {
-  /* CLAUDE FIRST, BECAUSE CLAUDE IS THE COMMON CASE. A common tree runs a
-     manager tier at xhigh and a builder tier at medium, both on claude-opus;
-     every circle in this lane is a claude-opus tree spawn. An earlier version of
+  /* CLAUDE FIRST, BECAUSE CLAUDE IS THE COMMON CASE. The owner's own managers
+     run claude-opus at xhigh and his builders claude-opus at medium; every
+     circle in this lane is a claude-opus tree spawn. An earlier version of
      this gate refused effort on every claude tier, reading the tier row's
      `effort` column -- which is that tier's DEFAULT, not its allowed set. */
   for (const [tier, effort, appliedEffort] of [
@@ -430,12 +430,11 @@ test('an effort outside the vocabulary, or named for a provider that has no dept
   }
 });
 
-test('provider and model confirm the tier and never override it: agreement applies, contradiction refuses', async () => {
-  /* Measured 2026-09-19 against mission-bridge/actions.js TIERS: every tier
-     this tool accepts already fixes both, so these two can only agree or
-     contradict. Both spellings a tier row carries are an agreement. */
+test('provider remains bound to the tier while exact models select within its authorized class', async () => {
   for (const [tier, provider, model] of [
     ['astra', 'codex', 'gpt-6-astra'],
+    ['astra', 'codex', 'gpt-5.6-luna'],
+    ['astra', 'codex', 'Provider/Team/Model:v9'],
     ['claude-opus', 'claude', 'claude/opus'],
     ['claude-opus', 'claude', 'opus'],
     ['local', 'local', 'local/auto']
@@ -457,7 +456,7 @@ test('provider and model confirm the tier and never override it: agreement appli
     ['astra', { provider: 'claude' }, 'AGENT_SPAWN_PROVIDER_REFUSED'],
     ['astra', { model: 'claude/opus' }, 'AGENT_SPAWN_MODEL_REFUSED'],
     ['claude-fable', { model: 'gpt-6-astra' }, 'AGENT_SPAWN_MODEL_REFUSED'],
-    ['astra', { provider: 'codex', model: 'gpt-5.6-luna' }, 'AGENT_SPAWN_MODEL_REFUSED']
+    ['luna', { provider: 'codex', model: 'gpt-5.6-sol' }, 'AGENT_SPAWN_MODEL_CLASS_REFUSED']
   ]) {
     const tree = fakeTree();
     const code = await codeOf(spawnSubagent(
@@ -578,16 +577,16 @@ test('with the route answering lane, the mission bridge receives exactly the req
 });
 
 /* ---------------------------------------------------------------------------
- * AUDIT (an earlier review pass, HUNT-pass follow-up to an earlier change).
+ * AUDIT (page2/lifecycle-status-engine, HUNT-pass follow-up to cc68b2f).
  *
- * an earlier change traced an asymmetry: agent.spawn's tree route calls
+ * cc68b2f traced an asymmetry: agent.spawn's tree route calls
  * assertUnrestrictedSpawn(context.permissionSession) (the test six above this
  * one drives it, with an {origin:'local',tier:'guarded'} session), while
  * agent.restart/stop/remove's handler (treeLifecycle, src/lib/tool-registry.js)
  * calls nothing of the kind. It concluded this is deliberate, citing
  * tests/confined-tool-surface.test.js's dated CONTAINED table and the owner's
- * own requirement (agents can delete, start and restart the agents under
- * them, with no tier caveat) -- correct, re-derived independently below --
+ * own words ("agents need to be able to delete and start and restart agents
+ * under them", no tier caveat) -- correct, re-derived independently below --
  * but the commit's own account of WHICH GATE does the work does not survive
  * driving both tools through the real dispatch chokepoint, executeTool(),
  * rather than calling spawnSubagent directly with hand-built dependencies the
@@ -615,13 +614,13 @@ test('with the route answering lane, the mission bridge receives exactly the req
  * dependency-injected shortcut.
  *
  * So at the tier that actually matters -- the one Standard installs run at --
- * the asymmetry an earlier change found is real and confirmed here by real execution,
+ * the asymmetry cc68b2f found is real and confirmed here by real execution,
  * but the CONTAINED-vs-UNCONFINABLE classification (src/lib/confined-tool-
  * surface.js, reviewed and dated for this exact feature) is the gate doing
  * the work, not assertUnrestrictedSpawn. That call still guards a narrower
  * case this file does not attempt to fully characterise (a Manifest-tier
  * remote caller whose reviewed capability list happens to name agent.spawn),
- * which is a defence in depth, not the dispositive gate that change's prose
+ * which is a defence in depth, not the dispositive gate cc68b2f's prose
  * suggested it was. CORRECTION 2026-09-06: the prior conclusion of "no
  * defect" was wrong. Forwarding no tier does not preserve the original tier:
  * the renderer's ordinary restart selects CURRENT global policy and profile.
@@ -661,7 +660,7 @@ test('Standard restart refuses an old generic host; it requires paired retained 
 });
 
 /* ---------------------------------------------------------------------------
- * AUDIT (an earlier review pass, closing the one gap the trace above
+ * AUDIT (page2/lifecycle-status-engine, closing the one gap the trace above
  * named but did not chase): "a Manifest-tier remote caller whose reviewed
  * capability list happens to name agent.spawn".
  *
@@ -720,7 +719,7 @@ test('a Manifest-tier session whose reviewed capability list names agent.spawn i
 });
 
 /* ---------------------------------------------------------------------------
- * HUNT (an earlier review pass, third wave). No new logic defect found
+ * HUNT (page2/lifecycle-status-engine, third wave). No new logic defect found
  * in treeLifecycle (src/lib/tool-registry.js) after tracing it fully against
  * the same executeTool() chokepoint the audit above already established as
  * the real one, and the only place agent.stop/restart/remove differ from
@@ -863,5 +862,37 @@ test('the session an application-bound command carries is always the calling con
     assert.equal(calls.length, 3, 'an authenticated caller without a bound role must not reach the application');
   } finally {
     treeSpawnHostModule.clearTreeSpawnHost();
+  }
+});
+
+test('explicit GPT-6-Luna reaches the tree with max while historical luna keeps its own model', async () => {
+  for (const [tier, model] of [['gpt-6-luna', 'gpt-6-luna'], ['luna', 'gpt-5.6-luna']]) {
+    const tree = fakeTree();
+    const answer = await spawnSubagent({ contract: VALID_CONTRACT, tier, model, provider: 'codex', effort: 'max', surface: 'tree', treeRole: 'worker' },
+      treeContext(), { subagentRoute: routeAnswering({ ok: true, route: 'tree' }), treeSpawn: tree, apiSheet: '' });
+    assert.equal(tree.calls.length, 1);
+    assert.equal(tree.calls[0].tier, tier);
+    assert.equal(tree.calls[0].model, model);
+    assert.equal(tree.calls[0].effort, 'max');
+    assert.deepEqual(answer.applied, { effort: 'max', provider: 'codex', model });
+  }
+});
+
+test('the explicit tree model preserves mismatch, effort, workspace and lane refusals', async () => {
+  for (const [extra, code] of [
+    [{ tier: 'luna', model: 'gpt-5.6-sol' }, 'AGENT_SPAWN_MODEL_CLASS_REFUSED'],
+    [{ model: 'claude/opus' }, 'AGENT_SPAWN_MODEL_REFUSED'],
+    [{ provider: 'claude' }, 'AGENT_SPAWN_PROVIDER_REFUSED'],
+    [{ effort: 'ultra' }, 'AGENT_SPAWN_EFFORT_REFUSED'],
+    [{ workspaceRoot: WORKSPACE + '-other' }, 'AGENT_SPAWN_WORKSPACE_REFUSED'],
+    [{ surface: 'lane' }, 'AGENT_SPAWN_TREE_TIER_REQUIRED'],
+  ]) {
+    const tree = fakeTree();
+    const args = { contract: VALID_CONTRACT, tier: 'gpt-6-luna', surface: 'tree', ...extra };
+    assert.equal(await codeOf(spawnSubagent(args, treeContext(), {
+      subagentRoute: routeAnswering({ ok: true, route: args.surface }), treeSpawn: tree, apiSheet: '',
+      createMissionActions: () => ({ dispatch: () => { tree.calls.push('unexpected lane'); return { ok: true }; } }),
+    })), code);
+    assert.equal(tree.calls.length, 0);
   }
 });

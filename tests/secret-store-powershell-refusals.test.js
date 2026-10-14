@@ -119,7 +119,7 @@ function assertRefusal(code, invoke) {
      call" both satisfy the loop above while breaking the override entirely. */
   {
     const { store, calls } = loadStore();
-    store.run('inventory', { vaultPath: 'C:/vaults/chosen' });
+    store.run('inventory', { vaultPath: '\x43:/vaults/chosen' });
     assert.equal(calls.spawn.length, 1, 'a real vault path stopped working');
     const environment = calls.spawn[0][2].env;
     assert.ok(String(environment.TOOLSENABLED_VAULT_PATH).includes('chosen'),

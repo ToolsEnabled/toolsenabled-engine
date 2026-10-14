@@ -11,8 +11,8 @@
 //
 // See tools/link-bus-enroll-token.js for the full rationale on why this
 // pattern exists at all (no interactive desktop to render a masked
-// credential form from this execution context; a secret must not be retyped
-// or emailed between two physically separate machines).
+// credential form from this execution context; the owner does not want to
+// retype or email a secret between two physically separate machines).
 const http = require('node:http');
 const path = require('node:path');
 const { spawn } = require('node:child_process');

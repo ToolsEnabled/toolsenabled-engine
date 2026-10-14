@@ -2,14 +2,8 @@
 
 // THE ONE PLACE THE PERSON'S REQUESTS ARE FILED, EDITED, REMOVED AND DECIDED.
 //
-// Before this module there were two stores for the same fact: the canonical
-// JSON ledger (reports/OWNER-REQUEST-LEDGER.json, written by the owner-capture
-// CLI and read by every gate, digest and projection) and four markdown files
-// behind /Request (src/lib/r-ledger.js). Product rule: one
-// canonical ledger with scope tiers, filed by /Request*, managed on /ledger.
-// This module is that ledger's single write API and its tier reader;
-// src/lib/r-ledger.js is now a thin adapter over it so every existing caller
-// keeps its names.
+// A single JSON ledger serves every scope. The r-ledger adapter preserves the
+// existing caller interface while this module owns writes and scoped reads.
 //
 // WHAT IS WRITTEN, AND WHERE.
 //   reports/OWNER-REQUEST-LEDGER.json          the record (one JSON document)
@@ -140,21 +134,9 @@ const TASK_LEDGER_POLICY_DENIED = 'T_LEDGER_WRITER_POLICY_DENIED';
 const BOM = '\uFEFF';
 
 // ---------------------------------------------------------------------------
-// Kinds -- one ledger file holds four record families. R records are the
-// person's standing requests. T records are work items that an agent may
-// close out and delete. A records are questions or needs an agent raises
-// for the person to answer. P records are purchases: a proposed spend, the
-// decision on it, and the charge recorded once it is made. The three newer
-// families reuse R's construction rather than inventing their own. R above
-// is untouched: its ids (assertId, family 'R'), its reader (isStoreRecordId,
-// family 'R' only, still exactly as written) and its vocabulary
-// (STATUS_VOCABULARY) are exactly what they were. T, A and P are
-// flat-numbered families sharing the same ledger file, the same lock, the
-// same hash chain (coreOf below is UNCHANGED -- kind is deliberately not
-// part of the hashed core, so a chain already written under the old formula,
-// including any existing R ledger, keeps verifying) and the same
-// atomic write.
-// ---------------------------------------------------------------------------
+// Tasks, asks and purchases use flat identifiers in the same ledger as rules.
+// All families share the lock, atomic writer and history chain. The hashed core
+// omits kind so earlier history remains verifiable.
 
 const KIND_ID_RE = Object.freeze({
   T: /^T([1-9]\d*)$/,
@@ -393,21 +375,11 @@ function assertPerson(actor) {
 }
 
 // src/lib/providers/pay.js journals this EXACT string as approvedBy for the
-// direct auto-approved spend path: a purchase that falls within the owner's
-// own standing outward.reserved_from_agents setting, decided by that setting,
-// never by a person clicking. decidePurchase journals whichever actor
-// actually decided -- so a setting-approved purchase is never misrecorded as
-// an owner click, and (product rule: asks and purchases are
-// agent-closable) an agent-decided purchase is never misrecorded as this setting
-// either. R's edit/remove/decide/resolve and A/P's own remove stay
-// assertPerson-only; A's answer/decline and P's decide do not, as of that
-// ruling -- this is a scoped widening of those three writers, not a general
-// widening of who "the person" is.
+// Setting-authorized purchases retain a distinct actor for accurate history.
+// Ask answers and purchase decisions may record agent actors; removing those
+// records and editing rules remain person-only operations.
 const OUTWARD_RESERVED_SETTING_ACTOR = 'setting:outward.reserved_from_agents';
-// UNCALLED since a later product rule widened decidePurchase to any
-// actor: kept, not deleted, as the definition of what the OLD gate was, for
-// anyone tracing OUTWARD_RESERVED_SETTING_ACTOR's history. Nothing in this
-// file calls it any more.
+// Retained compatibility definition for the former purchase decision gate.
 function assertPurchaseDecider(actor) {
   if (actor !== PERSON && actor !== OUTWARD_RESERVED_SETTING_ACTOR) {
     fail('R_LEDGER_PERSON_REQUIRED', 'Only the person, or the owner\'s own standing outward-spend setting, decides a purchase.');
@@ -1298,6 +1270,17 @@ function acquireLock(ledgerFile) {
   return null;
 }
 
+/* Run `fn` while holding this Ledger's write lock -- the same lock every write
+ * in this file takes -- for an operator tool that replaces the whole document
+ * (tools/ledger-compact.js --apply). Holding it means such a tool can never
+ * interleave with a write a running app is making. A held lock is waited for
+ * and then refused with R_LEDGER_LOCKED, exactly as for any other writer. */
+function withLedgerWriteLock(ledgerFile, fn) {
+  if (typeof ledgerFile !== 'string' || !ledgerFile) throw new TypeError('withLedgerWriteLock needs the Ledger file path');
+  const lock = acquireLock(path.resolve(ledgerFile));
+  try { return fn(); } finally { lock.release(); }
+}
+
 // ---------------------------------------------------------------------------
 // The write
 // ---------------------------------------------------------------------------
@@ -1324,6 +1307,64 @@ function atomicWrite(ledgerFile, previousRaw, nextData) {
   finally { forgetSharedLedgerDocument(ledgerFile); }
 }
 
+/* THE RECOVERY COPY, WITHOUT A SECOND FULL-SIZE WRITE.
+ *
+ * .bak held the previous document by writing all of its bytes out again, on the
+ * main thread, inside the write the person is waiting on. At a 14 MB Ledger that
+ * is a whole extra pass over the document for a copy of bytes that are still
+ * sitting on the disk under their own name.
+ *
+ * link(2) makes .bak the previous file's OWN inode instead. The ledger keeps its
+ * name until renameWithRetry below replaces it -- which breaks the link and
+ * leaves .bak holding the old inode and the old bytes -- so the guarantee comes
+ * out the same and slightly stronger: .bak is now what was on disk rather than a
+ * re-serialisation of it.
+ *
+ * The link is taken only when the file on disk is still exactly the bytes the
+ * transaction read: that read happened under the write lock, and the size check
+ * here refuses the shortcut if anything is off. Anything else -- no previous
+ * document, an empty previousRaw (a reset), a filesystem without hard links, a
+ * .bak on another device -- falls back to the write that was here before.
+ */
+function backupPreviousLedger(ledgerFile, previousRaw) {
+  const backup = `${ledgerFile}.bak`;
+  if (typeof previousRaw === 'string' && previousRaw.length > 0) {
+    try {
+      if (fs.statSync(ledgerFile).size === Buffer.byteLength(previousRaw, 'utf8')) {
+        unlinkIfPresent(backup);
+        fs.linkSync(ledgerFile, backup);
+        return true;
+      }
+    } catch { /* fall through to the write below */ }
+  }
+  writeSeparateBackup(backup, previousRaw);
+  return false;
+}
+
+/* .bak WRITTEN BY ITS PATH IS ALWAYS A NEW FILE. Between the link above and the
+ * rename, .bak and the Ledger are one inode; a rename that fails (Windows
+ * EPERM/EBUSY past its retries, EIO) or a process that dies in that moment
+ * leaves them so. Writing .bak by its path then would truncate and rewrite that
+ * inode -- the live Ledger -- in place. Unlinking first means the write can
+ * only ever create a separate file. */
+function writeSeparateBackup(backup, previousRaw) {
+  unlinkIfPresent(backup);
+  fs.writeFileSync(backup, typeof previousRaw === 'string' ? previousRaw : '', 'utf8');
+}
+
+/* After a failed rename the Ledger was not changed, and .bak may still be the
+ * Ledger's own inode. Put a separate copy of the same bytes there, so nothing
+ * that later writes .bak by its path can reach the live Ledger. Best effort:
+ * the rename's own error is what the caller must see. */
+function separateBackupAfterFailedRename(ledgerFile, previousRaw) {
+  const backup = `${ledgerFile}.bak`;
+  try {
+    const ledger = fs.statSync(ledgerFile);
+    const copy = fs.statSync(backup);
+    if (ledger.dev === copy.dev && ledger.ino === copy.ino) writeSeparateBackup(backup, previousRaw);
+  } catch { /* the rename's error is the one reported */ }
+}
+
 function writeLedgerFile(ledgerFile, previousRaw, nextData) {
   const serialized = `${JSON.stringify(nextData, null, 2)}\n`;
   const data = JSON.parse(serialized);
@@ -1342,8 +1383,13 @@ function writeLedgerFile(ledgerFile, previousRaw, nextData) {
     if (!bytes.equals(fs.readFileSync(temporary))) {
       fail('R_LEDGER_WRITE_UNCONFIRMED', 'The Ledger change did not read back exactly as it was written, so it was not saved. Everything already on file is kept. Try again.');
     }
-    fs.writeFileSync(`${ledgerFile}.bak`, typeof previousRaw === 'string' ? previousRaw : '', 'utf8');
-    renameWithRetry(temporary, ledgerFile);
+    backupPreviousLedger(ledgerFile, previousRaw);
+    try {
+      renameWithRetry(temporary, ledgerFile);
+    } catch (error) {
+      separateBackupAfterFailedRename(ledgerFile, previousRaw);
+      throw error;
+    }
   } finally {
     if (descriptor !== null) { try { fs.closeSync(descriptor); } catch { /* closed */ } }
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch { /* best effort */ }
@@ -3884,19 +3930,10 @@ function resolve({ id, status, reason, actor, now } = {}, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// T, A, P writes -- flat families that agents may write, within the limits
-// set out below (see "Kinds" near the top of this file for what each family
-// holds). Every one of them runs through the SAME transact() the
-// R writes use, so it gets the same lock, the same atomic write, and the
-// same hash-chained history for free, unmodified. Scope works exactly like
-// R's own (assertScope/assertKey, the same four tiers): T, A and P
-// records carry scope exactly as R records do. File/complete/remove are
-// agent-usable for T; answer/decline (A) and decide (P) are ALSO
-// agent-usable, per the product rule that asks and purchases are
-// agent-closable -- but removeAsk and removePurchase stay owner-only
-// (assertPerson below, same gate R's own edit/remove/decide/resolve use):
-// the rule makes asks and purchases closable, not removable, and agent
-// removal applies only to T.
+// Task, ask and purchase writes share transact(), locking, atomic persistence,
+// scoped keys and hash-chained history. Agents can file, complete and remove
+// tasks, answer or decline asks, and record purchase decisions. Removing asks
+// or purchases remains person-only. Purchase records do not authorize spending.
 // ---------------------------------------------------------------------------
 
 /* One filed record, T/A/P alike: a per-kind flat id (never a dotted
@@ -4128,6 +4165,14 @@ function recordTaskReview({ id, reviewId, outcome, reason, actor, now } = {}, op
   assertKindId('T', id);
   const who = normalizeFiledBy(actor);
   const text = normalizeReason(reason);
+  // A verdict without evidence is not a review. normalizeReason turns absent,
+  // blank and whitespace-only text into null, which would otherwise be saved as
+  // a review row with no reason at all -- the counter would rise and nobody
+  // could see why. Refuse before the transact() lock.
+  if (text === null) {
+    fail('T_LEDGER_REVIEW_REASON_REQUIRED',
+      'A task review needs a reason: the concrete evidence for this passed or failed verdict.');
+  }
   const result = transact(options, now, (document, at) => {
     const { index, entry, record } = locateForRewrite(document, id);
     if (!['open', 'in-progress', 'blocked-external', 'done', 'recurring'].includes(record.status)) {
@@ -4233,11 +4278,8 @@ function removeTask({ id, actor, now } = {}, options = {}) {
 }
 
 /** The owner answers one ask: open -> answered, carrying the owner's own words. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may answer an ask; removeAsk stays owner-only
-// (closable, not removable -- removal is the person's, as for R; agent
-// removal applies only to T). `actor` is validated and
-// normalized the same way filedBy already is, never assumed to be 'owner'.
+// Any validated actor may answer an open ask; removal remains person-only.
+// Journal the actual actor using the same normalization as filedBy.
 function answerAsk({ id, answer, actor, now } = {}, options = {}) {
   assertKindId('A', id);
   const who = normalizeFiledBy(actor);
@@ -4268,8 +4310,7 @@ function answerAsk({ id, answer, actor, now } = {}, options = {}) {
 }
 
 /** The owner declines to answer one ask: open -> declined. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decline an ask; removeAsk stays owner-only.
+// Any validated actor may decline an open ask; removal remains person-only.
 function declineAsk({ id, reason, actor, now } = {}, options = {}) {
   assertKindId('A', id);
   const who = normalizeFiledBy(actor);
@@ -4305,22 +4346,9 @@ function removeAsk({ id, actor, now } = {}, options = {}) {
   return removeMinor('A', { id, actor, now }, options);
 }
 
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decide a purchase; removePurchase stays
-// owner-only. A P DECISION HERE IS A LEDGER MIRROR, NOT A SPEND AUTHORITY:
-// approving or declining a P record only updates this ledger's own status
-// and history for the record; it never moves money and never touches spend
-// caps. Actual spend authority stays entirely with src/lib/providers/pay.js
-// and the owner prompt path, neither of which reads this ledger to decide
-// whether to spend -- decidePurchase and the ledger it writes are downstream
-// of that decision, not upstream of it. assertPurchaseDecider (below) is no
-// longer called here for exactly that reason: gating who may write the
-// MIRROR never gated who may authorize the SPEND, so removing it here widens
-// no financial authority. Journalled with the real actor, never hard-coded
-// PERSON: OUTWARD_RESERVED_SETTING_ACTOR is still a valid actor value and is
-// still journalled verbatim when the owner's own standing setting decided
-// it, exactly as before -- it is simply no longer the ONLY non-owner value
-// accepted, since every actor now is.
+// Purchase decisions update only the ledger status and history, with the actual
+// actor. They neither move money nor change spend limits. Payment authorization
+// remains in the payment provider and prompt path. Removal remains person-only.
 function decidePurchase({ id, decision, reason, actor, now } = {}, options = {}) {
   assertKindId('P', id);
   const who = normalizeFiledBy(actor);
@@ -4445,7 +4473,7 @@ function carriesChainHash(record) {
  *              no chain event (a history line that never landed is drift, not
  *              a CLI row);
  *   missing    ids the chain names that are no longer in the ledger at all --
- *              spliced out by hand; a tombstone would still be there;
+ *              absent from the document; a tombstone would still be there;
  *   unchained  rows with no history and no chain event: the owner-capture CLI
  *              wrote them; informational.
  * A 'drift-observed' event is informational and never the chain's last word.
@@ -4477,16 +4505,30 @@ function verifyHistory(options = {}) {
   }
   const missing = [...new Set(chain.events.map(event => event.requestId))]
     .filter(id => idKind(id) && !present.has(id));
+  const missingDetails = missing.map(id => {
+    const last = latest.get(id);
+    return Object.freeze({
+      id,
+      cause: last?.kind === 'reset' ? 'reset-tombstone-missing'
+        : last?.kind === 'remove' ? 'removal-tombstone-missing'
+          : 'record-missing-without-terminal-event',
+      lastEventKind: last?.kind || null,
+      lastSequence: last?.seq || null,
+      lastAt: last?.at || null,
+      lastLedgerRevision: last?.ledgerRevision ?? null,
+      recordContentsAvailable: false
+    });
+  });
   const ok = drift.length === 0 && missing.length === 0;
   const one = list => list.length === 1;
   const driftNote = drift.length
     ? `${one(drift) ? 'One request differs' : `${drift.length} requests differ`} from the last history line about ${one(drift) ? 'it' : 'them'}. Check ${drift.join(', ')} before relying on ${one(drift) ? 'it' : 'them'}.`
     : '';
   const missingNote = missing.length
-    ? `${one(missing) ? 'One request the history names is' : `${missing.length} requests the history names are`} no longer in the ledger: ${missing.join(', ')}. ${one(missing) ? 'It' : 'They'} left without a tombstone; restore ${one(missing) ? 'it' : 'them'} from the .bak or the history before relying on the ledger.`
+    ? `${one(missing) ? 'One request the history names is' : `${missing.length} requests the history names are`} no longer in the ledger: ${missing.join(', ')}. ${missingDetails.filter(row => row.cause === 'record-missing-without-terminal-event').length} have no recorded removal or reset; the journal does not establish how they disappeared. History stores hashes, not recoverable record contents. Restore missing records or tombstones from a verified backup before relying on the ledger.`
     : '';
   return Object.freeze({
-    ok, events: chain.events.length, head: chain.head, drift: Object.freeze(drift), missing: Object.freeze(missing), unchained: Object.freeze(unchained),
+    ok, events: chain.events.length, head: chain.head, drift: Object.freeze(drift), missing: Object.freeze(missing), ...(missing.length ? { missingDetails: Object.freeze(missingDetails) } : {}), unchained: Object.freeze(unchained),
     ...(ok ? {} : { code: drift.length ? 'R_LEDGER_CHAIN_DRIFT' : 'R_LEDGER_CHAIN_MISSING', message: [driftNote, missingNote].filter(Boolean).join(' ') })
   });
 }
@@ -4663,10 +4705,10 @@ function adoptUnconfirmedHistory({ actor, now, revision, token } = {}, options =
 }
 
 // ---------------------------------------------------------------------------
-// ADDITIVE, 2026-09-07: purchase-specific store lookups only.
+// ADDITIVE, L3 (Worker 3), 2026-09-07: purchase-specific store lookups only.
 // Neither function below changes an existing function, the record shape or a
-// vocabulary; both are read-only compositions of readAll/idKind, which this
-// module already exports with the {kinds} widening this file's own header comment
+// vocabulary; both are read-only compositions of readAll/idKind, which L1
+// already exports with the {kinds} widening this file's own header comment
 // describes. Needed so the purchase tools (tool-registry.js) and the
 // mission-bridge decision pipeline can find the ONE P record a promptId
 // belongs to, and so any tool can read one T/A/P record by id without
@@ -4748,7 +4790,7 @@ function resetKind({ kind, actor, revision, token, batchId: requestedBatchId, no
 }
 
 /** The DIRECT pay.record path (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS
- * ruling): an agent calling pay.record with no cart/prompt only
+ * ruling 05:12Z): an agent calling pay.record with no cart/prompt only
  * reaches providers/pay.js's spend layer when `approval.autoApproved` is
  * true, which is itself an owner decision -- made once, in Settings
  * (outward.reserved_from_agents), rather than per purchase. This composes
@@ -4756,8 +4798,8 @@ function resetKind({ kind, actor, revision, token, batchId: requestedBatchId, no
  * recordPurchase) exactly as a person would on the Ledger page, one
  * transaction each, so the SAME hash-chained history and status gates apply;
  * it adds no new status and no new field. The decision is journalled under
- * OUTWARD_RESERVED_SETTING_ACTOR, not PERSON (FINDING 2 ruling,
- * once assertPurchaseDecider/decidePurchase accepted it): a
+ * OUTWARD_RESERVED_SETTING_ACTOR, not PERSON (Controller 3, FINDING 2 ruling,
+ * once L1's assertPurchaseDecider/decidePurchase accepted it): a
  * setting-authorized spend must never read back as an owner click on this
  * exact purchase. `reason` still names the setting in full for a reader who
  * has not seen that constant before. */
@@ -4838,6 +4880,7 @@ module.exports = Object.freeze({
   recordDirectPurchase,
   resolve,
   verifyHistory,
+  withLedgerWriteLock,
   recoverHistory,
   previewUnconfirmedHistory,
   adoptUnconfirmedHistory,

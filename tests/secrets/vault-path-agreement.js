@@ -24,8 +24,8 @@
 //     - '/tmp/toolsenabled-vault-agreement-YEtRjw/state-root/vault/secrets.json'
 //
 // Restoration evidence: git hash-object returned the original object IDs
-// an earlier change for runtime.js and
-// an earlier change for powershell.js. On the restored
+// 98cef3e50dbdea8637732af9a3b815584573a8c2 for runtime.js and
+// 4e1ac8ef054c2fd25f028930bfa60e886766938a for powershell.js. On the restored
 // files the rerun printed:
 //     PASS runtime.js resolves the vault under the configured state root
 //     PASS loading the secret store publishes that same path to its child process

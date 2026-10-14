@@ -41,8 +41,9 @@ test('Linux paired preflight never prepares default credentials and a named acco
   assert.equal(complete.preflightVersion, undefined);
   assert.equal(complete.account, 'work');
   assert.equal(fs.existsSync(path.join(home, '.codex/auth.json')), false);
-  assert.equal(fs.statSync(path.join(complete.codexHome, 'auth.json')).ino,
-    fs.statSync(path.join(named, 'auth.json')).ino);
+  assert.equal(complete.codexHome, named);
+  assert.equal(complete.env.CODEX_HOME, named);
+  assert.equal(fs.existsSync(path.join(complete.agentHome, 'auth.json')), false);
   const defaultHome = path.join(home, '.codex');
   fs.mkdirSync(defaultHome, { mode: 0o700 });
   fs.writeFileSync(path.join(defaultHome, 'auth.json'), '{}', { mode: 0o600 });

@@ -197,15 +197,40 @@ check('adding a second account preserves the first, and everything around it', (
     /* THE FIRST ENTRY, FIELD FOR FIELD. `role` and `expectEmail` are not fields
        the writer understands, and an add that dropped them would silently
        unbind an account from the identity it was pinned to. */
+    /* 1.0.50 retired the automatic-switching fields (each entry's priority and the
+       registry's switching thresholds and modes): the old file still loads, and the
+       next save leaves them out. Every other field, known or not, is kept. */
     assert.deepEqual(after.accounts[0], {
       name: 'first', provider: 'codex', profileDir: path.join(area.homes, 'first'),
-      priority: 1, role: 'primary', expectEmail: 'someone@example.test'
+      role: 'primary', expectEmail: 'someone@example.test'
     });
     /* And what was around the list, too. */
     assert.deepEqual(after.$comment, ['a note the person wrote']);
-    assert.equal(after.exhaustedAtPercent, 80);
+    assert.equal(Object.prototype.hasOwnProperty.call(after, 'exhaustedAtPercent'), false,
+      'a retired switching threshold was written back');
     assert.equal(after.accounts[1].name, 'second');
-    assert.equal(after.accounts[1].priority, 2, 'the new entry took a priority already in use');
+    assert.equal(Object.prototype.hasOwnProperty.call(after.accounts[1], 'priority'), false,
+      'the new entry was given a switching priority');
+  });
+});
+
+check('a registry saved by an earlier version loads, and its retired switching fields go on the next save', () => {
+  withScratch(area => {
+    fs.mkdirSync(path.dirname(area.registry), { recursive: true });
+    fs.writeFileSync(area.registry, `${JSON.stringify({
+      selectionMode: 'rotate', reservePercent: 10, rankWindow: 'weekly', autoRecoverOnLimit: true,
+      selectionByProvider: { codex: { selectionMode: 'rotate' } },
+      exhaustedAtPercent: 80, exhaustedAtPercentHourly: 90, exhaustedAtPercentWeekly: 95,
+      accounts: [{ name: 'old', provider: 'codex', profileDir: path.join(area.homes, 'old'), priority: 3 }]
+    }, null, 2)}\n`);
+    add(area, 'newer');
+    const after = readRegistry(area);
+    for (const field of ['selectionMode', 'reservePercent', 'rankWindow', 'autoRecoverOnLimit', 'selectionByProvider',
+      'exhaustedAtPercent', 'exhaustedAtPercentHourly', 'exhaustedAtPercentWeekly']) {
+      assert.equal(Object.prototype.hasOwnProperty.call(after, field), false, `${field} survived the save`);
+    }
+    assert.deepEqual(after.accounts.map(entry => entry.name), ['old', 'newer']);
+    assert.ok(after.accounts.every(entry => !Object.prototype.hasOwnProperty.call(entry, 'priority')), 'a priority survived the save');
   });
 });
 
@@ -222,7 +247,7 @@ check('a third account is appended, and the two before it keep their homes', () 
   });
 });
 
-check('concurrent process adds preserve every registration and assign distinct priorities', async () => {
+check('concurrent process adds preserve every registration and give each its own home', async () => {
   const area = scratch();
   const children = [];
   try {
@@ -262,8 +287,9 @@ check('concurrent process adds preserve every registration and assign distinct p
     assert.equal(loaded.accounts.length, count);
     assert.deepEqual(new Set(loaded.accounts.map(account => account.name)),
       new Set(Array.from({ length: count }, (_, index) => `account-${index}`)));
-    assert.deepEqual(loaded.accounts.map(account => account.priority),
-      Array.from({ length: count }, (_, index) => index + 1));
+    // Since 1.0.50 accounts have no priority; what concurrency must preserve is one home per account.
+    assert.equal(new Set(loaded.accounts.map(account => account.home)).size, count);
+    assert.ok(loaded.accounts.every(account => account.priority === undefined));
     assert.equal(fs.existsSync(`${area.registry}.lock`), false);
   } finally {
     for (const child of children) { try { child.kill(); } catch { /* already exited */ } }
@@ -316,7 +342,7 @@ check('concurrent process add and remove preserve both registry mutations', asyn
 
     const loaded = loadRegistry({ configPath: area.registry });
     assert.deepEqual(loaded.accounts.map(account => account.name), ['keep', 'new-one']);
-    assert.equal(new Set(loaded.accounts.map(account => account.priority)).size, 2);
+    assert.equal(new Set(loaded.accounts.map(account => account.home)).size, 2);
     assert.equal(fs.readFileSync(path.join(removed.home, 'sign-in-fixture.txt'), 'utf8'), 'must-survive');
     assert.equal(fs.existsSync(`${area.registry}.lock`), false);
   } finally {
@@ -453,7 +479,7 @@ check('a process killed between the temp write and the rename leaves the good re
        TerminateProcess and spawnSync reports signal===null with a non-zero status.
        Same fact: terminated, did not exit on its own. The registry-integrity
        assertions below prove the write was interrupted; the POSIX signal name alone
-       (an earlier strengthening) fails on the machine that cuts. */
+       (the wave-29 strengthening) fails on the machine that cuts. */
     const forceKilled = result.signal === 'SIGKILL'
       || (process.platform === 'win32' && result.signal === null && result.status !== 0);
     assert.ok(forceKilled,
@@ -586,7 +612,7 @@ const { loadRegistry } = require(process.argv[7]);
   // Inject the documented healthy probe so the assertion measures registry
   // location rather than pretending this synthetic account is signed in.
   const selected = await rotation.resolveAccountForSession({
-    servicesRoot,
+    servicesRoot, preferred: 'cloud-a',
     probe: async account => ({
       account: account.name, status: 'healthy', canServe: true,
       usedPercent: 1, resetsAt: null, planType: 'pro', reason: null
@@ -675,8 +701,7 @@ check('nothing the writer returns or throws carries a credential-shaped value', 
     /* A real sign-in lives in the directory this call created. It is written
        here by this test, and the assertion is that nothing the writer produced
        ever contains it. */
-    // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-    fs.writeFileSync(path.join(record.home, 'auth.json'), JSON.stringify({ token: 'sk-' + 'not-a-real-secret-000' }));
+    fs.writeFileSync(path.join(record.home, 'auth.json'), JSON.stringify({ token: '\x73k-not-a-real-secret-000' }));
     const refusal = refusalOf(() => add(area, 'cloud-a'));
     const everything = JSON.stringify({ record, message: refusal.message, details: refusal.details });
     assert.ok(!/sk-|Bearer |eyJ[A-Za-z0-9_-]{6}/.test(everything), everything);

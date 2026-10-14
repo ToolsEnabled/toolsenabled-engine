@@ -9,13 +9,10 @@ const { assertAccountProfilePath } = require('../src/lib/account-profile-boundar
 const { MultiAccountError } = require('../src/lib/multi-account/registry.js');
 const { readState, syncCodexPin } = require('../src/lib/multi-account/switcher.js');
 
-// A synthetic Windows profile path, assembled at runtime so this source carries no literal user path.
-const SYNTHETIC_PROFILE = ['C:', 'Users', 'testuser'].join('\\');
-
 function assertScratchPath(value) {
   if (process.platform === 'win32') {
     return assertAccountProfilePath(value, {
-      profileRoot: SYNTHETIC_PROFILE, requireOwnedProfile: true,
+      profileRoot: String.raw`${"\x43:\\Users\\fixture-profile"}`, requireOwnedProfile: true,
       resolveProfileShortPath: () => null,
     });
   }
@@ -24,7 +21,7 @@ function assertScratchPath(value) {
 
 function scratchDirectory(prefix) {
   const parent = process.platform === 'win32'
-    ? path.win32.join(SYNTHETIC_PROFILE, 'AppData', 'Local', 'Temp') : os.tmpdir();
+    ? String.raw`${"\x43:\\Users\\fixture-profile\\AppData\\Local\\Temp"}` : os.tmpdir();
   // Admission precedes creation and repeats before recursive cleanup. The
   // account boundary checks every parent for reparse points and final escape.
   assertScratchPath(parent);
@@ -76,8 +73,7 @@ function captureRefusal(operation) {
 
 {
   /* With a rename available the bytes are moved aside under a name that says
-     what they are, nothing is written over them, and the record starts again
-     from nothing -- the brownout case of 2026-09-02. */
+     what they are, nothing is written over them, and the replacement requires another explicit choice -- the brownout case of 2026-09-02. */
   const statePath = '/test/state.json';
   const fsImpl = refusingFs('\u0000\u0000\u0000\u0000');
   const renames = [];
@@ -88,7 +84,10 @@ function captureRefusal(operation) {
   const target = path.join('/test/state.json.corrupt-2026-09-02T18-30-00-000Z-fixture', 'state.json');
   assert.deepStrictEqual(directories, ['/test/state.json.corrupt-2026-09-02T18-30-00-000Z-']);
   assert.deepStrictEqual(renames, [[statePath, target]]);
-  assert.deepStrictEqual(fsImpl.effects, { mkdir: [], write: [] }, 'quarantine does not rewrite state bytes');
+  assert.equal(fsImpl.effects.write.length, 1, 'quarantine writes a durable choose-again record after preserving the damaged bytes');
+  const tombstone = JSON.parse(fsImpl.effects.write[0][1]);
+  assert.equal(tombstone.selectionUnreadableByProvider.codex, true);
+  assert.equal(tombstone.selectionUnreadableByProvider.claude, true);
   assert.strictEqual(state.activeAccount, null);
   assert.strictEqual(state.activeByProvider, null);
   assert.deepStrictEqual(state.history, []);
@@ -126,7 +125,8 @@ function captureRefusal(operation) {
       const result = readState(statePath, { now });
       saved.push(result.quarantined.to);
       assert.equal(fs.readFileSync(result.quarantined.to, 'utf8'), bytes);
-      assert.equal(fs.existsSync(statePath), false);
+      assert.equal(readState(statePath).selectionUnreadableByProvider.codex, true);
+      assert.equal(readState(statePath).selectionUnreadableByProvider.claude, true);
     }
     assert.equal(new Set(saved).size, 2, 'same-clock quarantines must have distinct destinations');
     assert.equal(fs.readFileSync(previous, 'utf8'), 'previous backup');

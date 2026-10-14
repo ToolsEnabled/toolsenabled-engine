@@ -47,7 +47,8 @@
 // (owner-reported, confirmed at source: an undeclared claude-1 home carried an
 // unexpired refresh token five days after its access token expired). Session
 // history and every other file in the home are still never inspected, read,
-// or deleted; an internal review records why whole-home deletion was deliberately NOT built here.
+// or deleted; see REPORT-account-removal-leaves-credentials-20260907.md for
+// why whole-home deletion was deliberately NOT built here.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -212,7 +213,7 @@ function readForUpdate(configPath, fsImpl, { missingAsEmpty = false } = {}) {
 
 // THE DIRECTORY COLLISION THAT COMPARING STRINGS DOES NOT CATCH. parseRegistry()
 // refuses two same-provider entries whose declared directories are the same
-// TEXT; a relative "codex-homes/team" and an absolute path to that same
+// TEXT; a relative "codex-homes/school" and an absolute path to that same
 // directory are different text and the same directory, and two Codex homes in
 // one directory overwrite each other's sign-in. So the resolved paths are
 // compared too, and the refusal carries the registry's OWN code because it is
@@ -237,6 +238,21 @@ function refuseResolvedCollision(existing, spec, home, homeDir, configPath) {
         { source: configPath, provider: spec.id, home });
     }
   }
+}
+
+// FIELDS NO LONGER WRITTEN. 1.0.50 removed automatic account switching: the selection modes, reserve, ranking window,
+// per-provider selection, the "move off an account at" thresholds and each entry's priority order existed only to
+// pick another account by itself. A registry saved by an earlier version still loads (the reader ignores them); the
+// next save leaves them out, so nothing kept on disk describes a switch this product no longer makes.
+const RETIRED_TOP_LEVEL_FIELDS = Object.freeze(['selectionMode', 'reservePercent', 'rankWindow', 'selectionByProvider',
+  'autoRecoverOnLimit', 'exhaustedAtPercent', 'exhaustedAtPercentHourly', 'exhaustedAtPercentWeekly']);
+const RETIRED_ENTRY_FIELDS = Object.freeze(['priority']);
+function withoutRetiredFields(record) {
+  const kept = Object.fromEntries(Object.entries(record).filter(([key]) => !RETIRED_TOP_LEVEL_FIELDS.includes(key)));
+  kept.accounts = record.accounts.map(entry => (entry && typeof entry === 'object' && !Array.isArray(entry)
+    ? Object.fromEntries(Object.entries(entry).filter(([key]) => !RETIRED_ENTRY_FIELDS.includes(key)))
+    : entry));
+  return kept;
 }
 
 // DURABLE WRITE, AND THE IDIOM IS NOT INVENTED HERE. It is persist() from
@@ -329,7 +345,7 @@ function createAccountHome(home, fsImpl, cleanName) {
  * explicit boolean true, recorded by this writer's exclusive final mkdir, may
  * authorize destruction. Native client sign-in is preserved independently of
  * folder origin. */
-function destroyCredential(entry, spec, { fsImpl, homeDir }) {
+function destroyCredential(entry, spec, { fsImpl, homeDir, confinedHomesRoot = null }) {
   if (entry && entry.client === 'antigravity') {
     return {
       credentialDestroyed: false,
@@ -355,17 +371,57 @@ function destroyCredential(entry, spec, { fsImpl, homeDir }) {
   }
   const isolation = require('../provider-session-isolation');
   const credentialPath = isolation.assertIsolatedCredential(signInFilePath(resolvedHome, spec), isolation.isolationContext());
+  const confinement = require('../agent-session-confinement');
+  /* Captured BEFORE the unlink: the confined copies are matched by the file's
+     identity, and once this name is gone nothing here can name that file. */
+  const identity = confinement.credentialIdentity(credentialPath);
   try {
     fsImpl.unlinkSync(credentialPath);
   } catch (error) {
     if (error && error.code === 'ENOENT') {
-      return { credentialDestroyed: true };
+      return { credentialDestroyed: true, ...revokeConfinedCopiesOf(identity, credentialPath, confinement, confinedHomesRoot) };
     }
     refuse('ACCOUNTS_CREDENTIAL_NOT_REMOVED',
       `The credential for "${entry.name}" could not be removed (${(error && error.code) || 'unknown error'}), so nothing was changed.`,
       { name: entry.name });
   }
-  return { credentialDestroyed: true };
+  return { credentialDestroyed: true, ...revokeConfinedCopiesOf(identity, credentialPath, confinement, confinedHomesRoot) };
+}
+
+/* DESTROYING THE ACCOUNT'S SIGN-IN MUST ALSO REACH ITS CONFINED COPIES.
+ *
+ * Every confined session prepared for this account hard-linked this very file
+ * into a home under <services root>/agent-home (agent-session-confinement
+ * linkCredential), and nothing reaps those homes. Unlinking the account's own
+ * name therefore left the credential alive under every one of them -- a
+ * working sign-in for an account the person just removed. The sweep runs AFTER
+ * the unlink, so a prepare that linked a new copy while this ran (it can only
+ * link the old file, which it shares by identity) is caught too; a prepare
+ * after the unlink finds no sign-in to link.
+ *
+ * Reported, never refused: the credential is already destroyed at this point,
+ * and refusing now would keep a registration whose sign-in is gone. A sweep
+ * that could not finish says so (confinedCopiesRevoked: false) instead of
+ * letting "credentialDestroyed" be read as "revoked everywhere".
+ *
+ * The sign-in's PATH goes with its identity. After a confined CLI refreshed,
+ * the names holding the live token are on a new file that no longer shares
+ * this one's identity; each of their homes records this path as its source,
+ * and that record is how the sweep reaches them (agent-session-confinement
+ * revokeConfinedCopies). */
+function revokeConfinedCopiesOf(identity, credentialPath, confinement, confinedHomesRoot) {
+  // No sign-in was there to destroy, so there is no copy of one to report.
+  if (!identity) return {};
+  let root = confinedHomesRoot;
+  if (!root) {
+    try {
+      root = path.join(require('../setup/machine-record').resolveServicesRoot({}), confinement.CONFINED_HOME_LEAF);
+    } catch {
+      return { confinedCopiesRemoved: 0, confinedCopiesRevoked: false };
+    }
+  }
+  const sweep = confinement.revokeConfinedCopies(root, identity, { source: credentialPath });
+  return { confinedCopiesRemoved: sweep.removed, confinedCopiesRevoked: sweep.failures.length === 0 };
 }
 
 function withRegistryMutation(configPath, operation, {
@@ -462,12 +518,7 @@ function addAccount({
   isolation.assertIsolatedPath(home, isolation.isolationContext(), { field: 'new provider account home' });
 
   return withRegistryMutation(target, () => {
-    const previous = readForUpdate(target, fsImpl, { missingAsEmpty: true });
-
-    const priority = previous.accounts.reduce(
-      (highest, entry) => (entry && Number.isSafeInteger(entry.priority) && entry.priority > highest ? entry.priority : highest),
-      0
-    ) + 1;
+    const previous = withoutRetiredFields(readForUpdate(target, fsImpl, { missingAsEmpty: true }));
 
     /* THE FIELD IS OMITTED WHEN THERE IS NONE, not written as null. An entry
        carrying `"expectEmail": null` and an entry carrying nothing read the
@@ -481,8 +532,7 @@ function addAccount({
           name: cleanName,
           provider: spec.id,
           [spec.dirField]: home,
-          ...(expected ? { expectEmail: expected } : {}),
-          priority
+          ...(expected ? { expectEmail: expected } : {})
         }
       ]
     };
@@ -515,7 +565,6 @@ function addAccount({
          this entry, without re-reading the file to find out. Null is "no check
          was asked for", never "the check failed to record". */
       expectEmail: expected,
-      priority,
       homeCreatedByApp,
       registryPath: target
     });
@@ -545,7 +594,8 @@ function removeAccount({
   pid = process.pid,
   lockIsAlive = lockPidAlive,
   lockTimeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
-  lockSleep = sleepSync
+  lockSleep = sleepSync,
+  confinedHomesRoot = null
 } = {}) {
   const spec = providerSpec(provider);
   if (!spec) {
@@ -567,6 +617,9 @@ function removeAccount({
         `No ${spec.id} account named "${cleanName}" is registered, so nothing was changed.`,
         { source: target, name: cleanName, provider: spec.id });
     }
+    const isolation = require('../provider-session-isolation');
+    isolation.assertIsolatedPath(resolveProfileDir(selected, { homeDir }), isolation.isolationContext(),
+      { field: 'registered provider account' });
     const index = previous.accounts.findIndex(entry => entry && entry.provider === spec.id
       && typeof entry.name === 'string' && entry.name.trim().toLowerCase() === cleanName.toLowerCase());
     if (index < 0) {
@@ -582,12 +635,12 @@ function removeAccount({
     // registry silently reporting "removed" while its credential survives.
     // Use the raw row here: parseRegistry() intentionally normalizes reader
     // fields and leaves this writer-owned origin marker out of its public view.
-    const credentialDisposition = destroyCredential(previous.accounts[index], spec, { fsImpl, homeDir });
+    const credentialDisposition = destroyCredential(previous.accounts[index], spec, { fsImpl, homeDir, confinedHomesRoot });
     const accounts = previous.accounts.filter((_, entryIndex) => entryIndex !== index);
     if (accounts.length === 0) {
       removeRegistryFile(target, fsImpl);
     } else {
-      const record = { ...previous, accounts };
+      const record = withoutRetiredFields({ ...previous, accounts });
     // The same reader owns the schema.  This catches a corrupted record before
     // its durable replacement is staged, just as addAccount() does.
       parseRegistry(JSON.stringify(record), { source: target });

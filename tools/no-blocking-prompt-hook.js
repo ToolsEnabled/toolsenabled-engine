@@ -267,8 +267,8 @@ function sessionIdFrom(payload) {
 
 function refusalMessage(toolName, mode, gate) {
   return [
-    `NO-BLOCKING-PROMPT: ${toolName} is refused. This tool halts your turn waiting for a human answer.`,
-    'Product rule: agents never pop up question boxes that stop their workflow. The rule holds for every agent, it is a user setting in the program, and the program enforces it mechanically because ToolsEnabled is a harness.',
+    `NO-BLOCKING-PROMPT (owner 2026-08-13): ${toolName} is refused. This tool halts your turn waiting for a human answer.`,
+    'Owner directive, verbatim: "do not ever pop up question boxes that stop your workflow. i said that. hold yourself and other agents to it thats a rule, its a setting make it a user setting in the program, it should be mechanically enforced in the program as our programs a harness".',
     'DO THIS INSTEAD, and keep working:',
     '  1. STATE the question in your reply text, in one sentence.',
     '  2. STATE the assumption you are proceeding on, in one sentence, in the owner\'s own terms.',

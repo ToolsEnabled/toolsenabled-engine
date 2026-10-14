@@ -30,7 +30,7 @@ Selection rules (deterministic):
 - s6-website: server/, website/tools/, testkit (non-test), deploy/, public
   page .js/.css (138 files, grouped) + 12 lanes over 61 site test files.
 
-Dispatch: a single designated cloud account (hand-written provider files;
---provider auto would round-robin half of each batch to an exhausted one). 43 launches/min
+Dispatch: cloud-b ONLY (hand-written provider files; --provider auto would
+round-robin half of each batch to the exhausted cloud-a). 43 launches/min
 (3.47 min per 150), --accounts 1, batches strictly serial, a usage checkpoint
 between batches, stop-and-report at >=90% used.

@@ -1,5 +1,9 @@
 'use strict';
 
+// Codex lanes run only when the saved Agent API mode permits them; Only (the
+// shipped default) refuses them at dispatch, before any launch record.
+require('./lib/agent-api-mode-fixture').selectAgentApiMode('Enabled');
+
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const test = require('node:test');

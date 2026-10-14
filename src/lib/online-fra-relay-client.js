@@ -180,7 +180,7 @@ function connectOnlineFraRelay({ url, lease, onFrame, proof, WebSocketImpl, admi
           };
           const timer = setTimeout(() => finish(new OnlineFraRelayClientError('RELAY_CLIENT_RENEWAL_TIMEOUT', 'The relay did not answer the renewal; it may not support renewing a lease in place.')), timeoutMs);
           if (timer.unref) timer.unref();
-          renewal = { lease: freshLease, proof: renewProof, timer, finish };
+          renewal = { lease: freshLease, proof: renewProof, timer, finish, signed: false };
           try { socket.send(JSON.stringify({ renew: 'request' })); } catch {
             finish(new OnlineFraRelayClientError('RELAY_CLIENT_CLOSED', 'The relay connection closed.'));
           }
@@ -229,9 +229,32 @@ function connectOnlineFraRelay({ url, lease, onFrame, proof, WebSocketImpl, admi
           let answer;
           try { answer = JSON.parse(event.data); } catch { return; }
           if (!answer || typeof answer !== 'object') return;
-          if (typeof answer.challenge === 'string' && answer.challenge.length >= 16 && answer.renewal === true) {
+          if (typeof answer.challenge === 'string' && answer.renewal === true) {
+            /* RENEWAL IS NOT A SIGNING SERVICE EITHER (security review 1.0.50 H2).
+             *
+             * This branch kept the floor the admission handler below dropped --
+             * `length >= 16`, no ceiling, no format -- and signed every such
+             * challenge that arrived while a renewal was in flight, with the same
+             * device identity key that signs E2E handshake leases. A relay could
+             * hand it canonical lease bytes carrying its own X25519 ephemeral and
+             * stockpile forged hellos, several per renewal window. The admission
+             * rule applies here unchanged (an honest relay's renewal nonce is the
+             * same 32 random bytes, base64url), and a renewal signs AT MOST ONCE:
+             * a further challenge inside the same renewal is ignored, exactly as a
+             * second admission challenge is. */
+            if (renewal.signed) return;
+            let challengeBytes = null;
+            if (RELAY_CHALLENGE_RE.test(answer.challenge)) {
+              try { challengeBytes = Buffer.from(answer.challenge, 'base64url'); } catch { challengeBytes = null; }
+            }
+            if (!challengeBytes || challengeBytes.length !== RELAY_CHALLENGE_BYTES) {
+              renewal.finish(new OnlineFraRelayClientError('RELAY_CLIENT_CHALLENGE_INVALID',
+                'The relay offered a renewal challenge that is not a single fresh nonce; nothing was signed.'));
+              return;
+            }
+            renewal.signed = true;
             let signature;
-            try { signature = renewal.proof.sign(Buffer.from(answer.challenge, 'base64url')); } catch {
+            try { signature = renewal.proof.sign(challengeBytes); } catch {
               renewal.finish(new OnlineFraRelayClientError('RELAY_CLIENT_PROOF_FAILED', 'The relay renewal challenge could not be signed.'));
               return;
             }

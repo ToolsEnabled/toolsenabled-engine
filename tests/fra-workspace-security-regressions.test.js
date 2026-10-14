@@ -14,8 +14,8 @@ const policy = require('../src/lib/fra-workspace-policy');
 const coordination = require('./helpers/fra-workspace-authority-fixture');
 
 const registry = { schemaVersion: 1, machines: {
-  a: { address: '203.0.113.1', root: 'C:\\a' },
-  b: { address: '203.0.113.2', root: 'C:\\b' }
+  a: { address: '203.0.113.1', root: '\x43:\\a' },
+  b: { address: '203.0.113.2', root: '\x43:\\b' }
 }, services: {} };
 let nextContext = 0;
 

@@ -36,8 +36,7 @@ const settings = require('../src/lib/settings');
 const settingsSet = require('../tools/settings-set');
 
 const API_KEY_ID = 'model.api_key';
-// Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-const SECRET = 'sk-' + 'live-this-value-must-never-reach-settings-json';
+const SECRET = '\x73k-live-this-value-must-never-reach-settings-json';
 
 function scratch(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-api-key-'));

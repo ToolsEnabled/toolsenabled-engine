@@ -10,7 +10,7 @@
 // retained, so 240 rows are already gone, with no rotated or backup copy under
 // capability\logs. That history cannot be made retrospective.
 //
-// Per the refusal-persistence spec: required refusals get their own
+// Per W4\SPEC-refusal-persistence-20260907.md: required refusals get their own
 // append-only record that is never evicted, and durabilitySummary carries the
 // lifetime count BESIDE the windowed one, with "window" and "lifetime" in the
 // names rather than only in a comment.

@@ -28,9 +28,9 @@
 /* ONE COMPUTER, SERVED -- the solo relay pair end to end, and the refusal that
  * replaced a crash.
  *
- * Product rule: when only one computer is connected, the interface serves that
- * one computer; when two are connected, it serves both and both are
- * controllable.
+ * Owner ruling, verbatim: "If theres only one computer connected we need to
+ * serve that one computer in the interface. If there's two we need to serve
+ * both in the interface and both need to be controllable."
  *
  * Most customers have one computer. Until this suite existed that computer did
  * one of two things. Enrolled but in no connection, it CRASHED: the account
@@ -107,7 +107,7 @@ function vaultFor(privateKey, credential) {
   const store = new Map();
   store.set(DEVICE_IDENTITY_VAULT_KEY, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString());
   store.set(DEVICE_CREDENTIAL_VAULT_KEY, JSON.stringify(credential));
-  return { getSecret: (k) => { if (!store.has(k)) throw new Error('absent'); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
+  return { getSecret: (k) => { if (!store.has(k)) throw Object.assign(new Error('absent'), { code: 'SECRET_NOT_CONFIGURED' }); return store.get(k); }, setSecret: (k, v) => { store.set(k, v); } };
 }
 
 function bridgeNamed(name) {

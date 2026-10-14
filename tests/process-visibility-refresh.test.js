@@ -104,7 +104,7 @@ process.stdout.write('process-visibility-refresh\n');
 
   await check('accepted failed outcome is terminal and does not expose helper diagnostics', async () => {
     const receipt = await refresh.refreshProcessVisibility({
-      runOperation: async () => ({ ok: false, decision: 'accept', outcome: { error: 'C:\\secret\\state.json' } })
+      runOperation: async () => ({ ok: false, decision: 'accept', outcome: { error: '\x43:\\secret\\state.json' } })
     });
     assert.deepEqual(receipt, {
       operationId: 'collect-process-visibility',
@@ -159,7 +159,7 @@ process.stdout.write('process-visibility-refresh\n');
 
   await check('ordinary client failure is sanitized and cannot expose error text', async () => {
     const receipt = await refresh.refreshProcessVisibility({
-      runOperation: async () => { throw new Error('C:\\vault\\must-not-appear'); }
+      runOperation: async () => { throw new Error('\x43:\\vault\\must-not-appear'); }
     });
     assert.deepEqual(receipt, {
       operationId: 'collect-process-visibility',
@@ -187,7 +187,7 @@ process.stdout.write('process-visibility-refresh\n');
       // than turning this into an ordinary rejected-runner case.
       get(_target, property) {
         if (property === 'then') return undefined;
-        throw new Error('C:\\vault\\must-not-appear');
+        throw new Error('\x43:\\vault\\must-not-appear');
       }
     });
     const receipt = await refresh.refreshProcessVisibility({ runOperation: async () => hostile });
@@ -203,7 +203,7 @@ process.stdout.write('process-visibility-refresh\n');
   await check('hostile rejection metadata cannot collapse an unmeasured outcome into failure', async () => {
     const hostile = new Proxy(new Error('must not leak'), {
       get(target, property, receiver) {
-        if (property === 'outcomeUnknown') throw new Error('C:\\vault\\must-not-appear');
+        if (property === 'outcomeUnknown') throw new Error('\x43:\\vault\\must-not-appear');
         return Reflect.get(target, property, receiver);
       }
     });
@@ -224,8 +224,8 @@ process.stdout.write('process-visibility-refresh\n');
     const runner = async () => { calls += 1; return { ok: true }; };
     for (const input of [
       { runOperation: runner, retry: 1 },
-      { runOperation: runner, snapshot: 'C:\\vault\\state.json' },
-      Object.defineProperty({}, 'runOperation', { enumerable: true, get() { throw new Error('C:\\vault\\getter'); } })
+      { runOperation: runner, snapshot: '\x43:\\vault\\state.json' },
+      Object.defineProperty({}, 'runOperation', { enumerable: true, get() { throw new Error('\x43:\\vault\\getter'); } })
     ]) {
       const receipt = await refresh.refreshProcessVisibility(input);
       assert.deepEqual(receipt, {
@@ -249,7 +249,7 @@ process.stdout.write('process-visibility-refresh\n');
         value: 1, enumerable: false
       });
       const hiddenAccessor = Object.defineProperty({}, 'runOperation', {
-        get() { getterCalls += 1; throw new Error('C:\\vault\\getter'); }
+        get() { getterCalls += 1; throw new Error('\x43:\\vault\\getter'); }
       });
       const hiddenDataRunner = Object.defineProperty({}, 'runOperation', {
         value: runner, enumerable: false
@@ -276,11 +276,11 @@ process.stdout.write('process-visibility-refresh\n');
       return { ok: true };
     }, async isolated => {
       const ownKeysTrap = new Proxy({}, {
-        ownKeys() { throw new Error('C:\\vault\\own-keys'); }
+        ownKeys() { throw new Error('\x43:\\vault\\own-keys'); }
       });
       const descriptorTrap = new Proxy({}, {
         ownKeys() { return ['runOperation']; },
-        getOwnPropertyDescriptor() { throw new Error('C:\\vault\\descriptor'); }
+        getOwnPropertyDescriptor() { throw new Error('\x43:\\vault\\descriptor'); }
       });
       for (const input of [ownKeysTrap, descriptorTrap]) {
         assert.deepEqual(await isolated.refreshProcessVisibility(input), {

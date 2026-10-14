@@ -130,7 +130,7 @@ function neverAcknowledge() {
     assert.match(channel.calls[0], /COORDINATOR ESCALATION: fleet-supervisor is DOWN/);
     assert.match(channel.calls[0], /pid lock holder is gone/);
     assert.match(channel.calls[0], /not a reply to a message/,
-      'the notice must say it is a notice, so it can never read as an answer to something they said');
+      'the notice must say it is a notice, so it can never read as an answer to something he said');
 
     // The durable trail exists AND is secondary: it carries the delivery
     // outcome rather than being the delivery.
@@ -555,10 +555,10 @@ function neverAcknowledge() {
     assert.equal(result.ackRefusals[0].id, fromOwner.id);
     assert.equal(result.ackRefusals[0].code, 'OWNER_CHAT_NEEDS_A_REPLY');
 
-    // And their message is STILL unread: they are still visibly waiting.
+    // And his message is STILL unread: he is still visibly waiting.
     const unread = directiveInbox.list({ unreadOnly: true }, { inboxFile });
     const stillWaiting = unread.items.find(item => item.id === fromOwner.id);
-    assert.ok(stillWaiting, 'the owner message must stay unread -- their messages get answered, not filed');
+    assert.ok(stillWaiting, 'the owner message must stay unread -- his messages get answered, not filed');
     assert.equal(stillWaiting.status, 'unread');
   }
 
@@ -728,7 +728,7 @@ function neverAcknowledge() {
     assert.equal(result.subsystemId, 'owner-inbox');
     assert.match(channel.calls[0], /COORDINATOR ESCALATION: owner-inbox is OWNER_WAITING_FOR_REPLY/);
     assert.match(channel.calls[0], /not a reply to a message/,
-      'the owner-waiting notice must be unmistakably ABOUT the condition, never an answer to them');
+      'the owner-waiting notice must be unmistakably ABOUT the condition, never an answer to him');
 
     // Ambiguity is refused rather than resolved by guessing.
     await assert.rejects(() => sink.escalate({

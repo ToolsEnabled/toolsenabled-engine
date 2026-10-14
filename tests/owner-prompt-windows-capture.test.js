@@ -10,7 +10,7 @@ const { spawnSync } = require('node:child_process');
 test('actual Windows capture function binds named arguments and frames Console.Out without opening a form',
   { skip: process.platform !== 'win32', timeout: 45000 }, () => {
     const source = path.resolve(__dirname, '..', 'tools', 'owner-prompt-queue.ps1');
-    const powershell = path.win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const powershell = path.win32.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
       path.join(__dirname, 'lib', 'owner-prompt-windows-capture.ps1'), '-Source', source], {
       windowsHide: true, shell: false, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 40000, maxBuffer: 16384,
@@ -30,14 +30,14 @@ test('actual Windows query language distinguishes the exact legacy queue and rea
   { skip: process.platform !== 'win32', timeout: 45000 }, () => {
     const native = require('../src/lib/owner-prompt-platform');
     const source = require.resolve('../src/lib/owner-prompt-platform');
-    const target = 'C:\\Fixture\\[review]\\owner-prompt-queue.json';
+    const target = '\x43:\\Fixture\\[review]\\owner-prompt-queue.json';
     let query;
     native.legacyRunnerIsAlive(target, { platform: 'win32', execute(_command, args) { query = args.at(-1); return { status: 0, stdout: '0' }; } });
     assert.equal(typeof query, 'string');
     const sourceSha256 = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
     const file = path.join(isolated.root, 'legacy-query.json');
     fs.writeFileSync(file, JSON.stringify({ target, query, sourceSha256 }), { mode: 0o600 });
-    const powershell = path.win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const powershell = path.win32.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
       path.join(__dirname, 'lib', 'owner-prompt-windows-legacy.ps1'), '-InputFile', file], {
       windowsHide: true, shell: false, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 40000, maxBuffer: 16384,

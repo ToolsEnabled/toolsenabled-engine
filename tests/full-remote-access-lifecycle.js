@@ -36,7 +36,7 @@ fixtureRegistry.machines = {
   // from public routing but is still an outbound interface attempt and can be
   // captured by an enterprise route. Keep the deliberately disconnected peer
   // inside 127/8 so this hermetic suite cannot leave the workstation.
-  'machine-b': { address: '127.0.0.2', root: 'C:\\fixture-peer', role: 'disconnected-peer' }
+  'machine-b': { address: '127.0.0.2', root: '\x43:\\fixture-peer', role: 'disconnected-peer' }
 };
 for (const service of Object.values(fixtureRegistry.services || {})) {
   if (service && service.resolution === 'fixed') service.fixedMachine = 'machine-a';
@@ -74,7 +74,7 @@ assert.match(lifecycle, /RetireRolledBackRecovery/);
 assert.match(lifecycle, /--retire-rolled-back-recovery[\s\S]+--operation-id[\s\S]+--fingerprint/);
 assert.match(lifecycle, /Reconcile never/);
 // This compatibility-host guard used to compare $HostName against a literal
-// machine address ('203.0.113.2'). earlier commits made the script resolve
+// machine address ('203.0.113.2'). 6653bef/6a6c77e made the script resolve
 // both machine addresses from config/service-registry.json instead
 // ($MachineAAddress / $MachineBAddress, set up near the top of the file), so
 // the marker below was retargeted to the parameterized comparison it now

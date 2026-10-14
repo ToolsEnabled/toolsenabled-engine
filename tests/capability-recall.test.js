@@ -402,15 +402,15 @@ test('a missing index is a named refusal, not a crash', () => {
 /* ------------------------------------------------------------------- privacy */
 
 test('nothing the observer receives contains the prompt', () => {
-  /* A research retriever logs every query string, which is right for a research instrument
+  /* lean_rag logs every query string, which is right for a research instrument
    * over public docs and wrong here: the query IS the person's words. */
-  const secret = 'reschedule my dentist appointment with doctor Quillon';
+  const secret = 'reschedule my oncology appointment with doctor Halloran';
   const records = [];
   recommend(secret, { artifact, enabled: true, observer: record => records.push(record) });
   find(secret, { artifact, observer: record => records.push(record) });
   check(records.length === 2, 'DEFECT: the observer was not called for both paths.');
   const serialised = JSON.stringify(records).toLowerCase();
-  for (const word of ['dentist', 'quillon', 'reschedule', 'appointment', 'doctor']) {
+  for (const word of ['oncology', 'halloran', 'reschedule', 'appointment', 'doctor']) {
     check(!serialised.includes(word),
       `DEFECT: the word "${word}" from the person's prompt reached the observer. `
       + 'A recommender that quietly transcribes what its user typed is a far larger thing than a recommender.');
@@ -650,7 +650,7 @@ test('a query costs microseconds and the index is shared, not re-parsed', () => 
 /* --------------------------------------------------------- content sanity */
 
 test('acceptance: the tools a person reaches for constantly are actually reachable', () => {
-  /* The equivalent of a research retriever asserting its key results are present:
+  /* The equivalent of lean_rag asserting its SetHoldings overloads are present:
    * a handful of named, load-bearing results that must never quietly vanish. */
   const expectations = [
     ['take a screenshot of my screen', 'screen.capture'],
@@ -670,9 +670,9 @@ test('acceptance: the tools a person reaches for constantly are actually reachab
 /* ------------------------------------------------------- the settings row */
 
 test('agent.capability_recall is a real switch, not a drawn control', () => {
-  /* THE DOCTRINE THIS EXISTS TO SATISFY, the product rule: any
-   * failure that a system exists to handle or prevent, and that does not do its
-   * job according to user settings, is a software failure.
+  /* THE DOCTRINE THIS EXISTS TO SATISFY, in the owner's words (2026-08-11):
+   * "every failure which there exists a system for or to prevent; that doesnt
+   * do its job according to user settings, is vieweed as software fialure".
    * tests/settings-enforcement-honesty.test.js counts rows that enforce
    * nothing; this is the other half -- the row's named enforcer actually
    * refusing. Driven through the REAL settings loader against a real file, not
@@ -756,9 +756,9 @@ test('the block reads as a map, never as an instruction', () => {
 });
 
 test('"use the credential manager" names OUR credential tool, not somebody else\'s', () => {
-  /* THE LIVE CUSTOMER REPORT THIS PINS, pre-beta on 1.0.30, paraphrased: agents
-   * had to be prompted to use the credential manager, and then used Google's or
-   * Windows' credential manager instead of ours.
+  /* THE LIVE CUSTOMER REPORT THIS PINS, pre-beta on 1.0.30, verbatim: agents
+   * "have to be prompted to use the credential manager, and they come back
+   * having used Google's or Windows' credential manager instead of ours."
    *
    * Removing an agent's built-in tools (agent.agent_api) forces our shell and
    * our web. It cannot force our VAULT, because Windows Credential Manager and

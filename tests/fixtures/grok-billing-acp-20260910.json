@@ -1,5 +1,5 @@
 {
-  "_source": "Grok CLI 1.0.25 ACP reply shape (initialize -> authenticate cached_token headless -> _x.ai/billing); all values synthetic",
+  "_source": "Grok CLI 1.0.25 ACP replies captured 2026-09-10 (initialize -> authenticate cached_token headless -> _x.ai/billing); address and team id replaced",
   "authenticateMeta": {
     "email": "owner@example.test",
     "auth_mode": "Oidc",
@@ -10,7 +10,7 @@
     "coding_data_retention_opt_out": true,
     "show_resolved_model": false,
     "gate": null,
-    "subscription_tier": "Example Tier",
+    "subscription_tier": "X Premium+",
     "feedback_trace_offer": false,
     "backend_billed": false
   },
@@ -18,8 +18,8 @@
     "config": {
       "currentPeriod": {
         "type": "USAGE_PERIOD_TYPE_WEEKLY",
-        "start": "2026-09-10T00:00:00.000000+00:00",
-        "end": "2026-09-17T00:00:00.000000+00:00"
+        "start": "2026-09-10T08:47:13.160026+00:00",
+        "end": "2026-09-17T08:47:13.160026+00:00"
       },
       "onDemandCap": {
         "val": 0
@@ -31,9 +31,9 @@
         "val": 0
       },
       "isUnifiedBillingUser": true,
-      "billingPeriodStart": "2026-09-10T00:00:00.000000+00:00",
-      "billingPeriodEnd": "2026-09-17T00:00:00.000000+00:00"
+      "billingPeriodStart": "2026-09-10T08:47:13.160026+00:00",
+      "billingPeriodEnd": "2026-09-17T08:47:13.160026+00:00"
     },
-    "subscription_tier": "Example Tier"
+    "subscription_tier": "X Premium+"
   }
 }

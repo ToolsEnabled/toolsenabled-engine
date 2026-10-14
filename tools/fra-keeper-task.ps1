@@ -110,7 +110,7 @@ $action = New-ScheduledTaskAction -Execute $nodePath -Argument $arguments -Worki
 # This task used to carry a 2-minute repetition plus AtStartup/AtLogOn. But a
 # repetition combined with -StartWhenAvailable IS a startup trigger: it fires
 # within two minutes of every boot no matter which triggers were dropped. So
-# honouring startup.services_at_logon (product rule, and the owner
+# honouring startup.services_at_logon (owner directive 2026-08-13, and the owner
 # has it off) meant registering this task DISABLED -- and a disabled keeper never
 # starts FRA at all. The listener only survived because somebody had enabled the
 # task by hand, out of band, and the next run of this very script or of

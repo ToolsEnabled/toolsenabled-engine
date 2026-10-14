@@ -56,7 +56,7 @@ const fixtureManifest = {
 {
   for (const candidate of [
     { schemaVersion: 1, packages: [{ id: 'fleet.queue', files: ['../outside.js'] }] },
-    { schemaVersion: 1, packages: [{ id: 'fleet.queue', files: ['C:/outside.js'] }] },
+    { schemaVersion: 1, packages: [{ id: 'fleet.queue', files: ['\x43:/outside.js'] }] },
     { schemaVersion: 1, packages: [{ id: 'fleet.queue', files: ['src/a.js'] }, { id: 'fleet.queue', files: ['src/b.js'] }] },
     { schemaVersion: 1, packages: [{ id: 'fleet.queue', files: ['src/a.js'] }, { id: 'owner.ledger', files: ['src/a.js'] }] },
     { schemaVersion: 2, packages: [{ id: 'fleet.queue', files: ['src/a.js'] }] }

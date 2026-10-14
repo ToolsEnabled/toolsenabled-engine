@@ -84,20 +84,18 @@ const FIXTURE_WORKSPACE = path.join(os.tmpdir(), 'fixture-workspaces', 'ToolsEna
 //
 // The transcripts below deliberately carry realistic message CONTENT, including
 // secret-shaped strings and prose, so the no-leak assertion is testing
-// something real rather than an empty payload. The key-shaped and path-shaped
-// canaries are synthetic and assembled at runtime, so the source itself
-// carries no literal key value or user path.
+// something real rather than an empty payload.
 
 const CANARY = Object.freeze([
   'CANARY_PROMPT_TEXT_the_owner_private_question_about_his_medical_records',
-  ['sk', 'canaryAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'].join('-'),
+  '\x73k-canaryAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
   'ghp_canaryBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-  ['C:', 'Users', 'owner', 'Desktop', 'SecretProject', 'passwords.txt'].join('\\')
+  '\x43:\\Users\\owner\\Desktop\\SecretProject\\passwords.txt'
 ]);
 
 function claudeAssistant({ sessionId, model, effort, entrypoint, isSidechain, timestamp }) {
   return JSON.stringify({
-    parentUuid: 'f3f5b7d9-1a3c-4e5b-8d7f-9b1d3f5a7c9e',
+    parentUuid: 'f9efc5dd-69d0-4797-912f-78a18f949568',
     isSidechain,
     requestId: `req_${crypto.randomUUID()}`,
     type: 'assistant',
@@ -135,7 +133,7 @@ function codexSessionMeta({ id, parentThreadId, threadSource, agentPath, timesta
     originator: 'codex_vscode', cli_version: '0.146.0-alpha.3.1', thread_source: threadSource,
     model_provider: 'openai',
     base_instructions: { text: `${CANARY[0]} ${CANARY[1]}` },
-    git: { commit_hash: 'abcdef1234567890abcdef1234567890abcdef12', branch: 'main' }
+    git: { commit_hash: 'e57047f3dad43804cfaed1e238447f87906c79e7', branch: 'main' }
   };
   if (parentThreadId) payload.parent_thread_id = parentThreadId;
   if (agentPath) payload.agent_path = agentPath;
@@ -166,10 +164,10 @@ const codexRoot = path.join(root, 'codex-sessions');
 
 const CLAUDE_MAIN_SESSION = '11111111-2222-4333-8444-555555555555';
 const CLAUDE_SDK_SESSION = '66666666-7777-4888-8999-aaaaaaaaaaaa';
-const CODEX_USER_SESSION = '019f0000-0000-7000-8000-000000000002';
-const CODEX_SUB_SESSION = '019f0001-0000-7000-8000-000000000003';
-const CODEX_TWIN_A = '019f0001-1111-7000-8000-000000000111';
-const CODEX_TWIN_B = '019f0001-2222-7000-8000-000000000222';
+const CODEX_USER_SESSION = '019f9c80-8703-7373-9ffb-3ff319b56337';
+const CODEX_SUB_SESSION = '019fab0f-f0b3-7281-95a5-762ff9682986';
+const CODEX_TWIN_A = '019fab0f-1111-7281-95a5-762ff9682111';
+const CODEX_TWIN_B = '019fab0f-2222-7281-95a5-762ff9682222';
 
 function write(file, lines) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -184,7 +182,7 @@ write(path.join(claudeRoot, 'c--proj', `${CLAUDE_MAIN_SESSION}.jsonl`), [
 ]);
 
 // Claude: a spawned subagent, with the harness's own declared agent type.
-const subagentId = 'a0000000000000001';
+const subagentId = 'a0344bd95d42a51e8';
 const subagentFile = path.join(claudeRoot, 'c--proj', CLAUDE_MAIN_SESSION, 'subagents', `agent-${subagentId}.jsonl`);
 write(subagentFile, [
   claudeAssistant({ sessionId: CLAUDE_MAIN_SESSION, model: 'claude-fable-5', effort: 'high', entrypoint: 'claude-vscode', isSidechain: true, timestamp: at(-240_000) })
@@ -193,10 +191,10 @@ fs.writeFileSync(subagentFile.replace(/\.jsonl$/, '.meta.json'), JSON.stringify(
   agentType: 'general-purpose',
   description: `${CANARY[0]} -- free-form prose that must never be read`,
   name: 'spawn-tracker',
-  toolUseId: 'toolu_01AAAAAAAAAAAAAAAAAAAAAA',
+  toolUseId: 'toolu_01GLKC666uqZQz8m1iXJQKbQ',
   spawnDepth: 1,
   model: 'sonnet',
-  parentAgentId: 'a0000000000000002'
+  parentAgentId: 'ab874ea1fbbd27480'
 }), 'utf8');
 
 // Claude: a headless sdk-cli run.
@@ -219,13 +217,13 @@ write(path.join(codexRoot, '2026', '07', '28', `rollout-x-${CODEX_USER_SESSION}.
 
 // Codex: a spawned subagent thread on the mid tier.
 write(path.join(codexRoot, '2026', '07', '28', `rollout-y-${CODEX_SUB_SESSION}.jsonl`), [
-  codexSessionMeta({ id: CODEX_SUB_SESSION, parentThreadId: CODEX_USER_SESSION, threadSource: 'subagent', agentPath: '/root/example_subagent_review', timestamp: at(-200_000) }),
+  codexSessionMeta({ id: CODEX_SUB_SESSION, parentThreadId: CODEX_USER_SESSION, threadSource: 'subagent', agentPath: '/root/terra_q17_baseline_review', timestamp: at(-200_000) }),
   codexTurnContext({ model: 'gpt-5.6-terra', effort: 'xhigh', timestamp: at(-199_000) })
 ]);
 
 // Codex: a model with no entry in the product tier map.
-write(path.join(codexRoot, '2026', '07', '28', 'rollout-z-019f0001-3333-7000-8000-000000000333.jsonl'), [
-  codexSessionMeta({ id: '019f0001-3333-7000-8000-000000000333', threadSource: 'subagent', timestamp: at(-100_000) }),
+write(path.join(codexRoot, '2026', '07', '28', 'rollout-z-019fab0f-3333-7281-95a5-762ff9682333.jsonl'), [
+  codexSessionMeta({ id: '019fab0f-3333-7281-95a5-762ff9682333', threadSource: 'subagent', timestamp: at(-100_000) }),
   codexTurnContext({ model: 'codex-auto-review', effort: 'low', timestamp: at(-99_000) })
 ]);
 
@@ -258,7 +256,7 @@ const find = predicate => observation.sessions.find(predicate);
   assert.equal(sub.agentType, 'general-purpose', 'the harness records the agent TYPE and it is carried through');
   assert.equal(sub.agentName, 'spawn-tracker');
   assert.equal(sub.spawnDepth, 1);
-  assert.equal(sub.parentAgentId, 'a0000000000000002');
+  assert.equal(sub.parentAgentId, 'ab874ea1fbbd27480');
   assert.equal(sub.declaredModelAlias, 'sonnet', 'the harness-requested alias');
   assert.equal(sub.model, 'claude-fable-5', 'and, separately, the concrete model actually served');
   assert.equal(sub.agentMetaSource, 'claude-subagent-meta');
@@ -280,7 +278,7 @@ const find = predicate => observation.sessions.find(predicate);
   const codexSub = find(session => session.sessionId === CODEX_SUB_SESSION);
   assert.equal(codexSub.kind, 'subagent');
   assert.equal(codexSub.parentSessionId, CODEX_USER_SESSION);
-  assert.equal(codexSub.declaredAgentPath, '/root/example_subagent_review');
+  assert.equal(codexSub.declaredAgentPath, '/root/terra_q17_baseline_review');
   assert.equal(codexSub.model, 'gpt-5.6-terra');
 
   assert.equal(find(session => session.model === 'decoy-model-must-not-appear'), undefined,

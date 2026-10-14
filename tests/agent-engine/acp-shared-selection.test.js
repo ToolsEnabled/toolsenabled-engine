@@ -105,14 +105,20 @@ test('model and effort reserve the same prompt and load fence as mode', async t 
   }
 });
 
-test('recovery without advertisements cannot reuse previous model or effort availability', async t => {
+test('recovery clears old advertisements, forwards exact models and refuses unavailable effort', async t => {
   const h = await setup(t);
   const loading = h.adapter.resumeThread('s');
   h.reply(h.sent.at(-1), {});
   await loading;
-  await assert.rejects(h.adapter.selectModel('s', 'b'), { code: 'ACP_MODEL_UNAVAILABLE' });
-  await assert.rejects(h.adapter.selectEffort('s', 'high'), { code: 'ACP_EFFORT_UNAVAILABLE' });
   assert.equal(h.adapter.getSessionModels('s'), null);
+  const selection = h.adapter.selectModel('s', 'b');
+  assert.equal(h.sent.at(-1).method, 'session/set_model');
+  assert.deepEqual(h.sent.at(-1).params, { sessionId: 's', modelId: 'b' });
+  h.reply(h.sent.at(-1), {});
+  assert.equal(await selection, 'b');
+  await assert.rejects(h.adapter.selectEffort('s', 'high'), { code: 'ACP_EFFORT_UNAVAILABLE' });
+  assert.deepEqual(h.adapter.getSessionModels('s').availableModels, []);
+  assert.equal(h.adapter.getSessionModels('s').currentModelId, 'b');
   assert.equal(h.adapter.getSessionConfigOptions('s'), null);
 });
 

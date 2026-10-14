@@ -1,4 +1,7 @@
-# Tray icon that turns Windows UAC (EnableLUA) off and on, on demand.
+# Owner-operated Windows tray icon that toggles Full UAC Bypass on and off.
+# Q96 / owner request R1022, verbatim: "make another version that controls
+# uac full bypass so i can turn it on and off" ... "forget the 24h thing
+# completely, instead send the full icon buildout to the qeue".
 #
 # WHAT "FULL UAC BYPASS" MEANS HERE. This is Windows' OWN on/off switch --
 # the EnableLUA policy value under
@@ -13,8 +16,10 @@
 # never talks to its named-pipe helper -- see the "WHY NOT THE ALLOWLIST"
 # note below.
 #
-# NO TIMED OR AUTOMATIC BEHAVIOR, ANYWHERE IN THIS FILE.
-# No timer, schedule, expiry or auto-revert.
+# NO TIMED OR AUTOMATIC BEHAVIOR, ANYWHERE IN THIS FILE. No timer, no
+# schedule, no expiry, no auto-revert, no polling loop. The owner explicitly
+# retracted an earlier 24-hour-expiry idea ("forget the 24h thing
+# completely"); this script does not implement one, or anything like one.
 # Status is only ever recomputed on demand -- when the tray menu is opened or
 # right after a toggle -- never on a timer. grep for "Forms.Timer" in this
 # file: there is none, on purpose.
@@ -26,8 +31,8 @@
 # tools\link-bus-firewall.ps1 already documents the same reasoning for its
 # own one-off elevation. Adding a Full UAC Bypass operation there would let
 # the always-on named-pipe helper flip Windows' own UAC posture without the
-# owner ever seeing a prompt, which the product rule forbids: the toggle state
-# is an owner-side control and never agent-writable.
+# owner ever seeing a prompt, which is exactly what R1022 asked NOT to build
+# ("the toggle state must be an owner-side control", never agent-writable).
 #
 # THE ACTUAL SAFETY MECHANISM. Every toggle click below runs
 # `Start-Process -Verb RunAs`, which pops one native Windows UAC consent

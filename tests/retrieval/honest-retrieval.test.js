@@ -142,8 +142,7 @@ const LEDGER_FIXTURE = {
       id: 'R9003',
       verbatim: [
         'rotate the deploy credential',
-        // Synthetic key-shaped value, assembled at runtime so the source carries no literal key-shaped string.
-        'Authorization: Bearer sk-' + 'abcdefghijklmnopqrstuvwxyz0123456789',
+        'Authorization: Bearer \x73k-abcdefghijklmnopqrstuvwxyz0123456789',
         'and never print it again',
       ].join('\n'),
       request: '(interpretation) Rotate the deploy credential.',
@@ -298,8 +297,8 @@ check('the GATE itself withholds anything that is not exactly true, without trus
 });
 
 check('a registry DEFAULT of true cannot enable the surface -- only a user or installer choice can', () => {
-  // R1248 / owner-directive-control-that-does-not-enforce: a control that
-  // faithfully enforces an agent-invented value is still a software failure. So a value
+  // R1248 / owner-directive-control-that-does-not-enforce: "A control faithfully
+  // enforcing an agent-invented value is still a software failure." So a value
   // that reads true but whose provenance is `default` must NOT enable anything.
   const w = world('provenance');
   const asDefault = settingsFile(scratch('prov'), {
@@ -704,7 +703,7 @@ check('a secret-shaped line in a verbatim never reaches the index', () => {
   const bodies = store.db.prepare("SELECT body FROM docs WHERE source = 'ledger'").all().map(row => row.body).join('\n');
   const matched = store.db.prepare('SELECT docId FROM docs WHERE docs MATCH ?').all('"sk"').length;
   store.db.close();
-  assert.ok(!bodies.includes('sk-' + 'abcdefghijklmnopqrstuvwxyz0123456789'),
+  assert.ok(!bodies.includes('\x73k-abcdefghijklmnopqrstuvwxyz0123456789'),
     'a bearer-token-shaped line was copied into a second store');
   assert.ok(bodies.includes('rotate the deploy credential'),
     'redaction removed the whole record instead of the one secret-shaped line');

@@ -28,12 +28,13 @@
 //      weekly-spent account as half free.
 //   4. ONE SLOT DECIDES; IT IS NOT THE WHOLE READING. A provider may meter more
 //      than one week at once, and the `weekly` slot can hold one of them.
-//      MEASURED against Claude Code 2.1.258 on a development account: the
-//      reply carried an all-models week at 25% used and a
+//      MEASURED 2026-09-02 against Claude Code 2.1.258 on the owner's own
+//      account: the reply carried an all-models week at 25% used and a
 //      Fable-scoped week at 46% and `is_active`, so the accounts menu drew a
 //      single bar reading "this week · 54% free" and a person could tell
-//      neither which week that was nor that the other existed (rule: every weekly
-//      limit the provider reports is shown, each named by its model). The slot stays the single figure every
+//      neither which week that was nor that the other existed (owner: "i think
+//      fable weekly limit instead of all models weekly limit is shown for
+//      claude we should include both"). The slot stays the single figure every
 //      ranking and exhaustion test reads, and `weeklyWindows` carries every
 //      weekly ceiling the provider reported -- in the provider's own order,
 //      each naming the model it is scoped to -- so a SURFACE can show every
@@ -60,9 +61,9 @@ const NO_WINDOWS = Object.freeze({ hourly: null, weekly: null, weeklyWindows: Ob
 const SHORT_WINDOW_MAX_MINUTES = 24 * 60;
 
 // WHEN THE LENGTH IS NOT STATED, THE RESET TIME DECIDES. Codex Pro plans meter
-// only a weekly window and report it as `primary` with no length (Codex Pro
-// accounts have no 5-hour window), and the first cut
-// labelled that "5-hour window ·
+// only a weekly window and report it as `primary` with no length (owner,
+// 2026-09-02: "codex doesnt have 5 hour windows for some of my codex accounts
+// since they are pro"), and the first cut labelled that "5-hour window ·
 // resets in 6 days". A window that turns over more than six hours from now
 // cannot be the five-hour one. Six, not twenty-four: a weekly window in its
 // last day would otherwise read as the short one for a whole day out of
@@ -183,9 +184,9 @@ function codexWindows(rateLimits, { now = Date.now() } = {}) {
  * and `weekly_scoped` for Fable at 46% -- and the paragraph before this one
  * puts the ACTIVE one in the `weekly` slot. The accounts menu draws that slot
  * as a single bar reading "this week", so the person saw the Fable ceiling and
- * had no way to tell it from the all-models one (product note: the Fable
- * weekly limit was shown for Claude instead of the all-models weekly limit,
- * and both should be shown). `weeklyWindows` therefore carries EVERY measured
+ * had no way to tell it from the all-models one (owner, 2026-09-03: "i think
+ * fable weekly limit instead of all models weekly limit is shown for claude we
+ * should include both"). `weeklyWindows` therefore carries EVERY measured
  * weekly entry for a surface to draw, while `weekly` stays exactly what it
  * was: the one figure measuredWindows/bindingWindow/spentWindow read, so no
  * ranking and no exhaustion test moves because a second bar appeared.
@@ -329,7 +330,7 @@ function usableThreshold(specific, fallback) {
  * ONE LIMIT PER WINDOW, because the two windows are not the same kind of
  * thing. A weekly allowance is spent over days and is worth moving away from
  * early; a five-hour window refills fast enough that the same figure would
- * park an account that is about to be fine again. Measured on a development
+ * park an account that is about to be fine again. Measured on the owner's own
  * machine 2026-09-03: two accounts sat at 90% and 91% of the WEEK with 96% and
  * 65% of their five-hour window still free, and a single 90% threshold stopped
  * both of them on the strength of the slow window alone.
@@ -372,52 +373,9 @@ function spentWindow(windows, limits) {
 // A retry time is an observation/recheck schedule, never a promise of quota.
 // The caller persists this alongside its existing recovery intent and Stop
 // fence. No account is probed or selected by this calculation.
-function recoveryTiming(attempts, thresholds = {}, now = Date.now(), { recheckAttempt = 0 } = {}) {
-  if (!Array.isArray(attempts) || attempts.length > 256 || !Number.isFinite(now)) {
-    throw new TypeError('Recovery timing requires bounded account observations and a current clock.');
-  }
-  const limits = windowLimits(thresholds);
-  const delayMs = Math.min(300000, 30000 * 2 ** Math.min(4, Math.max(0, Number.isSafeInteger(recheckAttempt) ? recheckAttempt : 0)));
-  const waits = [];
-  let unmeasuredCount = 0;
-  let confirmedQuotaCount = 0;
-  const exhausted = attempts.filter(attempt => attempt?.status === 'exhausted');
-  for (const attempt of attempts) {
-    if (!attempt || attempt.status === 'transient') {
-      unmeasuredCount++;
-      waits.push({ at: now + delayMs, resetAt: null, reason: 'status-recheck' });
-      continue;
-    }
-    if (attempt.status !== 'exhausted') continue;
-    const windows = [['hourly', limits.hourlyLimit], ['weekly', limits.weeklyLimit]]
-      .filter(([kind, limit]) => Number.isFinite(limit) && Number.isFinite(attempt.windows?.[kind]?.usedPercent)
-        && attempt.windows[kind].usedPercent >= limit)
-      .map(([kind]) => attempt.windows[kind]);
-    // A configured reserve/threshold is an eligibility policy, not proof that
-    // the provider has no quota left. Only observed full usage supports that claim.
-    if (windows.some(window => window.usedPercent >= 100)
-      || Number.isFinite(attempt.usedPercent) && attempt.usedPercent >= 100) confirmedQuotaCount++;
-    // Both a full hour and a full week must reset before this account can be
-    // eligible. A missing reset in either window cannot be guessed from the other.
-    const resetValues = (windows.length ? windows.map(window => window.resetsAt) : [attempt.resetsAt])
-      .map(value => typeof value === 'string' && value ? Date.parse(value) : NaN);
-    const resetMs = resetValues.every(value => Number.isFinite(value) && value > now) ? Math.max(...resetValues) : NaN;
-    if (Number.isFinite(resetMs)) waits.push({ at: resetMs + 1000, resetAt: new Date(resetMs).toISOString(), reason: 'observed-reset' });
-    else {
-      unmeasuredCount++;
-      waits.push({ at: now + delayMs, resetAt: null, reason: 'reset-recheck' });
-    }
-  }
-  const identityBlocked = attempts.some(attempt => attempt?.status === 'account_mismatch');
-  const next = identityBlocked ? null : waits.sort((a, b) => a.at - b.at)[0];
-  return Object.freeze({ nextAttemptAt: next ? new Date(next.at).toISOString() : null,
-    resetAt: next?.resetAt || null, reason: next?.reason || (identityBlocked ? 'identity-action-required' : 'account-action-required'),
-    allQuotaExhausted: attempts.length > 0 && confirmedQuotaCount === attempts.length,
-    exhaustedCount: exhausted.length, unmeasuredCount });
-}
+
 
 module.exports = Object.freeze({
-  recoveryTiming,
   NO_WINDOWS,
   SHORT_WINDOW_MAX_MINUTES,
   SHORT_WINDOW_RESET_MAX_MS,

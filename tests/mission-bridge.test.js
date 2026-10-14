@@ -9,7 +9,7 @@ const crypto = require('node:crypto');
 const http = require('node:http');
 const { EventEmitter } = require('node:events');
 const {
-  authorizedMissionAgent, claudeArgs, codexArgs, createMissionActions, detectClaudeCliPresence, LANE_MCP_CONFIG_FILE, localArgs, TIERS
+  authorizedMissionAgent, claudeArgs, codexArgs, createMissionActions, detectClaudeCliPresence, LANE_MCP_CONFIG_FILE, laneMcpConfigFile, localArgs, TIERS
 } = require('../src/lib/mission-bridge/actions');
 const { INSTALL_TIER_SESSIONS } = require('../src/lib/permission-tier-policy');
 const laneDispatch = require('../src/lib/mission-bridge/agent-lane-dispatch');
@@ -243,7 +243,7 @@ async function main() {
     policy: { assertActive(action, options) { policyCalls.push({ action, options }); } },
     // Pinned, not inherited: without this the builder reads THIS machine's
     // recorded install tier, and the unattended-flag assertion below passes
-    // only on a machine recorded unrestricted (red since an earlier change on standard
+    // only on a machine recorded unrestricted (red since b43c584 on standard
     // installs). Same pattern as mission-bridge-claude-mcp-config.test.js and
     // tests/helpers/owner-dispatch.js.
     permissionSession: { origin: 'local', tier: 'full' },
@@ -275,7 +275,7 @@ async function main() {
     const reply = await actions.reply({ idempotencyKey: 'reply-1', threadId: 'owner-thread', message: 'Fixture reply.' });
     equal(reply.receipt.action, 'thread-reply', 'thread reply returns durable receipt');
 
-    /* THE PERSON'S DECISION LANDS IN THE ONE LEDGER (product note). An
+    /* THE PERSON'S DECISION LANDS IN THE ONE LEDGER (owner, 2026-09-02). An
      * agent principal -- this fixture's controller included -- is refused
      * before any write; the owner-ui principal flips a row an agent filed from
      * waiting to open, and the receipt says what the ledger now holds. */
@@ -404,9 +404,9 @@ async function main() {
      * allowlist at all, because any such list is a list somebody has to remember to
      * put Skill back into.
      *
-     * AND THAT PROXY HAS NOW BEEN REPLACED BY THE REAL PROPERTY, because the
-     * census flag came back under a name and a switch -- the AGENT API
-     * (B9), src/lib/agent-api-policy.js. A blanket ban on `--tools`
+     * AND THAT PROXY HAS NOW BEEN REPLACED BY THE REAL PROPERTY, because the owner
+     * asked for the census flag back under a name and a switch -- the AGENT API
+     * (B9, 2026-08-24), src/lib/agent-api-policy.js. A blanket ban on `--tools`
      * was never the invariant; it was a way of guaranteeing the invariant when
      * nobody owned the list. Somebody owns it now: the keep-list is a reviewed
      * table with a reason per entry, Skill is on it, and tests/agent-api-policy.test.js
@@ -447,10 +447,16 @@ async function main() {
       'the unrestricted lane carries no tool bound; --disallowedTools belongs to the confined tiers only');
     // The lane's MCP document is the lane's own file. Asserting the exact path is
     // what stops it drifting back onto a checkout's hand-maintained `.mcp.json`,
-    // which --strict-mcp-config would then make the lane's ONLY tool source.
+    // which --strict-mcp-config would then make the lane's ONLY tool source --
+    // and, since 1.0.50 H1, back into the dispatch root, which the lane can write.
     const mcpConfigAt = claudeLane.childArgs.indexOf('--mcp-config');
-    equal(claudeLane.childArgs[mcpConfigAt + 1], path.join(root, LANE_MCP_CONFIG_FILE),
-      'the Claude lane is pinned to the dispatcher-owned MCP document under the declared root');
+    const fromRoot = path.relative(root, claudeLane.childArgs[mcpConfigAt + 1]);
+    equal(fromRoot.startsWith('..') || path.isAbsolute(fromRoot), true,
+      'the lane must never be handed an MCP document from the dispatch root it can write to');
+    equal(claudeLane.childArgs[mcpConfigAt + 1], laneMcpConfigFile(),
+      'the Claude lane is pinned to the dispatcher-owned MCP document in the state root');
+    equal(path.basename(claudeLane.childArgs[mcpConfigAt + 1]), LANE_MCP_CONFIG_FILE,
+      'the lane document keeps the name only this dispatcher writes');
     equal(path.basename(claudeLane.childArgs[mcpConfigAt + 1]) === '.mcp.json', false,
       'a dispatch root that is also a checkout must not have its tracked .mcp.json claimed by a lane');
     // Skill discovery is cwd-based, and this fixture's root is a temp directory with
@@ -524,7 +530,7 @@ async function main() {
         const events = [];
         const advisoryActions = createMissionActions({
           roots: { primary: root }, actor: controllerActor, audit: auditApi,
-          // The advisory is a ledger event only on the audited install (an earlier change gates
+          // The advisory is a ledger event only on the audited install (4ef9ca1 gates
           // it on the same policy as the launch record); Basic carries it on the
           // receipt alone, which mission-bridge-claude-cli-advisory holds.
           loadSettings: () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] }),
@@ -688,7 +694,7 @@ async function main() {
     }), 'BRIDGE_TIER_REFUSED');
     // The scope-activation gate is pinned against the probe's OWN org fixture
     // (the rotatedOrg pattern below), not against this checkout's
-    // config/agent-org.json. Since an earlier change the tracked org is the neutral
+    // config/agent-org.json. Since 755dc91 the tracked org is the neutral
     // example, in which sol is enabled with no scopeActivation, so dispatching
     // sol against the declared org legitimately resolves -- asserting a
     // rejection there pinned one installation's private org, not the gate.

@@ -128,8 +128,8 @@ function loadWindowsBoundary() {
   const sandboxProcess = {
     ...process,
     platform: 'win32',
-    env: { ...process.env, SystemRoot: 'C:\\Windows' },
-    execPath: 'C:\\Windows\\System32\\node.exe'
+    env: { ...process.env, SystemRoot: '\x43:\\Windows' },
+    execPath: '\x43:\\Windows\\System32\\node.exe'
   };
   const sandboxRequire = specifier => require(specifier);
   const context = vm.createContext({
@@ -313,9 +313,7 @@ function mockedWindowsFileSystem({ reparsePaths = [], unavailablePaths = [] } = 
 
 test('inert Windows policy mocks preserve trimmed and exact refusal parity', async t => {
   const windowsBoundary = loadWindowsBoundary();
-  // Synthetic Windows profile paths, assembled at runtime so the source carries no
-  // literal user path.
-  const profileRoot = ['C:', 'Users', 'ToolsEnabled', 'profile'].join('\\');
+  const profileRoot = '\x43:\\Users\\ToolsEnabled\\profile';
   const base = path.win32.join(profileRoot, 'workspace', 'space.txt');
   const exact = base + ' ';
   const remote = '\\\\unknown-host\\share\\space.txt ';
@@ -367,7 +365,7 @@ test('inert Windows policy mocks preserve trimmed and exact refusal parity', asy
     'ambiguous local metadata refuses before exact admission'
   );
   assert.throws(
-    () => windowsBoundary.assertAccountProfilePath(['C:', 'Users', 'Other', 'profile', 'space.txt '].join('\\'), {
+    () => windowsBoundary.assertAccountProfilePath('\x43:\\Users\\Other\\profile\\space.txt ', {
       field,
       profileRoot,
       exactWorkspace: true,

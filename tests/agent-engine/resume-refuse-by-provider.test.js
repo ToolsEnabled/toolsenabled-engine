@@ -44,7 +44,7 @@ const { resumeClaudeSession } = require('../../src/lib/agent-engine/claude-cli-p
 const { resumeCodexSession } = require('../../src/lib/agent-engine/codex-process');
 require('../helpers/scratch-state-root');
 
-const CLAUDE_THREAD_ID = '46b8d0f2-4c6e-4b8d-9f1a-3c5e7b9d1f3a';
+const CLAUDE_THREAD_ID = '4fcaeb8b-93ec-4a5b-97c7-4cac9e59f2d1';
 const CODEX_THREAD_ID = '0b9f7a41-2c3d-4e5f-8a7b-6c5d4e3f2a1b';
 
 let failures = 0;
@@ -58,7 +58,7 @@ async function checkAsync(name, run) {
   }
 }
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-provider-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'w2-resume-provider-'));
 /* A binary that is not there. Reaching the spawn fails on THIS, with a code
    that is not the refusal's -- which is how "it never got that far" is told
    apart from "it got there and something else went wrong". */

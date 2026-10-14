@@ -28,10 +28,11 @@
 // THE STANDARD TOOL NOTE EVERY PRODUCT AGENT IS HANDED, PROVED AGAINST THE
 // MEASURED SURFACE RATHER THAN AGAINST ITSELF.
 //
-// Requirement: every product agent is handed a short standard note that lists
-// exactly the tools that exist, so a user does not have to explain tool names
-// and usage. It stays small enough to cost few tokens. A setting may disable
-// it; it is on by default.
+// The owner's requirement, verbatim: "i have to tell agents what tools are
+// called and what to do and to use this or that tool etc. so thats really hard
+// on a user. We should have a really short standard file that just shares
+// exactly what exists - we dont wat to eat tokens but they need to knoiw. We
+// can give a specific setting to disable this but it should be standard."
 //
 // Three properties, each of which has already failed somewhere in this
 // repository when left unproved:
@@ -147,7 +148,7 @@ function testEveryFamilySurvivesTheBudget() {
   }
   assert.ok(estimateTokens(roomy.text) >= estimateTokens(tight.text),
     'a tighter budget produced a longer note');
-  // FINDING 2, an internal review record:
+  // FINDING 2, evidence/controller5-tool-summary-review-20260908/REVIEW.md:
   // this is the ONLY place an agent is ever told (a) that a missing tool is a
   // deliberate permission-level choice, not a bug, and (b) that the person can
   // change the level in Settings -- tests/mcp-initialize-instructions.test.js
@@ -227,7 +228,7 @@ function testRegistryRowIsDeclaredAndEnforced() {
   const entry = registry.byId.get(summaryModule.TOOL_SUMMARY_SETTING_ID);
   assert.ok(entry, `"${summaryModule.TOOL_SUMMARY_SETTING_ID}" is not in the settings registry -- a control with no row is a lie`);
   assert.equal(entry.control, 'toggle');
-  assert.equal(entry.default, true, 'the product rule makes it standard, which is default on');
+  assert.equal(entry.default, true, 'the owner said it should be standard, which is default on');
   assert.ok(typeof entry.enforcedBy === 'string' && entry.enforcedBy.includes('agent-tool-summary'),
     'the row does not name src/lib/agent-tool-summary.js as its enforcer');
   console.log('  ✅ row present, toggle, default on, enforcer named.');
@@ -235,8 +236,8 @@ function testRegistryRowIsDeclaredAndEnforced() {
 
 function testUseToolsEnabledConventionRides() {
   console.log('🧪 The note carries the "use ToolsEnabled" convention at every level\'s default note...');
-  // Product rule: agents should know that when the user tells them to use
-  // ToolsEnabled, they should dive into it. The user-side half is the setup
+  // The owner's ask, verbatim: "make sure the agents know when the user says
+  // that they should dive into our program". The user-side half is the setup
   // card's tip ("ask the agent to use ToolsEnabled!"); this is the agent-side
   // half, and it rides the SAME note the session already gets -- one line,
   // inside the same token budget, never a second injection.

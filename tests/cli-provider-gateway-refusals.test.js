@@ -10,7 +10,8 @@ const {
   GEMINI_MODELS,
   RELEASE_REVIEW_GEMINI_MODEL,
   MAX_PROMPT_BYTES,
-  configuredGoogleAccountEmail
+  configuredGoogleAccountEmail,
+  providerEnvironment
 } = require('../src/lib/providers/cli-provider-gateway');
 const modelFloor = require('../src/lib/model-floor');
 
@@ -37,6 +38,10 @@ async function rejectsCode(promise, code) {
 }
 
 (async () => {
+  const nativeSettings = { ANTHROPIC_API_KEY:'fixture', CLAUDE_CODE_OAUTH_TOKEN:'fixture',
+    CLAUDE_CODE_USE_BEDROCK:'1', AWS_PROFILE:'fixture-profile', PATH:'fixture-path' };
+  assert.deepEqual(providerEnvironment('claude', nativeSettings), nativeSettings,
+    'the native Claude gateway must preserve the configured auth method');
   assert.deepEqual(GEMINI_MODELS, modelFloor.allowedFor('subscription'));
   assert.equal(RELEASE_REVIEW_GEMINI_MODEL, modelFloor.defaultFor('subscription'));
 

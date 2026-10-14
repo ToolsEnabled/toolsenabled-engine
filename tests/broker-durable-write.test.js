@@ -11,8 +11,8 @@
  * MEASURED 2026-09-03 on this machine: tree-node-directory.js's own state file
  * -- written with this exact temp-and-rename shape and no fsync -- was found as
  * 22,346 bytes of pure NUL and quarantined as
- * tree-nodes.json.corrupt-<timestamp>-<id>.zeros. That was fixed in
- * an earlier change. This file is the broker's own
+ * tree-nodes.json.corrupt-20260903T182449Z-75624e54.zeros. That was fixed in
+ * 4b0a59d94566f307771d70fd67cbdecbfb2e1f96. This file is the broker's own
  * writeState, which had the identical unfsynced shape and was not part of that
  * fix. It is a worse place for the bug to hide: the tree directory only holds
  * roster identity, which is rebuilt as circles re-register, but this file is
@@ -20,8 +20,8 @@
  * cooldown for agent_comms.send_local lives only here between commits. A torn
  * write here destroys message content with nothing left anywhere to
  * reconstruct it from: a message the sender believes it sent, silently gone,
- * with no answer and no trace. Unclean power loss happens on ordinary
- * machines, so the window this closes is not theoretical.
+ * with no answer and no trace. This machine has a recorded history of unclean
+ * power events, so the window this closes is not theoretical.
  *
  * broker.js's writeState calls the real `fs` module directly rather than
  * through an injected fsImpl (unlike tree-node-directory.js), so this test

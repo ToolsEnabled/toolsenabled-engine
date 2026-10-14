@@ -2,8 +2,9 @@
 
 // FOUR CREDENTIAL-SHAPED FILENAMES THAT NOTHING REFUSED.
 //
-// This file was written as RED-ONLY EVIDENCE comparing the live lineage
-// against a sibling unmerged commit, which had independently fixed
+// Worker 14 wrote this file as RED-ONLY EVIDENCE (engine commit 648b953c, on
+// test/containment-name-gaps-d9b44f96-20260907) comparing the live lineage
+// against the sibling unmerged commit a099930, which had independently fixed
 // the same defect with a different, non-overlapping set of credential-name
 // rules. In that form it printed four RED lines and exited 1 ON PURPOSE: it
 // was proof a gap existed, not a guard that it stays closed.
@@ -42,7 +43,7 @@ const test = require('node:test');
 const { preflight } = require('../src/lib/egress-preflight');
 const { resolveHostPath, HOME } = require('../src/lib/providers/host-control');
 
-// The four CLEAN-ADD rows. Each `why` is the shape the sibling commit's own rule named.
+// The four CLEAN-ADD rows. Each `why` is the shape a099930's own rule named.
 const PORTED = [
   { label: 'password/passwd/passphrase stem', filePath: 'password.json' },
   { label: 'passphrase, the same stem group', filePath: 'passphrase.yaml' },

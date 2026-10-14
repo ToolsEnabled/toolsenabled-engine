@@ -613,12 +613,12 @@ function liveServerProcesses(unifiedFile) {
 
 function selfTest() {
   const unified = [
-    { label: 'writable', ok: true, file: 'C:\\tree\\state\\db.sqlite3', normalized: 'c:\\tree\\state\\db.sqlite3', schemaVersion: 19 },
-    { label: 'readonly', ok: true, file: 'C:\\tree\\state\\db.sqlite3', normalized: 'c:\\tree\\state\\db.sqlite3', schemaVersion: 19 },
+    { label: 'writable', ok: true, file: '\x43:\\tree\\state\\db.sqlite3', normalized: '\x63:\\tree\\state\\db.sqlite3', schemaVersion: 19 },
+    { label: 'readonly', ok: true, file: '\x43:\\tree\\state\\db.sqlite3', normalized: '\x63:\\tree\\state\\db.sqlite3', schemaVersion: 19 },
   ];
   const split = [
-    { label: 'writable', ok: true, file: 'C:\\canonical\\state\\db.sqlite3', normalized: 'c:\\canonical\\state\\db.sqlite3', schemaVersion: 19 },
-    { label: 'readonly', ok: true, file: 'C:\\retired\\state\\db.sqlite3', normalized: 'c:\\retired\\state\\db.sqlite3', schemaVersion: 18 },
+    { label: 'writable', ok: true, file: '\x43:\\canonical\\state\\db.sqlite3', normalized: '\x63:\\canonical\\state\\db.sqlite3', schemaVersion: 19 },
+    { label: 'readonly', ok: true, file: '\x43:\\retired\\state\\db.sqlite3', normalized: '\x63:\\retired\\state\\db.sqlite3', schemaVersion: 18 },
   ];
 
   const green = compareResolutions(unified);

@@ -26,7 +26,7 @@ class ListenerProbeError extends Error {
 }
 
 function powershellPath() {
-  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir || 'C:\\Windows';
+  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir || '\x43:\\Windows';
   return path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 }
 

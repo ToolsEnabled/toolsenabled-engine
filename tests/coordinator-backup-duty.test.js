@@ -24,7 +24,7 @@ function validDefinition() {
     host: 'coordinator-duty-host',
     mode: 'report-only',
     intervalMs: 86_400_000,
-    destination: { kind: 'local-directory', path: 'C:\\Backup' },
+    destination: { kind: 'local-directory', path: '\x43:\\Backup' },
     retention: { maxSnapshots: 7 },
     plannedArtifacts: ['git-bundle', 'vault-state-copy', 'manifest-sha256', 'retention-prune'],
     safety: { registerScheduledTask: false, createArtifacts: false, deleteArtifacts: false, readVaultContents: false, readDestinationMetadata: true }
@@ -208,7 +208,7 @@ async function run() {
     const result = await registry._internals.runBackupObservationReport({
       now: () => nowMs,
       deps: {
-        backupDuty: { loadObservationTarget: () => ({ valid: true, target: { destinationPath: 'C:\\secret-backups' } }) },
+        backupDuty: { loadObservationTarget: () => ({ valid: true, target: { destinationPath: '\x43:\\secret-backups' } }) },
         backupObserver: { observeBackupDestination: candidate => {
           receivedPath = candidate;
           return {
@@ -222,7 +222,7 @@ async function run() {
         backupAgeStatus
       }
     });
-    assert.equal(receivedPath, 'C:\\secret-backups');
+    assert.equal(receivedPath, '\x43:\\secret-backups');
     assert.equal(result.outcome, DUTY_OUTCOME.OK);
     assert.equal(result.detail.status, 'fresh');
     assert.equal(JSON.stringify(result.detail).includes('secret-backups'), false);
@@ -234,7 +234,7 @@ async function run() {
     const result = await registry._internals.runBackupObservationReport({
       now: () => Date.parse('2026-07-29T12:00:00.000Z'),
       deps: {
-        backupDuty: { loadObservationTarget: () => ({ valid: true, target: { destinationPath: 'C:\\secret-backups' } }) },
+        backupDuty: { loadObservationTarget: () => ({ valid: true, target: { destinationPath: '\x43:\\secret-backups' } }) },
         backupObserver: { observeBackupDestination: () => ({
           schemaVersion: 1,
           kind: 'backup-age-observation',
@@ -288,7 +288,7 @@ async function run() {
         ...baseline.activationContract,
         executionAuthorized: true,
         schedulerRegistrationAuthorized: true,
-        destinationPath: 'C:\\forged-backups'
+        destinationPath: '\x43:\\forged-backups'
       })
     });
     const result = await registry._internals.runBackupExecutionGateReport({
@@ -303,7 +303,7 @@ async function run() {
 
   await check('the execution-gate duty rejects path leakage through an otherwise valid-looking report', async () => {
     const baseline = frozenGateReport();
-    const leaked = Object.freeze({ ...baseline, destinationPath: 'C:\\forged-backups' });
+    const leaked = Object.freeze({ ...baseline, destinationPath: '\x43:\\forged-backups' });
     const result = await registry._internals.runBackupExecutionGateReport({
       deps: {
         backupDuty: { loadDefinition: () => ({ valid: true, definition: backupDuty.loadDefinition().definition }) },
@@ -320,7 +320,7 @@ async function run() {
     for (const [key, value] of Object.entries(baseline)) {
       Object.defineProperty(accessorBacked, key, { enumerable: true, get: () => value });
     }
-    const polluted = Object.freeze(Object.assign(Object.create({ destinationPath: 'C:\\forged-backups' }), baseline));
+    const polluted = Object.freeze(Object.assign(Object.create({ destinationPath: '\x43:\\forged-backups' }), baseline));
     for (const candidate of [Object.freeze(accessorBacked), polluted]) {
       const result = await registry._internals.runBackupExecutionGateReport({
         deps: {

@@ -250,8 +250,8 @@ function contractApiSheet(fields, permissionSession) {
 // TESTER, VERIFIER, HARVESTER or IMPLEMENTER is not any declared org role at
 // all, and a lowercased COORDINATOR collides with nothing -- the tree declares
 // "coordinator-assistant", a different string), refused downstream once the
-// spawn request reaches the application. Measured for INVESTIGATOR in an
-// internal bug report ("A valid contract whose role is INVESTIGATOR
+// spawn request reaches the application. Measured for INVESTIGATOR in
+// REPORT-bugs-worker-20260906.md ("A valid contract whose role is INVESTIGATOR
 // and which omits treeRole ... is refused ... measured today. That is 6 of the
 // 9 valid contract roles whose documented default cannot work.").
 const CONTRACT_ROLE_TO_TREE_ROLE = Object.freeze({
@@ -268,8 +268,8 @@ const CONTRACT_ROLE_TO_TREE_ROLE = Object.freeze({
 
 /* HOW HARD THE NEW ASSISTANT THINKS, CHOSEN BY THE ONE ASKING FOR IT.
  *
- * Product requirement: the effort level must be selectable when
- * spawning agents. Measured the same morning: this schema offered contract, tier,
+ * Owner, 2026-09-19: "you NEED to be able to select effort level when you spawn
+ * agents". Measured the same morning: this schema offered contract, tier,
  * surface, treeRole, turns, timeoutSeconds, workspaceRoot and parentLaunchId --
  * and no way to say how hard the circle should think, so every assistant an
  * assistant made ran at whatever its tier defaulted to.
@@ -289,10 +289,9 @@ const AGENT_SPAWN_EFFORT_VALUES = Object.freeze([
  * THE FIRST VERSION OF THIS GATE GOT IT WRONG IN THE WORST DIRECTION. It read
  * the `effort` column off the tier row in mission-bridge/actions.js and refused
  * any effort for a tier whose column was empty -- which is every claude tier
- * and `local`. That would have refused the product's most common spawn: a
- * typical tree runs managers on claude-opus at xhigh and builders on
- * claude-opus at medium, and every circle in this lane is a claude-opus tree
- * spawn. The column
+ * and `local`. That would have refused the product's most common spawn: the
+ * owner's own managers run claude-opus at xhigh and his builders claude-opus at
+ * medium, and every circle in this lane is a claude-opus tree spawn. The column
  * is that tier's DEFAULT, not its allowed set.
  *
  * WHAT EACH ROW BELOW IS MEASURED FROM, on the landing tips, 2026-09-19:
@@ -372,8 +371,12 @@ const AGENT_SPAWN_EFFORT_BY_PROVIDER = Object.freeze({
  * default has been told a thing that is not so. The same holds one level down:
  * a row whose model offers fewer depths than its provider lists them in
  * `efforts`, and resolveTreeModelChoice holds the caller to that list. */
+// Explicit tree models do not consume a declared dispatch seat. Keep the
+// historical luna tier unchanged for saved callers and lane assignments.
+const { TREE_ONLY_SPAWN_TIERS } = require('./model-dispatch-tiers');
 function spawnTierRow(tierId, dependencies = {}) {
-  const tiers = dependencies.tiers || require('./mission-bridge/actions').TIERS;
+  if (typeof tierId === 'string' && Object.hasOwn(TREE_ONLY_SPAWN_TIERS, tierId)) return TREE_ONLY_SPAWN_TIERS[tierId];
+  const tiers = dependencies.tiers || require('./model-dispatch-tiers').TIERS;
   if (!tiers || typeof tierId !== 'string' || !Object.prototype.hasOwnProperty.call(tiers, tierId)) return null;
   return tiers[tierId];
 }
@@ -430,7 +433,7 @@ function resolveTreeModelChoice(args, dependencies = {}) {
        launcher would still pass --effort, and the model would drop or refuse
        it, so it is refused here, before a circle is drawn. Checked on the
        mapped value, so ultra is accepted wherever max is. */
-    if (Array.isArray(row.efforts) && !row.efforts.includes(runs)) {
+    if (args.model === undefined && Array.isArray(row.efforts) && !row.efforts.includes(runs)) {
       throw spawnRefusal('AGENT_SPAWN_EFFORT_REFUSED', row.efforts.length === 0
         ? `Subagent spawn refused: tier "${args.tier}" runs a model with no reasoning-effort setting, so "${args.effort}" could not have been `
           + 'applied and nothing was started. Drop effort, or name a tier whose model offers one.'
@@ -449,19 +452,25 @@ function resolveTreeModelChoice(args, dependencies = {}) {
     applied.provider = row.provider;
   }
   if (args.model !== undefined) {
-    /* Either spelling the tier row itself carries is an agreement: `model` is
-       the catalog id the product records, `cliModel` is what the vendor CLI is
-       actually told. A caller reading either one back to us is right. */
-    const known = [row.model, row.cliModel].filter(value => typeof value === 'string' && value !== '');
-    if (!known.includes(args.model)) {
-      throw spawnRefusal('AGENT_SPAWN_MODEL_REFUSED',
-        `Subagent spawn refused: model "${args.model}" contradicts tier "${args.tier}", which already fixes the model. `
-        + 'A tier decides the model on this computer; model is accepted only to confirm one. '
-        + (known.length > 0
-          ? `This tier's model is named ${known.map(value => `"${value}"`).join(' or ')}: pass one of those, drop model, or choose the tier that runs the model you want.`
-          : 'This tier pins no model name that can be confirmed -- it resolves one at launch -- so drop model, or choose a tier that names one.'));
+    const metadata = require('./model-dispatch-tiers');
+    const tiers = { ...(dependencies.tiers || metadata.TIERS), ...TREE_ONLY_SPAWN_TIERS };
+    let selection;
+    try {
+      selection = metadata.resolveNativeModelSelection({ base: row, model: args.model,
+        effort: applied.effort ?? row.effort, tiers, classOrder: require('./controller-launch-record').TIERS });
+    } catch (error) {
+      const code = error?.code === 'AGENT_MODEL_TIER_CAP_EXCEEDED' ? 'AGENT_SPAWN_MODEL_CLASS_REFUSED'
+        : error?.code === 'AGENT_MODEL_EFFORT_UNSUPPORTED' ? 'AGENT_SPAWN_EFFORT_REFUSED'
+        : 'AGENT_SPAWN_MODEL_REFUSED';
+      throw spawnRefusal(code, error?.message || 'The selected model could not be verified.');
     }
-    applied.model = args.model;
+    const known = Object.values(tiers).filter(candidate => candidate
+      && [candidate.model, candidate.cliModel].includes(selection.model));
+    if (known.length && !known.some(candidate => candidate.provider === row.provider
+        && (candidate.client || null) === (row.client || null))) {
+      throw spawnRefusal('AGENT_SPAWN_MODEL_REFUSED', 'The selected known model belongs to a different provider or client.');
+    }
+    applied.model = selection.model;
   }
   return applied;
 }
@@ -578,6 +587,10 @@ async function spawnSubagent(args, context = {}, dependencies = {}) {
   if (research && routed.route !== 'tree') {
     throw spawnRefusal('RESEARCH_DELEGATION_TREE_REQUIRED', 'Restricted research workers require the visible tree; no detached worker was started.');
   }
+  if (routed.route !== 'tree' && Object.hasOwn(TREE_ONLY_SPAWN_TIERS, args.tier)) {
+    throw spawnRefusal('AGENT_SPAWN_TREE_TIER_REQUIRED',
+      `Subagent spawn refused: tier "${args.tier}" is available only on the visible tree. Pass surface "tree"; no detached lane was started.`);
+  }
   if (routed.route !== 'tree') {
     /* EFFORT, PROVIDER AND MODEL ARE THE TREE SURFACE'S, AND A LANE SAYS SO
      * RATHER THAN DROPPING THEM. The lane request is built above and handed to
@@ -611,7 +624,7 @@ async function spawnSubagent(args, context = {}, dependencies = {}) {
     /* TURNS AND TIMEOUTSECONDS ARE NOT PART OF THIS PATH AT ALL, AND THE ANSWER
      * SAYS SO BY NAME.
      *
-     * Product requirement: no turn or timeout cap. A circle on the
+     * Owner, 2026-09-19: "i dont want a turn or timeout cap". A circle on the
      * person's tree has never had one and does not get one here: the `cap`
      * built for the lane request above is not forwarded to spawnOnTree, and
      * there is no other clock on the surface. Its limits are its own
@@ -1008,6 +1021,21 @@ const gitHeadSha1 = description => ({
 // that does not belong to the resolved environment.
 const paddleApiVaultKey = choice([...paddleEnvironment.API_VAULT_KEYS], 'Paddle API-key vault key; must match the recorded Paddle environment.');
 const paddleWebhookVaultKey = choice([...paddleEnvironment.WEBHOOK_VAULT_KEYS], 'Paddle webhook signing-secret vault key; must match the recorded Paddle environment.');
+// A CLOSED NAME, NOT A FREE STRING (1.0.50 security M2). This was str(), and the
+// only check behind it was a charset regex before an unconditional vault write,
+// so an agent could aim a fresh service-account key at any record -- the signed
+// audit anchor, the device identity, or on Windows the owner's card -- and
+// clobber it. The provider holds the same list (providers/infrastructure.js
+// GCP_SERVICE_ACCOUNT_VAULT_KEYS) for direct callers; it is repeated here rather
+// than required because this file must not load providers at startup.
+const gcpServiceAccountVaultKey = choice(['gcp_service_account_key'], 'Encrypted vault key, default gcp_service_account_key.');
+// THE SAME CLOSED-NAME RULE FOR THE STRIPE WEBHOOK SECRET (1.0.50 security L2).
+// billing.webhook_verify is a Guided-tier local read that decrypts the record
+// it is pointed at and compares an HMAC the caller controls; with a free name
+// it answered "is this guess the value of record X" for any record in the
+// vault, about 60 guesses per call. Mirrors paddleWebhookVaultKey above. The
+// provider holds the same list (providers/billing.js STRIPE_WEBHOOK_VAULT_KEYS).
+const stripeWebhookVaultKey = choice(['stripe_webhook_secret'], 'Vault key containing the Stripe webhook signing secret.');
 const CREDENTIAL_REMOVAL_REASONS = Object.freeze({
   no_longer_needed: 'Owner removed a credential that is no longer needed.',
   provider_revoked: 'Owner removed a credential after provider revocation.',
@@ -1311,6 +1339,10 @@ function define(name, description, inputSchema, handler, options = {}) {
     disabledByOwnerDecision: options.disabledByOwnerDecision === true,
     effect,
     dispatch: options.dispatch === 'exclusive' ? 'exclusive' : 'shared',
+    // A handler that starts work which must end when the call does (a pack's
+    // subprocess) declares it here and is handed the call's abort signal and
+    // nothing else -- see the context-aware list in executeTool().
+    takesAbortSignal: options.takesAbortSignal === true,
     identityAccess,
     annotations
   });
@@ -1571,8 +1603,8 @@ async function listAccountRouter(_args = {}, dependencies = {}) {
    * am I on" got remainingPercent for every account and no answer, because the
    * account in use lives in the rotation state and no tool handler read it:
    * rotation.js activeAccountRecord() returns exactly this and had ZERO
-   * production callers in either repo, verified three ways. The reported
-   * failure of account-status checks is that absence -- the
+   * production callers in either repo, verified three ways. The owner's report
+   * that "checking account status does not work" is that absence -- the
    * Accounts panel says it correctly, the programmatic surface never said it.
    *
    * THE PIN IS CARRIED BESIDE THE ACTIVE NAME because they answer different
@@ -1710,6 +1742,17 @@ const CORE_TOOLS = [
   define('ide.consent_remove', 'Withdraw one IDE/editor surface from this installation\'s saved import choices, preserving every other imported surface. Removing an unsaved surface preserves an existing valid choice file; a first-run removal records an explicit empty choice.', schema({ surface: ideSurfaceSlug }, ['surface']), args => require('./ide-session-consent-writer').removeSurface(consentRoot(), args.surface), { effect: 'local-write' }),
   define('iphone.handoff_status', 'Read only a redacted local iPhone presence/readiness summary from Windows device inventory. It never pairs, unlocks, reads, copies, or exposes phone data, names, serials, messages, notifications, or authentication codes.', schema(), () => iphoneHandoff().handoffStatus(), { effect: 'local-read' }),
   define('duo.desktop_status', 'Read a redacted readiness summary for the signed local Duo Desktop app. It returns only installation/version/signature/process/service readiness and never returns device identifiers, account data, authenticator material, authentication requests, or Windows credentials.', schema(), () => duoDesktop().desktopStatus(), { effect: 'local-read' }),
+  // The tool NAME is a wire identifier: it is an audited action id, it appears in
+  // the reviewed FRA capability manifest, and the handoff subsystem keys on it.
+  // Renaming it is a coordinated change across those surfaces, not a wording fix,
+  // so the description is what carries the meaning here.
+  define('duo.institution_login', 'Refresh the dedicated institutional Google Workspace browser session using the fixed registered account configured for this installation. With duoDesktopApproval exact_owner_requested, the live fixed Duo handoff may invoke only the single visible enabled Approve control in the signed Duo Desktop application; there is no standalone or general MFA approval tool. Remembered-device and Duo Mobile/other provider methods remain available as fallbacks. No password, MFA value, cookie, URL, or device identifier is returned.', schema({
+    account: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$', description: 'The Duo account alias configured for this installation. No default identity is inferred.' },
+    timeoutSeconds: integer('Sign-in timeout from 60 through 900 seconds; default 300.', { minimum: 60, maximum: 900 }),
+    duoDesktopApproval: choice(['owner_presence', 'exact_owner_requested'], 'owner_presence leaves the provider prompt untouched; exact_owner_requested may invoke only the exact visible Duo Desktop Approve control after the fixed institutional sign-in flow observes its matching live handoff.')
+  }, ['account']), args => duoDesktop().institutionLogin(args), {
+    effect: 'external-write', destructiveHint: false, idempotentHint: false, approvalEligible: false
+  }),
   define('system.doctor', 'Check local prerequisites and see which credentials this installation already holds. It names each vault key as present or missing -- and distinguishes an unreadable vault from a genuinely empty one -- without revealing any secret value. Check here before asking the owner for a credential.', schema(), () => system.doctor(), { effect: 'local-read' }),
   // WHY THESE TWO DESCRIPTIONS LEAD WITH PURPOSE AND NAME THE WRONG STORES.
   //
@@ -1768,7 +1811,7 @@ const CORE_TOOLS = [
     acknowledgement: schema({
       formId: choice(['payment_card_default'], 'The guided payment-card form identifier.'),
       // Version 2 of the form contract, five fields: the security-code field
-      // was removed (product rule Q-O4; PCI DSS 3.2). These bounds mirror
+      // was removed (owner ruling Q-O4; PCI DSS 3.2). These bounds mirror
       // src/lib/owner-form-contract.js and move with it.
       contractVersion: integer('Owner form contract version.', { minimum: 2, maximum: 2 }),
       fieldIds: { type: 'array', minItems: 5, maxItems: 5, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } },
@@ -1807,7 +1850,7 @@ const CORE_TOOLS = [
     return {
       paymentMethod: 'default_card',
       // `null` when the vault could not be read. An unreadable vault reported
-      // as `false` is the product telling the owner they have no card on file
+      // as `false` is the product telling the owner he has no card on file
       // because of a permissions error, which is worse than saying it does not
       // know. `checked` is the field a caller must branch on before believing
       // `present`.
@@ -1821,7 +1864,7 @@ const CORE_TOOLS = [
   }, { effect: 'local-read' }),
   define('system.kill_switch_status', 'Return the current local kill-switch state.', schema(), () => killSwitch.status(), { effect: 'local-read' }),
   define('system.kill_switch_activate', 'Activate the local kill switch, blocking outward operations.', schema(), (args, context) => killSwitch.activate(context), { effect: 'local-write', idempotentHint: true }),
-  define('audit.tail', 'Read the most recent sanitized audit entries.', schema({ limit: integer('1 through 200 entries, default 20.', { minimum: 1, maximum: 200 }) }), args => audit.tail(args.limit), { effect: 'local-read' }),
+  define('audit.tail', 'Read the most recent sanitized audit entries.', schema({ limit: integer('1 through 200 entries, default 20.', { minimum: 1, maximum: 200 }) }), args => audit.tail(args.limit).map(event => audit.withholdCommandText(event)), { effect: 'local-read' }),
   define('audit.verify', 'Verify canonical audit sequence, hash chain, Ed25519 signatures, sink cursors, projections, and emergency backlog. Optionally also verify the archived cold-storage segment against the signed archive boundary.', schema({ includeArchive: bool('Also verify audit-archive.jsonl and confirm its tail matches the signed archive boundary. Off by default; walks the whole archive file, which grows unbounded and currently costs tens of seconds.') }), args => audit.verify({ includeArchive: args.includeArchive === true }), { effect: 'local-read' }),
   define('audit.status', 'Report canonical audit head, signing keys, projection backlog, and emergency-spool health.', schema(), () => audit.status(), { effect: 'local-read' }),
   define('audit.flush', 'Retry or rebuild derived audit projections from the signed canonical ledger.', schema({ force: bool('Ignore projection retry backoff and reconcile immediately.') }), args => audit.flush({ force: Boolean(args.force) }), { effect: 'local-write', destructiveHint: false, idempotentHint: true }),
@@ -2199,15 +2242,15 @@ const CORE_TOOLS = [
     id: { type: 'string', minLength: 2, maxLength: 12, pattern: '^T[1-9]\\d{0,9}$', description: 'The task being reviewed.' },
     reviewId: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$', description: 'Stable identity for this review. Use a new identity for a separate review.' },
     outcome: choice(['passed', 'failed'], 'The observed review outcome.'),
-    reason: { type: 'string', minLength: 1, maxLength: 300, description: 'Concrete evidence supporting the review outcome.' }
+    reason: { type: 'string', minLength: 1, maxLength: 300, description: 'Concrete evidence supporting the review outcome. Required: a verdict with no evidence is refused.' }
   }, ['actor', 'id', 'reviewId', 'outcome', 'reason']), args => minorLedgerAgentControl.review(args), {
     effect: 'local-write', destructiveHint: false, idempotentHint: true, openWorldHint: false
   }),
-  define('t_ledger.progress', 'Record concrete progress or an external blocker on an unfinished one-shot task. Use open after its blocker clears, in-progress while working, or blocked-external when owner action is required. Terminal tasks stay terminal; repeated identical checkpoints do not count as new progress.', schema({
+  define('t_ledger.progress', 'Record concrete progress or an external blocker on an unfinished one-shot task. Use open after its blocker clears, in-progress while working, or blocked-external when owner action is required. Terminal tasks stay terminal; repeated identical checkpoints do not count as new progress. A checkpoint is not a review: only t_ledger.review raises the task\'s failed-review count, so send a passed or failed verdict there. Prose here that states a verdict is flagged in the receipt, or refused where the Ledger is set to refuse it.', schema({
     actor: ledgerActor,
     id: { type: 'string', minLength: 2, maxLength: 12, pattern: '^T[1-9]\\d{0,9}$' },
     status: choice(['open', 'in-progress', 'blocked-external'], 'The observed task condition.'),
-    reason: { type: 'string', minLength: 1, maxLength: 300, description: 'Concrete new progress, evidence or the unresolved blocker.' },
+    reason: { type: 'string', minLength: 1, maxLength: 300, description: 'Concrete new progress, evidence or the unresolved blocker. Not a pass/fail verdict -- that is t_ledger.review.' },
     waitingFor: {
       type: 'array', minItems: 0, maxItems: 16, uniqueItems: true,
       description: 'Optional task IDs that must be done before this task is scheduled. Omit to preserve the current wait; pass [] to clear it.',
@@ -2237,7 +2280,7 @@ const CORE_TOOLS = [
   }, ['actor', 'scope', 'words']), args => minorLedgerAgentControl.fileAsk(args), {
     effect: 'local-write', destructiveHint: false, idempotentHint: false, openWorldHint: false
   }),
-  // L3d -- asks and purchases are agent-closable (the owner's ruling). Same
+  // L3d -- "asks and purchases: agent closable" (the owner's ruling). Same
   // gate class (minor-ledger-agent-gate.js), same audit intent, same
   // transport-bound actor, same secret-shape refusal on free-text words as
   // a_ledger.file's. Choosing between a_ledger.answer/decline and system.ask:
@@ -2358,8 +2401,8 @@ const CORE_TOOLS = [
     effect: 'local-read', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false
   }),
   // host.* is the broad machine-control surface the owner authorizes directly
-  // (R117) for an agent running on their own paired second machine.
-  // Deliberately wider than repo.*: anywhere in their profile tree, plus real
+  // (R117) for an agent running on his own paired second machine.
+  // Deliberately wider than repo.*: anywhere in his profile tree, plus real
   // command execution. Deliberately NOT elevated, NOT a credential reader,
   // and every entry point is kill-switch gated and audited before it acts.
   // See src/lib/providers/host-control.js for the full boundary rationale.
@@ -2589,8 +2632,8 @@ const CORE_TOOLS = [
     query: str('Natural-language search query.'),
     k: integer('Number of results from 1 through 50, default 8.', { minimum: 1, maximum: 50 }),
     root: str('Optional directory scope to restrict results to a previously indexed root.')
-  }, ['query']), args => search().query(args), { effect: 'local-read' }),
-  define('search.status', 'Report the semantic index: indexed file/chunk counts, embedders used, roots, and whether local Ollama embeddings are available.', schema(), () => search().status(), { effect: 'local-read' }),
+  }, ['query']), (args, context) => search().query(args, { workspaceRoots: context && context.workspaceRoots }), { effect: 'local-read' }),
+  define('search.status', 'Report the semantic index: indexed file/chunk counts, embedders used, roots, and whether local Ollama embeddings are available.', schema(), (args, context) => search().status({ workspaceRoots: context && context.workspaceRoots }), { effect: 'local-read' }),
 
   // Semantic code intelligence (R47). Prefer these over ripgrep or full file
   // reads whenever a semantic answer exists: LSP, then AST, then git history,
@@ -2789,7 +2832,7 @@ const CORE_TOOLS = [
   // so the pattern already rejected anything past 32 regardless of the stated
   // ceiling. No caller-visible behavior changes; only the stated bound now
   // matches what the field actually accepts.
-  define('personal_calendar.capture', 'Capture an owner statement such as "dentist Wednesday" into the separate local Personal Calendar inbox. It does not guess missing timing or create a Google event; confirm the details before acting.', schema({
+  define('personal_calendar.capture', 'Capture an owner statement such as "quiz Wednesday" into the separate local Personal Calendar inbox. It does not guess missing timing or create a Google event; confirm the details before acting.', schema({
     text: { type: 'string', minLength: 1, maxLength: 2000, description: 'Owner statement to retain as an untrusted, local-only commitment candidate.' },
     dueAt: { type: 'string', minLength: 20, maxLength: 32, pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})$', description: 'Optional explicit RFC3339 due timestamp with timezone.' },
     timezone: { type: 'string', maxLength: 80, description: 'Optional IANA timezone label retained for the owner UI.' },
@@ -2897,12 +2940,12 @@ const CORE_TOOLS = [
   }),
   define('agent.spawn', 'Validate and expand one CONTRACT/1 form, then launch a real bounded subagent lane in this workspace. Malformed contracts are refused before provider resolution, launch recording, or process spawn.', schema({
     contract: { type: 'string', minLength: 1, maxLength: 12000, description: require('../../tools/agent-contract').CONTRACT_GUIDE },
-    tier: choice(['astra', 'luna', 'terra', 'sol', 'claude-fable', 'claude-sonnet', 'claude-opus', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-fable-5', 'claude-haiku-4-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'local'], 'Provider/model lane selection, not a permission level. Codex: astra, luna, terra, sol. Claude: claude-fable, claude-sonnet, claude-opus, claude-opus-5-5, claude-opus-5, claude-sonnet-5, claude-fable-5-1, claude-fable-5, claude-haiku-4-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-sonnet-4-6. claude-fable, claude-sonnet and claude-opus run whichever model the installed Claude CLI currently serves for that name; every other Claude tier pins the one model its name spells. local selects the configured local model. Use one of these exact tier values; codex and claude are provider names, not accepted tier values. Availability is checked at launch; this enum does not promise an installed or signed-in provider.'),
+    tier: choice(['astra', 'gpt-6.1-sol', 'luna', 'gpt-6-luna', 'terra', 'sol', 'claude-fable', 'claude-sonnet', 'claude-opus', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-fable-5', 'claude-haiku-4-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'local'], 'Provider/model lane selection, not a permission level. Codex: astra, luna (GPT-5.6-Luna), terra, sol; gpt-6-luna and gpt-6.1-sol are tree-only. Claude: claude-fable, claude-sonnet, claude-opus, claude-sonnet-5-5, claude-haiku-5-5, claude-opus-5-5, claude-opus-5, claude-sonnet-5, claude-fable-5-1, claude-fable-5, claude-haiku-4-5, claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-sonnet-4-6. claude-fable, claude-sonnet and claude-opus run whichever model the installed Claude CLI currently serves for that name; every other Claude tier pins the one model its name spells. local selects the configured local model. Use one of these exact tier values; codex and claude are provider names, not accepted tier values. Availability is checked at launch; this enum does not promise an installed or signed-in provider.'),
     turns: integer('Detached lanes only. Maximum agent turns from 1 through 100000; default 1. A circle on the tree has no turn cap: pass this with surface "tree" and the spawn still goes ahead, with the name returned in notApplied.', { minimum: 1, maximum: 100000 }),
     timeoutSeconds: integer('Detached lanes only. Hard lane lifetime from 60 through 86400 seconds; default 3600. A circle on the tree has no timeout cap: pass this with surface "tree" and the spawn still goes ahead, with the name returned in notApplied.', { minimum: 60, maximum: 86400 }),
-    effort: choice(AGENT_SPAWN_EFFORT_VALUES, 'Tree surface only. How hard the new assistant thinks. Codex tiers (astra, luna, terra, sol) take low, medium, high, xhigh, max and ultra, except luna, which has no ultra. Claude tiers take low, medium, high, xhigh, max and ultra -- ultra is applied as Claude\'s own top depth, max -- except where the model offers fewer: claude-opus-4-6 and claude-sonnet-4-6 have no xhigh, and claude-haiku-4-5 has no reasoning-effort setting at all, so a depth it cannot run is refused by name. The local tier has no reasoning-effort setting and refuses one by name rather than dropping it. Omit this to take the tier\'s own default. The value that will actually run is echoed back on the reply as applied.effort.'),
+    effort: choice(AGENT_SPAWN_EFFORT_VALUES, 'Tree surface only. How hard the new assistant thinks. Codex tiers (astra, gpt-6.1-sol, luna, gpt-6-luna, terra, sol) take low, medium, high, xhigh, max and ultra, except luna and gpt-6-luna, which have no ultra. Claude tiers take low, medium, high, xhigh, max and ultra -- ultra is applied as Claude\'s own top depth, max -- except where the model offers fewer: claude-opus-4-6 and claude-sonnet-4-6 have no xhigh, and claude-haiku-4-5 has no reasoning-effort setting at all, so a depth it cannot run is refused by name. The local tier has no reasoning-effort setting and refuses one by name rather than dropping it. Omit this to take the tier\'s own default. The value that will actually run is echoed back on the reply as applied.effort.'),
     provider: { type: 'string', minLength: 1, maxLength: 32, description: 'Tree surface only, and a confirmation rather than a choice: the tier already fixes the provider, so this is accepted when it agrees with the tier and refused by name when it contradicts it. Echoed back on the reply as applied.provider.' },
-    model: { type: 'string', minLength: 1, maxLength: 128, description: 'Tree surface only, and a confirmation rather than a choice: the tier already fixes the model, so this is accepted when it names that tier\'s own model and refused by name when it contradicts it. Echoed back on the reply as applied.model.' },
+    model: { type: 'string', minLength: 1, maxLength: 2048, description: 'Tree surface only. Exact model ID on the tier\'s authorized provider and client route. Known models retain their declared class and effort limits; unknown IDs are passed to the provider, which decides availability. Echoed byte-exact on the reply as applied.model.' },
     workspaceRoot: { type: 'string', minLength: 1, maxLength: 4096, description: 'Optional exact recorded workspace root; defaults to the first verified workspace root in the machine record.' },
     research: {
       ...schema({
@@ -2926,7 +2969,7 @@ const CORE_TOOLS = [
   }),
   define('agent.set_model', "Choose a model on a managed slot's current provider. Uses the same applied/pending admission as the user's model control; use agent.set_provider to change providers. Only descendants within the caller's managed scope are eligible. The same slot identity, draft, images, queue and accepted/unknown delivery holds are preserved. Returns applied, pending or a named refusal.", schema({
     nodeId: { type: 'string', minLength: 1, maxLength: 200, description: 'Managed descendant slot to configure.' },
-    model: { type: 'string', minLength: 1, maxLength: 128, description: 'Requested model choice from the available choices for this slot.' },
+    model: { type: 'string', minLength: 1, maxLength: 2048, description: 'Exact requested model ID on the slot\'s authorized route; the provider decides availability.' },
     expectedSessionId: { type: 'string', minLength: 1, maxLength: 200, description: 'Optional last observed session; refuses a changed slot.' }
   }, ['nodeId', 'model']), (args, context) => treeConfiguration('model', args, context), {
     effect: 'local-write', destructiveHint: false, idempotentHint: false, approvalEligible: false, openWorldHint: false
@@ -2968,8 +3011,8 @@ const CORE_TOOLS = [
   }),
   /* THE LIFECYCLE OF A CIRCLE BELOW THIS ONE.
    *
-   * Product requirement: agents must be able to delete, start and
-   * restart the agents under them, and message each one. agent.spawn and
+   * Owner, 2026-09-03: "THE AGENTS NEED TO BE ABLE TO DELETE AND START AND
+   * RESTART AGENTS UNDER THEM AND BE ABLE TO MESSAGE EACH". agent.spawn and
    * agent_comms already covered start and message. These three cover the rest,
    * and every one of them is an errand to the application: the tree store owns
    * the facts a decision turns on, so nothing here is decided by the caller.
@@ -3253,7 +3296,7 @@ const CORE_TOOLS = [
   define('gcloud.project_create', 'Create a Google Cloud project through gcloud.', schema({ projectId: str('Globally unique Google Cloud project ID.'), name: str('Optional friendly project name.') }, ['projectId']), args => infrastructure().gcloudProjectCreate(args), { provider: 'googleCloud', effect: 'external-write', destructiveHint: false }),
   define('gcloud.services_enable', 'Enable explicit Google APIs in a Google Cloud project.', schema({ projectId: str('Google Cloud project ID.'), services: strings('Google API service names ending in .googleapis.com.') }, ['projectId', 'services']), args => infrastructure().gcloudEnableServices(args), { provider: 'googleCloud', effect: 'external-write', destructiveHint: false, idempotentHint: true }),
   define('gcloud.service_account_create', 'Create a Google Cloud service account.', schema({ projectId: str('Google Cloud project ID.'), serviceAccountId: str('Service-account local ID.'), displayName: str('Optional display name.') }, ['projectId', 'serviceAccountId']), args => infrastructure().gcloudServiceAccountCreate(args), { provider: 'googleCloud', effect: 'external-write', destructiveHint: false }),
-  define('gcloud.service_account_key_to_vault', 'Create a Google service-account key and store it directly in the encrypted local vault; the private key is never returned.', schema({ projectId: str('Google Cloud project ID.'), serviceAccountId: str('Service-account local ID.'), vaultKey: str('Encrypted vault key, default gcp_service_account_key.') }, ['projectId', 'serviceAccountId']), args => infrastructure().gcloudServiceAccountKeyToVault(args), { provider: 'googleCloud', effect: 'external-write' }),
+  define('gcloud.service_account_key_to_vault', 'Create a Google service-account key and store it directly in the encrypted local vault; the private key is never returned.', schema({ projectId: str('Google Cloud project ID.'), serviceAccountId: str('Service-account local ID.'), vaultKey: gcpServiceAccountVaultKey }, ['projectId', 'serviceAccountId']), args => infrastructure().gcloudServiceAccountKeyToVault(args), { provider: 'googleCloud', effect: 'external-write' }),
   define('terraform.init', 'Initialize Terraform in a local infrastructure directory.', schema({ cwd: str('Terraform directory.'), upgrade: bool('Upgrade provider plugins.') }), args => infrastructure().terraformInit(args), { provider: 'googleCloud', effect: 'external-write', destructiveHint: false, idempotentHint: true, approvalEligible: false }),
   define('terraform.validate', 'Validate initialized Terraform configuration without changing infrastructure.', schema({ cwd: str('Terraform directory.') }), args => infrastructure().terraformValidate(args), { effect: 'local-read', provider: 'googleCloud' }),
   define('terraform.plan', 'Create a saved Terraform plan in a local infrastructure directory.', schema({ cwd: str('Terraform directory.'), planFile: str('Simple local plan filename.') }), args => infrastructure().terraformPlan(args), { provider: 'googleCloud', effect: 'external-write', destructiveHint: false, idempotentHint: true, approvalEligible: false }),
@@ -3283,9 +3326,10 @@ const CORE_TOOLS = [
     branch: str('Git branch the cloud task runs against. It must already exist on the remote.'),
     prompt: str('The person\'s task words. The cloud launch seam wraps them in a repository-and-target contract; callers must not pre-build or bypass that contract.'),
     target: str('Concrete file, directory, component, or repository-root target selected by the node action. It is placed on the first line sent to Codex Cloud. Older callers that omit it are explicitly scoped to the bound repository root.'),
-    repository: str('The "owner/name" source repository the target environment must be bound to. Required: the launch is verified against the repository the provider reports for the environment and refuses (nothing sent) if it is absent, unreadable, or different, so a task is never routed into an unrelated environment.'),
+    repository: str('The "owner/name" source repository the target environment must be bound to. Required: a provider-reported repository mismatch refuses before dispatch. A person-entered environment ID can launch with an explicitly unconfirmed repository declaration; its receipt and prompt state that limitation.'),
+    environmentSource: choice(['person-entered'], 'Set person-entered only when the person supplied the environment ID. The official CLI launches it; if the provider cannot confirm its repository, the receipt explicitly records an unconfirmed declaration. A real provider mismatch still refuses.'),
     attempts: integer('Assistant attempts (best-of-N) from 1 through 10, default 1.', { minimum: 1, maximum: 10 }),
-    account: str('Optional exact account name to prefer; by default the highest-priority account that can serve is chosen.')
+    account: str('The account explicitly chosen for this agent, or its existing manual account choice. Usage limits never choose another account.')
   }, ['environment', 'branch', 'prompt', 'repository']), args => require('./cloud-agent/codex-cloud-launch').launchCloudTask(args), {
     provider: 'codexCloud', effect: 'external-write', destructiveHint: false, idempotentHint: false
   }),
@@ -3322,7 +3366,7 @@ const CORE_TOOLS = [
   // -- including this product's own interface -- could only pass a name it had
   // been told out of band. It is external-read because it asks the provider for
   // each account's real allowance rather than reading a local file.
-  define('cloud.account_list', 'List the configured Codex accounts with each one\'s provider-reported allowance and whether it can serve a launch right now, the account an unspecified launch would use, and the Codex Cloud environments those accounts are authorized for with the repository each one is bound to. Reports account names, usage and environment bindings only; no e-mail address and no credential value is returned, and an account that cannot be checked is reported unknown rather than guessed spent, which marks the environment reading incomplete.', schema(),
+  define('cloud.account_list', 'List registered Codex accounts, their allowance, and the existing manual account choice. The official CLI retains sign-in custody. Its environment catalog is unavailable here: use the official Cloud picker or an environment ID entered by the person. Unknown sign-in or repository confirmation remains unknown; usage limits never select another account.', schema(),
     args => require('./cloud-agent/codex-cloud-launch').listCloudAccounts(args), {
       provider: 'codexCloud', effect: 'external-read', readOnlyHint: true
     }),
@@ -3342,7 +3386,6 @@ const CORE_TOOLS = [
     return Object.freeze({
       account: receipt.name,
       provider: receipt.provider,
-      priority: receipt.priority,
       registered: true,
       signInRequired: true
     });
@@ -3363,15 +3406,20 @@ const CORE_TOOLS = [
       registered: false,
       remainingAccountCount: receipt.remainingAccountCount,
       profilePreserved: receipt.homePreserved === true,
-      credentialDestroyed: receipt.credentialDestroyed === true
+      credentialDestroyed: receipt.credentialDestroyed === true,
+      // Present only when a sign-in was destroyed: whether every confined copy
+      // of it under agent-home went too (registry-write revokeConfinedCopiesOf).
+      ...(typeof receipt.confinedCopiesRevoked === 'boolean'
+        ? { confinedCopiesRevoked: receipt.confinedCopiesRevoked } : {})
     });
   }, {
     effect: 'local-write', destructiveHint: true, idempotentHint: false, approvalEligible: true, openWorldHint: false
   }),
 
   // THE FIVE telegram.* TOOLS WERE REMOVED 2026-08-23, and system.ask_remote
-  // above went with them. Telegram left the product entirely, because the
-  // product now ships its own mobile app. They were telegram.send, telegram.poll, telegram.worker_run,
+  // above went with them. Telegram left the product entirely (owner ruling:
+  // "you can rip out telegram", because the product now ships its own mobile
+  // app). They were telegram.send, telegram.poll, telegram.worker_run,
   // telegram.command.read and telegram.command.reply; every one of them called
   // src/lib/providers/messaging.js, which was Telegram-only once Discord left
   // and is deleted. Recorded here rather than silently absent: a tool id that
@@ -3460,7 +3508,7 @@ const CORE_TOOLS = [
     // The spend above is real and already committed the moment recordSpend
     // returns; a ledger write failing after that must never be read by the
     // caller as "nothing was charged" (LEDGER-KINDS-INTERFACE-20260907.md,
-    // TOOLS ruling: "the ledger mirror never refuses or delays a
+    // TOOLS ruling 05:12Z: "the ledger mirror never refuses or delays a
     // spend; a failed mirror is named in the tool result ... and audited,
     // never swallowed silently").
     let ledgerMirror;
@@ -3500,7 +3548,7 @@ const CORE_TOOLS = [
             minItems: 1,
             maxItems: 8,
             items: { type: 'string', pattern: '^R\\d{1,4}(?:\\.\\d{1,3})?$' },
-            description: 'Ids of the owner requests this line comes from, as recorded in the owner-request ledger (for example R241 or R52.1). Optional, and never guess: a line without it is shown to the owner stamped "AGENT-PROPOSED - not traceable to your words", which is the honest label for a line you chose rather than one they asked for.'
+            description: 'Ids of the owner requests this line comes from, as recorded in the owner-request ledger (for example R241 or R52.1). Optional, and never guess: a line without it is shown to the owner stamped "AGENT-PROPOSED - not traceable to your words", which is the honest label for a line you chose rather than one he asked for.'
           }
         },
         required: ['id', 'description', 'amountCents', 'currency', 'merchant', 'purpose']
@@ -3572,10 +3620,7 @@ const CORE_TOOLS = [
   define('billing.webhook_verify', 'Verify a raw Stripe webhook body with a vault-sourced signing secret before parsing it.', schema({
     payload: { type: 'string', maxLength: 1048576, description: 'Exact raw UTF-8 request body, before JSON parsing.' },
     signatureHeader: { type: 'string', minLength: 1, maxLength: 4096, description: 'Exact Stripe-Signature header.' },
-    vaultKey: {
-      type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9_.-]+$',
-      description: 'Vault key containing the Stripe webhook signing secret.'
-    },
+    vaultKey: stripeWebhookVaultKey,
     toleranceSeconds: integer('Accepted timestamp skew from 0 through 3600 seconds; default 300.', { minimum: 0, maximum: 3600 })
   }, ['payload', 'signatureHeader', 'vaultKey']), args => billing().webhookVerify(args), { effect: 'local-read' })
 
@@ -3633,6 +3678,7 @@ const P13_SEMANTIC_OVERRIDES = Object.freeze({
   'payment_method.card_register': Object.freeze({ policyKind: 'secret-access', targetKind: 'secret', generatedCode: false }),
   'gcloud.service_account_key_to_vault': Object.freeze({ policyKind: 'secret-access', targetKind: 'secret', generatedCode: false }),
   'browser.start': Object.freeze({ policyKind: 'authenticated-browser', targetKind: 'browser-session', generatedCode: false }),
+  'duo.institution_login': Object.freeze({ policyKind: 'authenticated-browser', targetKind: 'browser-session', generatedCode: false }),
   'sandbox.exec': Object.freeze({ policyKind: 'generated-code-execution', targetKind: 'local', generatedCode: true }),
   'agent.spawn': Object.freeze({ policyKind: 'recursive-delegation', targetKind: 'agent', generatedCode: false }),
   'agent.stop': Object.freeze({ policyKind: 'recursive-delegation', targetKind: 'agent', generatedCode: false }),
@@ -3966,15 +4012,34 @@ function tierNarrowed(tools, permissionSession) {
 // refuses everything. Enumeration is the advertisement, not the gate.
 function registeredTools({ allowedToolNames, permissionSession, agentRole } = {}) {
   const exactNames = exactToolNameSet(allowedToolNames);
-  let tools;
-  if (exactNames) {
-    tools = TOOL_REGISTRY.filter(entry => exactNames.has(entry.name));
-  } else {
-    const allowlist = parseToolAllowlist();
-    tools = allowlist
-      ? TOOL_REGISTRY.filter(entry => allowlist.some(selector => selectorMatchesTool(selector, entry.name)))
-      : TOOL_REGISTRY;
-  }
+  /* THE TWO NAME FILTERS COMPOSE. THEY USED TO REPLACE ONE ANOTHER.
+   *
+   * This read `if (exactNames) { ... } else { parseToolAllowlist() ... }`, so a
+   * request-bound profile did not narrow the operator's process-global
+   * TOOLSENABLED_TOOL_ALLOWLIST -- it REPLACED it, and could name tools that
+   * filter had removed. MEASURED 2026-09-25 against this file: with
+   * TOOLSENABLED_TOOL_ALLOWLIST='ledger.*', registeredTools({}) answers one
+   * tool and refuses host.exec; registeredTools({ allowedToolNames:
+   * ['host.exec'] }) answers it, and assertToolRegistered('host.exec') -- the
+   * gate executeToolWithinPolicy() uses -- stops refusing.
+   *
+   * That env var is not decoration. src/remote-agent-bridge.js start() sets it
+   * to the remote profile before the listener binds, and
+   * setup/machine-record.js stamps the recorded level's narrowed list into every
+   * generated .mcp.json entry. Both are narrowings a request-bound profile could
+   * step around. I found no caller that does today -- in this engine only the
+   * FRA bridge supplies a request-bound profile, and nothing sets the env var in
+   * that process -- so this is a latent fail-open rather than a live hole, which
+   * is exactly the shape the note below this function warns will be found again
+   * by the next transport.
+   *
+   * Composing is strictly narrowing in both directions, and a no-op wherever the
+   * env var is unset, which is every ordinary install. */
+  const allowlist = parseToolAllowlist();
+  let tools = allowlist
+    ? TOOL_REGISTRY.filter(entry => allowlist.some(selector => selectorMatchesTool(selector, entry.name)))
+    : TOOL_REGISTRY;
+  if (exactNames) tools = tools.filter(entry => exactNames.has(entry.name));
   {
     const names = new Set(require('./role-functions').narrowFunctionNames(tools.map(entry => entry.name), agentRole));
     tools = tools.filter(entry => names.has(entry.name));
@@ -4428,6 +4493,39 @@ function resolveActiveRequestId(context) {
   return requestContext.getActiveRequest();
 }
 
+// A requestId that does not resolve to a known ledger entry (the bare
+// JSON-RPC id that src/mcp-server.js threads through native calls, a scheduler
+// correlation id, or a caller-chosen tracking id) is not itself evidence that
+// owner gates were checked. Artifact-bearing calls therefore fail closed with
+// EGRESS_GATES_REQUIRED unless they are an explicitly identified scheduler
+// dispatch. Calls with no local artifact remain observable through the
+// mcp.tool.outward_ungated audit signal because they may be read/navigation
+// operations with no owner-instruction gate to bind.
+function authorizeExactDuoLiveProof(entry, requestId, executionArguments, invocationId) {
+  // The click-discovery gate is a postcondition: requiring it before the one
+  // live smoke would make the requested proof impossible. This is not a generic
+  // gate bypass. It applies only to the one fixed institutional-login tool, only
+  // in its explicit exact-agent mode, only when the sole unmet owner gate is that
+  // proof sentence, and only after all other gates have evidence.
+  if (!entry || entry.name !== 'duo.institution_login') return false;
+  let gates;
+  // A normal gate document can establish that this narrowly-scoped bypass is
+  // inapplicable. A failed read cannot, so let that failure remain observable
+  // rather than replacing it with the same `false` answer.
+  gates = egressPreflight.readGates(requestId);
+  if (!duoDesktop().allowsExactApprovalLiveProof({ requestId, gates, input: executionArguments })) return false;
+  const recorded = audit.requireRecord('mcp.tool.duo_live_proof_authorized', entry.name, {
+    invocationId,
+    requestId: String(requestId).slice(0, 120),
+    mode: 'exact_owner_requested',
+    reason: 'sole-live-proof-postcondition'
+  });
+  if (!recorded || recorded.durable !== true) {
+    throw new Error('Durable audit evidence for the exact Duo live proof was not recorded.');
+  }
+  return true;
+}
+
 // The configured model floor is enforced at the same chokepoint as the egress
 // rules. It refuses at the moment a tool call actually selects a model, on
 // every tool, including
@@ -4480,14 +4578,6 @@ function assertActionGuardsFor(entry, executionArguments, invocationId) {
   }
 }
 
-// A requestId that does not resolve to a known ledger entry (the bare
-// JSON-RPC id that src/mcp-server.js threads through native calls, a scheduler
-// correlation id, or a caller-chosen tracking id) is not itself evidence that
-// owner gates were checked. Artifact-bearing calls therefore fail closed with
-// EGRESS_GATES_REQUIRED unless they are an explicitly identified scheduler
-// dispatch. Calls with no local artifact remain observable through the
-// mcp.tool.outward_ungated audit signal because they may be read/navigation
-// operations with no owner-instruction gate to bind.
 function assertOutwardGate(entry, context, invocationId, executionArguments = {}, acceptance = dependencyAcceptance) {
   try {
     acceptance.assertEventAllowed({ event: 'third-party-interaction' });
@@ -4509,14 +4599,23 @@ function assertOutwardGate(entry, context, invocationId, executionArguments = {}
   const artifactBearing = findOutwardFileFields(executionArguments).length > 0;
   const schedulerOwned = schedulerApprovalBypass(context, loadPolicy(), entry, executionArguments);
   const requireBoundRequest = artifactBearing && !schedulerOwned;
+  // The exact Duo actuator is a local UI mutation with MFA consequence, even
+  // though its fixed browser navigation carries no file argument. It must
+  // therefore be ledger-bound; it never inherits the ordinary non-artifact
+  // navigation fail-open observation path below.
+  const exactDuoActuation = Boolean(entry && entry.name === 'duo.institution_login'
+    && executionArguments && executionArguments.duoDesktopApproval === 'exact_owner_requested');
   if (!requestId) {
-    if (requireBoundRequest) {
+    if (requireBoundRequest || exactDuoActuation) {
       try {
         operationAudit.record('mcp.tool.outward_blocked_ungated', entry.name, {
-          invocationId, reason: 'artifact-bearing-call-without-active-request'
+          invocationId, reason: exactDuoActuation
+            ? 'exact-duo-actuation-without-owner-request'
+            : 'artifact-bearing-call-without-active-request'
         });
       } catch { /* preserve the security decision even if the note cannot land */ }
-      throw new EgressGatesRequiredError(entry.name, invocationId, 'no-active-request');
+      throw new EgressGatesRequiredError(entry.name, invocationId,
+        exactDuoActuation ? 'exact-duo-actuation-requires-owner-request' : 'no-active-request');
     }
     try {
       operationAudit.record('mcp.tool.outward_ungated', entry.name, {
@@ -4528,15 +4627,21 @@ function assertOutwardGate(entry, context, invocationId, executionArguments = {}
   try {
     egressPreflight.assertGatesMet(requestId);
   } catch (error) {
-    if (error && error.code === 'EGRESS_GATES_UNMET') throw error;
-    if (requireBoundRequest) {
+    if (error && error.code === 'EGRESS_GATES_UNMET') {
+      if (authorizeExactDuoLiveProof(entry, requestId, executionArguments, invocationId)) return;
+      throw error;
+    }
+    if (requireBoundRequest || exactDuoActuation) {
       try {
         operationAudit.record('mcp.tool.outward_blocked_ungated', entry.name, {
-          invocationId, reason: 'requestId-not-a-known-ledger-request',
+          invocationId, reason: exactDuoActuation
+            ? 'exact-duo-actuation-request-not-in-owner-ledger'
+            : 'requestId-not-a-known-ledger-request',
           requestId: String(requestId).slice(0, 120)
         });
       } catch { /* preserve the security decision even if the note cannot land */ }
-      throw new EgressGatesRequiredError(entry.name, invocationId, 'unknown-request');
+      throw new EgressGatesRequiredError(entry.name, invocationId,
+        exactDuoActuation ? 'exact-duo-actuation-requires-owner-request' : 'unknown-request');
     }
     // Unknown/unresolvable ledger request for this id: not a proven unmet
     // gate, so dispatch still proceeds -- but this is recorded too, not
@@ -4891,6 +4996,9 @@ async function executeToolWithinPolicy(name, args = {}, context = {}) {
       'agent_comms.acknowledge',
       'agent_comms.send_local',
       'agent_comms.local_roster',
+      // 1.0.50 review L5: both read the indexed roots, so both need the
+      // session's narrowed workspace ceiling (context.workspaceRoots).
+      'search.query', 'search.status',
       't_ledger.assign'].includes(entry.name);
     /* THE OWNER'S PER-CREDENTIAL SWITCHES ARE BOUND AROUND THE HANDLER, not
        inside any one provider. Everything the handler reaches -- every
@@ -4922,7 +5030,15 @@ async function executeToolWithinPolicy(name, args = {}, context = {}) {
           } finally { fileContexts.endFileToolInvocation(invocation); }
         })();
       }
-      return contextAwareHandler ? entry.handler(executionArguments, context) : entry.handler(executionArguments);
+      if (contextAwareHandler) return entry.handler(executionArguments, context);
+      // A PACK TOOL NEVER GETS THE CONTEXT, BUT ONE THAT DECLARED takesAbortSignal
+      // GETS THE CALL'S ABORT SIGNAL. That is how the list above said a pack should
+      // ask ("declare it on the definition"), and the one thing a plugin tool needs:
+      // without it a stopped session, Erase or quit left the plugin's child
+      // program running (src/lib/plugin-host/tool-bridge.js). Only the signal
+      // crosses; the session, principal and role stay with the core tools.
+      if (entry.takesAbortSignal) return entry.handler(executionArguments, Object.freeze({ signal: context.signal }));
+      return entry.handler(executionArguments);
     }), credentialPromptRequestMetadata(entry, context)));
     await auditInvocation('succeeded', entry, startedAt, context, undefined, invocationId, profileHash);
     return value;
@@ -5114,7 +5230,7 @@ const exportedRegistry = {
   createAgentToolExecutor, isMediatedAgentToolExecutor,
   assertToolRegistered, validateRegistry, assertApprovalPolicyCompatible, routeBrowserStart,
   p13PolicyEnforcementEnabled, requireP13Decision,
-  findOutwardFileFields, assertEgressPreflight, resolveActiveRequestId, assertOutwardGate,
+  findOutwardFileFields, assertEgressPreflight, resolveActiveRequestId, assertOutwardGate, authorizeExactDuoLiveProof,
   AgentContractRefusal, validatedAgentContract, spawnSubagent,
   resolveTreeModelChoice,
   WorkspaceRootsUnavailableError, confinedWorkspaceRoots,

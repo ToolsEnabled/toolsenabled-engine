@@ -1,6 +1,7 @@
 'use strict';
 
 const { AcpAdapter } = require('./acp-adapter');
+const { validateNativeModelId, nativeModelForDescriptor } = require('../model-dispatch-tiers');
 const { createCodexProcessTransport, detectCodexVersion } = require('./codex-process');
 const { createStartupControl } = require('./startup-control');
 const { cleanupFailure, validateCleanupTimeout, withOwnedStartupCleanup } = require('./codex-startup-cleanup');
@@ -72,13 +73,13 @@ async function openAcpSession({ provider, plan, command = provider, clientInfo, 
   }
   validateCleanupTimeout(cleanupTimeoutMs);
   const requestedModel = threadOptions.model;
-  const model = requestedModel === undefined || requestedModel === null || requestedModel === `${provider}/auto`
-    ? null : typeof requestedModel === 'string' && requestedModel.startsWith(`${provider}/`)
-      ? requestedModel.slice(provider.length + 1) : requestedModel;
-  if (model !== null && (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(model))) {
-    const error = new Error('Choose an exact model advertised by this provider.');
-    error.code = 'ACP_MODEL_UNAVAILABLE';
-    throw error;
+  const model = nativeModelForDescriptor(requestedModel, { provider });
+  if (model !== null) {
+    try { validateNativeModelId(model); } catch (cause) {
+      const error = new Error(cause.message, { cause });
+      error.code = 'ACP_MODEL_UNAVAILABLE';
+      throw error;
+    }
   }
   const startup = createStartupControl({ signal, timeoutMs: startupTimeoutMs, label: `${provider} startup`, codePrefix: 'ACP_START' });
   let transport;
@@ -128,7 +129,7 @@ async function openAcpSession({ provider, plan, command = provider, clientInfo, 
     const effort = threadOptions.effort;
     if (effort != null) await startup.wait(() => adapter.selectEffort(started.threadId, effort));
     return { adapter, threadId: started.threadId,
-      ...(model ? { model: `${provider}/${model}` } : {}),
+      ...(model ? { model: requestedModel } : {}),
       ...(effort != null ? { reasoningEffort: effort } : {}),
       close() { try { adapter.close(); } finally { transport.close(); } } };
   } catch (error) {

@@ -29,23 +29,23 @@
 # Three more arrived orphaned while this file was under the merge lock: other
 # lanes landed tests/account-boundary-merge.test.js,
 # tests/desktop-captures-short-names.test.js and
-# tests/tree-directory-durable-write.test.js into the 1.0.41 release branch
+# tests/tree-directory-durable-write.test.js into release/engine-1.0.41-next
 # during this same window, each without wiring. Run together and PROVEN to
 # exit 0 before being appended here, same discipline as the rest of this file.
 # 2026-09-03, round 2: tools/test-census.js reported counts.orphaned = 3 again
 # (tests/test-census.test.js's ceiling is 0), the same "landed without wiring"
 # gap this file exists to close. Each of the three is the assertion suite a
 # separate lane already wrote for a fix that is ALREADY on this branch --
-# an earlier change (broker spool fsync-before-rename, the durable-write sibling
-# tree-directory-durable-write.test.js above names by commit), an earlier change
-# (research.finding_save's findingId/supersedes bounds), and an earlier change
+# c4bfc01 (broker spool fsync-before-rename, the durable-write sibling
+# tree-directory-durable-write.test.js above names by commit), e2fd0fd
+# (research.finding_save's findingId/supersedes bounds), and 804c30f
 # (schema-validator's uniqueItems enforcement) -- so the product-side fix was
 # never in question, only whether anything still ran the test that proves it.
 # Run together with `tests/run-isolated.js` and PROVEN to exit 0 as a batch
 # (12 assertions, 0 failures) before being appended here.
 # Found and wired independently, at the same time, by two separate round-2
-# lanes (a feature branch, landed first as an earlier change, and
-# a feature branch) against the same measurement -- the same
+# lanes (feature/1041-engine-suite-red-r2, landed first as f146278, and
+# feature/1041-t-test-lies-engine-r2) against the same measurement -- the same
 # census ceiling, the same three file names. This paragraph is the version
 # that landed first; the second lane's merge kept it rather than appending a
 # duplicate essay about the identical three files, to avoid exactly the
@@ -95,7 +95,7 @@ tests/desktop-captures-short-names.test.js
 tests/tree-directory-durable-write.test.js
 tests/audit-projection-parse-memo.test.js
 tests/agent-comms/tree-directory-restart-supersedes-stale-rows.test.js
-# 2026-09-04: an earlier review pass's HUNT pass traced three more paths in
+# 2026-09-04: page2/tree-store-engine's HUNT pass traced three more paths in
 # src/lib/agent-comms/tree-node-directory.js (heartbeatNode on a row that is
 # not there, supersededByCircle's treeKey requirement driven from the OTHER
 # side than the existing suite covers, and unresolvedManager healed from an
@@ -103,10 +103,10 @@ tests/agent-comms/tree-directory-restart-supersedes-stale-rows.test.js
 # fixed, so a later change to any of the three trips a red test instead of an
 # assumption. Run alone and PROVEN to exit 0 (4/4) before being appended here.
 tests/agent-comms/tree-directory-risk-pins.test.js
-# 2026-09-04, AUDIT pass on an earlier review pass: mutation-tested each of
+# 2026-09-04, AUDIT pass on page2/tree-store-engine: mutation-tested each of
 # the three risk-pins.test.js pins above (broke the exact behaviour each one
 # names, confirmed the matching pin alone goes red, restored) -- all three
-# hold. Tracing the app-side rewind fix (an earlier change, this rotation's other half
+# hold. Tracing the app-side rewind fix (8d4adab, this rotation's other half
 # of the same lane) into this module found a fourth fact worth naming:
 # shell/agent-host.cjs rewindSession() moves a session's OWN threadId to the
 # fork but never calls bindThread or registerNode, so a rewound circle's row
@@ -142,13 +142,13 @@ tests/agent-comms/tree-edges-manager-roster.test.js
 tests/providers/agent-comms-local-tool-context.test.js
 # And one this integration inherited rather than wrote:
 # tests/tree-directory-lock-contention.test.js arrived with
-# the 1.0.41 release branch's lock-queue commit and was the only
+# release/engine-1.0.41-next's lock-queue commit (d0ec1f3) and was the only
 # other orphan this merge pass added. Wiring it here keeps the pass net-zero
 # against the count it started from. Run through tests/run-isolated.js and
 # PROVEN to exit 0 (1/1) before being appended.
 tests/tree-directory-lock-contention.test.js
 tests/strict-lifecycle-record.test.js
-# 2026-09-07, review lane: tests/audit-projection-diverged-retry.test.js is wired
+# 2026-09-07, lane C2: tests/audit-projection-diverged-retry.test.js is wired
 # in the same change that wrote it (tools/test-census.js's MAXIMUM_ORPHANS is
 # 0). Three of its five checks are fail-closed guards -- a divergence that
 # never resolves is still refused, real loss is refused on the FIRST look, and
@@ -158,8 +158,8 @@ tests/strict-lifecycle-record.test.js
 # baseline entry. Run through tests/run-isolated.js and PROVEN to exit 0 (5/5)
 # before being appended.
 tests/audit-projection-diverged-retry.test.js
-# 2026-09-07, review lane: tests/egress-credential-name-gaps.test.js arrived
-# unwired with its cherry-picked RED-evidence commit -- measured,
+# 2026-09-07, lane C2: tests/egress-credential-name-gaps.test.js arrived
+# unwired with its cherry-picked RED-evidence commit (648b953c) -- measured,
 # not assumed: tools/test-census.js went from 0 to 1 orphan the moment the
 # cherry-pick landed ("orphan count increased from the R1162 baseline ceiling
 # (0) to 1"). It is wired here, and not in root-suite.txt where its
@@ -170,7 +170,7 @@ tests/audit-projection-diverged-retry.test.js
 # baseline entry and is fail-closed. Run through tests/run-isolated.js and
 # PROVEN to exit 0 (3/3) before being appended.
 tests/egress-credential-name-gaps.test.js
-# 2026-09-07, review lane: tests/broker-sender-on-receipt.test.js is wired in the
+# 2026-09-07, lane C2: tests/broker-sender-on-receipt.test.js is wired in the
 # same change that wrote it, rather than landing unwired for a later pass to
 # find (tools/test-census.js's MAXIMUM_ORPHANS is 0). It is placed HERE and not
 # in root-suite.txt or agent-comms-orphans.txt on purpose: both of those carry
@@ -179,7 +179,7 @@ tests/egress-credential-name-gaps.test.js
 # baseline entry, so it is fail-closed and the pin is live. Run through
 # tests/run-isolated.js and PROVEN to exit 0 (5/5) before being appended.
 tests/broker-sender-on-receipt.test.js
-# 2026-09-07, review lane: tests/desktop-worker-image-boundary.test.js is wired in
+# 2026-09-07, lane C2: tests/desktop-worker-image-boundary.test.js is wired in
 # the same change that wrote it (tools/test-census.js's MAXIMUM_ORPHANS is 0).
 # It is placed HERE rather than in root-suite.txt -- where its end-to-end
 # sibling tests/desktop-advanced.js lives -- because root-suite carries status
@@ -191,22 +191,22 @@ tests/broker-sender-on-receipt.test.js
 # screen. Run through tests/run-isolated.js and PROVEN to exit 0 (4/4).
 tests/desktop-worker-image-boundary.test.js
 
-# owner-host named refusal (2026-09-07, review item 1). Wired HERE and not
+# owner-host named refusal (2026-09-07, Lane C2R item 1). Wired HERE and not
 # into root-suite.txt: this list is absent from tools/check-chain-baseline.json,
 # so a regression in it is a visible FAIL rather than one absorbed by a
 # baselined FAIL chain. Checked before wiring.
 tests/owner-host-named-refusal.test.js
-# host-control credential name gate (2026-09-07, review item 2b). Wired
+# host-control credential name gate (2026-09-07, Lane C2R item 2 / D3b). Wired
 # HERE and not into root-suite.txt: this list is absent from
 # tools/check-chain-baseline.json, so a containment regression is a visible FAIL
 # rather than one absorbed by a baselined FAIL chain. Checked before wiring.
 tests/host-control-credential-name-gate.test.js
-# audit refusal persistence (2026-09-07, review item 3). Wired HERE
+# audit refusal persistence (2026-09-07, Lane C2R item 3 / E2-R33). Wired HERE
 # and not into root-suite.txt: this list is absent from
 # tools/check-chain-baseline.json, so a regression is a visible FAIL rather than
 # one absorbed by a baselined FAIL chain. Checked before wiring.
 tests/audit-refusal-persistence.test.js
-# courier read-lock bound (2026-09-07, review item 14). Wired HERE and not
+# courier read-lock bound (2026-09-07, Lane C2R item 14). Wired HERE and not
 # so a regression is a visible FAIL rather than one absorbed by a baselined FAIL
 # chain. Checked before wiring.
 tests/agent-comms/courier-read-lock-bound.test.js

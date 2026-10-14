@@ -515,7 +515,7 @@ async function run() {
       /R906#1 AUTHORIZED: restarting the mission bridge without a fresh approval/);
     // The counter-measurement. Reading only the active set -- what this file
     // did before the union was added -- drops the grant entirely, which is the
-    // difference between "they never permitted it" and "the permission is filed
+    // difference between "he never permitted it" and "the permission is filed
     // under a finished task".
     const cold = await ledgerQuery.readColdStorage(
       await ledgerQuery.readLedger(legacy.ledgerFile),

@@ -102,11 +102,22 @@ function check(name, fn) {
 // ELECTRON_RUN_AS_NODE is stripped for the same reason every other harness in
 // this tree strips it: it is set in this environment and silently changes what
 // a child process is.
+//
+// The executable is powershell.exe on Windows, where this whole file runs (it
+// is Windows-gated in tests/run-isolated.js). Elsewhere it is PowerShell 7's
+// pwsh, as in tests/vault-read-reliability.test.js: the write-denylist checks in
+// section 1b refuse before the vault store is opened, so they can be measured
+// there; every check that stores a value still needs Windows DPAPI. pwsh off
+// Windows refuses -WindowStyle, which only means something on Windows anyway.
+const POWERSHELL = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+const POWERSHELL_ARGS = process.platform === 'win32'
+  ? ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass']
+  : ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'];
 function vault(args, options = {}) {
   const environment = { ...process.env };
   delete environment.ELECTRON_RUN_AS_NODE;
-  const result = spawnSync('powershell.exe', [
-    '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', SECRETS_SCRIPT, ...args
+  const result = spawnSync(POWERSHELL, [
+    ...POWERSHELL_ARGS, '-File', SECRETS_SCRIPT, ...args
   ], {
     encoding: 'utf8',
     windowsHide: true,
@@ -168,19 +179,95 @@ check('set-stdin OVER an existing record records replaced:true', () => {
     'an overwrite recorded as replaced:false is the silent overwrite this check exists to catch');
 });
 
-/* THE REPORTED CASE: the card record replaced through
-   the generic write verb. `payment_card_default` is on $VaultOracleDenylist, so
-   it cannot be READ back through 'get' -- which is exactly why a silent write
-   was so hard to notice. The value written here is a test PAN inside a record
-   shaped like the real one; nothing decrypts it and nothing reads it back. */
-check('replacing the CARD record through set-stdin is no longer silent', () => {
-  vault(['set-stdin', CARD_KEY], { input: JSON.stringify({ version: 2, cardNumber: TEST_PAN }) });
+/* ---------------------------------------------------------------------------
+   1b. THE CASE THE OWNER DESCRIBED, WORD FOR WORD -- NOW REFUSED, NOT MERELY LOGGED.
+   --------------------------------------------------------------------------- */
+
+/* The card record replaced through the generic write verb. `payment_card_default`
+   and `owner_legal_identity_v1` are on $VaultOracleDenylist, so they cannot be
+   READ back through 'get'. Until 1.0.50 (security M2) they could still be
+   OVERWRITTEN through every generic writer, and this check only proved that the
+   overwrite left a line. Now the write itself is refused: before the vault is
+   opened and, for the single-key verbs, before the value on stdin is read. The
+   value offered here is a test PAN inside a record shaped like the real one; it
+   must never be stored, and the vault file must be byte-identical afterwards. */
+function vaultBytes() {
+  try { return fs.readFileSync(VAULT_FILE); } catch (error) {
+    if (error && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function assertVaultUnchanged(before, label) {
+  const after = vaultBytes();
+  assert.ok(before === null ? after === null : (after !== null && before.equals(after)),
+    `${label} changed the vault file even though the write was refused`);
+}
+
+function assertWriteRefused(result, action, keys, label) {
+  assert.equal(result.spawnError, null, `${label}: PowerShell could not start: ${result.spawnError}`);
+  assert.notEqual(result.status, 0, `${label}: the write of a denylisted record was not refused`);
+  assert.match(result.stderr, /ACCESS_DENIED_ORACLE_SCOPE/, `${label}: the refusal does not name the oracle denylist`);
+  for (const key of keys) {
+    const lines = linesFor(action, key);
+    assert.equal(lines.length, 1, `${label}: expected one ${action} line for ${key}, got ${lines.length}`);
+    assert.equal(lines[0].denied, true, `${label}: the ${action} line for ${key} must record denied:true`);
+    assert.ok(!('replaced' in lines[0]),
+      `${label}: a refusal made before the vault is opened must not claim to know whether ${key} was on file`);
+  }
+}
+
+const CARD_SHAPED = JSON.stringify({ version: 2, cardNumber: TEST_PAN });
+
+check('set-stdin REFUSES the CARD record, and the refusal is logged', () => {
+  const before = vaultBytes();
   truncateAccessLog();
-  const result = vault(['set-stdin', CARD_KEY], { input: JSON.stringify({ version: 2, cardNumber: TEST_PAN }) });
-  assert.equal(result.status, 0, `set-stdin failed: ${result.stderr || result.spawnError}`);
-  const lines = linesFor('set-stdin', CARD_KEY);
-  assert.equal(lines.length, 1, 'the card record was overwritten with no access-log line');
-  assert.equal(lines[0].replaced, true, 'the overwrite of an existing card must record replaced:true');
+  const result = vault(['set-stdin', CARD_KEY], { input: CARD_SHAPED });
+  assertWriteRefused(result, 'set-stdin', [CARD_KEY], 'set-stdin card');
+  assertVaultUnchanged(before, 'set-stdin card');
+});
+
+check('set-stdin refuses the owner legal identity and every casing of both records', () => {
+  for (const key of ['owner_legal_identity_v1', 'PAYMENT_CARD_DEFAULT', 'Owner_Legal_Identity_V1']) {
+    const before = vaultBytes();
+    truncateAccessLog();
+    const result = vault(['set-stdin', key], { input: CARD_SHAPED });
+    assertWriteRefused(result, 'set-stdin', [key], `set-stdin ${key}`);
+    assertVaultUnchanged(before, `set-stdin ${key}`);
+  }
+});
+
+check('set-pair-stdin refuses the whole pair when either key is denylisted', () => {
+  for (const [first, second] of [[CARD_KEY, 'write_visibility_denied_pair_b'], ['write_visibility_denied_pair_a', 'owner_legal_identity_v1']]) {
+    const before = vaultBytes();
+    truncateAccessLog();
+    const result = vault(['set-pair-stdin'], { input: JSON.stringify({
+      first: { key: first, value: CARD_SHAPED }, second: { key: second, value: CARD_SHAPED }
+    }) });
+    assertWriteRefused(result, 'set-pair-stdin', [first, second], `set-pair-stdin ${first}+${second}`);
+    assertVaultUnchanged(before, `set-pair-stdin ${first}+${second}`);
+  }
+});
+
+check('set-triple-stdin refuses the whole triple when any key is denylisted', () => {
+  const keys = ['write_visibility_denied_triple_a', 'write_visibility_denied_triple_b', 'Payment_Card_Default'];
+  const before = vaultBytes();
+  truncateAccessLog();
+  const result = vault(['set-triple-stdin'], { input: JSON.stringify({
+    first: { key: keys[0], value: 'a' }, second: { key: keys[1], value: 'b' }, third: { key: keys[2], value: CARD_SHAPED }
+  }) });
+  assertWriteRefused(result, 'set-triple-stdin', keys, 'set-triple-stdin');
+  assertVaultUnchanged(before, 'set-triple-stdin');
+});
+
+check('set-monotonic-stdin refuses a denylisted record', () => {
+  const before = vaultBytes();
+  truncateAccessLog();
+  const result = vault(['set-monotonic-stdin', CARD_KEY, '-Sequence', '1'], {
+    input: JSON.stringify({ sequence: 1, head: 'h1' })
+  });
+  assertWriteRefused(result, 'set-monotonic-stdin', [CARD_KEY], 'set-monotonic-stdin card');
+  assertVaultUnchanged(before, 'set-monotonic-stdin card');
 });
 
 /* ---------------------------------------------------------------------------

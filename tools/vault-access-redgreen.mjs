@@ -26,8 +26,24 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/* THE CHILD IS `node`, SO ITS ENVIRONMENT IS SCRUBBED AND NOT INHERITED.
+ *
+ * This script used to pass `env: process.env` to the suite it spawns, and
+ * tools/check-spawn-env-scrub.js failed the build for it -- correctly. The
+ * allowlist beside that gate is not the answer either: its own criterion says a
+ * general interpreter is NEVER exempt, "because whatever it runs inherits the
+ * same environment and can reach a provider CLI", and `process.execPath` is
+ * exactly that. So the environment goes through the shared scrub helper, which
+ * removes every provider credential and refuses if one survived. Nothing else the
+ * suite needs is touched: the scrub takes names away, it does not add or rename
+ * any, and the child still gets the same HOME, PATH and state root. */
+const safeLaunchEnvironment = createRequire(import.meta.url)(
+  '../src/lib/supervision/launch-environment.js'
+).safeLaunchEnvironment;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TARGET = path.join(ROOT, 'src', 'lib', 'runtime.js');
@@ -47,7 +63,7 @@ const digest = text => createHash('sha256').update(text, 'utf8').digest('hex');
 
 function runSuite() {
   const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', SUITE], {
-    cwd: ROOT, encoding: 'utf8', env: process.env, windowsHide: true
+    cwd: ROOT, encoding: 'utf8', env: safeLaunchEnvironment(process.env, { context: 'vault-access-redgreen' }), windowsHide: true
   });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
   const line = name => (output.match(new RegExp(`^# ${name} (\\d+)$`, 'm')) || [])[1] ?? '?';

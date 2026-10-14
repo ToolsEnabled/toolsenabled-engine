@@ -83,7 +83,7 @@
     "research.runner_agent": "Research jobs may launch assistants",
     "research.runner_process": "Research jobs may run programs",
     "research.runner_http": "Research jobs may call web services",
-    "accounts.failover": "If an account runs out",
+
     "audit.retention": "How much activity history stays instantly searchable",
     "diagnostics.retention": "Diagnostic storage",
     "audit.enabled": "Enable activity audit",
@@ -1979,26 +1979,7 @@
       "derivedFrom": "built-in product policy",
       "enforcedBy": "src/lib/research/settings-gate.js; src/lib/providers/research.js; src/lib/research/runners.js"
     },
-    {
-      "id": "accounts.failover",
-      "section": "F",
-      "depth": 2,
-      "control": "seg",
-      "options": [
-        "manual",
-        "auto"
-      ],
-      "default": "auto",
-      "consequence": "When the allowance on the account an assistant is using runs out, this decides what happens next. Left alone, it moves to the next account you have listed and carries on, and says which one it moved to. Set to stop, the assistant stops instead and tells you which account is spent and which of your others is ready, so you choose.",
-      "capabilities": [
-        "Lets work carry on across the accounts you have listed here, instead of stopping the moment one of them runs out."
-      ],
-      "risks": [
-        "Switching by itself spends the allowance on a different account of yours without asking first. Each account is still held to its own limit, and nothing here works around one."
-      ],
-      "derivedFrom": "built-in product policy",
-      "enforcedBy": "src/lib/multi-account/failover-setting.js failoverChoice() reads the row and answers with the choice only when the stored value is one of these two options AND was classified in the person\u2019s own settings file with user or installer provenance, so a flipped registry default or a value nobody chose leaves the shipped answer standing; src/lib/multi-account/rotation.js resolveAccountForSession asks it at slot 4 of its precedence, below anything the caller or the accounts panel stated and above the shipped default, and turns the answer into the selection mode the walk uses."
-    },
+
     {
       "id": "audit.retention",
       "section": "F",

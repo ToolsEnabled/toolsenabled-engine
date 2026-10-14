@@ -6,7 +6,7 @@
 // on 2026-08-10 and it applies identically here. `codex login status` is a
 // file read: it answered "Logged in using ChatGPT" while the id_token in
 // ~/.codex/auth.json had expired the day before. The INVERSE is equally
-// wrong, which is why "just read the expiry" is not the fix either: a second
+// wrong, which is why "just read the expiry" is not the fix either: the .edu
 // Codex home, whose id_token had expired, served a live request anyway
 // because the CLI silently refreshed off its refresh_token. Reading a token
 // file can say alive-when-dead OR dead-when-alive. So this module reads no
@@ -29,9 +29,9 @@
 //   Tier 2  a minimal `--print` request -- costs a little allowance, and is
 //           the ONLY thing that proves the account actually works.
 //
-// THE BILLING TELL. Measured 2026-08-10 with a machine-wide
-// ANTHROPIC_API_KEY present (for example one persisted in
-// HKCU:\Environment), tier 1 reports:
+// THE BILLING TELL. Measured 2026-08-10 with the machine-wide
+// ANTHROPIC_API_KEY present (it is persisted in HKCU:\Environment on this
+// machine), tier 1 reports:
 //     loggedIn: true, authMethod: "claude.ai", subscriptionType: "max",
 //     apiKeySource: "ANTHROPIC_API_KEY"
 // Every field a health check would look at is green, and the session is
@@ -59,7 +59,6 @@ const path = require('node:path');
 const { StringDecoder } = require('node:string_decoder');
 
 const { executableFor } = require('./cli-provider-gateway.js');
-const { safeLaunchEnvironment } = require('./subscription-launch-env.js');
 
 const DEFAULT_STATUS_TIMEOUT_MS = 30000;
 const DEFAULT_CAPABILITY_TIMEOUT_MS = 120000;
@@ -106,9 +105,12 @@ const RATE_LIMIT_PATTERN = /rate[_ ]?limit|usage limit|too many requests|429|quo
 
 function billingSourceOf(status) {
   if (!plainObject(status)) return null;
-  // apiKeySource names the VARIABLE the CLI chose to authenticate with. Its
-  // presence is the whole signal; its value is never read.
-  if (typeof status.apiKeySource === 'string' && status.apiKeySource.trim() !== '') return 'api_key';
+  // apiKeySource names the VARIABLE or helper the CLI chose, not a key value.
+  if (typeof status.apiKeySource === 'string' && status.apiKeySource.trim() !== '') {
+    return /helper/i.test(status.apiKeySource) ? 'key_helper' : 'api_key';
+  }
+  if (/^(?:bedrock|vertex|foundry|mantle|gateway|anthropic_aws|anthropic_google_cloud)$/i.test(status.apiProvider || '')) return 'cloud';
+  if (/api.?key/i.test(status.authMethod || '')) return 'api_key';
   if (status.loggedIn === true) return 'subscription';
   return null;
 }
@@ -128,7 +130,8 @@ function classifyClaudeAuth({
   capabilityStderr = '',
   capabilityTransportError = null
 } = {}) {
-  const base = { account: null, plan: null, authMethod: null, billingSource: null, capabilityRan: capabilityRan === true };
+  const base = { account: null, plan: null, authMethod: null, billingSource: null,
+    statusSucceeded: false, capabilityRan: capabilityRan === true };
 
   // Fail closed: the account surface itself did not answer.
   if (statusTransportError) {
@@ -137,7 +140,7 @@ function classifyClaudeAuth({
       state: STATE.INDETERMINATE,
       usable: false,
       canFailover: false,
-      reason: `The Claude account surface could not be reached (${statusTransportError}). This is not evidence about the account, so it is not treated as a sign-out.`
+      reason: 'The Claude account surface could not be reached. This is not evidence about the account, so it is not treated as a sign-out.'
     });
   }
 
@@ -157,6 +160,7 @@ function classifyClaudeAuth({
     plan: typeof status.subscriptionType === 'string' ? status.subscriptionType : null,
     authMethod: typeof status.authMethod === 'string' ? status.authMethod : null,
     billingSource: billingSourceOf(status),
+    statusSucceeded: statusExit === 0 && status.loggedIn === true,
     // Whether a live request was actually made. Rotation reads this to tell
     // "signed in, not yet proven" (selectable) from "a live request failed for
     // no attributable reason" (not selectable) -- both are INDETERMINATE.
@@ -171,6 +175,18 @@ function classifyClaudeAuth({
       usable: false,
       canFailover: true,
       reason: 'This Claude CLI has no signed-in account. Run `claude auth login` for it.'
+    });
+  }
+
+  // A signed-in envelope from a failed status command is contradictory.
+  // Do not claim readiness or attribute the failure to this account.
+  if (status.loggedIn === true && statusExit !== 0) {
+    return Object.freeze({
+      ...identity,
+      state: STATE.INDETERMINATE,
+      usable: false,
+      canFailover: false,
+      reason: 'The Claude status command did not exit successfully despite reporting a signed-in session. Authentication is unverified; no capability request should be made.'
     });
   }
 
@@ -194,7 +210,7 @@ function classifyClaudeAuth({
       state: STATE.INDETERMINATE,
       usable: false,
       canFailover: false,
-      reason: `Signed in, but the capability request could not be completed (${capabilityTransportError}). That is a transport fault, not evidence the account is spent or signed out.`
+      reason: 'Signed in, but the capability request could not be completed. That is a transport fault, not evidence the account is spent or signed out.'
     });
   }
 
@@ -282,6 +298,7 @@ async function runOnce(command, args, { env, cwd, timeoutMs, spawnImpl }) {
         cwd,
         env,
         windowsHide: true,
+        nativeClaudeCode: true,
         containProcessTree: true,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe']
@@ -360,12 +377,10 @@ async function probeClaudeAuth({
 } = {}) {
   const exe = require('../provider-session-isolation').resolvePrivateProviderExecutable('claude', baseEnvironment)
     || executable || executableFor('claude', { environment: baseEnvironment });
-  // The probe runs under exactly the environment a real launch would use.
-  // Probing under a different environment would make the answer inapplicable
-  // to the launch -- and probing under the ambient one would measure the API
-  // key instead of the subscription.
+  // Native status and capability checks use the same authentication settings
+  // as the native session, so a cloud/API route is not mistaken for sign-out.
   const env = require('../provider-session-isolation').providerSessionEnvironment(
-    safeLaunchEnvironment(baseEnvironment, { context: 'claude auth probe' }),
+    { ...baseEnvironment },
     { provider: 'claude', home: configDir, requireHome: true });
   if (configDir) env.CLAUDE_CONFIG_DIR = configDir;
   Object.assign(env, exe.env || {});
@@ -407,6 +422,7 @@ async function probeClaudeAuth({
     // test. Signed out is already conclusive.
     const statusJson = parseJson(status.stdout);
     const shouldRunCapability = capability
+      && status.exitCode === 0
       && !status.transportError
       && plainObject(statusJson)
       && statusJson.loggedIn === true;

@@ -97,7 +97,7 @@ code(() => operations.createOperation({
 }), 'BROWSER_OPEN_SESSION_OWNERSHIP');
 code(() => operations.createOperation({
   operation: 'open', snapshot, currentGeneration: 7, proof, sessionId: session,
-  idempotencyKey: 'open:agent-b:0003', input: { url: 'file:///C:/secret.txt' }
+  idempotencyKey: 'open:agent-b:0003', input: { url: 'file:///\x43:/secret.txt' }
 }), 'BROWSER_OPERATION_URL_INVALID');
 code(() => operations.createOperation({
   operation: 'open', snapshot, currentGeneration: 7, proof, sessionId: session,

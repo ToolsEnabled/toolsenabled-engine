@@ -610,7 +610,7 @@ const SWITCH_OFF = Object.freeze({ ok: true, facade: 'ready', sessionsOpen: 0, m
      THE DESK IS UNAFFECTED.
 
      This is the regression that would hurt the owner most: a gate that also
-     locked them out of their own application is worse than the defect it closes.
+     locked him out of his own application is worse than the defect it closes.
 
      The proof is not an assertion about the code, it is the same live mission
      bridge driven twice with the switch OFF -- once the way the person sitting
@@ -661,7 +661,7 @@ const SWITCH_OFF = Object.freeze({ ok: true, facade: 'ready', sessionsOpen: 0, m
         headers: { origin: DESK_ORIGIN, authorization: `Bearer ${bearer}`, 'content-type': 'application/json' },
         body: JSON.stringify({ brief: 'from the desk' })
       });
-      equal(desk.status, 200, 'THE DESK STILL WRITES with the switch off; the switch is about browsers, not about them');
+      equal(desk.status, 200, 'THE DESK STILL WRITES with the switch off; the switch is about browsers, not about him');
       equal((await desk.json()).ok, true);
       equal(performed.length, 1, 'and the action really ran');
 

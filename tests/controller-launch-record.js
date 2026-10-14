@@ -302,9 +302,9 @@ const scopeRule = (overrides = {}) => ({
 
   // --- 5b. executor authority binding is separate, canonical, and signed ---
   const authority = launch.executorPayloadHash({
-    repoRoot: 'C:\\repo', baseCommit: 'a'.repeat(40), laneId: 'q66-lane', itemId: 'Q66',
+    repoRoot: '\x43:\\repo', baseCommit: 'a'.repeat(40), laneId: 'q66-lane', itemId: 'Q66',
     allowedPaths: ['src/q66.js'], verificationCommand: { command: process.execPath, args: ['--check', 'src/q66.js'] },
-    taskBrief: 'Bound Q66 executor lane.', timeoutMs: 60_000, outputBudgetBytes: 65_536, evidenceRoot: 'C:\\evidence'
+    taskBrief: 'Bound Q66 executor lane.', timeoutMs: 60_000, outputBudgetBytes: 65_536, evidenceRoot: '\x43:\\evidence'
   });
   const bound = launch.createLaunch(baseRequest({ objectiveRef: 'Q66', executorPayloadHash: authority }), { org, audit, clock });
   assert.equal(bound.record.executorPayloadHash, authority, 'the explicit executor authority hash is part of the signed record');
@@ -425,7 +425,7 @@ const scopeRule = (overrides = {}) => ({
 
   // A crafted request object carrying an extra field as a NON-ENUMERABLE
   // property must be rejected by exact()'s Reflect.ownKeys guard, the same
-  // hidden-key class an earlier change closed for scope rules.
+  // hidden-key class 9a05e02 closed for scope rules.
   const sneaky = baseRequest();
   Object.defineProperty(sneaky, 'hiddenBudgetOverride', { value: true, enumerable: false, configurable: true });
   code(() => launch.createLaunch(sneaky, { org, audit, clock }), 'LAUNCH_INVALID', 'non-enumerable extra request field');

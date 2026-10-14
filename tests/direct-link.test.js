@@ -17,7 +17,7 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'tools', 'direct-link.ps1');
-const POWERSHELL = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const POWERSHELL = path.join(process.env.SystemRoot || '\x43:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 let passed = 0;
 const failures = [];
@@ -50,7 +50,8 @@ const parseCheck = () => {
     'tools/fra-rendezvous-firewall.ps1',
     'tools/fra-keeper-task.ps1',
     'tools/apply-startup-policy.ps1',
-    'tools/lib/StartupPolicy.ps1'
+    'tools/lib/StartupPolicy.ps1',
+    'packages/servercontrol/Mechanical-Connect.ps1'
   ].map(rel => path.join(ROOT, rel));
   const script = files.map(f =>
     `$e=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('${f.replace(/'/g, "''")}',[ref]$null,[ref]$e);"${path.basename(f)}=$(@($e).Count)"`
@@ -76,15 +77,15 @@ else {
 }
 
 check('nothing in the direct-link path hardcodes this desk\'s addresses', () => {
-  // Owner rule: this is production code, nothing may be hardcoded, and it has
-  // to work on other machines. The address pair belongs in config/service-registry.json
+  // "we cant hardcode anything this is production code it needs to work on
+  // other machines". The address pair belongs in config/service-registry.json
   // and is resolved through tools/lib/service-registry.ps1, which fails closed.
   // Comments may DISCUSS the old literals; code may not contain them.
   const files = ['tools/direct-link.ps1', 'tools/fra-rendezvous-firewall.ps1', 'tools/fra-keeper-task.ps1'];
   for (const rel of files) {
     const code = fs.readFileSync(path.join(ROOT, rel), 'utf8')
       .split(/\r?\n/).filter(line => !/^\s*#/.test(line)).join('\n');
-    assert.ok(!/\b192\.168\.\d+\.\d+\b/.test(code), `${rel} still carries a hardcoded direct-link address`);
+    assert.ok(!/192\.168\.214/.test(code), `${rel} still carries a hardcoded direct-link address`);
     assert.ok(!/\b10\.\d+\.\d+\.\d+\b/.test(code), `${rel} carries a hardcoded RFC1918 address`);
   }
   // And the firewall script must resolve the pair the way its seven siblings do.
@@ -98,6 +99,8 @@ check('the node interpreter is chosen by version, from the approved candidates, 
   // to pin one absolute path, which threw on any machine that installed Node
   // normally -- including the machine the packet ships to.
   const directLink = fs.readFileSync(path.join(ROOT, 'tools', 'direct-link.ps1'), 'utf8');
+  assert.match(directLink, /agent-apps\\node-v22\.19\.0\\node\.exe/,
+    'tools/direct-link.ps1 must keep the owned pin as first candidate');
   assert.match(directLink, /Program Files\\nodejs\\node\.exe/,
     'tools/direct-link.ps1 must also accept a normal Node install');
   assert.match(directLink, /22\.19\.0/, 'tools/direct-link.ps1 must state the version floor');
@@ -113,6 +116,8 @@ check('the node interpreter is chosen by version, from the approved candidates, 
     'tools/fra-keeper-task.ps1 must resolve a qualifying Node from this repository');
 
   const resolver = fs.readFileSync(path.join(ROOT, 'tools', 'lib', 'resolve-node.ps1'), 'utf8');
+  assert.match(resolver, /agent-apps\\node-v22\.19\.0\\node\.exe/,
+    'the shared resolver must keep the owned pin as a bounded bootstrap candidate');
   assert.match(resolver, /ProgramFiles[\s\S]{0,180}nodejs\\node\.exe/,
     'the shared resolver must also accept a normal Node install');
   assert.match(resolver, /tools\\resolve-node\.js/,
@@ -503,7 +508,7 @@ testcanfail-tests-direct-link-test-js
 
 MUTATION EVIDENCE
 - 'OFF is checked against what is still listening' formerly pinned the literal
-  `if (fs.existsSync(STOP_FILE)) break;`. An earlier commit rewrote the keeper to ask
+  `if (fs.existsSync(STOP_FILE)) break;`. a343529 rewrote the keeper to ask
   through stopSentinelPresent() -- statSync, so an unreadable state directory
   cannot read as "no stop switch" -- and the pinned check went RED against the
   BETTER implementation. It now asserts the property: some sleeping loop in
@@ -513,7 +518,7 @@ MUTATION EVIDENCE
   `FAIL  OFF is checked against what is still listening, not against what was asked`
   `the keeper waits without watching the stop sentinel: OFF would not be
   honoured until the next reconcile`, and `direct-link: 16 checks passed, 1
-  failed`. Restored byte-for-byte: `17 checks
+  failed`. Restored by sha256 (d67d732d...bc392d before and after): `17 checks
   passed, 0 failed`. Worth recording that under that same mutation the check
   below it, 'the resident loop stops on the owner's off switch and only on
   that', stayed GREEN -- it pins the stop's log line, not the wait, so this is

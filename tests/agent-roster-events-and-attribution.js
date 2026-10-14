@@ -70,7 +70,7 @@ function richLane(overrides = {}) {
     supervisorId: 'sup-test-0001',
     supervisorPid: 11111,
     pid: 22222,
-    worktree: 'C:\\somewhere\\lane',
+    worktree: '\x43:\\somewhere\\lane',
     startedAt: '2026-07-29T01:00:00.000Z',
     endedAt: '2026-07-29T01:02:14.479Z',
     changedFileCount: 3,
@@ -362,7 +362,7 @@ check('replaying 29 FVPM lanes + 7 FVPM-parked items produces zero agent-attribu
 check('laneOutcomeEvent projects ONLY harness-authored fields: every canary and billing.account left behind', () => {
   const event = events.laneOutcomeEvent(richLane(), {
     source: 'hook',
-    headCommit: '1234567890abcdef1234567890abcdef12345678',
+    headCommit: '6cbfcef27ac3c56bdebc532c632e8167667655b4',
     supervisorArgvHash: 'a'.repeat(64)
   });
   const serialized = JSON.stringify(event);

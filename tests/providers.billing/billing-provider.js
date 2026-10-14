@@ -15,6 +15,7 @@
 // Paddle leg first (W2c in `tests/entitlement-grant.test.js`) and only then was
 // the Stripe leg removed.
 
+require('../lib/isolated-environment').activate('providers-billing');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const billing = require('../../src/lib/providers/billing');
@@ -84,10 +85,10 @@ function fixture(overrides = {}) {
     const event = billing.webhookVerify({
       payload,
       signatureHeader: `t=${timestamp},v1=${'0'.repeat(64)},v1=${signature}`,
-      vaultKey: 'stripe_webhook_signing_secret_fixture'
+      vaultKey: 'stripe_webhook_secret'
     }, {
       getSecret: key => {
-        assert.equal(key, 'stripe_webhook_signing_secret_fixture');
+        assert.equal(key, 'stripe_webhook_secret');
         return secret;
       },
       now: () => timestamp * 1000,
@@ -103,13 +104,57 @@ function fixture(overrides = {}) {
     assert.throws(() => billing.webhookVerify({
       payload: `${payload} `,
       signatureHeader: `t=${timestamp},v1=${signature}`,
-      vaultKey: 'stripe_webhook_signing_secret_fixture'
+      vaultKey: 'stripe_webhook_secret'
     }, { getSecret: () => secret, now: () => timestamp * 1000 }), /verification failed/);
     assert.throws(() => billing.webhookVerify({
       payload,
       signatureHeader: `t=${timestamp},v1=${signature}`,
-      vaultKey: 'stripe_webhook_signing_secret_fixture'
+      vaultKey: 'stripe_webhook_secret'
     }, { getSecret: () => secret, now: () => (timestamp + 301) * 1000 }), /tolerance/);
+  }
+
+  // 1.0.50 SECURITY L2: webhookVerify DECRYPTS THE STRIPE WEBHOOK SECRET AND
+  // NOTHING ELSE. With a free vaultKey the HMAC check was a guess oracle over any
+  // vault record: the caller controls payload, timestamp and every candidate
+  // signature. Here the signature is computed with the very secret the injected
+  // reader would return, so before the fix each refused name below VERIFIED --
+  // which is exactly the confirmation an attacker needs.
+  {
+    const secret = 'whsec_offline_fixture';
+    const timestamp = 1_750_000_000;
+    const payload = '{"id":"evt_12345678","type":"checkout.session.completed","created":1750000000,"livemode":false,"data":{"object":{"id":"cs_12345678"}}}';
+    const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
+    const refusedKeys = [
+      'owner_pin', 'github_pat', 'payment_card_default', 'owner_legal_identity_v1',
+      'toolsenabled_audit_signing_key_v1', 'paddle_live_webhook_secret',
+      'STRIPE_WEBHOOK_SECRET', 'stripe_webhook_secret_v2', ''
+    ];
+    for (const vaultKey of [...refusedKeys, undefined]) {
+      const reads = [];
+      assert.throws(() => billing.webhookVerify({
+        payload, signatureHeader: `t=${timestamp},v1=${signature}`, vaultKey
+      }, {
+        getSecret: key => { reads.push(key); return secret; },
+        now: () => timestamp * 1000,
+        record: () => {}
+      }), error => error.code === 'BILLING_WEBHOOK_VAULT_KEY_INVALID',
+      `webhookVerify did not refuse vaultKey ${JSON.stringify(vaultKey)}`);
+      assert.deepEqual(reads, [], `vaultKey ${JSON.stringify(vaultKey)} reached the vault`);
+    }
+
+    const { TOOL_REGISTRY } = require('../../src/lib/tool-registry');
+    const { assertValid } = require('../../src/lib/schema-validator');
+    const tool = TOOL_REGISTRY.find(entry => entry.name === 'billing.webhook_verify');
+    assert.ok(tool, 'billing.webhook_verify is registered');
+    const base = { payload, signatureHeader: `t=${timestamp},v1=${signature}` };
+    for (const vaultKey of refusedKeys) {
+      assert.throws(() => assertValid(tool.inputSchema, { ...base, vaultKey }), /enum|one of|allowed/i,
+        `the registry schema accepted vaultKey ${JSON.stringify(vaultKey)}`);
+    }
+    assertValid(tool.inputSchema, { ...base, vaultKey: 'stripe_webhook_secret' });
+    assert.deepEqual(billing.STRIPE_WEBHOOK_VAULT_KEYS, ['stripe_webhook_secret']);
+    assert.deepEqual(tool.inputSchema.properties.vaultKey.enum, [...billing.STRIPE_WEBHOOK_VAULT_KEYS],
+      'the registry enum and the provider allowlist must name the same record');
   }
 
   assert.deepEqual(billing.parseStripeSignature(`t=123,v1=${'a'.repeat(64)}`), {

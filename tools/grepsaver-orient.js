@@ -332,12 +332,13 @@ function orient(query, options = {}) {
   // right doc-router lines beats a confidently wrong card.
   // ...but that floor is RELATIVE, so when the best hit is itself noise every
   // near-noise hit clears it. Measured 2026-07-29: "gmail thread read" returned
-  // three unrelated project cards, and "what are other
+  // three unrelated projects of the owner's, and "what are other
   // agent sessions working on" returned the KB literature card -- three and one
   // confidently wrong answers to questions no card covers.
   //
   // The cause is a coverage fact worth stating plainly: this index maps the
-  // OTHER PROJECTS on the machine. ToolsEnabled itself has ONE whole-repo card, so
+  // OTHER PROJECTS on this machine (the owner's own, unrelated to this one,
+  // LEAN-bench, KB, ...). ToolsEnabled itself has ONE whole-repo card, so
   // in-repo questions ("fleet supervisor", "durable worker lease") legitimately
   // match nothing and must say so instead of returning the nearest stranger.
   //
@@ -512,8 +513,8 @@ function renderMarkdown(packet) {
 }
 
 // Exit codes for the CLI. Until now this tool exited 0 while printing "No
-// carded system matched" — including for "licensing", with six documents of
-// licensing research sitting in docs/. Exit 0 is what every caller reads as
+// carded system matched" — including for "trademark", with six documents of
+// trademark research sitting in docs/. Exit 0 is what every caller reads as
 // "fine, nothing to see", so the fleet redid the work.
 //
 // `orient()` itself is deliberately untouched: agent-onboarding.js and the
@@ -528,7 +529,7 @@ const ORIENT_EXIT = Object.freeze({
 /**
  * The card index maps CODE. It structurally cannot hold a research finding —
  * CARD-TEMPLATE.md requires system/source_path/fingerprint/entry-points/PORTS,
- * and "the registry search returned zero hits across nine query forms" has no shape there.
+ * and "USPTO returned zero hits across nine query forms" has no shape there.
  * That is why a card miss must not be reported as an answer on its own: the
  * question is "does this exist", and half the corpus was never consulted.
  */

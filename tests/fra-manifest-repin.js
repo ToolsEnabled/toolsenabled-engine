@@ -73,8 +73,8 @@ fs.mkdirSync(fixtureConfig, { recursive: true });
 const fixtureRegistry = Object.freeze({
   schemaVersion: 1,
   machines: {
-    'machine-a': { address: '192.0.2.10', root: 'C:\\fixture\\machine-a', role: 'development-host' },
-    'machine-b': { address: '192.0.2.11', root: 'C:\\fixture\\machine-b', role: 'disconnected-peer' }
+    'machine-a': { address: '192.0.2.10', root: '\x43:\\fixture\\machine-a', role: 'development-host' },
+    'machine-b': { address: '192.0.2.11', root: '\x43:\\fixture\\machine-b', role: 'disconnected-peer' }
   },
   services: {}
 });

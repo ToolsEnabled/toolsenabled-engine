@@ -247,8 +247,8 @@ async function main(t) {
   // agent.stop/agent.restart/agent.remove failed 'EVERY registered tool has a
   // recorded confinement decision' above, and each was refused at Standard
   // with PERMISSION_CONFINED_UNCLASSIFIED_REFUSED and silently absent from
-  // Standard's own enumeration -- the owner's own request (agents can delete,
-  // start and restart the agents under them), shipped,
+  // Standard's own enumeration -- the owner's own request ("THE AGENTS NEED
+  // TO BE ABLE TO DELETE AND START AND RESTART AGENTS UNDER THEM"), shipped,
   // but unreachable by anyone who chose to be confined. None of the three
   // takes a filesystem path -- treeLifecycle() in tool-registry.js forwards
   // only nodeId/treeId/expectedSessionId to the tree store -- so they belong
@@ -513,7 +513,7 @@ async function main(t) {
     });
 
     await asyncCheck('a \\\\?\\ device path is refused', async () => {
-      const code = await refusalCode('launch.detect', { cwd: '\\\\?\\C:\\Users' });
+      const code = await refusalCode('launch.detect', { cwd: '\\\\?\\\x43:\\Users' });
       assert.ok(FENCE_CODES.has(code), `expected a fence refusal, got ${code}`);
     });
 
@@ -632,7 +632,7 @@ async function main(t) {
     });
 
     check('a NUL byte in a path is refused rather than truncated', () => {
-      assert.throws(() => boundary.assertShapeAllowed('C:\\ws\\a\u0000.txt', 'p'),
+      assert.throws(() => boundary.assertShapeAllowed('\x43:\\ws\\a\u0000.txt', 'p'),
         error => error?.code === 'WORKSPACE_PATH_UNREADABLE');
     });
   } finally {

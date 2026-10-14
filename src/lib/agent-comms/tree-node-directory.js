@@ -2,8 +2,8 @@
 
 // WHO IS RUNNING ON THIS COMPUTER'S AGENT TREE, AND WHO EACH ONE REPORTS TO.
 //
-// THE DEFECT THIS EXISTS FOR, as reported: a child agent tried to
-// reach its coordinator through agent comms, and it did not work.
+// THE DEFECT THIS EXISTS FOR, in the owner's words: "This is just the issue
+// with trying to have it reach coordinator through agent comms it didnt work."
 // A child agent started from a tree node was told the name of its manager and
 // given a messaging tool, and every attempt was refused. Three separate walls
 // produced that, and only one of them is about credentials or transport:
@@ -33,8 +33,8 @@
 // off the canvas -- into the durable agent identity the message fabric
 // addresses. Nothing else in this feature is allowed to invent an address.
 //
-// WHY A NAME AND NOT AN INTERNAL ID. The owner's screenshot guessed that the
-// manager's internal agent id was the wrong one. It is worse than that:
+// WHY A NAME AND NOT AN INTERNAL ID. The owner's screenshot guessed that "the
+// manager's internal agent ID isn't the..." right one. It is worse than that:
 // the child is never told an internal id at all, deliberately --
 // src/tree-node-brief.js's stated contract is that it names "the same string
 // the person reads, never an internal id". A mapping keyed on anything else
@@ -624,8 +624,8 @@ function readRecord(file, { fsImpl = fs, allowMissing = false } = {}) {
  * caught it and rebuilt, but everything in it was gone -- every circle
  * registered at that moment lost its address at once, which is the fleet-wide
  * failure this file is the single point of. A second file on this machine went
- * the same way the same day, and unclean power loss happens on ordinary
- * machines, so the window is real and not theoretical.
+ * the same way the same day, and this machine has a recorded history of
+ * unclean power events, so the window is real and not theoretical.
  *
  * A dozen other writers in this engine already fsync before renaming
  * (agent-presence.js, agent-org-store.js, browser-owner.js, audit.js among
@@ -743,8 +743,8 @@ const STOPPED_RETENTION_MS = 60 * 60 * 1000;
  * MEASURED 2026-09-03 against the live directory (11 rows): two, both named
  * "Controller", carried stoppedAt: null with heartbeatAt 4007s and 2229s in
  * the past -- 66 and 37 minutes past the 90-second live window, with no
- * session left anywhere to call unregisterNode for them. (Unclean power loss
- * happens on ordinary machines; a killed or crashed process
+ * session left anywhere to call unregisterNode for them. (This machine has a
+ * recorded history of unclean power events; a killed or crashed process
  * leaves exactly this shape -- heartbeats stop, nothing ever marks stoppedAt.)
  * The old expired() answered false for both, and would go on answering false
  * forever: a row only ages out once stoppedAt is set, and nothing ever sets
@@ -889,9 +889,9 @@ function currentRowOf(nodes, row) {
   return current;
 }
 
-/* THE CANVAS SPELLS ONE CIRCLE TWO WAYS. It draws "Builder 2 (0000b002)" while another circle
+/* THE CANVAS SPELLS ONE CIRCLE TWO WAYS. It draws "Builder 2 (964cd27e)" while another circle
  * shares the role name and "Builder 2" while none does, and the app re-sends whichever it shows
- * now (updateTreeAddress) -- the same session was told "Worker 3 (0000b003)" and then "Worker 3"
+ * now (updateTreeAddress) -- the same session was told "Worker 3 (277f776d)" and then "Worker 3"
  * within one conversation. spellingBase answers the plain form of a suffixed name: the same
  * text without the hex disambiguator the canvas appends, or null when the name carries none.
  * Nothing else is folded: "Builder 2" never matches "Builder 20". */
@@ -986,11 +986,11 @@ function createTreeNodeDirectory({
            to nothing: folding it to its plain or suffixed form below would hand that expired
            alias's reports to whichever circle now carries the other spelling -- measured, an
            unrelated circle registered as "Controller" gained the manager edge of every unbound
-           report still labelled "Controller (aaaa0001)" once that alias expired. */
+           report still labelled "Controller (da02fefa)" once that alias expired. */
         if (candidates.size === 0 && !namesExpiredAlias) {
           /* T839: NO EXACT NAME, SO TRY THE OTHER SPELLING -- with the same rules and the same demand
              for exactly one circle. Measured: a circle's successor re-sent its manager as "Builder 2"
-             while the manager was registered as "Builder 2 (0000b002)"; nothing matched, the successor
+             while the manager was registered as "Builder 2 (964cd27e)"; nothing matched, the successor
              had no line to its manager, and the manager could not reach a circle that was working.
              A label that could name two circles on this tree binds to neither (candidates.size), a label
              that names another circle exactly binds there (the loop above), and a circle the person
@@ -1132,8 +1132,8 @@ function createTreeNodeDirectory({
       /* A REPLACED ROW IS NOT DELETED, IT IS MARKED.
          agentId is sha256(sessionId), so a circle that moves accounts or is
          restarted gets a NEW address and its old one resolved to nothing --
-         measured on a development install, the Controller's node was
-         tree-aaaa0001… until one minute and tree-bbbb0002… from the next. Anything
+         measured on this computer 2026-09-15, the Controller's node was
+         tree-e60571a0… until 07:12Z and tree-4b31cd18… from 07:13Z. Anything
          already addressed to the old id was undeliverable from that instant,
          with the sender holding a receipt that said delivered.
          Keeping the retired row, marked with the address that continues it,
@@ -1265,7 +1265,7 @@ function createTreeNodeDirectory({
    *
    *  ONLY absence is forgiven, and only as the platform reports it.
    *  `allowMissing` tolerates ENOENT and nothing else -- deliberately NOT the
-   *  ENOTDIR this file also tolerated before an earlier change. A malformed file, a wrong
+   *  ENOTDIR this file also tolerated before 5fa759e. A malformed file, a wrong
    *  schema version, an invalid node list, EISDIR, EACCES and every other errno
    *  still refuse, because those are failures to READ and answering "no nodes"
    *  to them would be a confident lie about who is running.
@@ -1343,8 +1343,8 @@ function createTreeNodeDirectory({
    * REGISTERED. A row is kept only STOPPED_RETENTION_MS after its session
    * ends, so a child resumed before its stopped manager found no row and was
    * told the manager was "not registered" and to "re-point this agent" --
-   * measured 2026-09-24, three Managers resumed five minutes before their
-   * Controller, and one ended its only turn on that sentence. A sender registered for
+   * measured 2026-09-24, Managers 2-4 resumed five minutes before Controller 5,
+   * and Manager 4 ended its only turn on that sentence. A sender registered for
    * a saved circle (nodeKey) took its managerName from that same saved tree, so
    * the manager is a circle on it: the true answer is "not running", with the
    * one step that changes it. Nothing is held for a row that does not exist, so
@@ -1434,10 +1434,10 @@ function createTreeNodeDirectory({
     const exactMatches = connected.filter(node => nameKey(node.nodeName) === toKey || node.agentId === toKey);
     /* A BARE NAME THE PERSON ACTUALLY TYPES.
        Circles are registered with a disambiguating suffix -- "Controller
-       (aaaa0001)" -- and nothing is named plainly "Controller", so an exact
+       (da02fefa)" -- and nothing is named plainly "Controller", so an exact
        match on the shorthand finds nothing and the old answer was "No agent
        called "Controller" is registered on this computer's tree" while two
-       were. Measured: a tree's manager, reading its roster,
+       were. Measured 2026-09-15: the math tree's manager, reading its roster,
        sent to the Controller in its own tree rather than the linked one.
        A shorthand that fits exactly ONE reachable live circle is not ambiguous
        and resolves. Two and it is refused BY NAME, as it always was -- this
@@ -1663,7 +1663,7 @@ function createTreeNodeDirectory({
       .map(node => Object.freeze({
         nodeName: node.nodeName,
         /* EVERY REACHABLE ROW CARRIES ITS ADDRESS, not only a user-linked one.
-           The agentId arrived with direct links and was scoped to
+           The agentId arrived with direct links (f582c5a5) and was scoped to
            them because that was the case being built; a manager and a report
            were simply never extended. Measured 2026-09-16 (T138): a manager
            whose four workers all registered as "Worker" read this roster, got

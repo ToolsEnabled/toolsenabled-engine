@@ -153,8 +153,8 @@ function fallbackRecordsAreReviewableAndSettleAppendOnly() {
   check(ingress.listUnclassifiedIngress({ ledgerFile: f.ledger, fallbackFile: f.fallback }).length === 0, 'resolved fallback turn must leave the review queue');
 }
 
-/* THE TWO FAILURES THAT MADE MOST RECENT OWNER MESSAGES UNREACHABLE
-   (measured on a development install):
+/* THE TWO FAILURES THAT MADE 29 OF THE OWNER'S 30 RECENT MESSAGES UNREACHABLE
+   (measured 2026-09-03 on the live install):
 
    1. a turn an agent read and filed nothing for was settled 'discarded' and
       left the pending queue, so nothing could list or promote it again;
@@ -223,7 +223,7 @@ function unfiledProductTurnsAreListedAndStillPromotable() {
 /* A DISCARD FROM BEFORE THE PERSON-DECIDED GUARD IS THE SAME LOSS IN A
    DIFFERENT DIRECTORY.
 
-   MEASURED 2026-09-03 on a live spool: 228 records already sit in
+   MEASURED 2026-09-03 on the owner's live spool: 228 records already sit in
    reconciled/ with ledgerOutcome 'discarded', an agent's name, and no proof a
    person decided anything -- the exact shape markDiscarded's decidedBy guard
    now refuses to create. The guard stops new ones; it does nothing by itself

@@ -133,8 +133,8 @@ async function oneSession() {
    * the identical harm the comment in online-fra-relay-shell.js describes for
    * the handshake timeout, which was fixed there and is still present here.
    *
-   * The owner's spec is that the session lasts until the person has been inactive
-   * for about 4 minutes or closes the window, so nine and a half minutes is closer but still
+   * The owner's spec is "last until they are inactive for like 4 minutes ... or
+   * if they close the window", so nine and a half minutes is closer but still
    * wrong: the session ends on a clock the person cannot see and did not ask
    * for. Fixing it means re-admitting on the LIVE socket with a fresh relay
    * lease instead of reconnecting, which needs a relay-side message and is a

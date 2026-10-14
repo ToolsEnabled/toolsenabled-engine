@@ -50,7 +50,7 @@ function code(fn, expected, label) {
 }
 
 // readFile/writeFile/listDir/listProcesses now reach the audit ledger
-// through the awaited path host.exec already uses (an earlier change:
+// through the awaited path host.exec already uses (32faaf7:
 // audit-admission.js#requireRecordAsync), so a failure surfaces as a
 // rejection, not a synchronous throw. Same contract as code() above --
 // calling with values, not matching source text -- just awaited.
@@ -242,7 +242,7 @@ async function run() {
   // Same shape as host.exec's own coverage of this
   // (tests/host-exec-audit-off-thread.test.js, "a refused admission launches
   // nothing and rejects with the refusal"): inject dependencies.requireRecordAsync
-  // directly, the same seam host.exec reads. No ledger, vault or
+  // directly, the same seam host.exec (32faaf7) reads. No ledger, vault or
   // PowerShell is touched by this block.
   const refusal = Object.assign(new Error('test audit unavailable'), { code: 'AUDIT_UNAVAILABLE' });
   const refusedAdmission = { requireRecordAsync: () => Promise.reject(refusal) };

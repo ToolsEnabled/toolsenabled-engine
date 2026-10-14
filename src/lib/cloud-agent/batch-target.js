@@ -42,15 +42,11 @@ const agentContract = require('../../../tools/agent-contract.js');
 
 const BATCH_SCHEMA = 'toolsenabled.cloud-batch.target/v1';
 
-/* Measured on this machine 2026-08-24 and stated rather than assumed: the
- * provider accepted roughly 160 launches per two minutes per account, i.e. ~80
- * a minute each. The ceiling here is per ACCOUNT and deliberately a little
- * under that, because a batch that saturates the rate limit converts a
- * throughput problem into a 429 storm and the retries cost more than the
- * headroom saved. A declaration asking for more is refused rather than clamped:
- * silently serving less than was asked for is how a harness comes to report a
- * number nobody can reproduce. */
-const MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT = 72;
+/* Measured 2026-08-24: roughly 80 launches a minute were accepted. Keep the
+ * selected account below that rate so a batch does not saturate the provider
+ * limit and turn into repeated 429s. Admission refuses an excessive declared
+ * rate rather than silently promising throughput it cannot serve. */
+const MAX_LAUNCHES_PER_MINUTE = 72;
 
 const PROJECT_KEY = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const BATCH_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -102,9 +98,9 @@ function parseBatchTarget(input) {
   }
   const bounds = input.bounds;
   if (!bounds || typeof bounds !== 'object' || Array.isArray(bounds)) {
-    fail('CLOUD_BATCH_MALFORMED', 'bounds must be declared up front: how many, how fast, and across how many accounts.');
+    fail('CLOUD_BATCH_MALFORMED', 'bounds must declare how fast this batch may launch.');
   }
-  for (const field of ['launchesPerMinute', 'accounts']) {
+  for (const field of ['launchesPerMinute']) {
     if (!Number.isInteger(bounds[field]) || bounds[field] < 1) {
       fail('CLOUD_BATCH_MALFORMED', `bounds.${field} must be a positive integer.`);
     }
@@ -118,7 +114,7 @@ function parseBatchTarget(input) {
    * `{ publishedCommit }` is the honest alternative for the case where no
    * mirror is available -- the agents work from a published branch that is
    * BEHIND local. That is not automatically wrong: engine harvests were clean
-   * at a few commits behind, and useless at hundreds. The distance is not the thing that
+   * at 5 commits behind, and useless at 467. The distance is not the thing that
    * matters; whether THIS TASK'S OWN FILE moved is. So declaring it swaps the
    * mirror gate for a per-task drift gate that gives the same guarantee for the
    * tasks it admits.
@@ -144,37 +140,23 @@ function parseBatchTarget(input) {
     batchId: input.batchId,
     project: input.project,
     tasks: input.tasks,
-    bounds: Object.freeze({ launchesPerMinute: bounds.launchesPerMinute, accounts: bounds.accounts }),
+    bounds: Object.freeze({ launchesPerMinute: bounds.launchesPerMinute }),
     against,
     harvest: parseHarvestSpec(input.harvest),
-    provider: parseProviderSpec(input.provider, bounds.accounts)
+    provider: parseProviderSpec(input.provider)
   });
 }
 
-/* THE DISPATCH HALF OF "SPECIFY EVERYTHING UP FRONT". tools/cloud-lane.js has
- * always named the gap in its own handoff comment: runBatch also takes
- * `dispatch` and `accounts`, and the CLI could not honestly supply either,
- * because provider coordinates taken from FLAGS would sit outside the seal --
- * a sealed batch could be pointed at an environment nobody admitted without
- * breaking the seal. The first 150-task batch actually run (2026-08-24) was
- * dispatched by a harness composed outside the repo for exactly this reason.
- *
- * So the coordinates live HERE, inside the declaration the seal is computed
- * over: which branch the cloud agents check out, and which environment each
- * account launches into. What stays OUTSIDE the seal is machine-local by
- * nature and already re-checked downstream: each account's CODEX_HOME comes
- * from the multi-account registry on the dispatching machine, and runBatch
- * re-checks the account list against the admitted rate itself.
- *
- * ABSENT MEANS THE OLD CONTRACT, not a defect: a declaration without
- * `provider` admits exactly as before, and dispatching it still requires a
- * caller-supplied dispatch. Nothing that admitted yesterday refuses today. */
-function parseProviderSpec(input, declaredAccounts) {
+/* Provider coordinates are sealed with the declaration: the person's selected
+ * account, its environment, the branch and the concurrency bound. The CLI
+ * resolves only machine-local details such as that account's CODEX_HOME.
+ * Without a provider block, a caller must supply its own dispatch function. */
+function parseProviderSpec(input) {
   if (input === undefined || input === null) return null;
   if (typeof input !== 'object' || Array.isArray(input)) {
-    fail('CLOUD_BATCH_MALFORMED', 'provider must be an object when declared: { branch, environments, concurrency }.');
+    fail('CLOUD_BATCH_MALFORMED', 'provider must be an object when declared: { account, environment, branch, concurrency }.');
   }
-  const unknown = Object.keys(input).filter((key) => !['branch', 'environments', 'concurrency'].includes(key));
+  const unknown = Object.keys(input).filter((key) => !['account', 'environment', 'branch', 'concurrency'].includes(key));
   if (unknown.length) {
     fail('CLOUD_BATCH_MALFORMED',
       `provider declares ${unknown.map((k) => JSON.stringify(k)).join(', ')}, which nothing consumes. An accepted-but-ignored field reads as specified and does nothing, so it is refused instead.`);
@@ -183,49 +165,26 @@ function parseProviderSpec(input, declaredAccounts) {
   if (typeof branch !== 'string' || !BRANCH.test(branch)) {
     fail('CLOUD_BATCH_MALFORMED', 'provider.branch must be a usable branch name -- it is the branch every cloud agent checks out.');
   }
-  const environments = input.environments;
-  if (!environments || typeof environments !== 'object' || Array.isArray(environments)) {
+  const account = input.account;
+  if (typeof account !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(account)) {
+    fail('CLOUD_BATCH_MALFORMED', 'provider.account must name the account explicitly selected for this batch.');
+  }
+  const environment = input.environment;
+  if (typeof environment !== 'string' || !/^[0-9a-f]{32}$/.test(environment)) {
     fail('CLOUD_BATCH_MALFORMED',
-      'provider.environments must map each account name to its environment id. An account with no environment has nowhere to launch.');
-  }
-  const names = Object.keys(environments);
-  if (names.length === 0) {
-    fail('CLOUD_BATCH_MALFORMED', 'provider.environments must name at least one account.');
-  }
-  for (const name of names) {
-    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(name)) {
-      fail('CLOUD_BATCH_MALFORMED', `provider.environments names ${JSON.stringify(name)}, which is not a usable account name.`);
-    }
-    if (!/^[0-9a-f]{32}$/.test(String(environments[name] || ''))) {
-      fail('CLOUD_BATCH_MALFORMED',
-        `provider.environments[${JSON.stringify(name)}] must be a 32-hex-character environment id -- the exact environment that account is authorized for.`);
-    }
-  }
-  /* THE COUNT IS THE SAME FACT TWICE, so it must agree with itself.
-   * bounds.accounts is what gateBounds cleared the launch rate against;
-   * admitting a rate for three accounts and then dispatching across two is
-   * exactly the mismatch checkAccountsCanCarryRate refuses at run time --
-   * refusing it here names it while the coordinator is still steering. */
-  if (names.length !== declaredAccounts) {
-    fail('CLOUD_BATCH_MALFORMED',
-      `provider.environments names ${names.length} account(s) but bounds.accounts declares ${declaredAccounts}. `
-      + 'The admitted rate is cleared against bounds.accounts; a different dispatch roster would carry a rate nobody admitted.');
+      'provider.environment must be a 32-hex-character environment id -- the exact environment the selected account is authorized for.');
   }
   const concurrency = input.concurrency === undefined ? 1 : input.concurrency;
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 32) {
     fail('CLOUD_BATCH_MALFORMED', 'provider.concurrency must be a whole number from 1 to 32 when declared.');
   }
-  const frozenEnvironments = Object.freeze(names.sort().reduce((out, name) => {
-    out[name] = environments[name];
-    return out;
-  }, {}));
-  return Object.freeze({ branch, environments: frozenEnvironments, concurrency });
+  return Object.freeze({ account, environment, branch, concurrency });
 }
 
 /* THE HARVEST HALF OF "SPECIFY EVERYTHING UP FRONT". Until this, `harvest` was
  * carried through unvalidated and consumed by nothing -- an API surface that
  * reads as specified and does nothing, which is the settings-that-enforce-
- * nothing defect one layer up. The design is explicit: the coordinator
+ * nothing defect one layer up. The owner's design is explicit: the coordinator
  * specifies everything, harvesters included, and then loses control.
  *
  * WHO CONSUMES IT: the harvester enumerates a wave from the batch JOURNAL (the
@@ -310,12 +269,11 @@ function gateShape(declaration, findings) {
 }
 
 function gateBounds(declaration, findings) {
-  const { launchesPerMinute, accounts } = declaration.bounds;
-  const ceiling = MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT * accounts;
-  if (launchesPerMinute > ceiling) {
+  const { launchesPerMinute } = declaration.bounds;
+  if (launchesPerMinute > MAX_LAUNCHES_PER_MINUTE) {
     findings.push({
       gate: 'bounds',
-      refused: `bounds ask for ${launchesPerMinute} launches a minute across ${accounts} account(s), above the measured ceiling of ${ceiling} (${MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT} per account). Refusing rather than quietly serving less, because a batch that reports a rate it did not achieve is a number nobody can reproduce.`
+      refused: `bounds ask for ${launchesPerMinute} launches a minute, above the measured ceiling of ${MAX_LAUNCHES_PER_MINUTE}. Refusing rather than quietly serving less, because a batch that reports a rate it did not achieve is a number nobody can reproduce.`
     });
   }
 }
@@ -326,8 +284,8 @@ async function gateMirror(declaration, findings, { mirrorApi, registryPath }) {
    * agent in the batch works from stale source: their citations address code
    * that moved, their patches fail to apply, and the failure surfaces at
    * harvest as "the fix is already present" or an empty diff. That was measured
-   * -- the app's cloud branch was hundreds of commits behind local HEAD, and its
-   * harvests were the ones that came back useless while the engine's, a few behind,
+   * -- the app's cloud branch was 467 commits behind local HEAD, and its
+   * harvests were the ones that came back useless while the engine's, 5 behind,
    * came back clean. So a batch is refused at admission rather than discovering
    * it 250 dispatches later. */
   let verdict;
@@ -481,7 +439,7 @@ function assertSealIntact(admission, declaration) {
 
 module.exports = Object.freeze({
   BATCH_SCHEMA,
-  MAX_LAUNCHES_PER_MINUTE_PER_ACCOUNT,
+  MAX_LAUNCHES_PER_MINUTE,
   admitBatch,
   assertSealIntact,
   parseBatchTarget,

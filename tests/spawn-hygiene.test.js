@@ -48,6 +48,13 @@ const allowlistPattern = /VISIBLE-SHELL-ALLOWLIST\s*:\s*\S.+/;
  * call in the tree is still found and still required to hide its window. */
 const notAProcessSpawnPattern = /NOT-A-PROCESS-SPAWN\s*:\s*\S.+/;
 
+const serverControlPanel = fs.readFileSync(path.join(root, 'packages', 'servercontrol', 'Server-Control-Panel.ps1'), 'utf8');
+assert.match(
+  serverControlPanel,
+  /Start-Process -FilePath \$HostProfile\.PowerShell -Verb RunAs -WindowStyle Hidden -ArgumentList \("-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \$quotedScript"\)/,
+  'UAC elevation must remain owner-visible while the elevated PowerShell console is hidden'
+);
+
 function runtimeFiles() {
   const files = [];
   const skippedDirectories = new Set(['.git', 'node_modules', 'state', 'logs', 'profiles']);

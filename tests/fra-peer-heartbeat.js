@@ -259,8 +259,8 @@ async function main() {
       'computed elapsedMs -- proves elapsedMs is derived only from performance.now(), never Date.now()');
   }
 
-  // --- heartbeat(): the happy path proves the exact round trip the design
-  // requires -- connect, then initialize, then tools/list, then one
+  // --- heartbeat(): the happy path proves the exact round trip the owner
+  // asked for -- connect, then initialize, then tools/list, then one
   // tools/call against the read-only tool -- that it is wired through
   // createFullRemoteAccessProxy exactly like every other FRA client, that
   // liveness is confirmed exactly once, only after all three calls have
@@ -1143,7 +1143,7 @@ async function main() {
     const hostile = heartbeatModule.sanitizeHeartbeatTelemetry({
       ok: false, attemptsHistory: [
         { attempt: 1, stage: 'connect', code: 'REMOTE_BRIDGE_RESET', elapsedMs: 10, ok: false },
-        { attempt: 2, stage: 'not_a_real_stage', code: 'lowercase not safe', elapsedMs: -5, ok: false, secretPath: 'C:\\should\\never\\appear' },
+        { attempt: 2, stage: 'not_a_real_stage', code: 'lowercase not safe', elapsedMs: -5, ok: false, secretPath: '\x43:\\should\\never\\appear' },
         { attempt: 1, stage: 'connect', code: 'SHOULD_NOT_APPEAR', elapsedMs: 1, ok: false }
       ]
     });

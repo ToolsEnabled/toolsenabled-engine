@@ -14,9 +14,9 @@
 # 0 node listeners sit on 0.0.0.0/::/an internet-facing IP -- every one is
 # loopback or the direct-link address. The bind address is doing all of the
 # work and the firewall is contributing nothing behind it. That is one layer
-# with no backstop, sitting exactly where the ground is about to move: a
-# machine may be moved to another computer and network before red-team
-# testing, and the bind address is read from
+# with no backstop, sitting exactly where the ground is about to move: the
+# owner has said this machine will be moved to another computer and network
+# before red-team testing, and the bind address is read from
 # config/service-registry.json. On a network where that address is routable,
 # every service publishes the instant it binds. The bind is not even a
 # constant -- tools/release-packager/serve-candidate.mjs takes --bind as a CLI

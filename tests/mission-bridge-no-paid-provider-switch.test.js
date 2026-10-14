@@ -1,8 +1,15 @@
 'use strict';
 
+// Codex lanes run only when the saved Agent API mode permits them; Only (the
+// shipped default) refuses them at dispatch, before any launch record.
+require('./lib/agent-api-mode-fixture').selectAgentApiMode('Enabled');
+// Auditing is an explicit choice under the Basic runtime policy; this suite
+// asserts audited launch receipts, so the choice is injected (never written).
+const auditChosen = () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] });
+
 /* THE ENGINE-HONOURED NO-PROVIDER SWITCH.
  *
- * The 1.0.41 limitations notes (section 2.1) record the incident this file
+ * LIMITATIONS-AND-HANDOFF-1.0.41.md section 2.1 records the incident this file
  * exists to make impossible: `tools/agent-dispatch-packaged-qa.mjs` fenced its
  * paid lanes by ENVIRONMENT ONLY -- it handed the bridge child a cut-down PATH
  * and empty home directories and trusted that no provider CLI could be found.
@@ -82,6 +89,7 @@ function installedProviderFixture(t, { processEnv = {} } = {}) {
     actor: enabledControllerId(org),
     agentOrg: org,
     audit,
+    loadSettings: auditChosen,
     policy: { assertActive() {} },
     permissionSession: INSTALL_TIER_SESSIONS.unrestricted,
     env: { PATH: process.env.PATH },

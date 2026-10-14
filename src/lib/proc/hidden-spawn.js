@@ -86,6 +86,9 @@
  *   3. A `.cmd`/`.bat` target is run through `cmd.exe /d /s /c call`, with
  *      shell:false and an explicit argv. Node cannot execute a batch file
  *      directly (EINVAL since Node 18.20), and this is the hideable form.
+ *      cmd.exe still re-parses that argv, so an argument carrying a cmd
+ *      metacharacter is refused rather than started; see
+ *      BATCH_ARGUMENT_METACHARACTERS below.
  *   4. A known Node launcher shim is resolved to its native executable, per
  *      rule 4's table below.
  *   5. With TOOLSENABLED_REFUSE_PROVIDER_SPAWN set in THIS process, every spawn
@@ -263,6 +266,76 @@ function isBatchTarget(command) {
   return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(String(command));
 }
 
+/* WHAT A BATCH TARGET'S ARGUMENTS MAY NOT CARRY (security review 1.0.50 L9).
+ *
+ * Rule 3's argv is not passed through untouched. libuv joins it into one
+ * command line with MSVCRT quoting, where an embedded `"` becomes `\"`; the
+ * containment wrapper's QuoteArgument does the same. cmd.exe does not honour
+ * `\"`, so every `"` flips cmd's quote state and can leave the rest of an
+ * argument OUTSIDE quotes, and `/s` does nothing once `call` comes first. A
+ * JSON-quoted `-c mcp_servers={...}` override naming a server `x & calc` then
+ * runs `calc` as a cmd command, outside any sandbox. `%` expands even inside
+ * quotes (twice, through `call`), `^` escapes the character after it, and a
+ * CR or LF ends the command.
+ *
+ * Whether one of them lands inside or outside cmd's quotes depends on every
+ * `"` before it and on which of the two quoting implementations built the
+ * line, so the check does not try to tell: an argument containing any of them
+ * is refused before anything starts. The cost is a narrow case that did work:
+ * a quote-free value with a space (a path under a folder named `A & B`, a `%`
+ * that names no variable) was quoted whole and passed intact. Through a batch
+ * shim it is now refused with this error instead. Native executables and the
+ * npm codex.js route never reach this branch. The value is never echoed -- an
+ * argument can carry a path or a configuration value -- only its position. */
+const BATCH_ARGUMENT_METACHARACTERS = /[&|<>^%\r\n]/;
+
+function refuseBatchMetacharacters(command, args) {
+  /* THE PROGRAM'S OWN PATH TOO (platform review 1.0.50 E4). The batch file's
+     path rides on the same line, and libuv quotes it only when it holds a
+     space, so the profile folder of a Windows account named R&D reached cmd.exe bare
+     and cmd split the line at the `&`: every start of an npm-installed
+     provider failed with a cmd.exe error. Refused here by name instead. The
+     path itself is not echoed. */
+  if (BATCH_ARGUMENT_METACHARACTERS.test(String(command))) {
+    throw new HiddenSpawnError(
+      'HIDDEN_SPAWN_BATCH_COMMAND_REFUSED',
+      `Refusing to start ${path.win32.basename(String(command))} through cmd.exe: its folder path contains a character `
+        + 'cmd.exe would act on (& | < > ^ %, or a line break), so cmd.exe would split the command there.',
+    );
+  }
+  const index = args.findIndex(value => BATCH_ARGUMENT_METACHARACTERS.test(value));
+  if (index === -1) return;
+  throw new HiddenSpawnError(
+    'HIDDEN_SPAWN_BATCH_ARGUMENT_REFUSED',
+    `Refusing to start ${path.win32.basename(String(command))} through cmd.exe: argument ${index + 1} contains `
+      + 'a character cmd.exe would act on (& | < > ^ %, or a line break), so it could run as a separate command.',
+  );
+}
+
+/* HOW LONG A LINE cmd.exe WILL TAKE (platform review 1.0.50 E1).
+ *
+ * CreateProcess accepts 32,767 characters, but cmd.exe refuses any command
+ * longer than 8191 with "The command line is too long." -- after the child has
+ * started, as a failure the caller can only report as a generic start error.
+ * The line cmd.exe reads is at least `call <command> <arg> <arg> ...` with one
+ * space between parts; quoting and the shim's own `%*` expansion only add to
+ * it. So a line whose plain length is already over the limit cannot work, and
+ * is refused here, before anything starts, under its own name. A line under
+ * the plain length can still overflow once quoted; that rarer case is left to
+ * cmd.exe, as before. */
+const BATCH_COMMAND_LINE_LIMIT = 8191;
+
+function refuseOverlongBatchLine(command, args) {
+  let length = 'call'.length + 1 + String(command).length;
+  for (const value of args) length += 1 + value.length;
+  if (length <= BATCH_COMMAND_LINE_LIMIT) return;
+  throw new HiddenSpawnError(
+    'HIDDEN_SPAWN_BATCH_LINE_TOO_LONG',
+    `Refusing to start ${path.win32.basename(String(command))} through cmd.exe: its command line would be at least `
+      + `${length} characters, and cmd.exe accepts at most ${BATCH_COMMAND_LINE_LIMIT}.`,
+  );
+}
+
 /**
  * Decide what will actually be executed, without executing it.
  *
@@ -307,6 +380,8 @@ function resolveHiddenInvocation(command, args = [], env = undefined) {
      work; /d skips AutoRun, /s fixes the quoting rule, /v:off keeps a `!` in
      an argument from being expanded. */
   if (isBatchTarget(command)) {
+    refuseBatchMetacharacters(command, args);
+    refuseOverlongBatchLine(command, args);
     return {
       command: process.env.ComSpec || 'cmd.exe',
       args: ['/d', '/v:off', '/s', '/c', 'call', command, ...args],
@@ -427,6 +502,7 @@ function spawnHidden(command, args = [], options = {}) {
     env,
     credentialEnvironment: statedCredentials,
     containProcessTree = false,
+    nativeClaudeCode = false,
     rootLaunch: privateRootLaunch,
     ...rest
   } = options;
@@ -450,6 +526,11 @@ function spawnHidden(command, args = [], options = {}) {
    * scrub and are not handed to a generic containment helper as an escape
    * hatch. No current contained caller uses that channel; refuse the combined
    * shape if one ever tries. */
+  // Native Claude Code performs its own authentication. Its transport opts
+  // into pass-through; intermediary and general children retain the scrub.
+  const prepareEnvironment = nativeClaudeCode
+    ? environment => ({ ...environment })
+    : safeLaunchEnvironment;
   if (containProcessTree && (process.platform === 'win32' || process.platform === 'linux')) {
     if (Object.keys(credentialEnvironment).length > 0) {
       throw new HiddenSpawnError(
@@ -462,11 +543,11 @@ function spawnHidden(command, args = [], options = {}) {
     const child = spawnContained(invocation.command, invocation.args, {
       ...rest,
       cwd: containedCwd,
-      env: safeLaunchEnvironment(childEnv, { context: 'hidden child process' }),
+      env: prepareEnvironment(childEnv, { context: 'hidden child process' }),
       shell: false,
       windowsHide: true,
       terminateDescendantsOnRootExit: true,
-    }, { safeLaunchEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
+    }, { safeLaunchEnvironment: prepareEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
     rootLaunch?.spawned(child);
     return child;
   }
@@ -476,7 +557,7 @@ function spawnHidden(command, args = [], options = {}) {
   // Keep the scrub and the explicitly validated credential overlay together;
   // ordinary caller env is never evidence of an intended credential.
   const directEnvironment = Object.assign(
-    safeLaunchEnvironment(childEnv, { context: 'hidden child process' }),
+    prepareEnvironment(childEnv, { context: 'hidden child process' }),
     credentialEnvironment,
   );
   beforeRootSpawn?.();

@@ -77,7 +77,7 @@ function expectCode(operation, expectedCode) {
 }
 
 (() => {
-  /* Four actors since an earlier change (2026-09-10), which added 'grok' to the frozen
+  /* Four actors since a57cd698 (2026-09-10), which added 'grok' to the frozen
      ACTORS list in src/lib/delegation-enforcement.js:13 with the confined
      runtime-negotiated ACP launch for Gemini and Grok Research agents. Still an
      exact list, so a fifth actor arriving unreviewed still fails here.

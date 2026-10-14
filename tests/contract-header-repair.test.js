@@ -1,7 +1,7 @@
 'use strict';
 /* A MECHANICAL FAULT THE READER CAN FIX IS NOT WORTH A ROUND TRIP.
  *
- * MEASURED 2026-09-03 on a live ledger: the single commonest agent.spawn
+ * MEASURED 2026-09-03 on the owner's ledger: the single commonest agent.spawn
  * refusal was one sentence listing FIVE faults --
  *
  *   "no CONTRACT/1 header; missing required field: role; missing required
@@ -103,13 +103,13 @@ test('a "because" with no measurement is still refused after a repair', () => {
   assert.ok(errors.some(e => /states no measurement/.test(e)), JSON.stringify(errors));
 });
 
-/* A real-window run: a Controller asked for two Workers wrote a "because" that
+/* c5 real-window run: a Controller asked for two Workers wrote a "because" that
    quoted the person's words, in double quotes, and was refused six times with
    "Name a number, a failing check, or quoted output". The gate's own comment and
    its refusal both say quoted output counts; it did not look for quotes. */
 test('a "because" that quotes an output or the request states a measurement', () => {
   for (const because of [
-    'The person\'s request quotes: "each worker answers with one fixed word and nothing else".',
+    'The person\'s request quotes: "the first replies with the single word KIWI and nothing else".',
     'the probe printed \u201cno backend is configured\u201d and stopped',
     'the check printed `ENOENT: tools/missing.js` and stopped',
   ]) assert.equal(contract.statesAMeasurement(because), true, because);

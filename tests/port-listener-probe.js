@@ -13,7 +13,7 @@ const serviceControl = require('../src/lib/service-control');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROBE = path.join(ROOT, 'tools', 'port-listener-probe.ps1');
-const POWERSHELL = path.join(process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows',
+const POWERSHELL = path.join(process.env.SystemRoot || process.env.SYSTEMROOT || '\x43:\\Windows',
   'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 async function startListener() {

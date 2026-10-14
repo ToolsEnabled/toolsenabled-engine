@@ -25,6 +25,9 @@
 'use strict';
 
 require('./lib/agent-api-mode-fixture').selectAgentApiMode('Enabled');
+// Auditing is an explicit choice under the Basic runtime policy; this suite
+// asserts audited launch receipts, so the choice is injected (never written).
+const auditChosen = () => ({ values: { 'audit.enabled': true }, provenance: { 'audit.enabled': { source: 'user' } }, rejected: [] });
 
 /* A LOOP MAY NOT WIDEN WHAT ITS CHILDREN MAY DO.
  *
@@ -178,6 +181,7 @@ async function main() {
     roots: { isolated: root },
     actor: enabledControllerId(org), agentOrg: org,
     audit: auditApi,
+    loadSettings: auditChosen,
     policy: { assertActive() {} },
     permissionSession: GUIDED,
     env: { PATH: process.env.PATH },

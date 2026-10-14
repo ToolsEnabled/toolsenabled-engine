@@ -16,14 +16,14 @@
 //   46a2617b8b751d1b6ca947c6d52336dedb5306476f3c1fb7891d520bf33b8e7c).
 // - UNMET PRECONDITION: the complete file is not green before or after these
 //   changes on this checkout. Its pre-existing suggestion assertion reports:
-//   a mismatch between the suggested and the expected draft filename.
+//   "actual 'Personal Draft 7.28.pdf'" / "expected 'scholarship Draft 7.28.pdf'".
 //   No existing assertion was weakened to conceal that unrelated failure.
 
 'use strict';
 
-// Regression tests for the egress boundary check. The anchor case is the
-// incident shape: "Product Brief 2.10 (agent-reviewed).pdf" was sent to an
-// outside recipient with agent provenance in its filename. That exact string
+// Regression tests for the egress boundary check. The anchor case is the real
+// incident: "Personal Draft 7.28 (agent-reviewed).pdf" was submitted to the
+// owner's university with agent provenance in its filename. That exact string
 // must never pass again.
 
 const assert = require('node:assert/strict');
@@ -41,8 +41,8 @@ const check = (label, fn) => { fn(); checks += 1; void label; };
 
 check('the exact filename from the real incident is BLOCKED', () => {
   const result = preflight({
-    filePath: 'C:\\Drafts\\Product Brief 2.10 (agent-reviewed).pdf',
-    destination: 'customer portal upload'
+    filePath: '\x43:\\Users\\owner\\Desktop\\Personal Draft 7.28 (agent-reviewed).pdf',
+    destination: 'Canvas assignment submission'
   });
   assert.equal(result.allowed, false);
   assert.equal(result.severity, 'block');
@@ -51,14 +51,14 @@ check('the exact filename from the real incident is BLOCKED', () => {
 });
 
 check('the suggested replacement for the real incident is natural', () => {
-  const suggested = suggestName('Product Brief 2.10 (agent-reviewed).pdf');
-  assert.equal(suggested, 'Product Brief 2.10.pdf');
+  const suggested = suggestName('Personal Draft 7.28 (agent-reviewed).pdf');
+  assert.equal(suggested, 'Personal Draft 7.28.pdf');
   // and the suggestion must itself pass
   assert.equal(preflight({ filePath: suggested }).allowed, true);
 });
 
-check('ordinary working names without provenance are CLEAN', () => {
-  for (const name of ['Product New Brief.pdf', 'Product Current V2.pdf', 'Product Brief #1.pdf', 'Product Current.docx']) {
+check('the names the owner actually used before are CLEAN', () => {
+  for (const name of ['scholarship New Draft.pdf', 'scholarship Current V2.pdf', 'scholarship Draft #1.pdf', 'scholarship Current.docx']) {
     const result = preflight({ filePath: name });
     assert.equal(result.allowed, true, `${name} should be allowed`);
     assert.equal(result.severity, 'clean', `${name} should be clean, got ${JSON.stringify(result.findings)}`);
@@ -75,13 +75,13 @@ check('model names in a filename are blocked', () => {
 });
 
 check('ai/agent/autogen variants are blocked', () => {
-  for (const name of ['brief (ai-generated).pdf', 'proposal_agent_written.docx', 'summary-auto-generated.md']) {
+  for (const name of ['paper (ai-generated).pdf', 'thesis_agent_written.docx', 'summary-auto-generated.md']) {
     assert.equal(preflight({ filePath: name }).allowed, false, `${name} should be blocked`);
   }
 });
 
 check('internal-state words warn but do not block', () => {
-  const result = preflight({ filePath: 'proposal-wip.docx' });
+  const result = preflight({ filePath: 'essay-wip.docx' });
   assert.equal(result.allowed, true);
   assert.equal(result.severity, 'warn');
   assert.ok(result.findings.some(f => f.code === 'INTERNAL_STATE'));
@@ -98,7 +98,7 @@ check('a legitimate .ai extension does not trip the model-name rule', () => {
 
 check('clean filename with dirty metadata is still blocked', () => {
   const result = preflight({
-    filePath: 'Product Brief 2.10.pdf',
+    filePath: 'scholarship Draft 7.28.pdf',
     metadata: { author: 'Claude', producer: 'Microsoft Word' }
   });
   assert.equal(result.allowed, false);
@@ -107,7 +107,7 @@ check('clean filename with dirty metadata is still blocked', () => {
 
 check('clean metadata passes', () => {
   const result = preflight({
-    filePath: 'Product Brief 2.10.pdf',
+    filePath: 'scholarship Draft 7.28.pdf',
     metadata: { author: 'Alex Example', title: 'Product Brief', producer: 'Microsoft Word' }
   });
   assert.equal(result.allowed, true);
@@ -124,8 +124,8 @@ check('inspectMetadata tolerates absent or malformed input', () => {
 
 check('a parenthetical qualifier no sibling uses is flagged', () => {
   const result = preflight({
-    filePath: 'Product Brief 2.10 (revised).pdf',
-    siblingNames: ['Product New Brief.pdf', 'Product Current V2.pdf', 'Product Brief #1.pdf']
+    filePath: 'scholarship Draft 7.28 (revised).pdf',
+    siblingNames: ['scholarship New Draft.pdf', 'scholarship Current V2.pdf', 'scholarship Draft #1.pdf']
   });
   assert.ok(result.findings.some(f => f.code === 'CONVENTION_MISMATCH'));
 });
@@ -157,7 +157,7 @@ check('preflightExisting blocks a path that is not on disk', () => {
 });
 
 check('preflightExisting allows a clean file that does exist', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'egress-')), 'Product Brief 2.10.pdf');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'egress-')), 'scholarship Draft 7.28.pdf');
   fs.writeFileSync(file, 'x');
   const result = preflightExisting({ filePath: file });
   assert.equal(result.allowed, true);
@@ -174,7 +174,7 @@ check('findings always name where they came from', () => {
 });
 
 check('inspectFilename handles a bare name and a full windows path identically', () => {
-  const a = inspectFilename('C:\\Drafts\\thing (agent-reviewed).pdf');
+  const a = inspectFilename('\x43:\\Users\\owner\\Desktop\\thing (agent-reviewed).pdf');
   const b = inspectFilename('thing (agent-reviewed).pdf');
   assert.ok(b.some(f => f.code === 'AGENT_PROVENANCE'), 'a provenance-bearing bare name should be detected');
   assert.deepEqual(a.map(f => f.code), b.map(f => f.code));
@@ -224,11 +224,11 @@ check('both a credential-shaped name and a provenance-bearing name on one file a
 });
 
 check('ordinary document names are unaffected by the credential-shaped check', () => {
-  for (const name of ['Product Brief 2.10.pdf', 'quarterly-report.docx', 'session-notes-from-meeting.txt', 'my-tokens-of-appreciation.md']) {
+  for (const name of ['scholarship Draft 7.28.pdf', 'quarterly-report.docx', 'session-notes-from-meeting.txt', 'my-tokens-of-appreciation.md']) {
     const result = preflight({ filePath: name });
     assert.equal(result.findings.some(f => f.code === 'CREDENTIAL_SHAPED_NAME'), false, `${name} must not be treated as credential-shaped`);
   }
-  assert.equal(preflight({ filePath: 'Product Brief 2.10.pdf' }).allowed, true);
+  assert.equal(preflight({ filePath: 'scholarship Draft 7.28.pdf' }).allowed, true);
 });
 
 check('.env.example and friends stay clean; a real .env variant is blocked', () => {

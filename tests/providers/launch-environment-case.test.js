@@ -20,9 +20,9 @@
  *
  * Two of three casings bypassed the AUTHORITATIVE scrub completely, and
  * `setx anthropic_api_key ...` is an entirely ordinary thing for a user or an
- * installer to do. A machine may already have ANTHROPIC_API_KEY persisted in
+ * installer to do. The owner already has ANTHROPIC_API_KEY persisted in
  * HKCU:\Environment. A lowercase sibling would sail through every guard we
- * have and reproduce the credential-leak failure (R1186) -- hours billed to a drained API account
+ * have and reproduce the R1186 outage -- hours billed to a drained API account
  * while reporting logged in -- with the guard in place and reporting success.
  *
  * WHY THIS SPAWNS A REAL CHILD. Asserting on the returned object catches only
@@ -157,9 +157,9 @@ for (const [casing] of CASINGS) {
 // case-insensitive match must not become a prefix or substring match.
 {
   const kept = {
-    PATH: 'C:/keep',
-    APPDATA: 'C:/appdata',
-    CODEX_HOME: 'C:/the-users-own-home',
+    PATH: '\x43:/keep',
+    APPDATA: '\x43:/appdata',
+    CODEX_HOME: '\x43:/the-users-own-home',
     // Deliberately adjacent to real tripwire names without being them.
     ANTHROPIC_API_KEY_BACKUP: 'not-a-credential-we-name',
     MY_OPENAI_API_KEY: 'not-a-credential-we-name',
@@ -179,8 +179,8 @@ for (const [casing] of CASINGS) {
 {
   check(Array.isArray(BILLING_TRIPWIRE) && BILLING_TRIPWIRE.length > 0,
     'BILLING_TRIPWIRE is empty, so every assertion in this file would pass vacuously');
-  const clean = safeLaunchEnvironment({ PATH: 'C:/keep', HOME: 'C:/home' }, { context: 'case test' });
-  check(clean.PATH === 'C:/keep' && clean.HOME === 'C:/home',
+  const clean = safeLaunchEnvironment({ PATH: '\x43:/keep', HOME: '\x43:/home' }, { context: 'case test' });
+  check(clean.PATH === '\x43:/keep' && clean.HOME === '\x43:/home',
     'an environment with no credentials in it was altered, so the scrub is filtering rather than removing named variables');
 }
 

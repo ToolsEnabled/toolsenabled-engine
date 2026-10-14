@@ -12,7 +12,7 @@
 //
 // THE VERIFIED CASE THIS MODULE EXISTS FOR (2026-07-29, measured, not inferred):
 //   declared: --serve --quiet --concurrency 4 --project <id> --backend vertex
-//   live supervisor: "node.exe" tools/fleet-supervisor.js --serve --quiet
+//   live pid 21556: "node.exe" tools/fleet-supervisor.js --serve --quiet
 // The supervisor booted happily, then failed one lane at a time with
 // FLEET_VERTEX_PROJECT_MISSING, because tools/fleet-supervisor.js read
 // --project with a null default and only lane-runner.js validated it.
@@ -192,9 +192,9 @@ function candidateProcesses(processes, entryPattern) {
 
 // A process whose CommandLine came back null. VERIFIED 2026-07-29: once
 // fleet-supervisor was launched by its S4U scheduled task, Win32_Process
-// reported CommandLine = NULL for that process from an unelevated session, while
-// the same query read a hand-launched supervisor fine. The dashboard listener
-// has always been opaque for the same reason.
+// reported CommandLine = NULL for pid 36128 from an unelevated session, while
+// the same query read the hand-launched pid 21556 fine. The dashboard listener
+// (pid 29420) has always been opaque for the same reason.
 //
 // This distinction is the whole point. "I read every command line and none was
 // yours" and "four command lines were unreadable and yours may be one of them"

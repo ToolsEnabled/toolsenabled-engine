@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-// Fix note: the coordination layer was
+// Owner fix directive (in-session, 2026-08-12): the coordination layer was
 // blind -- and its own front door was missing. Every onboarding path
 // (CLAUDE.md, docs/AGENT-COORDINATION-PROTOCOL.md, and the memory_search tool
 // description itself) tells agents to read the agent-coord durable memory key
 // `channel-map-read-this-first` before their first message. Measured
-// 2026-08-12: the key did not exist, and no entry anywhere in durable
+// 2026-08-12T16:34Z: the key did not exist, and no entry anywhere in durable
 // memory referenced it -- every protocol-following agent read null at its
 // mandatory first step.
 //
@@ -57,7 +57,7 @@ const VALUE = {
     'Presence is observation, declaration is intent; neither is acceptance or permission.'
   ],
   doc: 'docs/AGENT-COORDINATION-PROTOCOL.md',
-  restoredBy: 'tools/agent-coord-channel-map.js (fix note; key was measured absent 2026-08-12)'
+  restoredBy: 'tools/agent-coord-channel-map.js (owner fix directive 2026-08-12; key was measured absent 2026-08-12T16:34Z)'
 };
 
 function main() {

@@ -27,10 +27,11 @@
 
 'use strict';
 
-// Weighted toward the NEGATIVE and DEFAULT cases per the product rule:
-// machine A / machine B questions must not surface. They are user
-// settings: record them as settings in the profile, let every user change
-// them to reasonable choices, and do not ask about them.
+// Weighted toward the NEGATIVE and DEFAULT cases per the owner's directive,
+// 2026-08-10, verbatim: "literally machine A and machine B questions should
+// NOT be surfacing. These are USER SETTINGS. Do not ask me about my user
+// settings. Pin them as user settings to my profile, make sure other users
+// can change them to reasonable choices, and be done with the nonsense."
 //
 // The cases below protect a NEW USER, who by definition has never configured
 // a profile: absence must be a normal, fully working single-machine state,
@@ -219,7 +220,7 @@ test('a validly configured multi-machine profile is honored as-is', (t) => {
     mode: 'multi',
     transport: 'self-hosted-relay',
     thisMachine: { id: 'machine-a', label: 'Desk' },
-    peers: [{ id: 'machine-b', label: 'Laptop', address: 'example.test', root: 'C:\\example\\path' }]
+    peers: [{ id: 'machine-b', label: 'Laptop', address: 'example.test', root: '\x43:\\example\\path' }]
   });
   const profile = loadMachineProfile(root);
   assert.equal(profile.mode, 'multi');

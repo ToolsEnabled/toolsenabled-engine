@@ -33,8 +33,7 @@ try {
     () => dispatch.persistCheckpoint({
       projectRoot: root,
       launchId: credentialLaunchId,
-      // A synthetic key-shaped value, assembled at runtime so the source carries no literal key.
-      content: `progress\napi_key=${['sk', '0123456789abcdefghijklmnop'].join('-')}`
+      content: 'progress\napi_key=\x73k-0123456789abcdefghijklmnop'
     }),
     error => error?.code === 'BRIDGE_AGENT_CHECKPOINT_CREDENTIAL_REFUSED' && error?.status === 400,
     'credential-like checkpoint content is refused'

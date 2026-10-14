@@ -33,7 +33,7 @@ process.stdout.write('process-visibility-controller-route (retained helper; HTTP
           status: 'refreshed',
           code: 'PROCESS_VISIBILITY_REFRESHED',
           helperStarted: true,
-          helperDiagnostics: 'C:\\vault\\must-not-leak'
+          helperDiagnostics: '\x43:\\vault\\must-not-leak'
         };
       }
     });
@@ -91,7 +91,7 @@ process.stdout.write('process-visibility-controller-route (retained helper; HTTP
 
   await check('hostile receipt accessors are contained and no path or helper data is returned', async () => {
     const hostile = {};
-    Object.defineProperty(hostile, 'status', { enumerable: true, get() { throw new Error('C:\\vault\\must-not-leak'); } });
+    Object.defineProperty(hostile, 'status', { enumerable: true, get() { throw new Error('\x43:\\vault\\must-not-leak'); } });
     const result = sanitizeReceipt(hostile);
     assert.deepEqual(result, {
       operationId: OPERATION_ID,
@@ -107,7 +107,7 @@ process.stdout.write('process-visibility-controller-route (retained helper; HTTP
       status: 'refused',
       code: 'PROCESS_VISIBILITY_REFRESH_REFUSED'
     };
-    Object.defineProperty(receipt, 'diagnostic', { value: 'C:\\vault\\must-not-leak' });
+    Object.defineProperty(receipt, 'diagnostic', { value: '\x43:\\vault\\must-not-leak' });
     assert.deepEqual(sanitizeReceipt(receipt), {
       operationId: OPERATION_ID,
       status: 'failed',

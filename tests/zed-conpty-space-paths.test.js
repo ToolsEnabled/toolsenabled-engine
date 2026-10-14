@@ -39,8 +39,8 @@ if (process.platform !== 'win32') {
 
 const relaySource = path.join(root, 'tools', 'zed-conpty-relay', 'Program.cs');
 const compilers = [
-  'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
-  'C:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
+  '\x43:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe',
+  '\x43:\\Windows\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
 ];
 const compiler = compilers.find(candidate => fs.existsSync(candidate));
 assert.ok(compiler, 'Windows C# compiler is required for the ConPTY space/path test');

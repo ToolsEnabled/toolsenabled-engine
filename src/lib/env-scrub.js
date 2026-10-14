@@ -25,7 +25,7 @@
 // does not care -- so nothing looks wrong at any point. The failure is silent
 // in both directions: the guard reports success, and the child works.
 //
-// The consequence is the credential-leak failure (R1186) that the credential scrubs exist to
+// The consequence is the R1186 outage that the credential scrubs exist to
 // prevent -- an ambient API key reaching a child that bills it instead of the
 // user's subscription, "for hours while reporting logged in" -- recurring with
 // every guard in place and passing.
@@ -95,7 +95,7 @@ function enumerateEnvNames(env) {
  *
  *   over-removal   a subscription launch loses a variable nothing in this
  *                  product sets, and the caller can re-set it explicitly.
- *   under-removal  the owner's API key reaches a child and bills them, silently,
+ *   under-removal  the owner's API key reaches a child and bills him, silently,
  *                  while every guard reports success. That is R1186.
  *
  * An ASCII-only fold would match Windows more closely for these lookalikes, and

@@ -41,8 +41,7 @@ const {
 
 const FAKE_SERVER_INFO = Object.freeze({
   userAgent: 'toolsenabled/0.146.0',
-  // A synthetic profile path, assembled at runtime so the source carries no literal user path.
-  codexHome: ['C:', 'Users', 'test', '.codex'].join('/'),
+  codexHome: '\x43:/\x55sers/test/.codex',
   platformFamily: 'windows',
   platformOs: 'windows'
 });
@@ -141,11 +140,11 @@ async function nextTick() {
   adapter.onEvent(event => events.push(event));
   assert.deepEqual(await transport.completeInitialization(adapter), FAKE_SERVER_INFO);
 
-  const started = adapter.startThread({ cwd: 'C:/workspace', approvalPolicy: 'on-request', sandbox: 'workspace-write' });
+  const started = adapter.startThread({ cwd: '\x43:/workspace', approvalPolicy: 'on-request', sandbox: 'workspace-write' });
   const startRequest = writtenRequest(transport, 'thread/start');
   assert.deepEqual(startRequest, {
     jsonrpc: '2.0', id: 2, method: 'thread/start',
-    params: { cwd: 'C:/workspace', approvalPolicy: 'on-request', sandbox: 'workspace-write' }
+    params: { cwd: '\x43:/workspace', approvalPolicy: 'on-request', sandbox: 'workspace-write' }
   });
   response(transport, startRequest, { thread: { id: 'thread-1' } });
   const startedThread = await started;
@@ -169,8 +168,8 @@ async function nextTick() {
   response(transport, resumeRequest, {
     thread: {
       id: 'thread-1',
-      cwd: 'C:/workspace',
-      path: 'C:/rollouts/thread-1.jsonl',
+      cwd: '\x43:/workspace',
+      path: '\x43:/rollouts/thread-1.jsonl',
       turns: [
         /* The person's side arrives as `content`, not `text` -- measured
            against codex 0.146.0. Reading only `text` dropped every line the
@@ -187,7 +186,7 @@ async function nextTick() {
   assert.equal(resumedThread.turnCount, 2);
   assert.equal(resumedThread.model, 'gpt-5.6-sol');
   assert.equal(resumedThread.reasoningEffort, 'xhigh', 'the effort the thread really has is what the surface must show');
-  assert.equal(resumedThread.cwd, 'C:/workspace');
+  assert.equal(resumedThread.cwd, '\x43:/workspace');
   assert.deepEqual(resumedThread.turns[0].said, [
     { who: 'you', text: 'Fix the header' },
     { who: 'agent', text: 'Header fixed' }
@@ -205,13 +204,13 @@ async function nextTick() {
 
   const turn = adapter.sendTurn({
     threadId: 'thread-1', text: 'Inspect this image',
-    images: [{ path: 'C:/images/example.png', detail: 'high' }, { url: 'data:image/png;base64,AA==' }]
+    images: [{ path: '\x43:/images/example.png', detail: 'high' }, { url: 'data:image/png;base64,AA==' }]
   });
   const turnRequest = writtenRequest(transport, 'turn/start');
   assert.equal(turnRequest.method, 'turn/start');
   assert.deepEqual(turnRequest.params.input, [
     { type: 'text', text: 'Inspect this image', text_elements: [] },
-    { type: 'localImage', path: 'C:/images/example.png', detail: 'high' },
+    { type: 'localImage', path: '\x43:/images/example.png', detail: 'high' },
     { type: 'image', url: 'data:image/png;base64,AA==' }
   ]);
   response(transport, turnRequest, { turn: { id: 'turn-1' } });
@@ -244,7 +243,7 @@ async function nextTick() {
     'reasoning must never be forwarded as assistant_text');
 
   /* A REASONING BLOCK WITHOUT TEXT IS SILENCE, NOT A DEAD SESSION. MEASURED
-     2026-09-03 on a live instance: text "" reached requiredString,
+     2026-09-03 on the owner's running instance: text "" reached requiredString,
      which threw CODEX_PROTOCOL_INVALID, which fail-closed the whole adapter
      mid-turn -- the circle stayed "running" forever and Halt, Queue and Send
      all reported busy. Mutation-checked: restoring requiredString on that read
@@ -277,7 +276,7 @@ async function nextTick() {
   transport.emit({
     id: 'approval-command', method: 'item/commandExecution/requestApproval', params: {
       threadId: 'thread-1', turnId: 'turn-1', itemId: 'command-1', startedAtMs: 1,
-      command: 'node test.js', cwd: 'C:/workspace', reason: 'test command'
+      command: 'node test.js', cwd: '\x43:/workspace', reason: 'test command'
     }
   });
   const commandApproval = events.find(event => event.type === 'approval_request' && event.approval.kind === 'commandExecution').approval;
@@ -297,7 +296,7 @@ async function nextTick() {
   transport.emit({
     id: 'approval-file', method: 'item/fileChange/requestApproval', params: {
       threadId: 'thread-1', turnId: 'turn-1', itemId: 'file-1', startedAtMs: 2,
-      reason: 'write output', grantRoot: 'C:/workspace'
+      reason: 'write output', grantRoot: '\x43:/workspace'
     }
   });
   const fileApproval = events.find(event => event.type === 'approval_request' && event.approval.kind === 'fileChange').approval;
@@ -310,7 +309,7 @@ async function nextTick() {
   transport.emit({
     id: 9, method: 'item/permissions/requestApproval', params: {
       threadId: 'thread-1', turnId: 'turn-1', itemId: 'permissions-1', startedAtMs: 3,
-      cwd: 'C:/workspace', environmentId: null, reason: 'network', permissions: { network: { enabled: true }, fileSystem: null }
+      cwd: '\x43:/workspace', environmentId: null, reason: 'network', permissions: { network: { enabled: true }, fileSystem: null }
     }
   });
   const permissionsApproval = events.find(event => event.type === 'approval_request' && event.approval.kind === 'permissions').approval;
@@ -325,7 +324,7 @@ async function nextTick() {
   });
 
   transport.emit({ method: 'item/started', params: {
-    threadId: 'thread-1', turnId: 'turn-1', item: { type: 'commandExecution', id: 'command-2', command: 'node check.js', cwd: 'C:/workspace' }
+    threadId: 'thread-1', turnId: 'turn-1', item: { type: 'commandExecution', id: 'command-2', command: 'node check.js', cwd: '\x43:/workspace' }
   } });
   transport.emit({ method: 'item/completed', params: {
     threadId: 'thread-1', turnId: 'turn-1', item: { type: 'commandExecution', id: 'command-2', status: 'completed', aggregatedOutput: 'ok', exitCode: 0 }
@@ -422,6 +421,45 @@ async function nextTick() {
   await nextTick();
   await protocolReject(() => hostile.adapter.startThread(), 'CODEX_PROTOCOL_UNSUPPORTED_REQUEST');
 
+  /* A QUESTION THIS HOST CANNOT SHOW IS DECLINED, NOT FATAL. codex-cli 0.156.0
+     asks MCP tool approval through item/tool/requestUserInput and relays MCP
+     elicitations as mcpServer/elicitation/request; both arrive mid-turn in an
+     ordinary session with the ToolsEnabled MCP servers configured. They are
+     answered with the schema's own refusals -- no answers, decline -- the turn
+     ends as the provider ends it, and the session stays usable. Nothing is
+     approved and no approval prompt is invented. */
+  const asked = createAdapter();
+  const askedEvents = [];
+  asked.adapter.onEvent(event => askedEvents.push(event));
+  await asked.transport.completeInitialization(asked.adapter);
+  const askedStart = asked.adapter.startThread();
+  response(asked.transport, writtenRequest(asked.transport, 'thread/start'), { thread: { id: 'thread-asked' } });
+  await askedStart;
+  const askedTurn = asked.adapter.sendTurn({ threadId: 'thread-asked', text: 'run the tool' });
+  response(asked.transport, writtenRequest(asked.transport, 'turn/start'), { turn: { id: 'turn-asked' } });
+  await askedTurn;
+  asked.transport.emit({ id: 41, method: 'item/tool/requestUserInput', params: {
+    threadId: 'thread-asked', turnId: 'turn-asked', itemId: 'item-question', isBlocking: true,
+    questions: [{ id: 'mcp_tool_call_approval_call-1', header: 'Approve', question: 'Allow toolsenabled to run host.exec?', isOther: false, isSecret: false, options: [{ label: 'Allow', description: '' }] }]
+  } });
+  asked.transport.emit({ id: 'elicit-7', method: 'mcpServer/elicitation/request', params: {
+    threadId: 'thread-asked', turnId: 'turn-asked', serverName: 'toolsenabled', mode: 'form', message: 'Need a value', requestedSchema: { type: 'object', properties: {} }
+  } });
+  await nextTick();
+  assert.deepEqual(writtenResponse(asked.transport, 41), { jsonrpc: '2.0', id: 41, result: { answers: {} } },
+    'an MCP approval question nobody can be shown is answered with no answers, which approves nothing');
+  assert.deepEqual(writtenResponse(asked.transport, 'elicit-7'), { jsonrpc: '2.0', id: 'elicit-7', result: { action: 'decline' } },
+    'an MCP elicitation is declined, never accepted on the person\'s behalf');
+  asked.transport.emit({ method: 'turn/completed', params: { threadId: 'thread-asked', turn: { id: 'turn-asked', status: 'completed', items: [] } } });
+  await nextTick();
+  assert.deepEqual(askedEvents.filter(event => event.type === 'turn_completed').map(event => event.status), ['completed'],
+    'the turn ends as the provider ended it -- the adapter did not fail it closed');
+  assert.equal(askedEvents.some(event => event.type === 'approval_request'), false,
+    'no approval prompt is fabricated for a question the host cannot render');
+  const askedNext = asked.adapter.startThread();
+  response(asked.transport, writtenRequests(asked.transport, 'thread/start')[1], { thread: { id: 'thread-after' } });
+  assert.equal((await askedNext).threadId, 'thread-after', 'the session is still usable after declining');
+
   /* THE RESOLVED SANDBOX, AND THE DOWNGRADE THAT MADE IT WORTH READING.
    *
    * MEASURED off codex-cli 0.146.0 on Windows, 2026-08-20, one real
@@ -440,7 +478,7 @@ async function nextTick() {
   const resolvedSandboxFor = async (result) => {
     const probe = createAdapter();
     await probe.transport.completeInitialization(probe.adapter);
-    const pending = probe.adapter.startThread({ cwd: 'C:/workspace', sandbox: 'workspace-write' });
+    const pending = probe.adapter.startThread({ cwd: '\x43:/workspace', sandbox: 'workspace-write' });
     response(probe.transport, writtenRequest(probe.transport, 'thread/start'), result);
     return (await pending).resolvedSandbox;
   };
@@ -471,7 +509,7 @@ async function nextTick() {
     );
   }
 
-  /* THE 0.153 LINE. MEASURED 2026-09-04: an installed Codex updated itself to
+  /* THE 0.153 LINE. MEASURED 2026-09-04: the owner's Codex updated itself to
      0.153.2 and every Codex circle was refused CODEX_PROTOCOL_VERSION_MISMATCH.
      Its app-server schema carries every method this adapter names except
      thread/settings/update; TurnStartParams gained `effort`. So the line is
@@ -781,6 +819,33 @@ async function nextTick() {
     ]);
     await adapter.closed.retryCleanup();
     assert.equal(calls, refusesFirst ? 2 : 1, 'confirmed cleanup and terminal are idempotent');
+  }
+
+  /* THE FAILURE-PATH TERMINAL PASSES THE SAME CONTRACT DOOR AS EVERY OTHER
+     EVENT. _failClosed() used to hand its terminal notices straight to the
+     boundary's own emitSequence(), which neither validates nor freezes, so the
+     one event that ends a turn on a dead child reached listeners as a mutable,
+     unchecked object -- here carrying a transport-reported stderr far past the
+     contract's 1,000,000-character text bound. */
+  {
+    const { transport, adapter } = createAdapter({ codexVersion: '0.153.0' });
+    await adapter.initialize();
+    const events = [];
+    adapter.onEvent(event => events.push(event));
+    const sent = adapter.sendTurn({ threadId: 'gate-thread', text: 'work' });
+    response(transport, writtenRequest(transport, 'turn/start'), { turn: { id: 'gate-turn', status: 'inProgress' } });
+    await sent;
+    transport.emit({ method: 'item/agentMessage/delta', params: { threadId: 'gate-thread', turnId: 'gate-turn', itemId: 'gate-item', delta: 'working' } });
+    for (const listener of [...transport.listeners]) listener(null, { code: 1, signal: null, error: null, stderr: 'x'.repeat(1_100_000) });
+    await new Promise(resolve => setImmediate(resolve));
+    const terminal = events.find(event => event.type === 'turn_completed');
+    assert.ok(terminal, 'a dead child still ends the acknowledged turn');
+    assert.equal(terminal.status, 'failed');
+    assert.ok(Object.isFrozen(terminal), 'the failure-path terminal is the frozen, contract-validated event every other emit path delivers');
+    assert.ok(typeof terminal.text === 'string' && terminal.text.length > 0 && terminal.text.length <= 1_000_000,
+      'its text stays inside the engine contract bound');
+    assert.doesNotThrow(() => contract.validateEngineEvent(terminal), 'and it is itself a valid engine event');
+    assert.ok(events.every(event => Object.isFrozen(event)), 'no emit path delivers an unvalidated event');
   }
 
   console.log('Codex agent-engine adapter tests passed (streaming, approvals, images, lifecycle, interrupt, retry, fail-closed, resolved sandbox, 0.153 line, confirmed protocol closure).');

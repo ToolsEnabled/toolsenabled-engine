@@ -194,9 +194,9 @@ try {
     }
   });
 
-  // An earlier sweep pinned the opposite here -- refuse whenever zero dependencies
+  // The w20 sweep pinned the opposite here -- refuse whenever zero dependencies
   // are found -- and its source half was adversarially REFUTED and reverted in
-  // a later change: the reader already throws for an unreadable or
+  // 5060413 (verify-w20-151): the reader already throws for an unreadable or
   // malformed package, so `{}` is a SUCCESSFUL scan that measured zero, not a
   // scan that failed to happen. This check pins that distinction from both
   // sides, which is what the refuted version could not distinguish.

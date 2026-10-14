@@ -23,19 +23,20 @@
 'use strict';
 // A PURCHASE LINE MUST SAY WHOSE IDEA IT WAS.
 //
-// The failure this catches: a request stated several times never reached the
-// ledger, so the cart was not the correct one.
+// The owner, 2026-08-11 (reports/OWNER-REQUEST-LEDGER.json R1233, verbatim):
+//   "Again - i think thats not the correct cart, I think maybe R is not working
+//    or something is going wrong because I have said a lot of times what I want"
 //
-// A legacy cart carried four lines whose keys are exactly
+// The live cart 0e33e84f carried four lines whose keys are exactly
 // [id,description,amountCents,currency,merchant,purpose]. There was no field in
 // which "this line comes from R1233" could have been written, so a cart a lane
 // assembled from its own research was indistinguishable, on screen, from a cart
-// built out of their words. Three earlier carts were built the same way by three
+// built out of his words. Three earlier carts were built the same way by three
 // lanes that never saw each other.
 //
 // These checks pin the fix at the only place every cart must pass through: the
 // store. They also pin the two things that could quietly undo it -- the wire
-// key set (a seventh key blanks the app's popup) and the description cap
+// key set (a seventh key blanks wt-installer's popup) and the description cap
 // (an overflowing stamp would do the same).
 
 const assert = require('node:assert');
@@ -117,7 +118,7 @@ check('a line WITH ownerRequestIds is stamped with the ids it came from', () => 
 check('a mixed cart labels each line independently', () => {
   const deps = tempDeps();
   store.enqueue(batch([
-    line({ id: 'owned', ownerRequestIds: ['R1233'] }),
+    line({ id: 'his', ownerRequestIds: ['R1233'] }),
     line({ id: 'theirs' })
   ]), deps);
   const items = firstPrompt(deps).items;
@@ -132,7 +133,7 @@ check('ownerRequestIds NEVER reaches the wire item', () => {
   store.enqueue(batch([line({ ownerRequestIds: ['R1233'] })]), deps);
   const item = firstPrompt(deps).items[0];
   assert.deepStrictEqual(Object.keys(item).sort(), WIRE_ITEM_KEYS,
-    'the app src/owner-popup.js validates items with exactKeys; an extra key blanks the popup');
+    'wt-installer src/owner-popup.js validates items with exactKeys; an extra key blanks the popup');
 });
 
 check('an unprovenanced line keeps the same wire key set', () => {
@@ -210,23 +211,23 @@ check('too many ids degrade to a bounded stamp instead of overflowing', () => {
 check('the settled decision records what each approved line was traceable to', () => {
   const deps = tempDeps();
   const { promptId } = store.enqueue(batch([
-    line({ id: 'owned', ownerRequestIds: ['R1233'] }),
+    line({ id: 'his', ownerRequestIds: ['R1233'] }),
     line({ id: 'theirs' })
   ]), deps);
   store.markPresented({ promptId, evidence: { mounted: true, visible: true, focused: true } }, deps);
-  const outcome = store.decide({ promptId, decision: 'submit', itemDecisions: [{ itemId: 'owned', decision: 'approve' }] }, deps);
-  const owned = outcome.items.find(i => i.itemId === 'owned');
+  const outcome = store.decide({ promptId, decision: 'submit', itemDecisions: [{ itemId: 'his', decision: 'approve' }] }, deps);
+  const his = outcome.items.find(i => i.itemId === 'his');
   const theirs = outcome.items.find(i => i.itemId === 'theirs');
-  assert.deepStrictEqual(owned.ownerRequestIds, ['R1233']);
+  assert.deepStrictEqual(his.ownerRequestIds, ['R1233']);
   assert.strictEqual(theirs.ownerRequestIds, null, 'an agent-proposed line records null, not a guess');
   assert.strictEqual(theirs.decision, 'deny', 'deny-by-default still holds');
 });
 
 // --- the actual incident --------------------------------------------------
 
-check('REGRESSION R1233: a legacy cart with no provenance cannot present as the owner\'s list', () => {
+check('REGRESSION R1233: a cart shaped exactly like the live 0e33e84f one cannot present as his list', () => {
   const deps = tempDeps();
-  // Four lines shaped like a legacy cart, by id and shape (six keys, no provenance).
+  // The four real lines of the live cart, by id and shape (six keys, no provenance).
   store.enqueue(batch([
     line({ id: 'toolsenabled-com-domain', merchant: 'Porkbun', amountCents: 1108 }),
     line({ id: 'azure-artifact-signing-basic', merchant: 'Microsoft Azure', amountCents: 999 }),

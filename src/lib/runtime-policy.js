@@ -16,7 +16,7 @@ function resolveRuntimePolicy(settings = {}) {
     ? values['audit.activity'] : 'Off';
   const continuationEnabled = !invalid('agent.persistent_continuation')
     && (chosen('agent.persistent_continuation') ? values['agent.persistent_continuation'] === true : true);
-  // The desktop app's own Metrics history (product decision): on by
+  // The desktop app's own Metrics history (owner decision 2026-09-23): on by
   // default and independent of audit.enabled. It never enables the signed
   // ledger. An unreadable or rejected choice keeps nothing new, because it may
   // have been the person's Off.

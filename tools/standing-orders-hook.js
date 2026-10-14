@@ -4,8 +4,8 @@
 // Standing Orders PreToolUse hook -- the harness-level teeth for STANDING-ORDERS.md.
 //
 // STANDING-ORDERS.md is prose, discipline-checked. Its OUTWARD and BROWSER
-// classes were both violated the same day they were written down (the
-// agent-provenance filename leak; the controller driving the browser itself the same hour a
+// classes were both violated the same day they were written down (the scholarship
+// filename leak; the controller driving the browser itself the same hour a
 // semantic layer was demoed to stop grep drift). Prose that nothing enforces
 // is not a backstop -- it is documentation. This script is the enforcement:
 // Claude Code and Codex invoke it as a PreToolUse hook before matching local
@@ -711,7 +711,7 @@ function hasExternalHost(command) {
   return false;
 }
 
-// Token-based, not a single regex: a real filename ("Product Brief 2.10
+// Token-based, not a single regex: a real filename ("scholarship Draft 7.28
 // (agent-reviewed).pdf") contains spaces, and the exact incident this hook
 // exists to catch would slip past any regex that stops capturing at the
 // first space. tokenize()/unquote() (defined below) treat a whole quoted
@@ -878,16 +878,17 @@ function hasControllerDelegation(command, env) {
   return false;
 }
 
-// RETIRED AS A BLOCK on 2026-08-10: agents may drive the browsers as needed;
-// it had been a thread-specific rule that needed cleaning up.
+// RETIRED AS A BLOCK on 2026-08-10, by the owner, in his own words: "literally
+// you can drive the browsers as needed that was a thread specific rule and
+// needs to be cleaned up."
 //
 // The original order ("do not Playwright or web-browse yourself -- send
 // agents", R05 and twice on 2026-07-28) was scoped to a specific thread and
 // was being applied globally and forever, which is how it ended up blocking
 // the controller from doing work the owner now explicitly wants done directly
 // -- including signing in AS A USER through a real browser, which the owner
-// requires be done by acting as a user through browser automation such as
-// Playwright, not by injecting code. A rule that forbids the very thing now being demanded is not a
+// requires be done "by being a user not by injecting code but by playwriting
+// and such". A rule that forbids the very thing now being demanded is not a
 // safety rail, it is stale prose with an enforcement hook attached.
 //
 // WHAT IS DELIBERATELY KEPT:
@@ -899,7 +900,9 @@ function hasControllerDelegation(command, env) {
 //     browser profile, cookies, or CDP into a container -- is UNTOUCHED and
 //     still enforced by src/lib/action-guards.js findBrowserBoundaryViolation().
 //     It stands on ordinary credential hygiene: the owner's live authenticated
-//     sessions must not be duplicated into a sandbox. Rule 1 and
+//     sessions must not be duplicated into a sandbox. (Its original write-up
+//     leaned on the Duo remembered-device state; the owner has since said Duo
+//     is not shipping, so that is no longer the reason to keep it.) Rule 1 and
 //     rule 2 solved different problems and only rule 1 was thread-scoped.
 //
 // CONTROLLER_DELEGATED is still honoured and still recorded distinctly, so

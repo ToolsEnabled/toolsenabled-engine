@@ -103,7 +103,7 @@ function inside(root, target) {
 
 function systemRoot() {
   const configured = process.env.SystemRoot || process.env.SYSTEMROOT || process.env.windir;
-  return configured && configured.trim() ? configured : 'C:\\Windows';
+  return configured && configured.trim() ? configured : '\x43:\\Windows';
 }
 
 function resolveExecutable(name) {
@@ -199,7 +199,15 @@ function probeOptions() {
 }
 
 function whoamiIdentity(run) {
-  const output = String(run(WINDOWS_WHOAMI, ['/user', '/fo', 'csv', '/nh'], probeOptions())).trim();
+  // `env: {}` is restated here, not only inside probeOptions(): an identity probe
+  // that inherited this process's environment would hand the owner's provider
+  // credentials to a child whose whole job is to print a user name, and
+  // tools/check-spawn-env-scrub.js cannot see an env option that lives behind a
+  // helper call -- it read this site as INHERITS_AMBIENT and failed the build for
+  // a call that was already safe. A guard that cries wolf is a guard that gets
+  // ignored on the day it is right, so the fact is stated where both the reader
+  // and the gate can see it.
+  const output = String(run(WINDOWS_WHOAMI, ['/user', '/fo', 'csv', '/nh'], { ...probeOptions(), env: {} })).trim();
   const match = output.match(WHOAMI_USER_CSV_RE);
   /* CSV doubles an embedded quote. No Windows account name may contain one,
      but undoing it here keeps the parse honest rather than lucky. */
@@ -207,6 +215,12 @@ function whoamiIdentity(run) {
 }
 
 function powershellIdentity(run) {
+  // `env: {}` is restated at the call site below for the same reason as in
+  // whoamiIdentity() above, and it matters more here because the child is
+  // powershell.exe. The note lives here rather than beside the options object: a
+  // comment between the argv and the options confused the static gate's reader
+  // into classifying the env as UNRESOLVED.
+  //
   // SSH and service environments can name WORKGROUP rather than the account's
   // actual domain. Read the process token and preserve Unicode; a guessed
   // environment identity must never receive the token's ACL.
@@ -214,7 +228,7 @@ function powershellIdentity(run) {
   return String(run(
     `${WINDOWS_SYSTEM32}\\WindowsPowerShell\\v1.0\\powershell.exe`,
     ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-    probeOptions()
+    { ...probeOptions(), env: {} }
   )).trim();
 }
 

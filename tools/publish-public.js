@@ -3,9 +3,7 @@
 
 // RETIRED PRIVATE-SOURCE TOMBSTONE.
 //
-// The development repositories are private; public source is released
-// separately, one clean commit per release.  This tool does not produce those
-// releases.  This filename is
+// ToolsEnabled/engine and ToolsEnabled/app remain private.  This filename is
 // retained only so an old operator command, automation fragment, or agent
 // memory fails with one explicit policy result instead of MODULE_NOT_FOUND.
 // There is deliberately no argument parser, owner-token compatibility path,
@@ -15,7 +13,7 @@
 
 const RETIREMENT_CODE = 'PUBLISH_PUBLIC_RETIRED';
 const RETIREMENT_MESSAGE =
-  'Source publication through this tool is retired. The development repositories remain private; ' +
+  'Source publication is retired. ToolsEnabled/engine and ToolsEnabled/app remain private; ' +
   'no flag, token, target, role, or agent instruction authorizes generating a public-source tree.';
 
 class PublishRefusal extends Error {

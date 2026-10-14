@@ -158,14 +158,14 @@ function buildWindowsCommand(options, peerOptions) {
 $ErrorActionPreference = 'Stop'
 $profileRoot = ${psString(options.windowsProfile)}
 $scratchRoot = ${psString(options.windowsTemp)}
-if ($profileRoot -notmatch '^C:\\\\Users\\\\[A-Za-z0-9._-]+$') { throw 'Explicit profile root required' }
+if ($profileRoot -notmatch '^\x43:\\\\Users\\\\[A-Za-z0-9._-]+$') { throw 'Explicit profile root required' }
 if (-not [string]::Equals($scratchRoot, ($profileRoot + '\\AppData\\Local\\Temp'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Explicit owner temp root required' }
 $accountName = [Security.Principal.WindowsIdentity]::GetCurrent().Name.Split('\\')[-1]
 if (-not [string]::Equals($accountName, (Split-Path -Leaf $profileRoot), [StringComparison]::OrdinalIgnoreCase)) { throw 'SSH account does not own the pinned profile' }
 function Assert-ProbePath([string]$target, [bool]$executable = $false) {
   $full = [IO.Path]::GetFullPath($target)
   $inside = $full.StartsWith(($profileRoot + '\\'), [StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($full, $profileRoot, [StringComparison]::OrdinalIgnoreCase)
-  if (-not $inside -and (-not $executable -or $full.StartsWith('C:\\Users\\', [StringComparison]::OrdinalIgnoreCase))) { throw 'Probe path is outside the pinned profile' }
+  if (-not $inside -and (-not $executable -or $full.StartsWith('\x43:\\Users\\', [StringComparison]::OrdinalIgnoreCase))) { throw 'Probe path is outside the pinned profile' }
   $ancestors = New-Object 'Collections.Generic.List[string]'
   $cursor = $full
   while ($cursor) {
@@ -192,7 +192,7 @@ $evidenceRoot = Assert-ProbePath $evidenceRoot
 $config = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psString(Buffer.from(JSON.stringify(peerOptions)).toString('base64'))})) | ConvertFrom-Json
 $config | Add-Member -NotePropertyName evidenceRoot -NotePropertyValue $evidenceRoot
 $config64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($config | ConvertTo-Json -Compress)))
-$pinnedEnvironment = @{ SystemRoot='C:\\Windows'; WINDIR='C:\\Windows'; TEMP=$scratchRoot; TMP=$scratchRoot; USERPROFILE=$profileRoot; HOME=$profileRoot; APPDATA=($profileRoot + '\\AppData\\Roaming'); LOCALAPPDATA=($profileRoot + '\\AppData\\Local'); PATH=((Split-Path -Parent $nodePath) + ';C:\\Windows\\System32'); TOOLSENABLED_STATE_ROOT=$evidenceRoot }
+$pinnedEnvironment = @{ SystemRoot='\x43:\\Windows'; WINDIR='\x43:\\Windows'; TEMP=$scratchRoot; TMP=$scratchRoot; USERPROFILE=$profileRoot; HOME=$profileRoot; APPDATA=($profileRoot + '\\AppData\\Roaming'); LOCALAPPDATA=($profileRoot + '\\AppData\\Local'); PATH=((Split-Path -Parent $nodePath) + ';\x43:\\Windows\\System32'); TOOLSENABLED_STATE_ROOT=$evidenceRoot }
 foreach ($name in @([Environment]::GetEnvironmentVariables('Process').Keys)) { [Environment]::SetEnvironmentVariable([string]$name, $null, 'Process') }
 foreach ($name in $pinnedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $pinnedEnvironment[$name], 'Process') }
 Set-Location -LiteralPath $evidenceRoot

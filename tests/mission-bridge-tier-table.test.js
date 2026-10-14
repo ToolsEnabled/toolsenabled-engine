@@ -2,12 +2,12 @@
 
 /* THE DISPATCH TIER TABLE AFTER THE 1.0.48 PROVIDER-THEN-MODEL PICKER.
  *
- * Product requirement: users can select every model a provider offers,
- * Opus 5 and Sonnet 5 included. Until this table named them, Opus 5
+ * Owner, 2026-09-25: "users need to be able to select all the models from the
+ * providers ... I need opus5 and sonnet5". Until this table named them, Opus 5
  * could not be reached at all and Sonnet 5 only through the moving `sonnet`
  * alias. The ten pinned Claude rows below are transcribed from the model
  * catalog Claude Code served this machine on 2026-09-25
- * (Claude Code's local model-catalog cache): the id, and whether
+ * (~/.claude/cache/model-catalog/dae081fd-...-cc.json): the id, and whether
  * the model takes an effort at all.
  *
  * Four copies of this vocabulary exist and nothing ties them together except
@@ -45,6 +45,8 @@ const claudeInstall = require('../src/lib/agent-engine/claude-cli-install');
 const CODEX_IDS = Object.freeze(['astra', 'luna', 'terra', 'sol']);
 const ALIAS_CLAUDE_IDS = Object.freeze(['claude-fable', 'claude-sonnet', 'claude-opus']);
 const PINNED_CLAUDE = Object.freeze([
+  ['claude-sonnet-5-5', 'standard'],
+  ['claude-haiku-5-5', 'cheap'],
   ['claude-opus-5-5', 'premium'],
   ['claude-opus-5', 'premium'],
   ['claude-sonnet-5', 'standard'],
@@ -78,8 +80,14 @@ test('agent.spawn offers exactly the dispatch tiers, in table order, with the pi
   assert.deepEqual(Object.keys(actions.TIERS), EXPECTED_IDS,
     'the dispatch table is not the 1.0.48 table: codex four, the three Claude aliases, the ten pinned Claude models, local');
   const tier = registry.getTool('agent.spawn').inputSchema.properties.tier;
-  assert.deepEqual(tier.enum, Object.keys(actions.TIERS),
-    'agent.spawn accepts a different tier list from the one dispatch declares');
+  // 1.0.50: agent.spawn also offers the tree-only rows (a circle on the tree needs no dispatch seat), listed next to
+  // their family; dispatch itself still declares exactly EXPECTED_IDS, in table order.
+  const { TREE_ONLY_SPAWN_TIERS } = require('../src/lib/model-dispatch-tiers');
+  const treeOnly = Object.keys(TREE_ONLY_SPAWN_TIERS);
+  assert.deepEqual(tier.enum.filter(id => !treeOnly.includes(id)), Object.keys(actions.TIERS),
+    'agent.spawn lists the dispatch tiers in a different order or set from the one dispatch declares');
+  assert.deepEqual([...tier.enum].filter(id => treeOnly.includes(id)).sort(), [...treeOnly].sort(),
+    'agent.spawn does not offer exactly the declared tree-only spawn rows beyond dispatch');
   assert.ok(tier.description.includes(`Claude: ${[...ALIAS_CLAUDE_IDS, ...PINNED_CLAUDE_IDS].join(', ')}.`),
     'the tier help does not list every Claude tier, aliases first, in table order');
 });

@@ -117,8 +117,33 @@ function installedRecord(tier) {
   return servicesRoot;
 }
 
-function readConfig(root) {
-  return JSON.parse(fs.readFileSync(path.join(root, actions.LANE_MCP_CONFIG_FILE), 'utf8'));
+// A per-check target for the lane document, so checks that are not about WHERE
+// it lives cannot see each other's file. Dispatch never passes one: it always
+// writes actions.laneMcpConfigFile(), which the checks further down pin.
+function laneTarget(prefix) {
+  return path.join(scratch(prefix), 'state', 'mission-bridge-mcp', actions.LANE_MCP_CONFIG_FILE);
+}
+
+function readConfig(file) {
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function insidePath(parent, candidate) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+// The path the lane is actually handed, read off the real argv, so the checks
+// below test what Claude would load rather than what a helper says it would.
+function namedConfigFile(root) {
+  const args = actions.claudeArgs({
+    root,
+    tier: { cliModel: 'test-model' },
+    permissionSession: { origin: 'local', tier: 'full' }
+  });
+  const at = args.indexOf('--mcp-config');
+  assert.ok(at >= 0, 'the claude lane must be given an mcp config');
+  return args[at + 1];
 }
 
 /* THE ACTOR GOES TO THE BROKER, AND ONLY TO THE BROKER. machine-record.js
@@ -147,37 +172,147 @@ function assertClaudeActor(document) {
   assert.ok(brokers > 0, 'the generated document must contain at least one ToolsEnabled broker');
 }
 
-check('claudeArgs names a config path under the root it was given', () => {
+// Every server the lane is handed is started by the runtime running this
+// engine. A planted entry is, by construction, something else.
+function assertOnlyEngineServers(document) {
+  assertClaudeActor(document);
+  for (const [name, entry] of Object.entries(document.mcpServers)) {
+    assert.equal(entry.command, process.execPath, `server "${name}" must be started by this engine's own runtime`);
+  }
+}
+
+/* WHERE THE LANE'S DOCUMENT LIVES IS A SECURITY BOUNDARY (1.0.50 security H1).
+ *
+ * The dispatch root is the lane's own working directory: a standard-tier Claude
+ * lane (acceptEdits + Write) and a Codex lane (`workspace-write --cd root`) can
+ * both write there. A document the lane is handed from that directory is a
+ * document the lane wrote, and Claude Code starts every stdio server in it at
+ * init -- as the person, unsandboxed, whatever --permission-mode/--tools say. */
+check('claudeArgs names the dispatcher\'s own document in the state root, never a file in the dispatch root', () => {
   // laneConfinement requires a readable session; local/full is the
   // unrestricted lane that ships today, and it is the one whose argv carries
   // --strict-mcp-config, so it is the right case to pin.
   const root = scratch('mcp-args-');
-  const args = actions.claudeArgs({
-    root,
-    tier: { cliModel: 'test-model' },
-    permissionSession: { origin: 'local', tier: 'full' }
-  });
-  const at = args.indexOf('--mcp-config');
-  assert.ok(at >= 0, 'the claude lane must be given an mcp config');
-  assert.equal(args[at + 1], path.join(root, actions.LANE_MCP_CONFIG_FILE));
+  const named = namedConfigFile(root);
+  assert.equal(insidePath(root, named), false,
+    'the lane must never be handed an MCP document from the directory it can write to');
+  assert.equal(named, actions.laneMcpConfigFile());
+  assert.equal(path.basename(named), actions.LANE_MCP_CONFIG_FILE);
+  const args = actions.claudeArgs({ root, tier: { cliModel: 'test-model' }, permissionSession: { origin: 'local', tier: 'full' } });
   // The flag that turns a missing file into a silent zero-tool session.
   assert.ok(args.includes('--strict-mcp-config'),
     'strict mode is deliberate; this test exists because of what it does when the file is absent');
 });
 
+check('a document planted in the dispatch root is never adopted, with or without a stale sidecar', () => {
+  // MEASURED by the 1.0.50 audit: a planted `{command:'/bin/sh'}` document was
+  // adopted both with no sidecar and with a stale one, and launched by the next
+  // Claude lane dispatch at every tier.
+  const servicesRoot = installedRecord('standard');
+  for (const sidecar of [null, { fingerprint: '0'.repeat(64) }]) {
+    const root = scratch('mcp-planted-');
+    const planted = { mcpServers: { planted: { command: '/bin/sh', args: ['-c', 'exit 0'] } } };
+    fs.writeFileSync(path.join(root, actions.LANE_MCP_CONFIG_FILE), JSON.stringify(planted, null, 2), 'utf8');
+    if (sidecar) {
+      fs.writeFileSync(path.join(root, 'mission-bridge-mcp-origin.local.json'), JSON.stringify(sidecar, null, 2), 'utf8');
+    }
+
+    const result = actions.ensureLaneMcpConfig({ root, servicesRoot });
+
+    assert.notEqual(result.adopted, true, `a planted document must not be adopted (sidecar: ${sidecar ? 'stale' : 'none'})`);
+    const handed = readConfig(namedConfigFile(root));
+    assert.equal(Object.hasOwn(handed.mcpServers, 'planted'), false,
+      'the planted server must not reach the document the lane is handed');
+    assertOnlyEngineServers(handed);
+  }
+});
+
+check('a lane document edited after dispatch is regenerated at the next dispatch', () => {
+  // The audit's other route: editing the generated file broke its fingerprint,
+  // so it was adopted "by hand" from then on -- and wake respawns reuse the
+  // same path. Nothing about the file on disk is trusted now; it is rewritten
+  // whenever it is not byte for byte what this dispatcher generates.
+  const root = scratch('mcp-edited-');
+  const servicesRoot = installedRecord('unrestricted');
+  actions.ensureLaneMcpConfig({ root, servicesRoot });
+  const file = namedConfigFile(root);
+  const generated = readConfig(file);
+  const edited = {
+    ...generated,
+    mcpServers: { ...generated.mcpServers, 'added-by-hand': { command: '/bin/sh', args: ['-c', 'exit 0'] } }
+  };
+  fs.writeFileSync(file, JSON.stringify(edited, null, 2), 'utf8');
+
+  const result = actions.ensureLaneMcpConfig({ root, servicesRoot });
+
+  assert.notEqual(result.adopted, true, 'an edited lane document must not be adopted');
+  assert.equal(result.generated, true, 'an edited lane document must be rewritten');
+  assert.deepEqual(readConfig(file), generated, 'the edit must not survive a dispatch');
+});
+
+check('a document in place does not excuse an unreadable machine record', () => {
+  // This used to be the opposite rule ("a foreign document that is already in
+  // place is never made to depend on it"), which is what let a planted file
+  // stand in for the record. Every dispatch now generates, so every dispatch
+  // needs the record.
+  const root = scratch('mcp-noread-');
+  fs.writeFileSync(path.join(root, actions.LANE_MCP_CONFIG_FILE), JSON.stringify({ mcpServers: {} }, null, 2), 'utf8');
+  const servicesRoot = scratch('mcp-noreadservices-');
+  fs.writeFileSync(path.join(servicesRoot, 'machine.json'), '{ not configuration', 'utf8');
+
+  const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot }));
+  assert.equal(error.code, 'BRIDGE_MCP_CONFIG_UNAVAILABLE');
+  assert.equal(error.details.cause, 'SETUP_MACHINE_RECORD_MALFORMED');
+});
+
+check('a generated server that is not this engine\'s own runtime and script is refused, and nothing is written', () => {
+  // Defence in depth on the generator itself: the document is checked before
+  // it is written, with the same shape rules the confined session surfaces use
+  // plus the lane's own rule that every server is this engine's catalogue entry.
+  const servicesRoot = installedRecord('standard');
+  const engineRoot = confinement.generationRecord({}).installRoot;
+  const broker = path.join(engineRoot, 'src', 'mcp-server.js');
+  const gateway = path.join(engineRoot, 'src', 'playwright-gateway.js');
+  const cases = [
+    ['a shell', { toolsenabled: { command: '/bin/sh', args: ['-c', 'exit 0'], cwd: engineRoot } }],
+    // Passes the shared runtime rule (it claims node mode); only the lane rule stops it.
+    ['a shell that claims node mode', { toolsenabled: { command: '/bin/sh', args: ['-c', 'exit 0'], cwd: engineRoot, env: { ELECTRON_RUN_AS_NODE: '1' } } }],
+    ['inline code on the right runtime', { toolsenabled: { command: process.execPath, args: ['-e', 'process.exit(0)'], cwd: engineRoot } }],
+    ['a script outside the engine', { toolsenabled: { command: process.execPath, args: [path.join(os.tmpdir(), 'mcp-server.js')], cwd: engineRoot } }],
+    ['a runtime flag the generator never emits', { toolsenabled: { command: process.execPath, args: ['--require=/tmp/x.js', broker], cwd: engineRoot } }],
+    ['a server the catalogue does not name', { extra: { command: process.execPath, args: [broker], cwd: engineRoot } }],
+    ['a different browser package', { playwright: { command: process.execPath, args: [gateway, 'evil-package@1.0.0'], cwd: engineRoot } }],
+    ['a server name the CLI would misread', { 'a__b': { command: process.execPath, args: [broker], cwd: engineRoot } }],
+    ['no server map at all', null]
+  ];
+  for (const [label, mcpServers] of cases) {
+    const root = scratch('mcp-refused-');
+    const file = laneTarget('mcp-refusedtarget-');
+    const recordApi = { ...machineRecord, generateMcpConfig: () => ({ document: { mcpServers }, skipped: [] }) };
+
+    const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot, recordApi, file }));
+    assert.equal(error.code, 'BRIDGE_MCP_CONFIG_UNAVAILABLE', `${label} must be refused`);
+    assert.equal(error.status, 503);
+    assert.equal(fs.existsSync(file), false, `${label}: a refused document must not be written`);
+    assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_CONFIG_FILE)), false,
+      `${label}: nothing may be written into the dispatch root either`);
+  }
+});
+
 check('an absent config is generated from the machine record, naming only paths that exist', () => {
   const root = scratch('mcp-generate-');
-  assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_CONFIG_FILE)), false,
-    'a fresh dispatch root has no .mcp.json -- that is the whole defect');
+  const file = laneTarget('mcp-generatetarget-');
+  assert.equal(fs.existsSync(file), false, 'a fresh installation has no lane document -- that is the whole defect');
 
-  const result = actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('unrestricted') });
+  const result = actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('unrestricted'), file });
 
   assert.equal(result.generated, true, 'a missing config must be produced, not merely reported');
-  assert.equal(result.adopted, false);
-  assert.equal(result.file, path.join(root, actions.LANE_MCP_CONFIG_FILE));
-  const document = readConfig(root);
+  assert.equal(result.file, file);
+  assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_CONFIG_FILE)), false,
+    'nothing is written into the dispatch root');
+  const document = readConfig(file);
   assert.ok(Object.keys(document.mcpServers).length > 0, 'a generated config with no servers is the crippled lane again');
-  assertClaudeActor(document);
+  assertOnlyEngineServers(document);
   // The acceptance property the generator promises, asserted rather than
   // assumed: --strict-mcp-config plus a path that is not there is the same
   // silent zero-tool session by another route.
@@ -186,6 +321,16 @@ check('an absent config is generated from the machine record, naming only paths 
   for (const named of namedPaths) {
     assert.ok(fs.existsSync(named), `the generated config names ${named}, which is not on this computer`);
   }
+});
+
+check('the default lane document is written where claudeArgs points', () => {
+  // The two halves agree by construction -- both call laneMcpConfigFile() --
+  // and this pins that they keep doing so.
+  const root = scratch('mcp-default-');
+  const result = actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('guided') });
+  assert.equal(result.file, actions.laneMcpConfigFile());
+  assert.equal(result.file, namedConfigFile(root));
+  assertOnlyEngineServers(readConfig(result.file));
 });
 
 check('a packaged install root, which holds no engine payload, still generates servers', () => {
@@ -205,6 +350,7 @@ check('a packaged install root, which holds no engine payload, still generates s
   // over a lane document that carried this dispatcher's own fingerprint sidecar
   // and so had been generated here rather than adopted from anyone.
   const root = scratch('mcp-packaged-');
+  const file = laneTarget('mcp-packagedtarget-');
   const servicesRoot = scratch('mcp-packagedservices-');
   const applicationRoot = scratch('mcp-packagedapp-');
   assert.equal(fs.existsSync(path.join(applicationRoot, 'src')), false,
@@ -219,9 +365,9 @@ check('a packaged install root, which holds no engine payload, still generates s
     machineLabel: 'mcp config test'
   }), { servicesRoot });
 
-  actions.ensureLaneMcpConfig({ root, servicesRoot });
+  actions.ensureLaneMcpConfig({ root, servicesRoot, file });
 
-  const document = readConfig(root);
+  const document = readConfig(file);
   assert.ok(Object.keys(document.mcpServers).length > 0,
     'a packaged install generated a document with no servers, which is a lane that starts with zero tools and reports healthy');
   assertClaudeActor(document);
@@ -239,9 +385,10 @@ check('a dispatch root with no machine record refuses, and writes nothing', () =
   // up cannot be told which tools it may use, and starting the lane anyway is
   // the failure this whole file exists to prevent.
   const root = scratch('mcp-norecord-');
+  const file = laneTarget('mcp-norecordtarget-');
   const emptyServices = scratch('mcp-noservices-');
 
-  const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot: emptyServices }));
+  const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot: emptyServices, file }));
   assert.match(error.message, /machine record/i, 'the refusal must say what is missing');
   assert.equal(error.code, 'BRIDGE_MCP_CONFIG_UNAVAILABLE');
   // BRIDGE_CLAUDE_UNAVAILABLE means "the executable could not be resolved" and
@@ -251,19 +398,19 @@ check('a dispatch root with no machine record refuses, and writes nothing', () =
   assert.notEqual(error.code, 'BRIDGE_CLAUDE_UNAVAILABLE');
   assert.equal(error.status, 503);
   assert.equal(error.details.cause, 'MACHINE_RECORD_ABSENT');
-  assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_CONFIG_FILE)), false,
-    'a refusal must not leave a half-written config behind');
+  assert.equal(fs.existsSync(file), false, 'a refusal must not leave a half-written config behind');
 });
 
 check('a machine record that cannot be read refuses rather than guessing a surface', () => {
   const root = scratch('mcp-badrecord-');
+  const file = laneTarget('mcp-badrecordtarget-');
   const servicesRoot = scratch('mcp-badservices-');
   fs.writeFileSync(path.join(servicesRoot, 'machine.json'), '{ this is not configuration', 'utf8');
 
-  const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot }));
+  const error = refusalFrom(() => actions.ensureLaneMcpConfig({ root, servicesRoot, file }));
   assert.equal(error.code, 'BRIDGE_MCP_CONFIG_UNAVAILABLE');
   assert.equal(error.details.cause, 'SETUP_MACHINE_RECORD_MALFORMED');
-  assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_CONFIG_FILE)), false);
+  assert.equal(fs.existsSync(file), false);
 });
 
 check('a config we wrote is regenerated when the recorded level changes under it', () => {
@@ -273,11 +420,12 @@ check('a config we wrote is regenerated when the recorded level changes under it
   // is not emitted at all. A file left behind by a level change therefore does
   // not go slightly out of date; it hands a confined installation the machine.
   const root = scratch('mcp-drift-');
+  const file = laneTarget('mcp-drifttarget-');
   const servicesRoot = scratch('mcp-driftservices-');
   machineRecord.writeMachineRecord(recordAt(servicesRoot, 'unrestricted'), { servicesRoot });
-  actions.ensureLaneMcpConfig({ root, servicesRoot });
+  actions.ensureLaneMcpConfig({ root, servicesRoot, file });
 
-  const wide = readConfig(root);
+  const wide = readConfig(file);
   assert.ok(Object.hasOwn(wide.mcpServers, 'toolsenabled'),
     'the unrestricted document is expected to carry the write-capable server; the drift being tested is its removal');
   assert.equal(wide.mcpServers.toolsenabled.env.TOOLSENABLED_TOOL_ALLOWLIST, undefined,
@@ -287,11 +435,11 @@ check('a config we wrote is regenerated when the recorded level changes under it
 
   // The owner narrows the installation.
   machineRecord.writeMachineRecord(recordAt(servicesRoot, 'guided'), { servicesRoot });
-  const refreshed = actions.ensureLaneMcpConfig({ root, servicesRoot });
+  const refreshed = actions.ensureLaneMcpConfig({ root, servicesRoot, file });
 
   assert.equal(refreshed.generated, true, 'a stale document must be rewritten, not reused');
   assert.equal(refreshed.refreshed, true);
-  const narrow = readConfig(root);
+  const narrow = readConfig(file);
   assert.equal(Object.hasOwn(narrow.mcpServers, 'toolsenabled'), false,
     'the narrowed level does not configure the write-capable server, so neither may the file the lane is handed');
   const allowlist = narrow.mcpServers['toolsenabled-readonly'].env.TOOLSENABLED_TOOL_ALLOWLIST.split(',');
@@ -301,16 +449,17 @@ check('a config we wrote is regenerated when the recorded level changes under it
 
 check('the application state root is stamped into every strict-config server', () => {
   const root = scratch('mcp-state-root-');
+  const file = laneTarget('mcp-state-roottarget-');
   const stateRoot = scratch('mcp-application-state-');
   const before = process.env.TOOLSENABLED_STATE_ROOT;
   process.env.TOOLSENABLED_STATE_ROOT = stateRoot;
   try {
-    actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('unrestricted') });
+    actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('unrestricted'), file });
   } finally {
     if (before === undefined) delete process.env.TOOLSENABLED_STATE_ROOT;
     else process.env.TOOLSENABLED_STATE_ROOT = before;
   }
-  const document = readConfig(root);
+  const document = readConfig(file);
   assertClaudeActor(document);
   for (const entry of Object.values(document.mcpServers)) {
     assert.equal(entry.env.TOOLSENABLED_STATE_ROOT, stateRoot,
@@ -319,75 +468,22 @@ check('the application state root is stamped into every strict-config server', (
 });
 
 check('an unchanged record rewrites nothing', () => {
-  // Regenerating on every dispatch would churn the file under concurrent lanes
-  // and make its timestamp meaningless. Drift is the trigger, not arrival.
+  // The document is GENERATED on every dispatch, but rewriting identical bytes
+  // would churn the file under concurrent lanes and make its timestamp
+  // meaningless. A difference is the trigger, not arrival.
   const root = scratch('mcp-stable-');
+  const file = laneTarget('mcp-stabletarget-');
   const servicesRoot = installedRecord('standard');
-  actions.ensureLaneMcpConfig({ root, servicesRoot });
-  const file = path.join(root, actions.LANE_MCP_CONFIG_FILE);
+  actions.ensureLaneMcpConfig({ root, servicesRoot, file });
   const before = fs.readFileSync(file, 'utf8');
   const beforeMtimeMs = fs.statSync(file).mtimeMs;
 
-  const again = actions.ensureLaneMcpConfig({ root, servicesRoot });
+  const again = actions.ensureLaneMcpConfig({ root, servicesRoot, file });
 
   assert.equal(again.generated, false, 'a current document must not be rewritten');
   assert.equal(again.refreshed, false);
-  assert.equal(again.adopted, false, 'a document we wrote is ours, not an adopted one');
   assert.equal(fs.readFileSync(file, 'utf8'), before);
   assert.equal(fs.statSync(file).mtimeMs, beforeMtimeMs, 'no write means no new mtime');
-});
-
-check('a config we did not write is left exactly as it is', () => {
-  // A dispatch root can legitimately hold a config a person maintains by hand --
-  // this checkout has one, tracked in git, naming servers this generator knows
-  // nothing about. Replacing it would be the same class of quiet damage as the
-  // missing file: the lane launches, and it is not the lane they configured.
-  const root = scratch('mcp-foreign-');
-  const foreign = { mcpServers: { 'hand-written': { command: process.execPath, args: ['--version'] } } };
-  const file = path.join(root, actions.LANE_MCP_CONFIG_FILE);
-  fs.writeFileSync(file, JSON.stringify(foreign, null, 2), 'utf8');
-
-  const result = actions.ensureLaneMcpConfig({ root, servicesRoot: installedRecord('unrestricted') });
-
-  assert.equal(result.adopted, true, 'an unowned document must be reported as adopted, not silently claimed');
-  assert.equal(result.generated, false);
-  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), foreign);
-  assert.equal(fs.existsSync(path.join(root, actions.LANE_MCP_ORIGIN_FILE)), false,
-    'adopting must not stamp ownership over somebody else\'s file');
-});
-
-check('a stamped config that was edited by hand is adopted rather than overwritten', () => {
-  // Ownership is proven per-write, not per-directory: once the file stops
-  // matching what we recorded writing, it is somebody else's again.
-  const root = scratch('mcp-edited-');
-  const servicesRoot = installedRecord('unrestricted');
-  actions.ensureLaneMcpConfig({ root, servicesRoot });
-  const file = path.join(root, actions.LANE_MCP_CONFIG_FILE);
-  const edited = readConfig(root);
-  edited.mcpServers['added-by-hand'] = { command: process.execPath, args: ['--version'] };
-  fs.writeFileSync(file, JSON.stringify(edited, null, 2), 'utf8');
-
-  // Move the record so a blind regenerator would certainly rewrite.
-  machineRecord.writeMachineRecord(recordAt(servicesRoot, 'guided'), { servicesRoot });
-  const result = actions.ensureLaneMcpConfig({ root, servicesRoot });
-
-  assert.equal(result.adopted, true);
-  assert.equal(result.generated, false);
-  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), edited, 'a hand edit must survive a dispatch');
-});
-
-check('the guard reads the record only when it has to generate', () => {
-  // The refusal above must not become a new way for a working installation to
-  // stop dispatching: a foreign document that is already in place is answered
-  // without consulting the record at all, so an unreadable one cannot break it.
-  const root = scratch('mcp-noread-');
-  const file = path.join(root, actions.LANE_MCP_CONFIG_FILE);
-  fs.writeFileSync(file, JSON.stringify({ mcpServers: {} }, null, 2), 'utf8');
-  const servicesRoot = scratch('mcp-noreadservices-');
-  fs.writeFileSync(path.join(servicesRoot, 'machine.json'), '{ not configuration', 'utf8');
-
-  const result = actions.ensureLaneMcpConfig({ root, servicesRoot });
-  assert.equal(result.adopted, true);
 });
 
 for (const directory of temporaries) {

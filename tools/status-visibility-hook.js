@@ -84,7 +84,7 @@
 // NO HARDCODED PATHS. This file deliberately invokes plain `node` (PATH
 // resolution) from .claude/settings.json, not a pinned absolute interpreter
 // path -- unlike the standing-orders-hook.js entry in that same file, which
-// pins a machine-specific absolute Node path to dodge a specific node:sqlite
+// pins C:\agent-apps\node-v22.19.0\node.exe to dodge a specific node:sqlite
 // defect on an older PATH-resolved Node build (see that file's own header).
 // This hook touches no node:sqlite and has no such landmine, so pinning
 // would only add an unnecessary hardcoded, machine-specific path -- exactly
@@ -177,7 +177,7 @@ function unquote(token) {
 // newline. Quote-aware (tracks a single active ' or " at a time; a backslash
 // escapes the next character) so a pipe character or operator INSIDE a
 // quoted argument is never mistaken for a real shell operator -- the same
-// class of bug the incident-filename fix in standing-orders-hook.js exists to
+// class of bug the scholarship-filename fix in standing-orders-hook.js exists to
 // avoid (a quoted string with meaningful punctuation must survive intact).
 function splitPipelines(command) {
   const text = String(command || '');

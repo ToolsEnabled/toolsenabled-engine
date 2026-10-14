@@ -39,7 +39,6 @@
 // AND AN UNREAD CACHE CHANGES NOTHING. Absent, malformed, drifted or STALE all
 // answer "not measured" (../usage/adapters/claude-cached-utilization.js refuses
 // each of those by name rather than guessing), the account keeps exactly the
-// status its auth probe gave it, and ./selection-modes.js leaves it in registry
 // order behind the accounts that did report.
 //
 // HOW OLD IS TOO OLD IS THE CALLER'S QUESTION. The adapter's default budget is

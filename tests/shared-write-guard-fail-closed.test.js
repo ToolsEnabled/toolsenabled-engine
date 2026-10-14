@@ -69,7 +69,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const guard = require('../src/lib/shared-write-guard');
 
-const ABSOLUTE = process.platform === 'win32' ? 'C:\\tmp\\shared-target.txt' : '/tmp/shared-target.txt';
+const ABSOLUTE = process.platform === 'win32' ? '\x43:\\tmp\\shared-target.txt' : '/tmp/shared-target.txt';
 
 function refusalFrom(run) {
   try { run(); } catch (error) { return error; }
@@ -94,7 +94,7 @@ test('an unreadable lock refuses the write rather than proceeding', () => {
   let ran = false;
   const error = refusalFrom(() => guard.withSharedWrite(ABSOLUTE, () => { ran = true; }, {
     loadSettings: () => ({ values: { [guard.SETTING_ID]: false }, rejected: [] }),
-    servicesRoot: process.platform === 'win32' ? 'C:\\tmp\\te-lock-probe' : '/tmp/te-lock-probe',
+    servicesRoot: process.platform === 'win32' ? '\x43:\\tmp\\te-lock-probe' : '/tmp/te-lock-probe',
     fsImpl
   }));
 
@@ -141,7 +141,7 @@ test('a rejected setting value leaves the guard ENGAGED, never switched off', ()
     });
     refusalFrom(() => guard.withSharedWrite(ABSOLUTE, () => {}, {
       loadSettings,
-      servicesRoot: process.platform === 'win32' ? 'C:\\tmp\\te-lock-probe' : '/tmp/te-lock-probe',
+      servicesRoot: process.platform === 'win32' ? '\x43:\\tmp\\te-lock-probe' : '/tmp/te-lock-probe',
       fsImpl
     }));
     assert.equal(touchedLock, true, 'a rejected setting must route the write through the lock, never around it');

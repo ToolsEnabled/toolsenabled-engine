@@ -2,11 +2,11 @@
 
 /*
  * Containment for src/lib/providers/code-intel.js#resolveFilePath (see
- * src/lib/code-file-containment.js). MEASURED: at an earlier engine commit,
+ * src/lib/code-file-containment.js). MEASURED: at engine commit b7149aeb,
  * resolveFilePath ran path.resolve(rootPath(), value) then
  * fs.statSync(resolved) with zero containment checks and zero audit calls,
  * so an absolute `file` argument read any file the process could open. The
- * same shape was confirmed live at several earlier revisions (memory
+ * same shape was confirmed live at c621171c, 74ea0b23 and 147251a (memory
  * key code-intel-abs-path-escape-20260906).
  *
  * Run directly: node tests/code-intel-containment.test.js

@@ -56,10 +56,10 @@ const SYSTEM = { sid: 'S-1-5-18', name: 'NT AUTHORITY\\SYSTEM' };
 const ADMINS = { sid: 'S-1-5-32-544', name: 'BUILTIN\\Administrators' };
 const USERS = { sid: 'S-1-5-32-545', name: 'BUILTIN\\Users' };
 const AUTHED = { sid: 'S-1-5-11', name: 'NT AUTHORITY\\Authenticated Users' };
-const TASK_ACCOUNT_SID = 'S-1-5-21-1111111111-2222222222-3333333333-1001';
+const TASK_ACCOUNT_SID = '\x53-1-5-21-1111111111-2222222222-3333333333-1001';
 const TASK_ACCOUNT = { sid: TASK_ACCOUNT_SID, name: 'EXAMPLE\\owner' };
-const SANDBOX = { sid: 'S-1-5-21-1111111111-2222222222-3333333333-1055', name: 'EXAMPLE\\SandboxUsers' };
-const FOREIGN = { sid: 'S-1-5-21-9999999999-8888888888-7777777777-1000', name: 'S-1-5-21-9999999999-8888888888-7777777777-1000' };
+const SANDBOX = { sid: '\x53-1-5-21-1111111111-2222222222-3333333333-1055', name: 'EXAMPLE\\SandboxUsers' };
+const FOREIGN = { sid: '\x53-1-5-21-9999999999-8888888888-7777777777-1000', name: '\x53-1-5-21-9999999999-8888888888-7777777777-1000' };
 
 const allow = (principal, rights, inherited = false) => ({ principal, rights, type: 'Allow', inherited });
 
@@ -114,7 +114,7 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
 
 (() => {
   const target = {
-    path: 'C:\\example\\helper.js',
+    path: '\x43:\\example\\helper.js',
     reason: 'scheduled task "Example" runs it at RunLevel=Highest',
     aces: [
       allow(SYSTEM, 'FullControl'),
@@ -135,7 +135,7 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
   // This is the exact live defect measured on 2026-08-11: an inherited
   // BUILTIN\Users Modify ACE on the program a Highest-RunLevel task executes.
   const target = {
-    path: 'C:\\example\\uac-delegation-helper.js',
+    path: '\x43:\\example\\uac-delegation-helper.js',
     reason: 'scheduled task runs it at RunLevel=Highest',
     aces: [
       allow(SYSTEM, 'FullControl'),
@@ -159,7 +159,7 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
   // A sandbox principal is a DIFFERENT account, so write access here is a
   // sandbox escape to administrator, not a same-user UAC prompt.
   const r = evaluateTarget({
-    path: 'C:\\example\\helper.js',
+    path: '\x43:\\example\\helper.js',
     aces: [allow(ADMINS, 'FullControl'), allow(SANDBOX, 'Modify')],
   }, { taskAccountSid: TASK_ACCOUNT_SID });
   assert.equal(r.ok, false, 'a sandbox principal with Modify is an escape to administrator');
@@ -169,7 +169,7 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
 
 (() => {
   const r = evaluateTarget({
-    path: 'C:\\example\\helper.js',
+    path: '\x43:\\example\\helper.js',
     aces: [allow(ADMINS, 'FullControl'), allow(FOREIGN, 'Modify', true)],
   }, { taskAccountSid: TASK_ACCOUNT_SID });
   assert.equal(r.ok, false, 'an unresolvable SID with Modify must fail');
@@ -180,7 +180,7 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
 (() => {
   // Deny entries must not be mistaken for grants, and must not mask a grant.
   const r = evaluateTarget({
-    path: 'C:\\example\\helper.js',
+    path: '\x43:\\example\\helper.js',
     aces: [
       allow(ADMINS, 'FullControl'),
       { principal: USERS, rights: 'FullControl', type: 'Deny' },
@@ -230,11 +230,11 @@ const allow = (principal, rights, inherited = false) => ({ principal, rights, ty
 
 (() => {
   const bad = evaluateElevationWritability({
-    targets: [{ path: 'C:\\example\\helper.js', reason: 'RunLevel=Highest', aces: [allow(USERS, 'Modify', true)] }],
+    targets: [{ path: '\x43:\\example\\helper.js', reason: 'RunLevel=Highest', aces: [allow(USERS, 'Modify', true)] }],
     taskAccountSid: TASK_ACCOUNT_SID,
   });
   const text = formatReport(bad);
-  assert.match(text, /^FAIL {2}C:\\example\\helper\.js/m);
+  assert.match(text, /^FAIL {2}\x43:\\example\\helper\.js/m);
   assert.match(text, /BUILTIN\\Users holds Modify \(inherited\)/);
   assert.match(text, /FAIL: 1 offending grant/);
 

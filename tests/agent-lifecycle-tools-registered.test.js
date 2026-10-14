@@ -1,12 +1,12 @@
 'use strict';
 /* THE FOUR TREE VERBS ARE TOOLS, NOT ONLY A HANDLER.
  *
- * MEASURED 2026-09-04 on a live engine build: `listTools()` answered 216 names
+ * MEASURED 2026-09-04 on live-engine 38ee062: `listTools()` answered 216 names
  * and not one of them began with `agent.`. treeLifecycle() and spawnSubagent()
  * were still defined, the P13 semantic table and the context-aware handler
  * list still named all four verbs, confined-tool-surface still classed them
  * "contained" -- and no assistant could call any of them, because the JARVIS
- * extraction swept the `define('agent.spawn'|'agent.stop'|
+ * extraction (fe64032) swept the `define('agent.spawn'|'agent.stop'|
  * 'agent.restart'|'agent.remove', ...)` entries out with the jarvis.* block
  * they sat between. A manager on the tree could not spawn, stop, restart or
  * remove a circle under it; every call was an unknown tool.

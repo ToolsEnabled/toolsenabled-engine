@@ -3,8 +3,9 @@
 /*
  * T1608 / T1613 / T1614 regression, at the broker rather than the classifier.
  *
- * MEASURED against the then-live source (workspace broker and policy
- * byte-identical to the running Linux and Windows runtimes): an authorized FRA peer walked an ordinary granted
+ * MEASURED 2026-09-23 against the then-live source (workspace broker
+ * dd58b1a1..., policy ed23d723..., byte-identical to the running Linux and
+ * Windows runtimes): an authorized FRA peer walked an ordinary granted
  * workspace and listed AND read 15 planted secrets, because the exclusion
  * rule tested `relative.split('/')[0]` only. `vault/master.key` was refused;
  * `server/vault/master.key`, `sub/.git/config` (a remote URL carrying a live
@@ -26,8 +27,8 @@ const { FraWorkspaceHandleBroker } = require('../src/lib/providers/fra-workspace
 const registry = {
   schemaVersion: 1,
   machines: {
-    left: { address: '203.0.113.1', root: 'C:\\left', role: 'development-host' },
-    right: { address: '203.0.113.2', root: 'C:\\right', role: 'disconnected-peer' }
+    left: { address: '203.0.113.1', root: '\x43:\\left', role: 'development-host' },
+    right: { address: '203.0.113.2', root: '\x43:\\right', role: 'disconnected-peer' }
   },
   services: {}
 };
@@ -42,7 +43,7 @@ const PLANT = {
   'a/b/c/vault/deep.key': `deeply nested vault ${SECRET}-02`,
   'server/state/session-store.bin': `nested state ${SECRET}-03`,
   'server/logs/audit.log': `nested logs ${SECRET}-04`,
-  'sub/.git/config': `[remote "origin"]\n url = https://x:${SECRET}-05@github.com/o/r`,
+  'sub/.git/config': `[remote "origin"]\n url = https://x:${SECRET}person-367fef8e@example.com/o/r`,
   'sub/node_modules/.package-lock.json': `nested modules ${SECRET}-06`,
   '.ssh/id_rsa': `${SECRET}-07`,
   '.aws/credentials': `aws_secret_access_key = ${SECRET}-08`,
@@ -50,7 +51,7 @@ const PLANT = {
   '.docker/config.json': `{"auths":{"r":{"auth":"${SECRET}-10"}}}`,
   '.gnupg/secring.gpg': `${SECRET}-11`,
   '.netrc': `machine api.example.com password ${SECRET}-12`,
-  '.git-credentials': `https://user:${SECRET}-13@github.com`,
+  '.git-credentials': `https://user:${SECRET}person-e1e627ab@example.com`,
   'deploy/id_ed25519': `${SECRET}-14`,
   'deploy/server.pem': `${SECRET}-15`,
   'deploy/secrets.yaml': `stripe_live_key: ${SECRET}-16`,

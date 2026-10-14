@@ -1,5 +1,7 @@
 'use strict';
 
+const { validateNativeModelId, nativeModelForDescriptor } = require('../model-dispatch-tiers');
+
 const path = require('node:path');
 const { assertAntigravitySurface } = require('./antigravity-confinement');
 const { scopedEnvironment } = require('../../../tools/antigravity-mcp-owner-proxy');
@@ -64,11 +66,9 @@ async function openAntigravitySession({ plan, command = 'agy', onEvent, rootLaun
   assertAntigravitySurface(surface);
   scopedEnvironment(plan.env);
   const selected = threadOptions.model;
-  const prefix = 'gemini/antigravity/';
-  const model = typeof selected === 'string' && selected.startsWith(prefix) ? selected.slice(prefix.length) : null;
-  if (!model || !model.startsWith('gemini-') || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(model)) {
-    throw failure('AGY_CLI_MODEL_REQUIRED', 'Choose an exact model advertised by Antigravity for this account.');
-  }
+  const model = nativeModelForDescriptor(selected, { provider: 'gemini', client: 'antigravity' });
+  try { validateNativeModelId(model); }
+  catch (error) { throw failure('AGY_CLI_MODEL_REQUIRED', error.message); }
   const effort = threadOptions.effort;
   if (effort != null && !['low', 'medium', 'high'].includes(effort)) {
     throw failure('ACP_EFFORT_UNAVAILABLE', 'Antigravity supports low, medium or high effort. Nothing was started.');

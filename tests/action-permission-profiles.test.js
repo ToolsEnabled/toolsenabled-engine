@@ -119,7 +119,7 @@ test('only saved settings affect discovery and dispatch; caller permission claim
 });
 
 /* The tier this runs at is load-bearing, and it changed under this test.
-   An earlier engine build ("Require paired retained authority for confined tree
+   Engine b2bdd802 ("Require paired retained authority for confined tree
    lifecycle commands") reclassified agent.resume/agent.restart from
    'contained' to 'tree-lifecycle-confined', so a CONFINED session may only
    resume through host.commandConfined on a build that declares
@@ -213,7 +213,7 @@ test('confined resume dispatch uses the paired authenticated tree command with n
   policy.installHost({ readSaved: () => saved, isDirectUserTurn: () => false, hasInheritedUserPermission: () => false });
   // Standard/confined agent.resume dispatches exclusively through the paired
   // confined lifecycle callback (src/lib/agent-tree-spawn.js commandOnTree,
-  // gated by supportsConfinedTreeLifecycle()) since an earlier change "Require paired
+  // gated by supportsConfinedTreeLifecycle()) since b2bdd802 "Require paired
   // retained authority for confined tree lifecycle commands": a generic
   // `command` host is no longer sufficient for resume/restart at this tier.
   tree.installTreeSpawnHost({
@@ -232,8 +232,8 @@ test('confined resume dispatch uses the paired authenticated tree command with n
   } finally { tree.clearTreeSpawnHost(); }
 });
 
-/* T1792. MEASURED 2026-09-24: a Controller resumed 15 idle agents so that
-   every agent would be working; agent.resume could carry nothing
+/* T1792. MEASURED 2026-09-24: Controller 1 resumed 15 idle agents after the
+   owner asked for every agent to be working; agent.resume could carry nothing
    but the circle, every resumed agent confirmed its old task was finished, and
    the next assignments sent afterwards as messages to idle agents were set
    aside (T1743). agent.resume now takes an optional bounded assignment,

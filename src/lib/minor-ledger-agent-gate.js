@@ -11,20 +11,9 @@
 // R_LEDGER_SCOPE_INVALID, R_LEDGER_KEY_INVALID each say what was wrong), so
 // this door adds nothing on top of them beyond the audit requirement itself.
 //
-// WHAT THIS GATE DELIBERATELY DOES NOT CARRY, UNLIKE r_ledger.file'S OWN GATE.
-// A standing rule is filed IN THE PERSON'S OWN WORDS and stands for what they
-// said, which is why r-ledger-agent-gate.js reads a settings row
-// (rules.capture_spoken) before allowing it, and checks the words against the
-// person's own spooled turns before filing them. A task is an agent's own
-// worklist item and an ask is an agent's own question -- neither is a claim
-// about what the person said (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS: "T
-// and A words are the agent's own and must still pass the secret-shape
-// refusal"), so there is no settings door here and no verbatim check. A
-// purchase (P) is routed separately, straight through owner-request-store.js
-// from the existing purchase.request / purchase.decision / pay.record tools
-// (tool-registry.js), because those tools already carry their own
-// owner-approval gate (purchase-authority.js) and re-gating them here would
-// be a second, competing decision over the same money.
+// Tasks and asks contain agent-authored text, so they do not use the standing
+// rule capture setting or verbatim-turn check. Secret-shaped text is refused.
+// Purchases use the existing payment authorization path and ledger store.
 //
 // THE ACTOR IS TRANSPORT-BOUND, NOT AGENT-CHOSEN. t_ledger.file/complete/
 // remove and a_ledger.file are added to src/mcp-server.js's
@@ -33,16 +22,8 @@
 // as, so the name on a T or A record's head line is never a name the agent
 // claims for itself.
 //
-// L3d -- asks and purchases are agent-closable (product rule).
-// a_ledger.answer, a_ledger.decline and p_ledger.decide
-// close the loop the person's own words opened: an agent that filed an ask,
-// or a purchase list waiting on a decision, can now settle it itself instead
-// of the record sitting open until the person visits the Ledger page. This
-// widens WHO may call answerAsk/declineAsk/decidePurchase (the store's own
-// L1h change: those three drop their person-only gate and journal whichever
-// actor the call names, exactly as decidePurchase already does for the
-// standing outward-spend setting) -- it does not touch removeAsk or
-// removePurchase, which stay owner-only, and it never widens R.
+// Agents may answer or decline asks and record purchase decisions. These calls
+// retain the actual actor; ask/purchase removal remains person-only.
 //
 // p_ledger.decide MOVES THE LEDGER MIRROR ONLY. Spend authority is, and
 // remains, purchase-authority.js's assertSpendAuthorized reading the owner's
@@ -63,16 +44,86 @@
 // is already computed. So p_ledger.decide changes what the Ledger page shows
 // for a P record; it can never authorise or block a charge.
 
-// T and A words are the agent's own, never a claim about what the person
-// said, so they skip r_ledger.file's settings gate and its
-// verbatim-against-the-person's-turns check -- but LEDGER-KINDS-INTERFACE-
-// 20260907.md is explicit that they "must still pass the secret-shape
-// refusal". Reusing r-ledger-agent-gate.js's own judgement (rather than a
-// second definition of "looks like a secret") keeps one answer to that
-// question in this program, exactly as its own header promises for the audit
-// scrubber.
+// Reuse the standing-rule gate's secret-shape classifier for task and ask text.
 const { looksSecretShaped } = require('./r-ledger-agent-gate');
 const { normalizeWaitingFor } = require('./task-waiting');
+
+// WHY A REVIEW FILED AS PROGRESS IS CAUGHT HERE (T1997, wave lane L4).
+// The decision kind on a T record is not inferred from its words: it is
+// whichever store function was called. progressTask hardcodes
+// `decision: 'progress'` (owner-request-store.js) and never touches
+// failedReviewCount; recordTaskReview hardcodes `decision: 'review'` and is the
+// ONLY writer of that counter (via task-difficulty.js planTaskDifficultyReview).
+// So an agent that narrates "reviewed it, suites green" through
+// t_ledger.progress files a checkpoint, the review never exists, the count
+// never rises, and a troubled task cannot be told from a healthy one. Measured
+// on the live store 2026-09-24: 8,947 progress rows against 126 reviews, of
+// which only 2 were failures. progress is the cheaper call (no reviewId to
+// invent), so it wins by default unless the door says otherwise.
+//
+// The test is deliberately two-signal and narrow: the prose must name a review
+// AND state a verdict on it. "Reviewed the spec, still implementing" is real
+// progress and passes; "review passed" is a verdict and is caught, with the
+// exact call to make instead. This never guesses a verdict on the agent's
+// behalf -- inferring pass/fail from prose is precisely the silent
+// misclassification this check exists to prevent.
+// Co-occurrence is not enough. Measured against the live store, a rule that
+// merely finds a review word and a verdict word anywhere in the same 300
+// characters catches 913 of 8,947 real checkpoints (10.2%), most of them
+// honest work notes that happen to mention a branch called "review head" and
+// a passing test. These patterns instead require the verdict to be ASSERTED
+// ABOUT the review -- the two must be adjacent, with only short connective
+// filler between them and no sentence boundary crossed. A bare "LGTM" or
+// "approved for merge" counts on its own: those are verdicts whatever noun
+// follows.
+const REVIEW_VERDICT_PATTERNS = Object.freeze([
+  // "review passed", "review: fail", "review is clean", "reviews came back green"
+  /\b(?:re-?)?review(?:s|ed|er)?\b[^.;!?\n]{0,18}?\b(?:passed|passes|passing|pass|failed|fails|failing|fail|clean|green|approved|rejected|blocked|blocking)\b/i,
+  // "passed review", "failed the code review", "rejected at review"
+  /\b(?:passed|passes|failed|fails|rejected|approved|blocked)\b[^.;!?\n]{0,18}?\b(?:re-?)?review(?:s|ed|er)?\b/i,
+  // "review verdict: pass", "QA outcome failed", "sign-off: approved"
+  /\b(?:review|qa|sign[- ]?off)\b[^.;!?\n]{0,18}?\b(?:verdict|outcome|result)\b[^.;!?\n]{0,12}?\b(?:pass(?:ed)?|fail(?:ed)?|approved|rejected|clean|green)\b/i,
+  /\b(?:verdict|sign(?:ed)?[- ]?off)\b[^.;!?\n]{0,18}?\b(?:pass(?:ed)?|fail(?:ed)?|approved|rejected|clean|green|stands)\b/i,
+  // "reviewed and approved", "reviewed, rejected"
+  /\breviewed\b[^.;!?\n]{0,12}?\b(?:approved|rejected|accepted|declined)\b/i,
+  // Standalone verdicts that need no review noun to be a verdict.
+  /\blgtm\b/i,
+  /\bship it\b/i,
+  /\bgood to go\b/i,
+]);
+
+// "the failed-review count is 0" and "failed review counts" discuss the counter;
+// they do not pass or fail anything. Measured on the live store, that compound
+// noun was the largest remaining false-positive family (3 of 88).
+const COUNTER_TALK_RE = /\b(?:failed|passed)[- ]review\b[^.;!?\n]{0,8}?\bcounts?\b/i;
+
+function looksLikeReviewVerdict(words) {
+  if (typeof words !== 'string' || words.length === 0) return false;
+  const text = COUNTER_TALK_RE.test(words) ? words.replace(new RegExp(COUNTER_TALK_RE, 'gi'), ' ') : words;
+  return REVIEW_VERDICT_PATTERNS.some(pattern => pattern.test(text));
+}
+
+// REFUSE OR WARN IS ONE SWITCH, AND ITS DEFAULT IS WARN (O11 IS OPEN).
+// L4 shipped the detector as a refusal. RELEASE-READINESS O11 asks whether a
+// ~1% checkpoint-rewording rate is acceptable or whether the detector should
+// warn instead, and the Controller's return on T1997 says a composed packet
+// must not choose that silently. So both behaviours are here and the choice is
+// one explicit switch:
+//
+//   'warn'    (DEFAULT) the checkpoint is written exactly as it was before this
+//             check existed -- same store call, same row, same waitingFor, same
+//             agent id -- and the receipt carries a `warning` naming the
+//             t_ledger.review call that would have raised the count.
+//   'refuse'  L4's behaviour, unchanged: typed T_LEDGER_REVIEW_AS_PROGRESS,
+//             nothing written, not even the progress row.
+//
+// The default is the non-refusing one because that is the behaviour the base
+// already had for every current caller. Answering O11 "refuse" is changing
+// REVIEW_AS_PROGRESS_DEFAULT below (or constructing the control with
+// { reviewAsProgress: 'refuse' }). No historical row is touched either way:
+// re-filing the prose verdicts already in the Ledger is O10, also open.
+const REVIEW_AS_PROGRESS_MODES = Object.freeze(['warn', 'refuse']);
+const REVIEW_AS_PROGRESS_DEFAULT = 'warn';
 
 class MinorLedgerAgentControl {
   constructor(dependencies = {}) {
@@ -83,6 +134,14 @@ class MinorLedgerAgentControl {
     this.ledgerOptions = dependencies.ledgerOptions || {};
     this.scrub = dependencies.scrub || null;
     this.loadSettings = dependencies.loadSettings || (() => require('./settings').loadSettings());
+    const reviewAsProgress = dependencies.reviewAsProgress === undefined
+      ? REVIEW_AS_PROGRESS_DEFAULT : dependencies.reviewAsProgress;
+    if (!REVIEW_AS_PROGRESS_MODES.includes(reviewAsProgress)) {
+      throw Object.assign(new TypeError(
+        `reviewAsProgress must be one of ${REVIEW_AS_PROGRESS_MODES.join(', ')}; a misspelt switch is not silently read as either.`
+      ), { code: 'T_LEDGER_REVIEW_AS_PROGRESS_MODE_INVALID' });
+    }
+    this.reviewAsProgress = reviewAsProgress;
   }
 
   // Uses the installation-owned store, with no caller-supplied path or write.
@@ -90,7 +149,7 @@ class MinorLedgerAgentControl {
   // `ids` answers many exact records from this ONE store read. Without it a
   // caller that needs 200 records starts 200 reads, each parsing the whole
   // Ledger, and a Codex code-mode script that fans out that far stops
-  // dispatching at about 130 calls in flight and never returns (measured
+  // dispatching at about 130 calls in flight and never returns (Controller 1,
   // 2026-09-24). `missing` names every asked-for id that is not in the answer,
   // so nobody has to fan out again to learn which ones exist.
   read(args = {}) {
@@ -136,6 +195,35 @@ class MinorLedgerAgentControl {
         'Those words look like a password, key or token, so they were not filed. Tell the person you did not file them.'
       );
     }
+  }
+
+  /* A checkpoint may say what was done; a review's verdict belongs in
+   * t_ledger.review, the only call that raises the failed-review count.
+   * Under 'refuse' (L4's behaviour) the verdict is refused with the exact call
+   * to make instead and NOTHING is written -- the progress row is not saved
+   * either, because saving it would put the verdict back where the counter
+   * cannot see it. Under 'warn' (the default until O11 is answered) this
+   * returns the same advice as a warning for the receipt and the checkpoint is
+   * written exactly as before. Returns null when the words carry no verdict. */
+  _reviewAsProgress(id, reason) {
+    if (!looksLikeReviewVerdict(reason)) return null;
+    const instead = `Send it as a review instead: t_ledger.review with id "${id}", outcome "passed" or "failed", `
+      + 'a reviewId that is stable for this one review, and reason set to the evidence. '
+      + 'A failed review is what raises this task\'s failed-review count. ';
+    if (this.reviewAsProgress === 'refuse') {
+      throw new this.store.OwnerRequestStoreError(
+        'T_LEDGER_REVIEW_AS_PROGRESS',
+        'That reads as a review verdict, and a task checkpoint cannot carry one, so nothing was filed. '
+        + instead
+        + 'If you meant a work checkpoint and not a verdict, resend it through t_ledger.progress without the pass/fail wording.'
+      );
+    }
+    return Object.freeze({
+      code: 'T_LEDGER_REVIEW_AS_PROGRESS',
+      message: 'The checkpoint was recorded, but it reads as a review verdict, and a checkpoint never reaches the failed-review count. '
+        + instead
+        + 'If it was only a work checkpoint, nothing more is needed.'
+    });
   }
 
   _audit(action, target, details) {
@@ -329,10 +417,18 @@ class MinorLedgerAgentControl {
       this._requireAudit(await this.auditRequireAsync('t_ledger.progress', `t-ledger:${id}`, auditDetails));
     }
     this._checkWords(reason);
+    // T1997: refused here under 'refuse' before any store write; under 'warn'
+    // the same store call below runs unchanged and the receipt says why the
+    // count did not move. The caller's waitingFor reaches the store on both
+    // paths exactly as it would without this check.
+    const reviewVerdict = this._reviewAsProgress(id, reason);
     const storeArgs = { id, status, reason, actor };
     if (hasWaitingFor) storeArgs.waitingFor = waitingFor;
     const progress = this.store.progressTask(storeArgs, this.ledgerOptions);
-    return Object.freeze({ updated: true, id: progress.id, status: progress.status, note: `${progress.id}: task checkpoint recorded.` });
+    return Object.freeze({
+      updated: true, id: progress.id, status: progress.status, note: `${progress.id}: task checkpoint recorded.`,
+      ...(reviewVerdict ? { warning: reviewVerdict } : {})
+    });
   }
 
   /** t_ledger.complete: complete one task. A one-shot task lands 'done'; a
@@ -370,11 +466,7 @@ class MinorLedgerAgentControl {
     });
   }
 
-  /** a_ledger.answer: close one open ask with an answer, in this agent's own
-   *  words. Agent-closable per the owner's ruling (asks and purchases are
-   *  agent-closable) -- the actor journalled is the calling agent, not the
-   *  person, so an answer here is never mistaken for the person's own words
-   *  the way a_ledger.file's words already are not. */
+  /** Ask decisions retain the calling actor and require the configured permission. */
   _assertAskDecisionAllowed() {
     let settings;
     try { settings = this.loadSettings(); } catch { settings = null; }
@@ -409,12 +501,7 @@ class MinorLedgerAgentControl {
     });
   }
 
-  /** p_ledger.decide: approve or decline one proposed purchase's LEDGER
-   *  MIRROR. Agent-closable per the owner's ruling. This moves only the
-   *  Ledger page's view of the P record; it carries no spend authority and
-   *  cannot cause or block a charge -- see the module header for the
-   *  two-method re-verification that no spend path reads a P record's
-   *  status. */
+  /** Record a purchase decision without granting payment authority. */
   decidePurchase(args) {
     this._checkKind('P', args.id);
     this._audit('p_ledger.decide', `p-ledger:${args.id}`, { actor: args.actor, decision: args.decision });
@@ -427,4 +514,6 @@ class MinorLedgerAgentControl {
   }
 }
 
-module.exports = Object.freeze({ MinorLedgerAgentControl });
+module.exports = Object.freeze({
+  MinorLedgerAgentControl, looksLikeReviewVerdict, REVIEW_AS_PROGRESS_MODES, REVIEW_AS_PROGRESS_DEFAULT
+});

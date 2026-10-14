@@ -28,6 +28,10 @@ function subject() {
     if (name === 'node:path' || name === 'node:v8') return require(name);
     if (name === 'node:fs' || name === 'node:readline') return new Proxy({}, { get(_target, key) { return forbidden(name + '.' + String(key)); } });
     if (inertDependencies.has(name)) return inertModule;
+    // src/mcp-server.js calls activate() at load. Reviewed: it is the plugin host's
+    // start-up pass and has nothing to do with how a refusal is rendered, so it is
+    // inert here like the tool registry it runs ahead of.
+    if (name === './lib/plugin-activation') return Object.freeze({ activate: () => undefined });
     throw new Error('Unreviewed dependency in public-message test: ' + name);
   }
   requireInVm.main = null;

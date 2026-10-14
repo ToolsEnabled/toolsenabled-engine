@@ -42,7 +42,7 @@ Assertion audit (testcanfail-tests-vault-unreadable-is-not-absent-test-js):
  *   online-fra-relay-shell.js identityFromVault() -> null -> IDENTITY_MISSING
  *
  * Both are worse than a crash, because both render as a confident statement
- * about the owner's own machine. The doctor one tells them they hold no
+ * about the owner's own machine. The doctor one tells him he holds no
  * credentials; the relay one sends whoever is debugging a connection to go
  * finish a setup that was already finished.
  *

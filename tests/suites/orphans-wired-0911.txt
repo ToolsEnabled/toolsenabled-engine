@@ -2,7 +2,7 @@
 # command line, so nothing in `npm test` ran them and the orphan ceiling in
 # tests/test-census.test.js went from 0 to 3.
 #
-# MEASURED 2026-09-11 at an earlier revision, before wiring, with the chain's own
+# MEASURED 2026-09-11 at fe3c3b8c, before wiring, with the chain's own
 # instrument -- `node tests/run-isolated.js <the three files>`:
 #   tests/host-byte-mediation.test.js            11/11 pass, 17.9 s
 #   tests/owner-host-socket-path-refusal.test.js  3/3  pass,  6 ms
@@ -17,15 +17,15 @@
 # is the only instrument that can tell those two readings apart, which is why
 # its ceiling is 0 and not a tolerance.
 
-# an earlier change mediated host.read_file/host.write_file and added host.patch_file.
+# cabf99c3 mediated host.read_file/host.write_file and added host.patch_file.
 tests/host-byte-mediation.test.js
 
-# an earlier change made the owner-host socket refusal name the byte count and the
+# 85dd2d59 made the owner-host socket refusal name the byte count and the
 # 107-byte kernel limit. The boundary it pins is exact; an unrun exactness
 # check is the one kind that rots without anybody noticing.
 tests/owner-host-socket-path-refusal.test.js
 
-# an earlier change gave Linux the vault-presence cache Windows already had.
+# eaa377d7 gave Linux the vault-presence cache Windows already had.
 tests/vault-presence-cache-linux.test.js
 
 # .45 native census ownership: real detached descendants may not outlive the
@@ -37,7 +37,7 @@ tests/linux-credential-prompt.test.js
 tests/owner-prompt-windows-capture.test.js
 tests/desktop-focus-refusal.test.js
 
-# Who adds standing rules (rules.filing_from): the three-way
+# Who adds standing rules (rules.filing_from, owner 2026-09-15): the three-way
 # choice, its migration to and from the older switch, and the no-asking texts.
 tests/rules-filing-from.test.js
 

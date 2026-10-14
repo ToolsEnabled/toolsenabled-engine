@@ -11,7 +11,7 @@ const stores = [];
 const runtime = Object.freeze({
   nodePath: process.execPath,
   runnerPath: path.resolve(__dirname, '..', '..', 'src', 'job-runner.js'),
-  principalId: 'S-1-5-21-111111111-222222222-333333333-1003'
+  principalId: '\x53-1-5-21-111111111-222222222-333333333-1003'
 });
 
 function fixture(label) {

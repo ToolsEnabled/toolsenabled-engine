@@ -10,7 +10,7 @@ const {
   ClaudeCliAdapter
 } = require('../../src/lib/agent-engine/claude-cli-adapter');
 
-const THREAD_ID = '72d4f6b8-0c2e-4a6c-9e0b-2d4f6a8c0e1f';
+const THREAD_ID = '7cf7c88e-6912-4388-a181-78aef262c494';
 
 function recordingTransport() {
   const sent = [];
@@ -194,6 +194,117 @@ async function testSessionLimitCompletion() {
   adapter.close();
 }
 
+/* MEASURED on claude 2.1.281 with a signed-out, isolated CLAUDE_CONFIG_DIR
+   (no credential, nothing billed): a refused turn streams this synthetic
+   assistant message, then a failed result carrying the same sentence. */
+async function testProviderRefusalEndsAsRefusal() {
+  const fixture = recordingTransport();
+  const adapter = new ClaudeCliAdapter({ transport: fixture.transport });
+  const events = [];
+  adapter.onEvent(event => events.push(event));
+  await adapter.resumeThread(THREAD_ID);
+  const pending = adapter.sendTurn({ threadId: THREAD_ID, text: 'continue' });
+  fixture.receive({ type: 'result', subtype: 'success', is_error: false, stop_reason: 'refusal', result: '' });
+  await pending;
+  const completed = events.filter(event => event.type === 'turn_completed');
+  assert.equal(completed.length, 1);
+  assert.equal(completed[0].status, 'refusal', 'a provider refusal must reach the host as a refusal, not a success');
+  adapter.close();
+}
+
+async function testApiErrorIsNotAgentSpeech() {
+  const fixture = recordingTransport();
+  const adapter = new ClaudeCliAdapter({ transport: fixture.transport });
+  const events = [];
+  adapter.onEvent(event => events.push(event));
+  await adapter.resumeThread(THREAD_ID);
+  const pending = adapter.sendTurn({ threadId: THREAD_ID, text: 'hi' });
+  const sentence = 'Not logged in · Please run /login';
+  fixture.receive({
+    type: 'assistant',
+    message: { id: 'synthetic-1', model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text: sentence }] },
+    parent_tool_use_id: null,
+    session_id: THREAD_ID,
+    error: 'authentication_failed',
+    is_api_error_message: true
+  });
+  fixture.receive({ type: 'result', subtype: 'success', is_error: true, result: sentence, session_id: THREAD_ID });
+  const outcome = await pending;
+  assert.deepEqual(events.filter(event => ['assistant_text', 'assistant_text_delta'].includes(event.type)), [],
+    'the provider refusal must not be delivered as the agent\'s own words');
+  const completed = events.filter(event => event.type === 'turn_completed');
+  assert.equal(completed.length, 1);
+  assert.equal(completed[0].status, 'error');
+  assert.equal(completed[0].text, sentence, 'the refusal still reaches the person on the failed completion');
+  assert.deepEqual(completed[0].payload, { code: 'authentication_failed' });
+  assert.equal(outcome.isError, true);
+  assert.equal(outcome.text, sentence);
+  adapter.close();
+}
+
+/* 1.0.50 review CM-2. The CLI's own sentence for a model it will not run marks the failed turn as a model refusal,
+   so the host holds queued and helper sends; any other error result does not. */
+async function testModelRefusalIsMarked() {
+  for (const [result, marked] of [
+    ["There's an issue with the selected model (my-typed-model). It may not exist or you may not have access to it. Run /model to pick a different model.", true],
+    ['There\u2019s an issue with the selected model (claude-fable).', true],
+    ['API Error: 500 Internal server error', false],
+  ]) {
+    const fixture = recordingTransport();
+    const adapter = new ClaudeCliAdapter({ transport: fixture.transport });
+    const events = [];
+    adapter.onEvent(event => events.push(event));
+    await adapter.resumeThread(THREAD_ID);
+    const pending = adapter.sendTurn({ threadId: THREAD_ID, text: 'hi' });
+    fixture.receive({ type: 'result', subtype: 'success', is_error: true, result, session_id: THREAD_ID });
+    await pending.catch(() => {});
+    const completed = events.filter(event => event.type === 'turn_completed');
+    assert.equal(completed.length, 1);
+    assert.equal(completed[0].status, 'error');
+    assert.equal(completed[0].text, result, 'the CLI sentence still reaches the person');
+    if (marked) {
+      assert.deepEqual(completed[0].payload, { failure: { provider: 'claude', source: 'turn', category: 'model-refused' } });
+    } else {
+      assert.equal(completed[0].payload, undefined, result);
+    }
+    adapter.close();
+  }
+}
+
+/* The packet path (assistant/user content blocks) must pass the same contract
+   gate as every other emission: validated, frozen, and refused when invalid. */
+async function testPacketEventsAreValidated() {
+  const fixture = recordingTransport();
+  const adapter = new ClaudeCliAdapter({ transport: fixture.transport });
+  const events = [];
+  adapter.onEvent(event => events.push(event));
+  const warnings = [];
+  const onWarning = warning => warnings.push(String(warning && warning.message));
+  process.on('warning', onWarning);
+  try {
+    await adapter.resumeThread(THREAD_ID);
+    const pending = adapter.sendTurn({ threadId: THREAD_ID, text: 'go' });
+    fixture.receive({ type: 'assistant', message: { content: [
+      { type: 'tool_use', id: 'call-1', name: 'Read', input: { file_path: '/tmp/x' } },
+      { type: 'text', text: 'x'.repeat(1_000_001) }
+    ] } });
+    fixture.receive({ type: 'result', subtype: 'success', is_error: false, result: 'done' });
+    await pending;
+    await new Promise(resolve => setImmediate(resolve));
+    const call = events.find(event => event.type === 'tool_call');
+    assert.ok(call, 'the valid tool call was not delivered');
+    assert.ok(Object.isFrozen(call) && Object.isFrozen(call.payload),
+      'a packet event reached listeners without passing validateEngineEvent');
+    assert.equal(events.filter(event => event.type === 'assistant_text').length, 0,
+      'an event the contract refuses (text over 1,000,000 characters) reached listeners');
+    assert.ok(warnings.some(text => text.includes('claude-cli-adapter dropped a malformed event')),
+      'the refused event must be reported, not dropped silently');
+  } finally {
+    process.off('warning', onWarning);
+    adapter.close();
+  }
+}
+
 (async () => {
   // Production timers are deliberately unref'ed. Keep this short-lived test
   // process alive so the isolated runner cannot exit before those timers bite.
@@ -204,6 +315,10 @@ async function testSessionLimitCompletion() {
     await testSessionLimitCompletion();
     await testProductiveTurnOutlivesInitialDeadline();
     await testNoiseCannotRenewIdleTurn();
+    await testProviderRefusalEndsAsRefusal();
+    await testApiErrorIsNotAgentSpeech();
+    await testModelRefusalIsMarked();
+    await testPacketEventsAreValidated();
     process.stdout.write('Claude CLI adapter driven refusal tests passed.\n');
   } finally {
     clearTimeout(keepAlive);

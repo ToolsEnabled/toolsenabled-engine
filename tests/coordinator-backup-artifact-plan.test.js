@@ -32,7 +32,7 @@ function run() {
     assert.equal(first.plan.manifest.grantsRestoreAuthority, false);
     assert.equal(first.plan.activation.writesAuthorized, false);
     assert.equal(Object.isFrozen(first.plan), true);
-    assert.equal(JSON.stringify(first.plan).includes('C:\\'), false);
+    assert.equal(JSON.stringify(first.plan).includes('\x43:\\'), false);
   });
   check('retains newest snapshots deterministically and only proposes older candidates', () => {
     const result = planner.buildBackupArtifactPlan(input());

@@ -12,18 +12,21 @@
 // restored byte-for-byte after the mutation, and the restored run ended:
 // "10 passed, 0 failed".
 'use strict';
-// WHAT THE OWNER SAID vs WHAT R HOLDS.
+// WHAT HE SAID vs WHAT R HOLDS.
 //
-// The failure this catches: a request stated several times never reached the
-// R ledger.
+// The owner, 2026-08-11 (reports/OWNER-REQUEST-LEDGER.json R1233, verbatim):
+//   "I think maybe R is not working or something is going wrong because I have
+//    said a lot of times what I want"
 //
 // Capture is manual, so the ledger only holds what an agent remembered to file.
-// Measured with this tool over a 24-hour window: most real owner turns were
-// absent from the ledger's verbatim corpus.
+// Measured with this tool on 2026-08-11 over a 24-hour window: 71 real owner
+// turns, 6 present in the ledger's verbatim corpus, 65 absent -- including
+// "I wanted the whole list. Go back and review what I had wanted on the purchase
+// list, it should be in R".
 //
 // The load-bearing property under test is NOT the diff, it is the DISCRIMINATOR:
 // a detector that mistakes agent traffic for the owner's words would file lane
-// briefs as their requirements (the R1098 defect) and would drown the real signal.
+// briefs as his requirements (the R1098 defect) and would drown the real signal.
 // So the fixture deliberately mixes human turns with task-notification turns,
 // peer turns, sidechain turns and tool results carrying the same absent text.
 
@@ -42,8 +45,8 @@ async function check(name, fn) {
   catch (error) { failures.push(name); console.log(`  FAIL ${name}: ${error.stack || error.message}`); }
 }
 
-const CAPTURED = 'keep going on the settings page until it is ready for a test build';
-const UNCAPTURED = 'Please show the full supply list. Review the earlier list again, it should already be recorded';
+const CAPTURED = 'ok continue working with your team until it makes sense to ship a candidate to A for testing';
+const UNCAPTURED = 'I wanted the whole list. Go back and review what I had wanted on the purchase list, it should be in R';
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capture-audit-'));
@@ -74,7 +77,7 @@ function fixture() {
     uuid: `u${index}`,
     message: { role: 'user', content: [{ type: 'text', text: row.text }] }
   }));
-  // A tool result carrying the same words must never count as the owner saying them.
+  // A tool result carrying the same words must never count as him saying them.
   rows.push(JSON.stringify({
     type: 'user', timestamp: at, isSidechain: false, origin: { kind: 'human' }, uuid: 'tr',
     message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: UNCAPTURED }] }
@@ -116,10 +119,10 @@ const OPTIONS = f => ({ ledger: f.ledger, projects: [f.projects], since: '2026-0
     await auditTool.audit(OPTIONS(f));
     const after = [fs.readFileSync(f.ledger, 'utf8'), fs.readFileSync(path.join(f.projects, 'session.jsonl'), 'utf8')];
     assert.deepStrictEqual(after, before,
-      'this tool must never capture on its own; auto-filing their words is how a paraphrase acquires their authority');
+      'this tool must never capture on its own; auto-filing his words is how a paraphrase acquires his authority');
   });
 
-  await check('only VERBATIM counts as capture, never an interpretation that paraphrases them', async () => {
+  await check('only VERBATIM counts as capture, never an interpretation that paraphrases him', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'capture-audit-paraphrase-'));
     const ledger = path.join(dir, 'ledger.json');
     fs.writeFileSync(ledger, JSON.stringify({
@@ -162,10 +165,10 @@ const OPTIONS = f => ({ ledger: f.ledger, projects: [f.projects], since: '2026-0
     assert.strictEqual(auditTool.isCaptured(corpus, auditTool.normalize('cancel the run')), false);
   });
 
-  await check('normalization survives the way people actually type', async () => {
+  await check('normalization survives the way he actually types', async () => {
     assert.strictEqual(
-      auditTool.normalize('  Plaese,  chekc teh build, then example.org .net .io ? '),
-      'plaese chekc teh build then example org net io'
+      auditTool.normalize('  Trademark,  licnsing, entity ioncorportation, all the toolsanebaled.ai .io .com ? '),
+      'trademark licnsing entity ioncorportation all the toolsanebaled ai io com'
     );
     assert.strictEqual(auditTool.shingles(auditTool.normalize('one two three')).length, 0, 'a short turn has no shingle');
     assert.strictEqual(auditTool.shingles(auditTool.normalize('a b c d e f g h i')).length, 2);

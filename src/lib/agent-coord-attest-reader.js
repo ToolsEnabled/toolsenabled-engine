@@ -61,7 +61,7 @@ function sidecarPathFor(statePath) {
  * null into 'unattested' for every row. The row-level strictness below stopped
  * an attacker DELETING ONE attestation, and did nothing about deleting the whole
  * file -- the same defect one level up, and anyone who can write the state
- * folder has exactly that power. Found in review.
+ * folder has exactly that power. Found in review by reviewer.
  */
 function loadAttestations(sidecarPath, { sqlite = require('node:sqlite') } = {}) {
   const fs = require('node:fs');

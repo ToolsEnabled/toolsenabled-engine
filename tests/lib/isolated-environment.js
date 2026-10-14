@@ -51,7 +51,7 @@ const PATHS = Object.freeze({
   // state/active-request.json.
   TOOLSENABLED_ACTIVE_REQUEST_PATH: path.join('state', 'active-request.json'),
   // R84: the owner-delivery outcome record. `node src/agent-digest.js --status`
-  // reads it to report whether reports are actually reaching them, so a test
+  // reads it to report whether reports are actually reaching him, so a test
   // that exercises a send path must never be able to write a synthetic
   // failure into the real one.
   TOOLSENABLED_OWNER_DELIVERY_PATH: path.join('state', 'owner-delivery.json'),
@@ -64,7 +64,7 @@ const PATHS = Object.freeze({
   // side effect; without this override every such run appended real
   // "startup-refused" lines to the production logs/fleet-supervisor.log.
   TOOLSENABLED_FLEET_SUPERVISOR_LOG_PATH: 'fleet-supervisor.log',
-  // State-root identity plus an independently isolated ambient platform
+  // W41: state-root identity plus an independently isolated ambient platform
   // directory. See the note above for why the identity is a throwaway name.
   // Measured on this checkout before the change: tests/scheduler-runner.js,
   // tests/mission-bridge-claude-mcp-config.test.js and
@@ -90,7 +90,7 @@ function within(root, candidate) {
 
 /* Windows may publish TEMP in its 8.3 spelling even while the account's own
  * home is available in its canonical long spelling. Product account fencing
- * deliberately refuses an ambiguous `<drive>:\\Users\\SAMPLE~1` rather than probing
+ * deliberately refuses an ambiguous `<profile-root>/SAMPLE~1` rather than probing
  * it to discover whether it is this account or a sibling. Keep isolated test
  * roots unambiguous at creation time so the suite exercises the same long-form
  * account boundary the packaged shell publishes to children. */

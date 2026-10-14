@@ -110,7 +110,7 @@ const WORKSPACE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$/;
 const VERSION_RE = /^[0-9][0-9A-Za-z._-]{0,31}$/;
 // Codex's own spawn label for a subagent thread, e.g.
-// "/root/example_subagent_review". Provider-supplied and therefore
+// "/root/terra_q17_baseline_review". Provider-supplied and therefore
 // untrusted; bounded to a slug path so it can carry no markup or prose.
 const AGENT_PATH_RE = /^\/[A-Za-z0-9][A-Za-z0-9_./-]{0,119}$/;
 // Claude subagent identity, from the transcript filename and its sibling

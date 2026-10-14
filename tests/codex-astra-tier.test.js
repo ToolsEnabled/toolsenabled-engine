@@ -1,18 +1,18 @@
 'use strict';
 
-/* Cut gate R1199: Codex launched astra6, and the release must support that
- * model before it is cut.
+/* Cut gate R1199, the person's words: "also codex launched astra6. make sure we
+ * support that model before you cut".
  *
  * The exact id and its efforts are MEASURED, not assumed: they come from
  * `model/list` on the installed codex-cli 0.153.4, captured in the working
  * folder's CODEX-MODEL-CATALOG-20260907.json
- * (measured 2026-09-07): id `gpt-6-astra`, displayName
+ * (measuredAt 2026-09-07T13:33:58.032Z): id `gpt-6-astra`, displayName
  * `GPT-6-Astra`, efforts low/medium/high/xhigh/max/ultra, catalog default
  * `medium`.
  *
  * Owner K3 reverses the stale HIGH ruling: the product's default effort for
- * this tier is `medium`, because that is Codex's own default and this is their
- * model. That product decision is pinned here by value
+ * this tier is `medium` -- "default should be medium thats what codex does and
+ * we are using their model". That product decision is pinned here by value
  * rather than left to drift.
  *
  * WHY THESE ASSERTIONS AND NOT A TABLE COMPARISON: a tier is only "supported"

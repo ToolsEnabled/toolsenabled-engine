@@ -103,12 +103,12 @@
 //      where a transcript lands on disk). Laundering those into "the CLI"
 //      would cost real accuracy and buy no compliance.
 //
-//   3. THE LEGAL DOCUMENT -- PRIVACY-POLICY.md.
-//      It uses the name to IDENTIFY the CLI the reader already has installed,
+//   3. THE TWO LEGAL DOCUMENTS -- PRIVACY-POLICY.md and TERMS-OF-SERVICE.md.
+//      These use the name to IDENTIFY the CLI the reader already has installed,
 //      which is disclosure accuracy: a privacy policy that will not say which
 //      program it is describing has failed at the one job a privacy policy has.
-//      Legal was asked to confirm and the instruction was to leave it exactly
-//      as it is.
+//      Legal was asked to confirm and the instruction was to leave them exactly
+//      as they are.
 //
 //   4. tests/ -- INCLUDING tests/agent-engine/claude-subscription-credential-
 //      fence.test.js, which legal named specifically: its rationale text has to
@@ -147,8 +147,8 @@ function loadOpenSet() {
   };
 }
 
-// The pattern the app half already uses in
-// tools/test/account-panel-copy.test.mjs, kept
+// The pattern the app lane already uses at
+// C:\lanes\research-app\tools\test\account-panel-copy.test.mjs:106, kept
 // character-for-character so the two guards are read as one rule rather than
 // two similar ones. `\s*` and not `\s+`: "ClaudeCode" jammed together is the
 // same name, and the identifier exemption below is what keeps that from
@@ -156,7 +156,8 @@ function loadOpenSet() {
 const FORBIDDEN = /claude\s*code/gi;
 
 const EXEMPT_FILES = new Set([
-  'PRIVACY-POLICY.md'       // exemption 3
+  'PRIVACY-POLICY.md',      // exemption 3
+  'TERMS-OF-SERVICE.md'     // exemption 3
 ]);
 
 const EXEMPT_PREFIXES = [
@@ -342,7 +343,7 @@ check('the interface names our code must spell exactly are exempt', () => {
 check('the exemptions are the four that were argued, and no fifth crept in', () => {
   // A new entry here is a change to a legal position's enforcement. It belongs
   // in the docket first and in this list second.
-  assert.deepEqual([...EXEMPT_FILES].sort(), ['PRIVACY-POLICY.md']);
+  assert.deepEqual([...EXEMPT_FILES].sort(), ['PRIVACY-POLICY.md', 'TERMS-OF-SERVICE.md']);
   assert.deepEqual(EXEMPT_PREFIXES, ['tests/']);
 });
 

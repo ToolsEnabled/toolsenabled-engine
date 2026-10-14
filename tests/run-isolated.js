@@ -128,6 +128,7 @@ for (const suite of [
   'tests/isolation-contract.js',
   'tests/mission-bridge-bootstrap-auth.test.js',
   'tests/scheduled-task-registrars.test.js',
+  'tests/servercontrol-mechanical-connect.test.js',
   'tests/startup-policy.test.js',
   'tests/desktop-window-close-guard.js',
   'tests/fra-root-access-control.js',
