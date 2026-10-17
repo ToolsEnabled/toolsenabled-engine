@@ -1,6 +1,6 @@
 'use strict';
 
-// P15's closed, transport-safe failure boundary.  It deliberately retains no
+// Closed, transport-safe error boundary. It retains no
 // provider prose in its public shape: callers decide retry/block/fail from the
 // code and classification alone.  Legacy detailed errors stay available to
 // their originating protected audit path, never as cross-process authority.
@@ -124,6 +124,9 @@ function includesCodeSegments(code, values) {
 // never decides a controller action by regexing provider prose.
 function classifySourceCode(code, status, timedOut, matches) {
   if (isCode(code)) return code;
+  // Waiting cannot supply a signing identity or an unavailable kernel API.
+  // These prerequisites require repair; keep other availability errors retryable.
+  if (['AUDIT_SIGNING_KEY_UNAVAILABLE', 'LINUX_PROCESS_NATIVE_UNAVAILABLE'].includes(code)) return 'INPUT_REQUIRED';
   // Losing an interactive transport does not prove a click or keypress failed.
   // Require inspection/input rather than automatically replaying that action.
   if (['PLAYWRIGHT_CALL_TIMEOUT', 'PLAYWRIGHT_CALL_TRANSPORT_CLOSED',
@@ -189,6 +192,10 @@ function classifySourceCode(code, status, timedOut, matches) {
   if (['HOST_FILE_CHANGED_BEFORE_WRITE', 'HOST_FILE_IDENTITY_CHANGED'].includes(code)) return 'EXTERNAL_CHANGE';
   if (code === 'HOST_FILE_CHANGED_DURING_READ') return 'STALE_DATA';
   if (['HOST_FILE_PATCH_MISMATCH', 'HOST_FILE_PATCH_AMBIGUOUS'].includes(code)) return 'INVALID_REQUEST';
+  // Content refusals have bounded, actionable format guidance. Preserve it
+  // across MCP rather than describing an unsupported input as an engine fault.
+  if (['HOST_FILE_BINARY_UNSUPPORTED', 'HOST_FILE_MIME_MISMATCH',
+    'HOST_FILE_MALFORMED_IMAGE', 'HOST_FILE_TEXT_ENCODING_UNSUPPORTED'].includes(code)) return 'INVALID_REQUEST';
   if (code === 'HOST_BYTE_MEDIATION_OFF') return 'POLICY_DENIED';
   // Exact exception: this 403 is an organisation-policy decision, not an
   // expired sign-in. Keep every other historical 403 on the existing path.
@@ -199,9 +206,33 @@ function classifySourceCode(code, status, timedOut, matches) {
   // A reset marker keeps the retained row out of product readers. Calls that
   // name it need a fresh list, never a retry against that historical id.
   if (['R_LEDGER_ENTRY_RESET', 'R_LEDGER_RESET_EMPTY', 'BRIDGE_LEDGER_TARGET_RESET', 'OWNER_PROMPT_RESET_PENDING', 'OWNER_PROMPT_RESET_UNKNOWN'].includes(code)) return 'STALE_DATA';
+  // The ledger's answers to a request it cannot take (owner-request-store.js,
+  // r-ledger-agent-gate.js): an id that is not in the ledger (deleted, or
+  // never filed), blank words, a parent rule that is not standing, words that
+  // are not the person's own. Each sentence says what was wrong, and none of
+  // their words matched a rule, so an agent completing a mistyped task id read
+  // "internal error". Measured 2026-09-29 in an OpenShell sandbox.
+  if (['R_LEDGER_ENTRY_UNKNOWN', 'R_LEDGER_WORDS_EMPTY', 'R_LEDGER_PARENT_UNKNOWN', 'R_LEDGER_WORDS_NOT_VERBATIM'].includes(code)) return 'INVALID_REQUEST';
   // These are rejected input contents, not a broken memory database or an
   // expired sign-in. Keep the secret-field filters and protected prose intact.
   if (code === 'MEMORY_SECRET_REJECTED' || code === 'TASK_SECRET_REJECTED') return 'INVALID_REQUEST';
+  /* Reaching one of Fleet's own reserved memory namespaces is a refusal with a
+   * reason the caller can act on -- use a namespace of your own, or agent-coord.
+   * Unclassified it reached the agent as "stopped safely because of an internal
+   * error", which is the same defect the HOST_FILE_PATCH comment above describes:
+   * a real answer replaced by one that teaches nothing and invites a retry. */
+  if (code === 'MEMORY_NAMESPACE_RESERVED') return 'POLICY_DENIED';
+  // The durable task lifecycle's answers (state-store.js): a task cancelled
+  // while an agent held it refuses start, checkpoint and completion until the
+  // agent acknowledges the cancellation; acknowledging one nobody requested,
+  // a late outcome for an uncertain task from the wrong claim, and a task out
+  // of checkpoints are requests to correct. None of their words matched a
+  // rule, so an agent finishing a cancelled task read "internal error" and
+  // never learned it had been cancelled. Measured 2026-09-29 in an OpenShell
+  // sandbox.
+  if (code === 'TASK_CANCEL_REQUESTED') return 'EXTERNAL_CHANGE';
+  if (['TASK_CANCEL_NOT_REQUESTED', 'TASK_UNCERTAIN', 'TASK_CHECKPOINT_LIMIT'].includes(code)) return 'INVALID_REQUEST';
+  if (code === 'OPENSHELL_PROPOSAL_REACHES_HOST') return 'POLICY_DENIED';
   if (matches(code, ['INJECTION', 'SSRF', 'PROMPT_INJECTION'])) return 'INJECTION_DETECTED';
   // Refusals of the OpenShell policy tools (providers/openshell.js), the
   // sandbox agent tree (openshell-agent-host.js) and the role rules it shares
@@ -213,11 +244,13 @@ function classifySourceCode(code, status, timedOut, matches) {
   // this reason.
   if (['OPENSHELL_NOT_IN_SANDBOX', 'OPENSHELL_DENIAL_UNPARSEABLE', 'OPENSHELL_DENIAL_NOT_RECENT',
     'OPENSHELL_PROPOSAL_NO_BINARY', 'OPENSHELL_PROPOSAL_NO_ENDPOINT', 'OPENSHELL_PROPOSAL_DNS_ONLY',
-    'OPENSHELL_PROPOSAL_UNPARSEABLE', 'OPENSHELL_AGENT_OUTSIDE_SANDBOX', 'OPENSHELL_AGENT_NOT_RUNNING',
+    'OPENSHELL_PROPOSAL_UNPARSEABLE', 'OPENSHELL_PROPOSAL_BINARY_MISMATCH', 'OPENSHELL_AGENT_OUTSIDE_SANDBOX', 'OPENSHELL_AGENT_NOT_RUNNING',
     'OPENSHELL_ROLE_PROVIDER_UNKNOWN', 'MC_TREE_COMMAND_STOP_UNAVAILABLE', 'TREE_SENDER_NOT_RUNNING',
     'TREE_RECIPIENT_AMBIGUOUS', 'TREE_RECIPIENT_UNKNOWN', 'TREE_RECIPIENT_NOT_CONNECTED', 'OPENSHELL_TREE_LINK_IN_USE',
     'AGENT_ORG_STORE_CONTROLLER_EXISTS', 'AGENT_ORG_STORE_CONTROLLER_ROOTED',
     'AGENT_ORG_ROLE_SEAT_LIMIT'].includes(code)) return 'INVALID_REQUEST';
+  // A full or unreadable terminal question file needs the person's attention.
+  if (['PERSON_CHANNEL_FULL', 'PERSON_CHANNEL_UNREADABLE', 'PERSON_CHANNEL_UNWRITABLE'].includes(code)) return 'INPUT_REQUIRED';
   if (matches(code, ['SANDBOX', 'CONTAINER_ESCAPE'])) return 'SANDBOX_VIOLATION';
   if (code === 'HTTP_RESPONSE_DECODE_FAILED'
     || matches(code, ['MALFORMED_OUTPUT', 'PROVIDER_OUTPUT', 'OUTPUT_PARSE', 'OUTPUT_SCHEMA'])) return 'MALFORMED_OUTPUT';
@@ -285,47 +318,36 @@ function classifySourceCode(code, status, timedOut, matches) {
   // waiting-on-a-person rule above, before this line can see it.
   if (matches(code, ['RESOURCE', 'ENOMEM', 'ENOSPC', 'THERMAL', 'HEADROOM', 'OVERLOADED', 'QUEUE_FULL'])) return 'RESOURCE_PRESSURE';
   if (code === 'MC_TREE_COMMAND_SESSION_CHANGED') return 'STALE_DATA';
-  // The saved width and depth limits of a tree (fleet.tree_width/_depth).
-  // The desktop's slot admission and the OpenShell agent tree both refuse with
-  // it and a sentence naming what to do instead (reuse a slot, delegate lower
-  // or higher); none of its words matched a rule, so the agent read the
-  // internal-error sentence. Measured 2026-09-29 in an OpenShell sandbox.
+  // A full agent tree is an invalid request, with a specific refusal message.
   if (code === 'TREE_SLOT_LIMIT') return 'INVALID_REQUEST';
+  // An agent this release keeps as a lead only is a deliberate refusal; its
+  // descriptor's sentence says to choose another agent. Unclassified it read
+  // "stopped safely because of an internal error" (measured 2026-10-05).
+  if (code === 'AGENT_WORKER_HELD') return 'POLICY_DENIED';
+  // Inherited levels and role removals that an agent cannot enforce are fixed
+  // answers, not outages, though their codes end in UNAVAILABLE: waiting never
+  // changes them, and the agent must read which level or tool was the problem.
+  if (['AGENT_WORKER_LEVEL_UNAVAILABLE', 'AGENT_NATIVE_TOOLS_UNAVAILABLE', 'ACP_LEVEL_UNAVAILABLE',
+    'OPENSHELL_AGENT_LEVEL_UNAVAILABLE', 'MODEL_API_TOOLS_UNAVAILABLE'].includes(code)) return 'POLICY_DENIED';
+  // A model, mode or effort the agent does not offer: choose another.
+  if (['ACP_MODEL_UNAVAILABLE', 'ACP_MODE_UNAVAILABLE', 'ACP_EFFORT_UNAVAILABLE'].includes(code)) return 'INVALID_REQUEST';
+  // A worker that cannot start because its CLI is out of date or incompatible: the person can act on
+  // Fleet's own sentence (update the CLI), which "try again later" hid (the plugin's e815bf6).
+  if (['CLAUDE_CLI_UPDATE_NEEDED', 'CODEX_CLI_INCOMPATIBLE'].includes(code)) return 'INPUT_REQUIRED';
+  // A worker that calls agent.wait must learn that its reports arrive as its
+  // next turn. As INTERNAL_ERROR it read "internal error" and polled instead.
+  if (code === 'AGENT_WAIT_ROOT_ONLY') return 'POLICY_DENIED';
   if (code === 'MC_TREE_COMMAND_SESSION_ENDED') return 'INVALID_REQUEST';
   if (matches(code, ['STALE', 'EXPIRED', 'FENCE_LOST']) || /(?:^|_)FENCE_LOST$/.test(code)) return 'STALE_DATA';
   if (matches(code, ['EXTERNAL_CHANGE', 'CONFLICT', 'OWNERSHIP_CHANGED', 'FOREIGN_TASK', 'MUTATION_CHANGED'])
     || /(?:^|_)(?:FOREIGN|OWNERSHIP_CHANGED|MUTATION_CHANGED)(?:_|$)/.test(code)) return 'EXTERNAL_CHANGE';
-  // 'DISABLED' is a switch somebody turned off (TOOL_DISABLED_BY_OWNER_DECISION,
-  // RESEARCH_PIPELINE_DISABLED); 'PERMISSION' is the tier policy's own refusal
-  // family. Both are decisions, not faults.
-  // 'PROTECTED' joins this rule 2026-09-12: HOST_PATH_WRITE_PROTECTED and
-  // REPO_FILE_WRITE_PROTECTED (host-control.js / repo-files.js's own write
-  // guards for src/lib and other integrity anchors) are permanent, deliberate
-  // write refusals -- the same category as FORBIDDEN/DENIED/DISABLED above --
-  // and no rule in this ladder recognized either code, so both fell through
-  // to INTERNAL_ERROR and every caller read the opaque internal-error
-  // sentence instead of the real one the tool had already worked out.
-  // tests/error-taxonomy-refusal-rescue.test.js section 6 is this fix's proof.
-  // 'OUTSIDE_PROFILE' joins 2026-09-25 (B16, the app's rehearsal-8 tool
-  // sweep): HOST_PATH_OUTSIDE_PROFILE and the DRIVE_UPLOAD_ and
-  // GMAIL_ATTACHMENT_ twins built from it are the containment boundary's
-  // deliberate refusal of a path outside the owner's profile, the same kind of
-  // decision as PROTECTED, and they too fell through to INTERNAL_ERROR, so the
-  // agent never read "path must be inside the owner profile tree".
-  // 'OUTSIDE_ROOT' joins 2026-09-29 (OpenShell hand test): SEARCH_ROOT_OUTSIDE_ROOT
-  // and code-intel's CODE_FILE_/CODE_PATH_OUTSIDE_ROOT are the workspace
-  // boundary's refusal of a folder outside the recorded roots, the same kind
-  // of decision as OUTSIDE_PROFILE; the agent read only the internal-error
-  // sentence, never which folders it may use.
-  if (matches(code, ['POLICY', 'KILLSWITCH', 'PROVIDER_DISABLED', 'ALLOWLIST', 'DENIED', 'FORBIDDEN', 'DISABLED', 'PERMISSION', 'PROTECTED', 'OUTSIDE_PROFILE', 'OUTSIDE_ROOT'])) return 'POLICY_DENIED';
-  // The condition phrases of "something this installation needs has not been
-  // supplied yet": a missing registry or language pack ('MISSING'), an absent
-  // precondition ('REQUIRED', after the more specific AUTH/QUOTA/APPROVAL
-  // rules above have had their turn), and unprovisioned or unconfigured
-  // capability ('NOT_CONFIGURED', 'UNCONFIGURED', 'UNPROVISIONED',
-  // 'NOT_PROVISIONED', and the NO_<thing>_CONFIGURED composition the model
-  // providers use). Deliberately NOT bare 'CONFIGURED': the tree also names
-  // ALREADY_CONFIGURED states, which are not absences.
+  // Disabled tools, denied permissions and paths outside a protected root
+  // are deliberate policy refusals. Preserve their specific messages.
+  if (matches(code, ['POLICY', 'KILLSWITCH', 'PROVIDER_DISABLED', 'ALLOWLIST', 'DENIED', 'FORBIDDEN', 'DISABLED', 'PERMISSION', 'PROTECTED', 'OUTSIDE_PROFILE', 'OUTSIDE_ROOT', 'OUTSIDE_WORKSPACE'])) return 'POLICY_DENIED';
+  if (code === 'HOST_PATH_CHECK_FAILED') return 'VERIFICATION_FAILED';
+  if (code === 'HOST_WORKER_WORKSPACE_MISMATCH') return 'INVALID_REQUEST';
+  // Missing configuration or prerequisites require input. Bare CONFIGURED
+  // is excluded because ALREADY_CONFIGURED is not an absence.
   if (matches(code, ['INPUT_REQUIRED', 'INPUT_MISSING', 'MISSING_INPUT', 'MISSING', 'REQUIRED',
     'NOT_CONFIGURED', 'UNCONFIGURED', 'UNPROVISIONED', 'NOT_PROVISIONED'])
     || /(?:^|_)NO_(?:[A-Z0-9]+_)+CONFIGURED(?:_|$)/.test(code)) return 'INPUT_REQUIRED';
@@ -393,6 +415,8 @@ function mapSource(error, options = {}) {
   if (options.verificationFailed === true) return 'VERIFICATION_FAILED';
   if (options.timedOut === true) return 'TIMEOUT';
   const code = sourceCode(error);
+  if (code === 'AUDIT_UNAVAILABLE' && plain(error?.details)
+      && own(error.details, 'reason') && error.details.reason === 'AUDIT_SIGNING_KEY_UNAVAILABLE') return 'INPUT_REQUIRED';
   const status = sourceStatus(error);
   const timedOut = Boolean(error) && typeof error === 'object' && own(error, 'timedOut') && error.timedOut === true;
   const head = classifySourceCode(code, status, timedOut, includesCode);

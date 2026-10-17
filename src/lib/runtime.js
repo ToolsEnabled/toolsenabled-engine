@@ -9,13 +9,10 @@ const {
   vaultPlatformRefusal
 } = require('./vault-platform');
 const { execFileSync, spawnSync } = require('node:child_process');
-const { credentialDefinitionForKey } = require('./credential-metadata');
-const { programOrStatePath, statePath } = require('./runtime-state-root');
+const { programOrStatePath, statePath, resolveStateRoot } = require('./runtime-state-root');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SECRET_KEY_RE = /^[A-Za-z0-9_.-]+$/;
-const PROMPT_LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,119}$/;
-const credentialPromptContext = new AsyncLocalStorage();
 
 /* WHO IS ASKING FOR A SECRET, CARRIED THE ONLY WAY IT CAN BE.
  *
@@ -23,14 +20,13 @@ const credentialPromptContext = new AsyncLocalStorage();
  * principal and must not learn one -- `d.getSecret(key)` is called from dozens
  * of providers, and threading an identity through each would mean every future
  * provider is one forgotten argument away from an unenforced read. So the
- * identity travels out of band, the same way credentialPromptContext above
- * already carries the owner-prompt attribution: src/lib/tool-registry.js sets
- * it once around the handler call, and the read sites below take it from here.
+ * identity travels out of band: src/lib/tool-registry.js sets it once around
+ * the handler call, and the read sites below take it from here.
  *
  * DEFAULT EMPTY MEANS UNRULED, NOT UNRESTRICTED-BY-ACCIDENT. A read with no
  * store is the installation reading its own credentials (startup, audit
  * signing, sign-in), which the owner's per-agent switches are not about. That
- * is the same rule the desktop app's shell/vault-presence.cjs applies to its
+ * is the same rule the host application's shell/vault-presence.cjs applies to its
  * own `principal`-less caller, and it is asserted by test rather than assumed:
  * a tool dispatch that failed to set this would be an unenforced read, so the
  * test that matters is the one driving executeTool, not this module. */
@@ -51,38 +47,14 @@ function rootPath(...parts) {
   return programOrStatePath(ROOT, parts);
 }
 
-// WHERE A CUSTOMER'S IDE IMPORT CHOICE LIVES. The ide.consent_* tools and the
-// attribution projection used to hand ide-session-consent a bare rootPath(),
-// which is the PROGRAM root: with zero parts the state-directory redirect above
-// is never consulted, so config/ide-session-consent.json landed inside the
-// install directory on a per-machine install (measured 2026-09-02 -- a QA
-// sweep left it in a sealed release tree). 'state' is a redirected directory,
-// so this resolves under the per-user state root when installed and under the
-// checkout when running from source, exactly like every other mutable record.
-// The consent module composes config/ide-session-consent.json beneath it; the
-// tools adopt a legacy program-root file once (see
-// ide-session-consent-writer.adoptLegacyConsent) so an existing choice never
-// reads as "first run".
-function consentRoot() {
-  const root = rootPath('state');
-  try {
-    require('./ide-session-consent-writer').adoptLegacyConsent({ legacyRoot: ROOT, root });
-  } catch {
-    // Adoption is best-effort: a lock held by a concurrent writer, or an
-    // unreadable legacy file, must not stop the tool from answering. The read
-    // side reports its own state honestly either way.
-  }
-  return root;
-}
-
 function safeChildEnvironment(context) {
-  // Lazy because subscription-launch-env reaches this module through the
+  // Lazy because launch-environment reaches this module through the
   // provider gateway during startup. At call time that graph is initialized.
   // Every caller of this function spawns powershell.exe (the vault helper,
   // tools/secrets.ps1) -- SEC11: naming that child here also drops the
   // PowerShell 7 entries a PowerShell-7-launched parent would otherwise leak
   // into that 5.1 child. See supervision/launch-environment.js.
-  return require('./providers/subscription-launch-env.js')
+  return require('./supervision/launch-environment.js')
     .safeLaunchEnvironment(process.env, { context, childExecutable: 'powershell.exe' });
 }
 
@@ -106,82 +78,15 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(temp, file);
 }
 
-// npm's Windows Firebase launcher is a batch file. Even when a parent asks
-// Node to hide the child, the cmd.exe hop can briefly allocate a conhost on
-// some desktop builds. Firebase's CLI entry point is a normal Node script,
-// so prefer that direct invocation whenever the fixed per-user installation
-// is present. This preserves the public command name/arguments while removing
-// the avoidable cmd.exe console hop.
-function directFirebaseInvocation(executable, args = []) {
-  if (process.platform !== 'win32' || !/firebase\.cmd$/i.test(String(executable || ''))) {
-    return { executable, args, direct: false };
-  }
-  const entry = path.join(path.dirname(executable), 'node_modules', 'firebase-tools', 'lib', 'bin', 'firebase.js');
-  if (!fs.existsSync(entry)) return { executable, args, direct: false };
-  return { executable: process.execPath, args: [entry, ...args], direct: true };
-}
-
-// Google Cloud SDK ships both a gcloud.cmd shim and a normal Python entry
-// point. The shim crosses cmd.exe and can briefly allocate a console host for
-// every bounded account/status probe. Prefer the bundled Python entry point
-// for non-interactive broker work; the explicit environment mirrors the SDK's
-// own launcher without changing the selected account or credentials.
-function directGcloudInvocation(executable, args = []) {
-  if (process.platform !== 'win32' || !/gcloud(?:\.cmd)?$/i.test(path.basename(String(executable || '')))) {
-    return { executable, args, direct: false };
-  }
-  const binDirectory = path.dirname(String(executable));
-  const sdkRoot = path.resolve(binDirectory, '..');
-  const entry = path.join(sdkRoot, 'lib', 'gcloud.py');
-  const bundledPython = path.join(sdkRoot, 'platform', 'bundledpython', 'python.exe');
-  if (!fs.existsSync(entry) || !fs.existsSync(bundledPython)) return { executable, args, direct: false };
-  return {
-    executable: bundledPython,
-    args: ['-S', entry, ...args],
-    direct: true,
-    env: {
-      CLOUDSDK_ROOT_DIR: sdkRoot,
-      CLOUDSDK_PYTHON: bundledPython,
-      CLOUDSDK_PYTHON_ARGS: '-S',
-      CLOUDSDK_GSUTIL_PYTHON: bundledPython
-    }
-  };
-}
-
-// WHAT MAY BE REMEMBERED ABOUT A COMMAND LOOKUP, AND WHAT MAY NOT.
-//
-// Every commandExists() spawns where.exe, and for terraform/firebase it then
-// RUNS the resolved binary with a 5,000 ms timeout. system.doctor asks about
-// gcloud, terraform, firebase, node and npx across several provider modules on
-// every call; measured on a live install, that was 6.6 s of process
-// spawning per four doctor calls, and system.status pays one on every poll.
-//
-// Three rules, and the first two are contracts other code already depends on:
-//
-//   * A MISS IS NEVER REMEMBERED. tests/runtime-command-lookup.test.js pins
-//     this deliberately: a command that was absent and has since been
-//     installed must be seen on the very next call, because a diagnostic that
-//     latches "not installed" is worse than a slow one. Misses re-probe,
-//     always.
-//   * AN UNKNOWN IS NEVER REMEMBERED. COMMAND_LOOKUP_UNKNOWN means the lookup
-//     could not be completed, which is not an answer about the command. It
-//     propagates and caches nothing -- the same rule vaultContentDigest()
-//     follows for a digest it could not compute.
-//   * A HIT IS REMEMBERED ONLY BRIEFLY. An uninstalled command reported as
-//     present is a false positive, which is the worse direction for a doctor,
-//     so the memory is bounded rather than permanent. The window only has to
-//     cover one doctor run and a burst of status polls.
-//
-// The whole table is dropped if any environment value the resolution reads
-// changes, so a PATH change is never served a stale answer.
+// Cache only successful executable lookups. A miss or an unavailable helper is
+// rechecked on the next status call, and environment changes invalidate hits.
 const COMMAND_PATH_HIT_TTL_MS = 60_000;
 const commandPathHits = new Map();
 let commandPathEnvKey = null;
 
 function commandPathEnvironment() {
   return [
-    process.env.PATH || '', process.env.PATHEXT || '', process.env.LOCALAPPDATA || '',
-    process.env.APPDATA || '', process.env.ProgramFiles || '',
+    process.env.PATH || '', process.env.PATHEXT || '',
     // POSIX PATH entries and slash paths may be relative. An unset PATH also
     // uses the process launcher's default, whereas an empty PATH means cwd.
     process.platform === 'win32' ? '' : process.cwd(),
@@ -260,145 +165,11 @@ function resolveCommandPath(command) {
     if (process.platform === 'win32' && !path.extname(candidate) && fs.existsSync(`${candidate}.cmd`)) return `${candidate}.cmd`;
     return candidate;
   }
-  if (process.platform !== 'win32') return null;
-  const local = process.env.LOCALAPPDATA || '';
-  const roaming = process.env.APPDATA || '';
-  let terraformCandidates = [];
-  // Only Terraform uses this directory. Every other missing command used to
-  // synchronously enumerate all WinGet packages before returning its result.
-  if (String(command).toLowerCase() === 'terraform') {
-    try {
-      terraformCandidates = fs.readdirSync(path.join(local, 'Microsoft', 'WinGet', 'Packages'), { withFileTypes: true })
-        .filter(entry => entry.isDirectory() && entry.name.startsWith('Hashicorp.Terraform_'))
-        .map(entry => path.join(local, 'Microsoft', 'WinGet', 'Packages', entry.name, 'terraform.exe'));
-    } catch { /* Winget package directory is optional. */ }
-  }
-  const known = {
-    terraform: [
-      ...terraformCandidates
-    ],
-    gcloud: [
-      path.join(local, 'Google', 'Cloud SDK', 'google-cloud-sdk', 'bin', 'gcloud.cmd'),
-      path.join(process.env.ProgramFiles || '', 'Google', 'Cloud SDK', 'google-cloud-sdk', 'bin', 'gcloud.cmd')
-    ],
-    // npm's per-user Windows global prefix is often absent from the broker's
-    // PATH even though the installed CLI is callable by the signed-in owner.
-    // Resolve the fixed launcher without invoking a shell or treating an
-    // inaccessible owner config as proof of readiness.
-    firebase: [
-      path.join(roaming, 'npm', 'firebase.cmd'),
-      path.join(local, 'npm', 'firebase.cmd')
-    ]
-  };
-  const candidates = (known[String(command).toLowerCase()] || []).filter(candidate => candidate && fs.existsSync(candidate));
-  const candidate = candidates[0] || null;
-  if (!candidate) return null;
-  // A few Windows package managers leave a protected executable visible to
-  // `where`/filesystem probes even though the current desktop token cannot
-  // execute it (EPERM/Access Denied).  Treat that as unavailable instead of
-  // advertising a false-positive capability and failing later in a provider.
-  // The probe is limited to fixed local Terraform/Firebase version checks and
-  // has no network or state-changing arguments.
-  if (['terraform', 'firebase'].includes(String(command).toLowerCase())) {
-    try {
-      const probeArgs = String(command).toLowerCase() === 'firebase' ? ['--version'] : ['version'];
-      const invocation = directFirebaseInvocation(candidate, probeArgs);
-      const probe = spawnSync(invocation.executable, invocation.args, { stdio: 'ignore', timeout: 5000, windowsHide: true, shell: false });
-      if (probe.error || probe.status !== 0) return null;
-    } catch {
-      return null;
-    }
-  }
-  return candidate;
+  return null;
 }
 
 function commandExists(command) {
   return Boolean(commandPath(command));
-}
-
-function findBrowser() {
-  if (process.platform !== 'win32') return commandExists('google-chrome') || commandExists('chromium') || commandExists('microsoft-edge');
-  const paths = [
-    path.join(process.env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    path.join(process.env['ProgramFiles(x86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-    path.join(process.env.ProgramFiles || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe')
-  ];
-  return paths.find(candidate => candidate && fs.existsSync(candidate)) || null;
-}
-
-// Windows cannot execute .cmd/.bat files directly: they must be parsed by
-// cmd.exe. That parser expands percent/exclamation variables and recognizes
-// command separators even though Node received the values as separate argv
-// entries. Reject those constructs before cmd.exe sees provider- or
-// model-supplied values. `(default)` is the one intentional parenthesized
-// argument used by Firebase's Firestore CLI.
-const SAFE_BATCH_LITERALS = new Set(['(default)']);
-const UNSAFE_BATCH_ARGUMENT = /[\x00\r\n"&|<>^()%!]/;
-
-function safeBatchArguments(args) {
-  if (!Array.isArray(args)) throw new TypeError('Command arguments must be an array.');
-  return args.map((argument, index) => {
-    const value = String(argument);
-    if (!SAFE_BATCH_LITERALS.has(value) && UNSAFE_BATCH_ARGUMENT.test(value)) {
-      throw new Error(`Unsafe Windows batch argument at index ${index}; command metacharacters, expansion markers, quotes, and newlines are not allowed.`);
-    }
-    return value;
-  });
-}
-
-function run(command, args, options = {}) {
-  const reportedExecutable = commandPath(command) || command;
-  const firebase = directFirebaseInvocation(reportedExecutable, args);
-  const gcloud = directGcloudInvocation(firebase.executable, firebase.args);
-  const direct = gcloud.direct ? gcloud : firebase;
-  const executable = direct.executable;
-  const batch = !direct.direct && process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(executable);
-  const launched = batch ? (process.env.ComSpec || 'cmd.exe') : executable;
-  const normalizedArgs = batch ? safeBatchArguments(args) : (direct.direct ? direct.args : args);
-  // `call` lets cmd.exe execute an absolute .cmd path containing spaces. Batch
-  // arguments have already passed the conservative parser-boundary check above.
-  const launchedArgs = batch ? ['/d', '/v:off', '/s', '/c', 'call', executable, ...normalizedArgs] : normalizedArgs;
-  const hideWindow = options.windowsHide !== false;
-  const powerShell = /(?:^|[\\/])(?:pwsh|powershell)(?:\.exe)?$/i.test(String(launched));
-  const effectiveArgs = hideWindow && powerShell
-    && !launchedArgs.some(value => /^-windowstyle$/i.test(String(value)))
-    ? ['-WindowStyle', 'Hidden', ...launchedArgs]
-    : launchedArgs;
-  const result = spawnSync(launched, effectiveArgs, {
-    cwd: options.cwd || ROOT,
-    encoding: 'utf8',
-    timeout: options.timeout || 10 * 60 * 1000,
-    env: { ...process.env, ...(firebase.env || {}), ...(direct.env || {}), ...(options.env || {}) },
-    // Every broker helper is piped and non-interactive.  On Windows, the
-    // default console allocation can still flash a terminal for each short
-    // PowerShell/cmd helper invocation; suppress it at this common boundary.
-    // Owner-facing WinForms dialogs use their own visible form, not a console.
-    windowsHide: hideWindow,
-    shell: false
-  });
-  if (result.error) {
-    // A CUT-OFF CHILD IS NOT A NAMELESS ETIMEDOUT (R1534). One of the things
-    // that stops a Windows child answering is an administrator approval box
-    // raised where nobody can see it -- a 15-minute lockup that surfaces as
-    // `spawnSync ETIMEDOUT` and names neither the command nor the cause. The
-    // thrown error keeps its own code so existing handlers still work, and
-    // carries the two facts a caller needs to say something honest.
-    result.error.command = [reportedExecutable, ...args].join(' ');
-    result.error.timedOut = result.error.code === 'ETIMEDOUT';
-    throw result.error;
-  }
-  return {
-    command: [reportedExecutable, ...args].join(' '),
-    status: result.status,
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    // `signal` is how spawnSync reports a timeout that killed the child rather
-    // than erroring. Without it a caller cannot tell "the tests failed" from
-    // "the tests never finished", and this codebase reported both as failure.
-    timedOut: result.signal === 'SIGTERM' && result.status === null
-  };
 }
 
 function assertSecretKey(key) {
@@ -566,7 +337,8 @@ function vaultFilePath() {
   const alreadySet = typeof process.env.TOOLSENABLED_VAULT_PATH === 'string'
     && process.env.TOOLSENABLED_VAULT_PATH.trim() !== '';
   if (alreadySet) return;
-  const resolvedVault = rootPath('vault', 'secrets.json');
+  const selected = resolveStateRoot();
+  const resolvedVault = path.join(selected.redirected ? selected.root : ROOT, 'vault', 'secrets.json');
   if (path.resolve(resolvedVault) === path.join(ROOT, 'vault', 'secrets.json')) return;
   process.env.TOOLSENABLED_VAULT_PATH = resolvedVault;
 }());
@@ -574,14 +346,8 @@ function vaultFilePath() {
 // TELLING EVERY OTHER HELPER PROGRAM THE SAME THING, ONCE.
 //
 // The publisher above solves exactly one file's version of this problem. The
-// rest of the helper programs have it too: tools/desktop.ps1 resolves captures/,
-// tools/browser.ps1 resolves profiles/, tools/owner-prompt-queue.ps1 resolves
-// state/ -- each from its OWN location, which packaged is the install directory.
-// Node had already redirected those directories, so the two halves named
-// different places: measured, the capture helper created captures/ under the
-// program and then rejected the per-user path Node passed it, so screen capture
-// wrote where it must not AND failed. A per-helper environment variable each
-// would be four seams to remember; the state root is the one fact they all need.
+// rest of the helper programs use the same state root rather than writing
+// mutable files beneath the installed program directory.
 //
 // It matters most where nothing else can say it: an MCP client starting
 // src/mcp-server.js straight out of an install has no Electron shell, and the
@@ -594,7 +360,8 @@ function vaultFilePath() {
   const alreadySet = typeof process.env.TOOLSENABLED_STATE_ROOT === 'string'
     && process.env.TOOLSENABLED_STATE_ROOT.trim() !== '';
   if (alreadySet) return;
-  const resolvedState = rootPath('state');
+  const selected = resolveStateRoot();
+  const resolvedState = path.join(selected.redirected ? selected.root : ROOT, 'state');
   if (path.resolve(resolvedState) === path.join(ROOT, 'state')) return;
   process.env.TOOLSENABLED_STATE_ROOT = path.dirname(resolvedState);
 }());
@@ -644,10 +411,12 @@ function vaultFingerprint() {
 // "unknown, read for real", never as "unchanged"; this value is never
 // evidence that a secret is present, valid, or authorized.
 // Inside a person's OpenShell sandbox there is no desktop keyring, so the
-// vault is the sandbox vault (src/lib/vault-openshell.js); everywhere else it
-// is the Linux keyring vault. Checked per call, like process.platform below.
+// vault is the sandbox vault (src/lib/vault-openshell.js); the ToolsEnabled
+// host that serves sandboxes from outside uses the same state-file vault under
+// its own root. Everywhere else it is the Linux keyring vault. Checked per
+// call, like process.platform below.
 function linuxVault() {
-  return require('./openshell-inside').isInsideOpenShellSandbox() ? require('./vault-openshell') : require('./vault-linux');
+  return require('./openshell-inside').usesStateFileVault() ? require('./vault-openshell') : require('./vault-linux');
 }
 
 function vaultContentDigest() {
@@ -757,7 +526,7 @@ function readSecretFromVaultHost(key, observedDigest) {
       rememberSecretValue(key, observedDigest, null);
       throw secretError('SECRET_NOT_CONFIGURED', `Secret '${key}' is not configured.`);
     }
-    // T329: the generic prefix stays, the host client's own reason follows it
+    // the generic prefix stays, the host client's own reason follows it
     // and its code travels with the error (see relayHostedVaultFailure). The
     // reason is the host's error text, never the secret: on a get the value is
     // the response's OUTPUT, which this catch never sees.
@@ -847,12 +616,12 @@ function readSecretsFromVault(keys) {
     // located -- while removing the billing credentials that have no business
     // crossing into a secret read.
     //
-    // REQUIRED LAZILY, NOT AT MODULE TOP. subscription-launch-env reaches
+    // REQUIRED LAZILY, NOT AT MODULE TOP. launch-environment reaches
     // runtime.js transitively (via cli-provider-gateway), so a top-level
     // require here is a cycle: runtime.js would receive a half-initialised
     // module and safeLaunchEnvironment could be undefined at call time. By the
     // time this function actually runs, the graph is fully loaded.
-    const { safeLaunchEnvironment } = require('./providers/subscription-launch-env.js');
+    const { safeLaunchEnvironment } = require('./supervision/launch-environment.js');
     raw = execFileSync('powershell.exe', [
       '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script,
       'get-many', '-Keys', keys.join(',')
@@ -888,432 +657,8 @@ function readSecretsFromVault(keys) {
   return found;
 }
 
-function credentialPromptError(code, message) {
-  return secretError(code, message);
-}
-
-function parseCredentialPromptResult(value, key) {
-  let result;
-  try {
-    result = JSON.parse(String(value || '').trim());
-  } catch {
-    throw credentialPromptError('CREDENTIAL_CAPTURE_FAILED', 'The local credential prompt returned an invalid result.');
-  }
-  if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    throw credentialPromptError('CREDENTIAL_CAPTURE_FAILED', 'The local credential prompt returned an invalid result.');
-  }
-  if (result.status === 'cancelled') {
-    throw credentialPromptError('CREDENTIAL_CAPTURE_CANCELLED', 'Credential entry was cancelled; the local vault was not changed.');
-  }
-  if (result.status === 'in_progress') {
-    if (result.key !== key) {
-      throw credentialPromptError('CREDENTIAL_CAPTURE_FAILED', 'The local credential prompt returned an invalid result.');
-    }
-    throw credentialPromptError(
-      'CREDENTIAL_CAPTURE_IN_PROGRESS',
-      'Another local credential prompt is already open. Complete it, then retry this operation.'
-    );
-  }
-  if (result.key !== key || !['created', 'updated'].includes(result.status)) {
-    throw credentialPromptError('CREDENTIAL_CAPTURE_FAILED', 'The local credential prompt returned an invalid result.');
-  }
-  return { key, status: result.status };
-}
-
-// This invokes a trusted local script with no credential value in argv, stdin,
-// stdout, audit data, or the MCP result.  Only a static provider label and the
-// safe vault-key name reach the Windows Forms dialog.
-function captureCredential(key, suppliedDefinition) {
-  assertSecretKey(key);
-  const definition = suppliedDefinition || credentialDefinitionForKey(key);
-  if (!definition || definition.key !== key || typeof definition.label !== 'string' || !PROMPT_LABEL_RE.test(definition.label)) {
-    throw credentialPromptError('CREDENTIAL_CAPTURE_UNSUPPORTED', 'This credential cannot be captured through the local prompt.');
-  }
-  const script = vaultScript();
-  let output;
-  try {
-    output = execFileSync('powershell.exe', [
-      '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-STA', '-File', script,
-      'prompt-set', key, '-PromptLabel', definition.label
-    ], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    });
-  } catch (error) {
-    const detail = [error && error.stderr, error && error.stdout, error && error.message]
-      .filter(value => value !== undefined && value !== null)
-      .map(value => String(value))
-      .join('\n');
-    if (/CREDENTIAL_INTERACTION_REQUIRED/i.test(detail)) {
-      throw credentialPromptError('CREDENTIAL_INTERACTION_REQUIRED', 'A local interactive Windows desktop is required to enter this credential.');
-    }
-    throw credentialPromptError('CREDENTIAL_CAPTURE_FAILED', 'The local credential prompt could not save the credential.');
-  }
-  return parseCredentialPromptResult(output, key);
-}
-
-// Payment-card values use a separate multi-field local dialog so a card number,
-// expiration, billing postal code, and cardholder name are never placed in
-// argv, stdin, an MCP result, audit data, or a generic one-line credential box.
-// The structured record is encrypted as one DPAPI vault value and can be read
-// only by a future provider-specific, owner-authorized checkout bridge.
-//
-// THE CARD SECURITY CODE (CVC / CVV) IS NEVER STORED. NOT HERE, NOT BY THE
-// DIALOG, NOT BY ANYONE, ANYWHERE.
-//
-// The record written by tools/secrets.ps1 (its version 3 shape) holds the
-// cardholder, the PAN, the expiry month and year, and the postal code -- and
-// nothing else. The dialog has no security-code field and does not ask for
-// one; there is no vault key, file, log, audit entry, MCP result or report in
-// this product that may hold the code. This is product rule Q-O4
-// and legal's X3 launch gate (2026-08-18), and it is what PCI DSS Requirement
-// 3.2 demands: sensitive authentication data, of which the security code is
-// one, may not be retained after authorisation, encrypted or otherwise. Both
-// launch documents state "the security code is never stored"; the code has to
-// make that sentence true, so it is enforced, not described --
-// tests/secrets/payment-card-security-code-never-stored.js fails the build if
-// the vault script gains a security-code key in any persisted payload, if any
-// argument reaching its Protect-PlainText can be traced to one, or if either
-// capture form grows a field that asks for one.
-//
-// TO A FUTURE AUTHOR OF A SPEND PATH: a checkout that needs the code asks the
-// owner for it LIVE, at the moment of spend, in a local owner-facing prompt;
-// passes it straight to the provider for that one authorisation; and discards
-// it. Do not add it to this record. Do not cache it "for the retry". Do not
-// write it to any state store, however briefly. If a design appears to need it
-// persisted, the design is wrong, not this comment.
-//
-// Records captured before this invariant (versions 1 and 2) may still carry
-// the field; scrubPaymentCardSecurityCode() below removes it in place, and the
-// next successful capture replaces the whole record with a version 3 one.
-function capturePaymentCard(key = 'payment_card_default') {
-  assertSecretKey(key);
-  if (key !== 'payment_card_default') {
-    throw credentialPromptError('PAYMENT_METHOD_CAPTURE_UNSUPPORTED', 'This payment method cannot be captured through the local card prompt.');
-  }
-  if (process.platform === 'linux') {
-    const result = linuxVault().capturePaymentCard();
-    if (result.status === 'timeout') throw credentialPromptError('CREDENTIAL_INTERACTION_REQUIRED', 'The local payment-method prompt timed out without saving.');
-    return parseCredentialPromptResult(JSON.stringify(result), key);
-  }
-  const script = vaultScript();
-  let output;
-  try {
-    output = execFileSync('powershell.exe', [
-      '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-STA', '-File', script,
-      'prompt-payment-card', key, '-PromptLabel', 'default payment card'
-    ], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    });
-  } catch (error) {
-    const detail = [error && error.stderr, error && error.stdout, error && error.message]
-      .filter(value => value !== undefined && value !== null)
-      .map(value => String(value))
-      .join('\n');
-    if (/CREDENTIAL_INTERACTION_REQUIRED/i.test(detail)) {
-      throw credentialPromptError('CREDENTIAL_INTERACTION_REQUIRED', 'A local interactive Windows desktop is required to enter a payment method.');
-    }
-    throw credentialPromptError('PAYMENT_METHOD_CAPTURE_FAILED', 'The local payment-method prompt could not save the payment card.');
-  }
-  return parseCredentialPromptResult(output, key);
-}
-
-// Remove the security code from a card record captured before the invariant
-// above existed. Runs tools/secrets.ps1's 'scrub-payment-card-cvc' verb hidden
-// and unattended (no window, no stdin, nothing from inside the record ever
-// crosses this boundary) and answers with exactly one of
-//   { key: 'payment_card_default', status: 'scrubbed' | 'clean' | 'absent' }.
-// This is the key-bound seam the owner-session host calls before accepting
-// work. It runs against the real vault during startup so records captured by
-// the earlier dialogs are actually repaired, rather than leaving the hygiene
-// operation as an uncalled helper.
-const PAYMENT_CARD_SCRUB_STATUSES = Object.freeze(['scrubbed', 'clean', 'absent']);
-function scrubPaymentCardSecurityCode() {
-  const key = 'payment_card_default';
-  // Linux checks canonical native version3 records inside its private vault
-  // helper. Absent/clean metadata returns here; malformed, tampered or old
-  // records require local review. No card content enters this process.
-  if (process.platform === 'linux') return linuxVault().checkPaymentCardHygiene();
-  const script = vaultScript();
-  let output;
-  try {
-    output = execFileSync('powershell.exe', [
-      '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script,
-      'scrub-payment-card-cvc'
-    ], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: false
-    });
-  } catch {
-    // The reason is deliberately not carried out: a vault diagnostic can quote
-    // the file it failed on. The caller learns only that the scrub did not run.
-    throw secretError('PAYMENT_CARD_SCRUB_FAILED', 'The local vault could not be scrubbed of a card security code.');
-  }
-  let result;
-  try {
-    result = JSON.parse(String(output || '').trim());
-  } catch {
-    throw secretError('PAYMENT_CARD_SCRUB_FAILED', 'The local vault scrub returned an invalid result.');
-  }
-  if (!result || typeof result !== 'object' || Array.isArray(result) || result.key !== key
-      || !PAYMENT_CARD_SCRUB_STATUSES.includes(result.status)) {
-    throw secretError('PAYMENT_CARD_SCRUB_FAILED', 'The local vault scrub returned an invalid result.');
-  }
-  return { key, status: result.status };
-}
-
-// DISCONNECT THIS COMPUTER. The one vault record that says "this machine is
-// connected to an account" (src/lib/online-fra-device-claim.js keeps it under
-// DEVICE_CREDENTIAL_VAULT_KEY -- pairId, deviceId, certificate, the machine's
-// own device token) is removed. This is local credential storage only: an
-// admitted relay can retain its credential, so the app separately owns remote
-// authority shutdown, pending disconnect intent and fresh-connection consent.
-//
-// KEY-BOUND ON PURPOSE, like scrubPaymentCardSecurityCode() above. This is not
-// a generic delete: a "deleteSecret(key)" export would be the first generic
-// destructive verb on this module, reachable by anything that can require it,
-// and the identity key beside this one (the machine's long-lived Ed25519
-// identity, a separate record) must never be removable by a misspelling.
-// No record value crosses this boundary. Both platform helpers observe and
-// remove the fixed key within their own locked transaction.
-//
-// Runs the selected platform's fixed-key removal unattended and answers with
-// exactly one of
-//   { key, status: 'cleared' | 'absent', mutationOutcome }
-// A second press answers 'absent' honestly. Windows accepts REMOVED_SYNCED
-// only after its helper's existing flushed, write-through replacement returns.
-// This is a Windows call-completion receipt, not a power-loss guarantee or a
-// claim that it performs Linux directory-fsync. Every failure is typed; the
-// reason is deliberately not carried out, because a vault diagnostic can quote
-// the file it failed on.
-const DEVICE_CREDENTIAL_VAULT_KEY = 'custom.online_fra_device_credential_v1';
-function clearDeviceCredential() {
-  const key = DEVICE_CREDENTIAL_VAULT_KEY;
-  if (process.platform === 'linux') {
-    let linux;
-    try {
-      linux = linuxVault();
-      return linux.clearDeviceCredential();
-    } catch (error) {
-      const refusal = secretError('DEVICE_CREDENTIAL_CLEAR_FAILED', 'The local vault did not confirm this computer\'s account disconnection.');
-      const details = require('./device-credential-clear-outcome').failureDetails(linux ? error
-        : { code: 'SECRET_HELPER_UNAVAILABLE', mutationOutcome: 'NOT_ATTEMPTED' });
-      refusal.mutationOutcome = details.mutationOutcome;
-      refusal.localCause = details.localCause;
-      throw refusal;
-    }
-  }
-  function refused(mutationOutcome, localCause) {
-    const error = secretError('DEVICE_CREDENTIAL_CLEAR_FAILED', 'This computer\'s saved account connection could not be confirmed.');
-    error.mutationOutcome = mutationOutcome;
-    error.localCause = localCause;
-    return error;
-  }
-  let script;
-  try {
-    script = vaultScript();
-  } catch {
-    throw refused('NOT_ATTEMPTED', 'SECRET_HELPER_UNAVAILABLE');
-  }
-  // Declared WITH its initializer, not as a bare `let` assigned inside a try:
-  // tools/check-spawn-env-scrub.js follows exactly one hop from `env: environment`
-  // to a `const environment = ...` expression and certifies the scrub helper it
-  // finds there; the bare-let shape read as UNRESOLVED (the 1.0.42 union-head red
-  // of 2026-09-07) although the child never received an unscrubbed environment.
-  // The refusal on any failure -- missing helper module or a scrub that refused --
-  // is unchanged: NOT_ATTEMPTED / SECRET_HELPER_UNAVAILABLE, before anything runs.
-  const environment = (() => {
-    try {
-      const { safeLaunchEnvironment } = require('./providers/subscription-launch-env.js');
-      const scrubbed = safeLaunchEnvironment(process.env, { context: 'Windows device credential removal' });
-      // A one-shot transaction must never inherit the persistent host's flag,
-      // which would load definitions and then exit without running the action.
-      for (const name of Object.keys(scrubbed)) {
-        if (name.toUpperCase() === 'TOOLSENABLED_VAULT_HOST_LIBRARY') delete scrubbed[name];
-      }
-      return scrubbed;
-    } catch {
-      throw refused('NOT_ATTEMPTED', 'SECRET_HELPER_UNAVAILABLE');
-    }
-  })();
-  invalidateSecretValueCache();
-  let output;
-  let status = 0;
-  try {
-    output = execFileSync('powershell.exe', [
-      '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script,
-      'clear-device-credential'
-    ], {
-      cwd: ROOT,
-      env: environment,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: false,
-      timeout: 35_000,
-      maxBuffer: 16 * 1024
-    });
-  } catch (error) {
-    if (error && ['ENOENT', 'EACCES'].includes(error.code) && !Number.isInteger(error.status) && !error.signal) {
-      throw refused('NOT_ATTEMPTED', 'SECRET_HELPER_UNAVAILABLE');
-    }
-    // Only a naturally completed nonzero child can return a pre-write refusal.
-    // A timeout, signal or missing completion cannot certify when it stopped.
-    if (!error || !Number.isInteger(error.status) || error.status === 0 || error.signal) {
-      throw refused('UNCERTAIN', 'SECRET_HELPER_PROTOCOL_INVALID');
-    }
-    output = error.stdout;
-    status = error.status;
-  } finally {
-    invalidateSecretValueCache();
-  }
-  let answer;
-  try {
-    const raw = Buffer.isBuffer(output) ? output.toString('utf8') : output;
-    if (typeof raw !== 'string' || Buffer.byteLength(raw, 'utf8') > 2048) throw new Error('Invalid receipt.');
-    answer = JSON.parse(raw);
-    // The fixed helper emits compact ASCII metadata. Duplicate fields must
-    // not be accepted through JSON.parse's last-value-wins behavior.
-    if (JSON.stringify(answer) !== raw.trim()) throw new Error('Invalid receipt.');
-  } catch { throw refused('UNCERTAIN', 'SECRET_HELPER_PROTOCOL_INVALID'); }
-  const exact = (value, names) => value !== null && typeof value === 'object' && !Array.isArray(value)
-    && Object.keys(value).sort().join(',') === [...names].sort().join(',');
-  if (status === 0 && exact(answer, ['ok', 'result']) && answer.ok === true
-      && exact(answer.result, ['key', 'status', 'mutationOutcome']) && answer.result.key === key
-      && ((answer.result.status === 'cleared' && answer.result.mutationOutcome === 'REMOVED_SYNCED')
-        || (answer.result.status === 'absent' && answer.result.mutationOutcome === 'NOT_ATTEMPTED'))) {
-    return { key, status: answer.result.status, mutationOutcome: answer.result.mutationOutcome };
-  }
-  const beforeWrite = ['SECRET_INPUT_INVALID', 'SECRET_VAULT_UNREADABLE', 'SECRET_VAULT_PATH_UNSAFE', 'SECRET_VAULT_LOCK_TIMEOUT'];
-  if (status !== 0 && exact(answer, ['ok', 'code', 'mutationOutcome']) && answer.ok === false
-      && ((answer.mutationOutcome === 'NOT_ATTEMPTED' && beforeWrite.includes(answer.code))
-        || (answer.mutationOutcome === 'UNCERTAIN' && answer.code === 'SECRET_VAULT_WRITE_UNCERTAIN'))) {
-    throw refused(answer.mutationOutcome, answer.code);
-  }
-  throw refused('UNCERTAIN', 'SECRET_HELPER_PROTOCOL_INVALID');
-}
-
-function withCredentialPrompt(callback, requestMetadata = {}) {
-  if (typeof callback !== 'function') throw new TypeError('Credential prompt callback must be a function.');
-  // Agent and scheduled callers can defer owner-only credential entry. The
-  // handler still runs, but a missing vault value remains a typed
-  // SECRET_NOT_CONFIGURED failure instead of creating a queued owner request.
-  // Interactive callers never open a surprise credential window: they queue
-  // a durable request and receive a typed resumable result instead.
-  if (process.env.TOOLSENABLED_DEFER_CREDENTIAL_PROMPTS === '1') {
-    return credentialPromptContext.run(Object.freeze({ enabled: false }), callback);
-  }
-  const promptContext = { enabled: true };
-  if (requestMetadata && typeof requestMetadata === 'object' && !Array.isArray(requestMetadata) &&
-      requestMetadata.requestContext && typeof requestMetadata.requestContext === 'object' &&
-      typeof requestMetadata.requester === 'string') {
-    promptContext.requestContext = Object.freeze({ ...requestMetadata.requestContext });
-    promptContext.requester = requestMetadata.requester;
-  }
-  return credentialPromptContext.run(Object.freeze(promptContext), callback);
-}
-
-// Codes the durable owner-prompt queue itself raises. Each is paired in that
-// module with a fixed literal message, so re-surfacing the pair leaks nothing a
-// caller could not already read from the queue's own API. An unrecognised code
-// is treated as an unexpected internal failure and stays generic.
-const OWNER_PROMPT_QUEUE_CODES = new Set([
-  'OWNER_PROMPT_ATTRIBUTION_REQUIRED', 'OWNER_PROMPT_DIFFERENT_ACTIVE', 'OWNER_PROMPT_EVENTS_INVALID',
-  'OWNER_PROMPT_INVALID', 'OWNER_PROMPT_IN_PROGRESS', 'OWNER_PROMPT_NOT_FOUND', 'OWNER_PROMPT_QUEUE_BUSY',
-  'OWNER_PROMPT_QUEUE_FULL', 'OWNER_PROMPT_QUEUE_INVALID', 'OWNER_PROMPT_QUEUE_UNAVAILABLE',
-  'OWNER_PROMPT_RUNNER_UNAVAILABLE'
-]);
-// Plain prose only: no paths, no quotes, no vault values could survive this.
-const OWNER_PROMPT_QUEUE_MESSAGE_RE = /^[A-Za-z0-9][A-Za-z0-9 ,.;:'()-]{0,199}$/;
-const OWNER_PROMPT_BLOCKER_KEY_RE = /^[A-Za-z0-9_.-]{1,100}$/;
-const OWNER_PROMPT_BLOCKER_ID_RE = /^owner-prompt-[a-f0-9-]{36}$/;
-const OWNER_PROMPT_LAUNCH_MESSAGES = Object.freeze({
-  OWNER_PROMPT_PLATFORM_UNSUPPORTED: 'This owner form is unavailable on this platform. The request remains queued and can be cancelled with owner_prompts.cancel.',
-  OWNER_PROMPT_RUNNER_UNAVAILABLE: 'Owner credential input is queued, but the form runner could not start. Retry owner_prompts.start or cancel with owner_prompts.cancel.',
-  OWNER_PROMPT_RUNNER_LOOKUP_UNAVAILABLE: 'Owner credential input is queued, but the form runner could not be checked. Retry owner_prompts.start or cancel with owner_prompts.cancel.'
-});
-
-function surfacedOwnerPromptQueueError(queueError) {
-  const code = queueError && typeof queueError.code === 'string' ? queueError.code : '';
-  const message = queueError && typeof queueError.message === 'string' ? queueError.message : '';
-  if (!OWNER_PROMPT_QUEUE_CODES.has(code) || !OWNER_PROMPT_QUEUE_MESSAGE_RE.test(message)) {
-    return credentialPromptError('OWNER_PROMPT_QUEUE_FAILED', 'The owner credential request could not be queued.');
-  }
-  const surfaced = credentialPromptError(code, message);
-  // A blocked request is only actionable if the blocker can be named. These are
-  // a request id and a vault key NAME; no vault value is ever carried here.
-  if (OWNER_PROMPT_BLOCKER_ID_RE.test(String(queueError.blockingRequestId || ''))) {
-    surfaced.blockingRequestId = queueError.blockingRequestId;
-  }
-  if (OWNER_PROMPT_BLOCKER_KEY_RE.test(String(queueError.blockingVaultKey || ''))) {
-    surfaced.blockingVaultKey = queueError.blockingVaultKey;
-  }
-  return surfaced;
-}
-
-function promptDefinitionForSecret(key, options = {}) {
-  if (options && options.prompt === false) return null;
-  if (options && options.prompt === true) return credentialDefinitionForKey(key);
-  const context = credentialPromptContext.getStore();
-  return context && context.enabled === true ? credentialDefinitionForKey(key) : null;
-}
-
-function getSecret(key, options = {}) {
-  try {
-    return readSecretFromVault(key);
-  } catch (error) {
-    if (!error || error.code !== 'SECRET_NOT_CONFIGURED') throw error;
-    const definition = promptDefinitionForSecret(key, options);
-    if (!definition) throw error;
-    const promptRequestContext = credentialPromptContext.getStore();
-    if (!promptRequestContext || !promptRequestContext.requestContext || !promptRequestContext.requester) {
-      throw credentialPromptError(
-        'CREDENTIAL_PROMPT_CONTEXT_REQUIRED',
-        'Credential entry requires a supported attributed provider or local-workflow context.'
-      );
-    }
-    let queued;
-    try {
-      // Loaded lazily to keep the low-level runtime independent at startup.
-      // Tool execution supplies bounded public attribution for the owner UI.
-      // Direct runtime callers without that metadata fail above and never
-      // create an owner-facing request.
-      const request = {
-        kind: 'credential', vaultKey: key, label: definition.label
-      };
-      request.requestContext = promptRequestContext.requestContext;
-      request.requester = promptRequestContext.requester;
-      queued = require('./providers/owner-prompt-queue').enqueue(request);
-    } catch (queueError) {
-      // The queue's own refusals are already caller-safe typed errors built by
-      // provider-safety with fixed literal prose, and they are the only thing
-      // that says WHY the owner could not be asked — another prompt is already
-      // active, the queue file is busy, the desktop runner is unavailable.
-      // Collapsing every one of them into a single generic sentence made every
-      // missing credential unactionable for the owner and for the next agent.
-      throw surfacedOwnerPromptQueueError(queueError);
-    }
-    // Enqueue can persist successfully while its native form cannot launch.
-    // Keep the durable id and the known prerequisite together; waiting for an
-    // owner event from an unavailable form cannot resolve this operation.
-    const launchCode = Object.hasOwn(OWNER_PROMPT_LAUNCH_MESSAGES, queued.launchFailure)
-      ? queued.launchFailure : null;
-    const queuedError = credentialPromptError(launchCode || 'OWNER_PROMPT_QUEUED', launchCode
-      ? OWNER_PROMPT_LAUNCH_MESSAGES[launchCode]
-      : queued.launchFailure
-        ? 'Owner credential input is queued, but its form could not open. Use owner_prompts.start to retry the form or owner_prompts.cancel to cancel.'
-        : 'Owner credential input is queued. Wait for the durable owner-prompt event before retrying this operation.');
-    queuedError.requestId = queued.requestId;
-    throw queuedError;
-  }
+function getSecret(key) {
+  return readSecretFromVault(key);
 }
 
 /* WHY THESE VAULT SPAWNS RELAY THE CHILD'S stderr, AND WHY ONLY stderr.
@@ -1388,7 +733,7 @@ function vaultChildFailure(error) {
 
 // THE HOSTED PATHS RELAY THE CHILD'S REASON TOO, AND CARRY ITS CODE.
 //
-// T329: the two hosted catch blocks (readSecretFromVaultHost and
+// The two hosted catch blocks (readSecretFromVaultHost and
 // setMonotonicSecretViaHost) used to throw the bare generic sentence, discarding
 // both the host client's message and its `code`. A caller therefore could not
 // tell "the sequence moved backward" (a custody defect) from "Timed out waiting
@@ -1591,7 +936,7 @@ function getOrCreateSecret(key, candidate) {
 // "the host is unavailable, fall back to the per-call spawn", and a thrown
 // error is a real vault-level refusal or failure. It carries the same generic
 // prefix the per-call spawn's catch block throws, FOLLOWED BY THE HOST'S OWN
-// REASON and, when the host client attached one, its `code` (T329, via
+// REASON and, when the host client attached one, its `code` (via
 // relayHostedVaultFailure). The prefix alone still does not distinguish
 // "sequence moved backward" from "lock timed out" -- that is exactly why the
 // reason is relayed rather than collapsed: a caller that must tell a custody
@@ -1697,11 +1042,8 @@ function secretExists(key) {
 
 module.exports = {
   VAULT_PRINCIPAL_ENV, currentVaultPrincipals, inheritedVaultPrincipals, vaultPrincipalEnvironment,
-  ROOT, rootPath, consentRoot, ensureDir, readJson, writeJsonAtomic, commandPath, commandExists, resetCommandPathCache, findBrowser,
-  run, getSecret, readSecretsFromVault, listSecretKeys, setSecret, setSecretPair, setSecretTriple, getOrCreateSecret, setMonotonicSecret, secretExists,
-  captureCredential, capturePaymentCard, clearDeviceCredential, withCredentialPrompt,
-  run, getSecret, listSecretKeys, setSecret, setSecretPair, setSecretTriple, getOrCreateSecret, setMonotonicSecret, secretExists,
-  captureCredential, capturePaymentCard, scrubPaymentCardSecurityCode, clearDeviceCredential, withCredentialPrompt,
+  ROOT, rootPath, ensureDir, readJson, writeJsonAtomic, commandPath, commandExists, resetCommandPathCache,
+  getSecret, readSecretsFromVault, listSecretKeys, setSecret, setSecretPair, setSecretTriple, getOrCreateSecret, setMonotonicSecret, secretExists,
   withVaultPrincipal, assertVaultReadAllowed,
   vaultFilePath, vaultFingerprint, vaultContentDigest,
   // Exported for tests only: the rules that decide when a decrypted value may

@@ -18,6 +18,7 @@ const {
   listNetworkPolicyRuleNames
 } = require('../openshell-inside');
 const { parseDenialLine, explainDenial, buildNarrowestProposal } = require('../openshell-denial-explainer');
+const hostReach = require('../openshell-host-reach');
 
 const REVIEW_HINT = 'The person reviews pending proposals from outside the sandbox with `openshell rule get <sandbox>` '
   + 'and decides each one with the openshell CLI. An agent cannot approve its own proposals.';
@@ -26,6 +27,13 @@ const ENABLE_ADVISOR_HINT = 'The policy advisor is off for this sandbox. The per
 // How far back denials() and propose() look: the most policy.local returns
 // (MAX_DENIALS_LIMIT in OpenShell 0.1.2's openshell-supervisor-network).
 const PROPOSE_LOOKBACK = 100;
+// How much of one answer the denials may fill, as result text. The agent
+// CLIs keep only about 10,000 tokens of a tool result and Codex cuts the
+// middle out of a longer one, so 50 explained denials (about 60,000
+// characters) reached the agent with denials missing from the middle. The
+// same limit as a sandbox file read (providers/host-control.js), less room
+// for the rest of the answer.
+const DENIALS_TEXT_BUDGET = 24 * 1024;
 
 function openshellError(code, message) {
   const error = new Error(message);
@@ -81,18 +89,22 @@ async function status({ env = process.env, client } = {}) {
   }
 }
 
-function describeDenial(line) {
+function describeDenial(line, hostPorts) {
   const parsed = parseDenialLine(line);
   if (!parsed) return { line, understood: false };
-  const explained = explainDenial(parsed);
+  const explained = explainDenial(parsed, { hostPorts });
   let proposal = null;
   let proposalNeeds = null;
+  let proposalRefused = null;
   try {
-    proposal = buildNarrowestProposal(parsed);
+    proposal = buildNarrowestProposal(parsed, { hostPorts });
   } catch (error) {
-    proposalNeeds = error.code === 'OPENSHELL_PROPOSAL_NO_BINARY'
-      ? 'binary: the absolute path of the program that made the request'
-      : error.message;
+    if (error.code === hostReach.REFUSAL_CODE) proposalRefused = { code: error.code, message: error.message };
+    else {
+      proposalNeeds = error.code === 'OPENSHELL_PROPOSAL_NO_BINARY'
+        ? 'binary: the absolute path of the program that made the request'
+        : error.message;
+    }
   }
   return {
     line,
@@ -107,7 +119,8 @@ function describeDenial(line) {
     reason: parsed.reason,
     explanation: explained.plainText,
     narrowestProposal: proposal,
-    proposalNeeds
+    proposalNeeds,
+    ...(proposalRefused ? { proposalRefused } : {})
   };
 }
 
@@ -138,12 +151,23 @@ async function denials({ last = 10, host, env = process.env, client } = {}) {
     if (seen) seen.times += 1;
     else distinct.set(key, { line, times: 1 });
   }
-  const shown = [...distinct.values()].slice(0, last).map(({ line, times }) => ({ ...describeDenial(line), times }));
+  const asked = [...distinct.values()].slice(0, last);
+  const shown = [];
+  let size = 0;
+  for (const { line, times } of asked) {
+    const described = { ...describeDenial(line, hostReach.guardedHostPorts({ env })), times };
+    const bytes = Buffer.byteLength(JSON.stringify(described));
+    if (shown.length > 0 && size + bytes > DENIALS_TEXT_BUDGET) break;
+    shown.push(described);
+    size += bytes;
+  }
+  const left = asked.length - shown.length;
   return {
     logAvailable: !(body && body.log_available === false),
     linesRead: lines.length,
     count: shown.length,
     denials: shown,
+    ...(left > 0 ? { moreDenials: left, moreDenialsNote: `${left} more did not fit in one answer; pass host to list one host's denials.` } : {}),
     reviewHint: REVIEW_HINT
   };
 }
@@ -168,7 +192,7 @@ async function propose({ denial, intent, binary, env = process.env, client } = {
   }
   let proposal;
   try {
-    proposal = buildNarrowestProposal(parsed, { intentSummary: intent, binary });
+    proposal = buildNarrowestProposal(parsed, { intentSummary: intent, binary, hostPorts: hostReach.guardedHostPorts({ env }) });
   } catch (error) {
     throw openshellError(error.code || 'OPENSHELL_PROPOSAL_INVALID', error.message);
   }

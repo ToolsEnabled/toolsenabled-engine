@@ -5,6 +5,59 @@ const coordinatorAudit = require('../coordinator-audit-events');
 
 const UNTRUSTED_CONTENT = Object.freeze({ contentTrust: 'untrusted', grantsAuthority: false });
 
+/* NAMESPACES THIS PUBLIC TOOL MAY NOT TOUCH, read or write.
+ *
+ * These hold product authority and private state in the SAME memory table this
+ * tool exposes: agent-comms keeps live message history, including the
+ * owner.journal every local message is appended to; agent-comms-control keeps
+ * channel membership and owner-special designation; mcp.tool-surface keeps the
+ * instance records system.status reports. Reaching them through this tool let an
+ * agent forge a message from another agent, read the owner's retained traffic,
+ * poison the roster, or corrupt the surface record.
+ *
+ * `contentTrust: untrusted` on a result is an INTEGRITY label -- it says the
+ * bytes grant no authority. It is not confidentiality, and it does nothing at
+ * all on a write.
+ *
+ * THE CHECK BELONGS HERE, NOT IN StateStore. The trusted internal writers
+ * (agent-comms/history.js, agent-comms/control-plane.js, mcp-tool-surface.js)
+ * call the very same setMemory/getMemory, so refusing inside the store would
+ * break the product's own state. This module is the public tool boundary and
+ * the only caller that must be bounded.
+ *
+ * agent-coord is deliberately NOT here: it is the inter-agent coordination
+ * board agents are told to use, and this tool's own description documents it. */
+const INTERNAL_NAMESPACES = Object.freeze(['agent-comms', 'agent-comms-control', 'mcp.tool-surface']);
+
+function refuseInternal(namespace, what) {
+  throw Object.assign(
+    new Error(`"${namespace}" is one of Fleet's own internal namespaces, so ${what}. `
+      + `Use a namespace of your own, or agent-coord for notes to other agents.`),
+    { code: 'MEMORY_NAMESPACE_RESERVED', details: Object.freeze({ namespace, reserved: INTERNAL_NAMESPACES }) }
+  );
+}
+
+/* SNAPSHOT ONCE, THEN CHECK AND FORWARD THE SNAPSHOT.
+ *
+ * Reading input.namespace here and letting StateStore read it again would be a
+ * check/use gap: an accessor can answer 'my-notes' the first time and
+ * 'agent-comms' the second, and the row comes back. JSON-RPC cannot build such
+ * an object, so this is hardening rather than a live remote hole -- but a
+ * boundary that validates one value and forwards another is not a boundary.
+ *
+ * A non-plain input is returned untouched so StateStore's own argument
+ * validation reports it, which it does better. An array in particular must NOT
+ * be spread: {...[1,2]} is a plain object, so spreading one would smuggle it
+ * past a check that currently rejects it. */
+function publicMemoryInput(input, what) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const snapshot = { ...input };
+  if (typeof snapshot.namespace === 'string' && INTERNAL_NAMESPACES.includes(snapshot.namespace)) {
+    refuseInternal(snapshot.namespace, what);
+  }
+  return snapshot;
+}
+
 function durableState(dependencies) {
   return dependencies.state || getStateStore();
 }
@@ -24,7 +77,8 @@ function metadata(entry) {
 }
 
 function set(input, dependencies = {}) {
-  const saved = durableState(dependencies).setMemory(input);
+  const bounded = publicMemoryInput(input, 'it cannot be written through this tool');
+  const saved = durableState(dependencies).setMemory(bounded);
   const output = {
     ...metadata(saved.entry),
     created: saved.created,
@@ -43,7 +97,7 @@ function set(input, dependencies = {}) {
    * write happens AFTER the durable local mutation has already committed, so
    * demanding a durable audit record cannot protect anything -- it can only
    * throw away a completed local write when a canonical audit store is
-   * unreachable. P11's stated contract is that local policy/task/memory
+   * unreachable. The legacy policy's stated contract is that local policy/task/memory
    * changes are OBSERVED with audit.record and never gated by a new
    * fail-closed boundary; the value-free events recover through the emergency
    * spool when a canonical store returns. Making this required turns an audit
@@ -97,13 +151,50 @@ function set(input, dependencies = {}) {
 }
 
 function get(input, dependencies = {}) {
-  const entry = durableState(dependencies).getMemory(input);
+  const bounded = publicMemoryInput(input, 'it cannot be read through this tool');
+  const entry = durableState(dependencies).getMemory(bounded);
   return entry === null ? null : { ...entry, ...UNTRUSTED_CONTENT };
 }
 
-function search(input, dependencies = {}) {
-  const entries = durableState(dependencies).searchMemory(input);
-  return { entries, count: entries.length, ...UNTRUSTED_CONTENT };
+/* Inside an OpenShell sandbox the agent CLIs keep about 10,000 tokens of a
+   tool result and cut the middle out, and twenty matches of up to 32 KiB each
+   came back as hundreds of kilobytes (measured 2026-09-29). There a search
+   returns at most the read window's 32 KiB of JSON text: every match is
+   named, and a value that does not fit is left for memory.get. */
+function boundedSearch(result) {
+  if (!require('../openshell-inside').isInsideOpenShellSandbox()) return result;
+  const cap = require('./host-control').SANDBOX_READ_WINDOW_BYTES;
+  const note = 'Some values are left out (valueOmitted: true) to keep this result whole; read each with memory.get.';
+  const shell = entry => {
+    const { value: _value, note: _note, ...rest } = entry;
+    return { ...rest, valueOmitted: true };
+  };
+  let size = Buffer.byteLength(JSON.stringify({ ...result, entries: [], note }))
+    + result.entries.reduce((sum, entry) => sum + Buffer.byteLength(JSON.stringify(shell(entry))) + 1, 0);
+  let omitted = 0;
+  const entries = result.entries.map(entry => {
+    const whole = Buffer.byteLength(JSON.stringify(entry)) - Buffer.byteLength(JSON.stringify(shell(entry)));
+    if (size + whole <= cap) { size += whole; return entry; }
+    omitted += 1;
+    return shell(entry);
+  });
+  return omitted === 0 ? result : { ...result, entries, note };
 }
 
-module.exports = { UNTRUSTED_CONTENT, get, metadata, search, set };
+/* The exclusion is handed to the store so it applies in SQL, BEFORE the row
+ * limit. Filtering the returned page here instead would hand back short or
+ * empty pages whenever internal rows happened to sort first, which reads as
+ * "no matches" rather than "not yours". */
+function search(input, dependencies = {}) {
+  const bounded = publicMemoryInput(input, 'it cannot be searched through this tool');
+  // Only a plain object carries the exclusion; anything else goes through
+  // unchanged so the store refuses it instead of being handed a shape its own
+  // validation would have rejected.
+  const scoped = bounded && typeof bounded === 'object' && !Array.isArray(bounded)
+    ? { ...bounded, excludeNamespaces: INTERNAL_NAMESPACES }
+    : bounded;
+  const entries = durableState(dependencies).searchMemory(scoped);
+  return boundedSearch({ entries, count: entries.length, ...UNTRUSTED_CONTENT });
+}
+
+module.exports = { INTERNAL_NAMESPACES, UNTRUSTED_CONTENT, get, metadata, search, set };

@@ -1,6 +1,6 @@
 'use strict';
 
-// P11 semantic audit adapter.  This module deliberately owns no database,
+// legacy policy semantic audit adapter.  This module deliberately owns no database,
 // signing key, projection, or recovery file: src/lib/audit.js remains the
 // only canonical signed ledger authority.
 
@@ -441,7 +441,7 @@ function providerOperation({ provider, operation, outcome, durationMs, promptByt
   if (promptBytes !== undefined && promptBytes !== null) summary.promptBytes = integer(promptBytes, 'promptBytes');
   // Transport metadata only (measured wire/response size), never a token or
   // billing figure. Previously silently dropped here, which lost real
-  // measurement data before the P11 wrap could hand it to any meter.
+  // measurement data before the legacy policy wrap could hand it to any meter.
   if (outputBytes !== undefined && outputBytes !== null) summary.outputBytes = integer(outputBytes, 'outputBytes');
   return createEvent({
     kind: operation === 'start' ? 'provider.start' : 'provider.operation',

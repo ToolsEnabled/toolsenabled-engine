@@ -50,17 +50,17 @@ const CONTRACT_GUIDE = [
   'To call agent.spawn, contract is a newline-separated input form, not this expanded brief.',
   'Begin with CONTRACT/1; required fields are role, target, do, because, done, report (key then space then value).',
   `role: ${ROLES.join('|')}. Optional fields: api (comma-separated namespaces), allow (explicit exceptions).`,
-  'because must cite actual task evidence: an observed number, named failing check or quoted output; never invent a measurement.',
+  'because needs concrete evidence. For a new task, quote the person\'s request or state its requested count; no filesystem precheck is required. For a repair, cite an observed number, failing check or quoted output; never invent a measurement.',
   'done must name an independently verifiable artifact/check, not subjective claims such as "works correctly". Cite symbols, not file:line.',
   'Illustrative syntax only: replace the example paths, task, evidence and completion checks with your actual task; this example is not observed evidence.',
   '```text',
   'CONTRACT/1',
   'role INVESTIGATOR',
   'target src/',
-  'do Inspect the reported failure and write findings; do not edit source.',
-  'because The parent reports 2 refused spawn attempts.',
-  'done REPORT-child.md names inspected symbols, findings and verification commands.',
-  'report REPORT-child.md',
+  'do Inspect the requested project area and write findings; do not edit source.',
+  'because The user requested 1 inspection report for this project.',
+  'done .fleet/reports/child.md names inspected symbols, findings and verification commands.',
+  'report .fleet/reports/child.md',
   '```',
 ].join('\n');
 
@@ -226,8 +226,7 @@ function validate(fields) {
     errors.push(`role must be one of ${ROLES.join('|')} -- got ${fields.role}`);
   }
   if (fields.because && !statesAMeasurement(fields.because)) {
-    errors.push('because states no measurement. Name a number, a failing check, or quoted output -- '
-      + 'an adjective is how an agent gets sent to fix something that is not broken.');
+    errors.push('because is missing concrete evidence. Quote the user\'s request with several words (at least 8 characters) in double quotes, curly quotes, or backticks, or name its requested count; for a repair, name an observed number, failing check or quoted output. No preliminary filesystem check is required for a direct request.');
   }
   if (fields.done && /\b(properly|correctly|well|good|clean|nice)\b/i.test(withoutPaths(fields.done))) {
     errors.push('done is not checkable by anybody but the agent. Say what someone else could verify.');
@@ -265,7 +264,7 @@ function expand(fields, apiSheet) {
    * same lesson the other way round -- a fence placed FIRST became the task and
    * three agents did the warning and returned nothing. Whatever leads, leads. */
   out.push('WRITE THE REPORT EVEN IF YOU CHANGE NO CODE.');
-  out.push(`  -> ${fields.report}, at the repository root, in the same task diff.`);
+  out.push(`  -> ${fields.report}, relative to the project root, in the same task diff.`);
   out.push('  A task that changes nothing and reports nothing is indistinguishable from');
   out.push('  a task that never ran. If your answer is "nothing is wrong here", that is a');
   out.push('  finding and it goes in the file with the evidence that established it.');
@@ -326,7 +325,7 @@ function main(argv = process.argv.slice(2)) {
        * case-insensitive while a JS object is not -- so `delete
        * env.ANTHROPIC_API_KEY` leaves `anthropic_api_key` behind for the child
        * to find. */
-      const { safeLaunchEnvironment } = require('../src/lib/providers/subscription-launch-env');
+      const { safeLaunchEnvironment } = require('../src/lib/supervision/launch-environment');
       sheet = execFileSync(process.execPath,
         [require('node:path').join(__dirname, 'agent-api-sheet.js'), '--ns', fields.api],
         { encoding: 'utf8', windowsHide: true, env: safeLaunchEnvironment(process.env, { context: 'agent api sheet' }) });

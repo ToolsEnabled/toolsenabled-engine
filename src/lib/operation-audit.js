@@ -22,10 +22,7 @@ function capturePolicy(options = {}) {
       code: 'AUDIT_POLICY_INVALID'
     });
   }
-  // metricsLocalHistory rides with the snapshot so the desktop shell decides
-  // its own run and token records from the same read; it grants no audit.
-  const policy = Object.freeze({ required: configured.auditEnabled, activity: configured.activity,
-    metricsLocalHistory: configured.metricsLocalHistory === true });
+  const policy = Object.freeze({ required: configured.auditEnabled, activity: configured.activity });
   decisions.add(policy);
   if (!policy.required) requestIdleRetirement();
   return policy;

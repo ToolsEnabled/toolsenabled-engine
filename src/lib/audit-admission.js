@@ -7,7 +7,7 @@
  * admits one event per acquisition of the ledger's single cross-process
  * writer lock, and the admission's fixed cost -- anchor reads, chain
  * verification, projection file handling -- was measured at 70-120 ms of
- * held lock per event. Because the owner host runs inside the desktop app's
+ * held lock per event. Because the owner host runs inside the host application's
  * main process and dispatched every agent's calls one after another, that
  * cost was paid serially by the whole fleet and by the person's own screen.
  *
@@ -131,7 +131,7 @@ function createAdmissionQueue(options = {}) {
    * When the worker is unavailable or answers malformedly, admission moves back
    * onto the calling thread and keeps going -- correct, and the right choice,
    * because durability must not depend on a thread starting. But the only
-   * evidence was one stderr line, and stderr on the desktop app is not
+   * evidence was one stderr line, and stderr on the host application is not
    * collected anywhere. So "did admission fall back during that stall?" was not
    * a question anyone could answer afterwards; it could only be answered
    * "I could not look", which is a weaker claim than "it did not happen".
@@ -237,7 +237,7 @@ function createAdmissionQueue(options = {}) {
          worker and then finished never exited; its only live handle was the
          worker's MessagePort, hasRef true, although startWorker() had called
          worker.unref(). Posting to the worker references its port again and
-         nothing gave that back. In the desktop app that is invisible; in any
+         nothing gave that back. In the host application that is invisible; in any
          short-lived caller -- a test script, a one-shot broker -- it is a
          process that finishes its work and hangs. So the worker is referenced
          for exactly the life of a batch (the reply timeout above already keeps
@@ -446,7 +446,7 @@ function resetAdmissionQueueForTests() {
  * get, then set-monotonic-stdin: the vault anchor a REQUIRED record forces)
  * inside every stall window. The tool providers still called
  * audit.requireRecord() synchronously, and the owner host runs inside the
- * desktop app's main process, so every agent's shell command parked the
+ * host application's main process, so every agent's shell command parked the
  * thread the person's window is drawn on for the length of two PowerShell
  * starts. The policy-decision record had already been moved onto this queue
  * (coordinator-audit-events.js writeAsync); the providers' own intent

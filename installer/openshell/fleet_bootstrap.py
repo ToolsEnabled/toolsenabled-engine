@@ -26,8 +26,8 @@ def bootstrap_main(argv=None):
     parser.add_argument('--version', required=True)
     parser.add_argument('--prefix', required=True)
     parser.add_argument('--mode', required=True, choices=('fresh', 'upgrade'))
-    parser.add_argument('--tier', choices=('guided', 'standard', 'unrestricted'))
-    parser.add_argument('--providers', choices=('codex', 'claude', 'codex,claude'))
+    parser.add_argument('--tier', choices=('guided', 'standard', 'unrestricted'), help="Optional: narrow Fleet tools further; unrestricted adds no cap.")
+    parser.add_argument('--providers')
     parser.add_argument('--previous-archive')
     parser.add_argument('--previous-sha256')
     options = parser.parse_args(words)
@@ -80,7 +80,7 @@ def bootstrap_main(argv=None):
                 command = ['--setup' if options.mode == 'fresh' else '--upgrade', options.prefix,
                            '--archive', options.archive, '--sha256', options.sha256]
                 if options.mode == 'fresh':
-                    command += ['--tier', options.tier or 'unrestricted', '--providers', options.providers or 'codex,claude']
+                    command += ['--tier', options.tier or 'unrestricted', *(['--providers', options.providers] if options.providers else [])]
                 if options.previous_archive is not None:
                     command += ['--previous-archive', options.previous_archive, '--previous-sha256', options.previous_sha256]
                 try:

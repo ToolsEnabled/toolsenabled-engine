@@ -78,6 +78,7 @@
 // A boundary that answers "allowed" when it does not know is not a boundary.
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const WINDOWS = process.platform === 'win32';
@@ -245,7 +246,24 @@ function resolveRoots(roots, { label = 'workspace root' } = {}) {
 function isInsideRoots(candidate, roots, { label = 'path' } = {}) {
   const resolvedRoots = resolveRoots(roots);
   const real = realResolve(candidate, label);
-  return resolvedRoots.some(root => sameLocation(root, real) || containedBy(root, real));
+  return resolvedRoots.some(root => (sameLocation(root, real) || containedBy(root, real))
+    && !hiddenUnderHome(root, real));
+}
+
+/* A WORKSPACE THAT IS THE WHOLE ACCOUNT HOME NEVER INCLUDES ITS HIDDEN ENTRIES.
+ * Host mode may be set up "global", with the account home as its workspace.
+ * The home's top-level dot folders and dotfiles hold agent settings, sign-ins,
+ * keys and shell startup files, which no workspace may contain, so for that
+ * root alone anything under a top-level entry whose name starts with "." is
+ * outside. Any other root is unaffected. */
+function accountHome() {
+  try { return fs.realpathSync(process.platform === 'linux' ? os.userInfo().homedir : os.homedir()); }
+  catch { return null; }
+}
+function hiddenUnderHome(root, candidate, home = accountHome()) {
+  if (home === null || !sameLocation(root, home)) return false;
+  const first = path.relative(root, candidate).split(/[\\/]/)[0];
+  return first.startsWith('.') && first !== '..' && first !== '.';
 }
 
 /**
@@ -275,5 +293,6 @@ module.exports = Object.freeze({
   containedBy,
   resolveRoots,
   isInsideRoots,
-  assertInsideRoots
+  assertInsideRoots,
+  hiddenUnderHome
 });

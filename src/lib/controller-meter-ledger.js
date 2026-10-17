@@ -1,6 +1,6 @@
 'use strict';
 
-// Q17 writes meter rows into the canonical signed audit ledger rather than a
+// Write meter rows into the canonical signed audit ledger rather than a
 // second activity ledger. This adapter has no MCP registration: it is a
 // broker-internal projection materializer that accepts only a closed meter
 // record, checks its canonical task and already-signed provider event, and
@@ -16,7 +16,7 @@ const SCHEMA_VERSION = 1;
 
 // MCP tool dispatch (executeTool()) has no canonical durable run task and its
 // parent audit event is the pre-existing, unwrapped mcp.tool.* legacy record,
-// not a P11 coordinator.audit.provider.operation event. recordMeter()/
+// not a legacy policy coordinator.audit.provider.operation event. recordMeter()/
 // assertCanonicalTask()/assertParentAudit() below are a closed, proven
 // contract for exactly one purpose (task-bound broker provider/local phase
 // completions) and are deliberately left untouched. The tool-call path below

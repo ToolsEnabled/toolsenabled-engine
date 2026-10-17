@@ -2,8 +2,7 @@
 
 // THE WORKSPACE -- the folder the assistant is allowed to work in.
 //
-// Task T10 of docs/design/INSTALLER-EXPERIENCE.md section 7, and step 7 of the
-// flow in section 3. Guided is shown one card containing `Documents\AI Workspace`
+// Installer workspace step. Guided is shown one card containing `Documents\AI Workspace`
 // with a single button; Standard and Unrestricted may add several roots.
 //
 // TWO REFUSALS, BOTH MECHANICAL.
@@ -82,7 +81,7 @@ function isInside(candidate, container) {
  * to be explainable to the person who chose the folder. "That folder cannot be
  * used" with no reason is the shape that makes someone pick a worse one.
  */
-function checkWorkspaceCandidate(candidate, { installRoot, tier = 'guided', env = process.env, homedir = os.homedir } = {}) {
+function checkWorkspaceCandidate(candidate, { installRoot, tier = 'guided', env = process.env, homedir = os.homedir, allowHome = false } = {}) {
   if (typeof candidate !== 'string' || candidate.trim() === '') {
     return { ok: false, code: 'SETUP_WORKSPACE_MISSING', message: 'Choose a folder for your assistant to work in.' };
   }
@@ -105,7 +104,9 @@ function checkWorkspaceCandidate(candidate, { installRoot, tier = 'guided', env 
     };
   }
   const home = typeof env.USERPROFILE === 'string' && env.USERPROFILE !== '' ? env.USERPROFILE : homedir();
-  if (path.resolve(home) === resolved) {
+  // Host mode may be global (allowHome): the boundary then excludes the home's
+  // hidden entries (src/lib/workspace-boundary.js hiddenUnderHome).
+  if (path.resolve(home) === resolved && !allowHome) {
     return {
       ok: false,
       code: 'SETUP_WORKSPACE_PROFILE_ROOT_REFUSED',

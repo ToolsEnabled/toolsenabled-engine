@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { safeLaunchEnvironment } = require('./supervision/launch-environment');
 
 function upgrade(binDir, argv) {
   if (process.platform !== 'linux' || process.env.OPENSHELL_SANDBOX !== '1') {
@@ -30,7 +31,9 @@ function upgrade(binDir, argv) {
   // The installed bootstrap verifies/extracts NEW bytes outside the moving
   // prefix. Its staged transaction driver owns serialization and recovery.
   const result = spawnSync('/usr/bin/python3', ['-B', driver, '--prefix', prefix,
-    '--archive', options['--archive'], '--sha256', options['--sha256'], ...previous], { stdio: 'inherit', env: process.env });
+    '--archive', options['--archive'], '--sha256', options['--sha256'], ...previous], {
+    stdio: 'inherit', env: safeLaunchEnvironment(process.env, { context: 'Fleet upgrade driver' })
+  });
   if (result.error || result.signal || !Number.isInteger(result.status)) {
     throw Object.assign(new Error('OUTCOME_UNCERTAIN: upgrade did not settle; retain the archive and any reported stage/journal.'), { code: 'OUTCOME_UNCERTAIN' });
   }

@@ -26,7 +26,9 @@ from fleet_install import (InstallError, absolute, digest, strict_json, read_at,
                            validate_context, bounded_command)
 
 
-PROVIDERS = ('claude', 'codex')
+def provider_ids(context):
+    # Older receipts retain their original two profile keys.
+    return tuple(context.get('agentProfiles', {'claude': None, 'codex': None}))
 
 
 def refuse(code, message):
@@ -58,18 +60,19 @@ def validate_inspection(value, prefix):
         refuse('INTEGRITY', 'Uninstall inspection returned an unexpected schema')
     validate_context(value['context'], prefix)
     providers = value['providers']
-    if not isinstance(providers, dict) or set(providers) != set(PROVIDERS):
+    if not isinstance(providers, dict) or set(providers) != set(provider_ids(value['context'])):
         refuse('INTEGRITY', 'Uninstall inspection omitted a supported provider')
-    for provider in PROVIDERS:
+    for provider in provider_ids(value['context']):
         item = providers[provider]
         if not isinstance(item, dict) or set(item) != {'available', 'history'} or type(item['available']) is not bool:
             refuse('INTEGRITY', 'Uninstall provider inspection schema is invalid')
         if item['available']:
             if item['history'] is not None:
                 refuse('INTEGRITY', 'Available provider has unexpected setup-history evidence')
-        elif item['history'] != 'never':
+        elif item['history'] not in ('never', 'absent'):
+            # 'absent': the agent's described registration file holds no Fleet entry.
             refuse('DEREGISTER', 'Unavailable provider lacks sealed never-attempted history; runtime retained')
-    expected_available = {provider for provider in PROVIDERS if providers[provider]['available']}
+    expected_available = {provider for provider in providers if providers[provider]['available']}
     if set(value['context']['availableProviders']) != expected_available:
         refuse('INTEGRITY', 'Provider availability disagrees with the selected context')
     return value
@@ -80,7 +83,7 @@ def validate_outcome(value, provider):
             or value['provider'] != provider or value['outcome'] not in ('removed', 'absent', 'never')):
         refuse('DEREGISTER', 'Registration adapter returned an unknown outcome')
     if value['outcome'] == 'absent':
-        if value['version'] != {'claude': '2.1.284', 'codex': '0.158.0'}[provider]:
+        if value['version'] is not None and (not isinstance(value['version'], str) or len(value['version']) > 100):
             refuse('DEREGISTER', 'Registration absence has no qualified version')
     elif value['version'] is not None:
         refuse('DEREGISTER', 'Registration adapter returned unexpected version evidence')
@@ -112,9 +115,8 @@ class Adapter:
             if code == 'CODEX_TARGET_UNPROVEN':
                 refuse(code, 'Codex target inspection refused; runtime and state retained; inspect the selected target before retrying')
             guidance = ''
-            if code == 'DEREGISTER' and provider in PROVIDERS:
-                command = 'claude mcp remove --scope user toolsenabled' if provider == 'claude' else 'codex mcp remove toolsenabled'
-                guidance = '; manual command for this selected profile: ' + command
+            if code == 'DEREGISTER' and provider:
+                guidance = '; inspect the selected agent registration before retrying: ' + provider
             refuse(code,
                    'Registration adapter refused; runtime and state retained; earlier outcomes and pending evidence were kept' + guidance)
         if stderr:
@@ -146,6 +148,8 @@ class Uninstaller:
     def protected_context(self, context):
         homes = {context['home'], context['accountHome']}
         selected = {context[key] for key in ('stateRoot', 'servicesRoot', 'codexProfile', 'claudeProfile', 'workspace')}
+        selected.update(row['root'] for row in context.get('agentProfiles', {}).values())
+        selected.update(row['file'] for row in context.get('agentProfiles', {}).values() if row['file'] is not None)
         for home in homes:
             if self.prefix == Path(home) or self.prefix in Path(home).parents:
                 refuse('PROTECTED_PATH', 'Runtime contains a protected home')
@@ -188,7 +192,7 @@ class Uninstaller:
                                                           legacy_runtime=receipt is None or receipt_value['schema'] == 1))
             retained.revalidate()
             if receipt_value is not None:
-                require_state_record(receipt_value, receipt, seed_c10=receipt_value['schema'] == 1)
+                require_state_record(receipt_value, receipt, seed_schema1=receipt_value['schema'] == 1)
             try:
                 self.checkpoint()
                 inspection = validate_inspection(self.adapter.inspect(self.prefix), self.prefix)
@@ -206,11 +210,11 @@ class Uninstaller:
                            'archiveSha256': archive.archive_sha256,
                            'archivePath': str(self.archive_path) if self.archive_path else None,
                            'context': context, 'recordedContext': recorded_context,
-                           'providerOutcomes': {provider: None for provider in PROVIDERS},
+                           'providerOutcomes': {provider: None for provider in inspection['providers']},
                            'activeProvider': None, 'removedEntries': 0}
             self.save('PREPARED')
             try:
-                for provider in PROVIDERS:
+                for provider in inspection['providers']:
                     # Recheck held identities before each external mutation.
                     self.checkpoint()
                     retained.revalidate()

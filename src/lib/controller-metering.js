@@ -1,21 +1,17 @@
 'use strict';
 
-// Q17 mechanical, content-free meter contract. Persistence and provider
+// Mechanical, content-free meter contract. Persistence and provider
 // instrumentation remain separate phases; this module is deliberately pure so
 // a dashboard can never infer billing from prompt/output text or a CLI timer.
 const crypto = require('node:crypto');
-const googleAccounts = require('./google-accounts');
 
 const SCHEMA_VERSION = 1;
-const PROVIDERS = new Set(['codex', 'claude', 'gemini', 'vertex', 'local']);
+const PROVIDERS = new Set([...require('./agents/registry').activeRegistry().ids, 'vertex', 'local']);
 // 'unattributed' is a contract constant, not a registered identity: it is the
 // honest name for usage that belongs to no registered account, and it stays a
 // valid accountAlias on an installation whose roster is empty.
 const UNATTRIBUTED = 'unattributed';
-// Registered accounts are user data (config/google-accounts.profile.json),
-// never a compile-time list -- a customer's own registered account must be a
-// valid accountAlias here, the same as the sibling roster read by
-// controller-projection.js.
+// Registered accounts are user data, never a compile-time list.
 //
 // It is equally never a MODULE-LOAD SNAPSHOT, which is what it used to be.
 // Freezing the roster at import made this module wrong in two directions:
@@ -28,7 +24,7 @@ const UNATTRIBUTED = 'unattributed';
 //     first tools/google-oauth-login.js run -- validated every record against
 //     a roster of one. 12 engine test files failed there and passed only where
 //     that gitignored file happened to exist, which is why a trustworthy
-//     engine baseline could not be measured from a worktree at all (R1531).
+//     engine baseline could not be measured from a worktree at all.
 // The roster is therefore resolved WHEN NEEDED, once per public call, and the
 // empty case is a NAMED state carried on the error rather than a silent wrong
 // answer that looks identical to a genuinely unknown alias.
@@ -79,16 +75,11 @@ function freezeRoster(aliases) {
   });
 }
 
-// The live roster, read from user data at CALL time. An absent or empty profile
-// is the NONE_REGISTERED state exposed by googleAccounts.load(). A thrown read
-// failure is different: it leaves the roster unmeasured and must not be
-// collapsed into the definite claim that no accounts are registered.
+// Fleet keeps no account registry and never chooses between accounts: each
+// agent uses whatever sign-in it already has. The live roster is therefore
+// always "none registered", which admits 'unattributed' and nothing else.
 function accountRoster() {
-  let loaded;
-  try { loaded = googleAccounts.load(); }
-  catch { fail('METER_ROSTER_UNAVAILABLE', 'The account roster could not be read.'); }
-  if (!plain(loaded) || !plain(loaded.accounts)) fail('METER_ROSTER_UNAVAILABLE', 'The account roster could not be established.');
-  return accountRosterFor(loaded.accounts);
+  return freezeRoster([]);
 }
 
 // Build a roster from an accounts map a caller already holds -- the live
@@ -156,7 +147,7 @@ function resolveRoster(options) {
 function accountAliasValue(value, roster) {
   if (typeof value === 'string' && roster.validAliases.has(value)) return value;
   const error = new MeterError('METER_INVALID', roster.state === ROSTER_STATES.NONE_REGISTERED
-    ? `accountAlias is invalid: ${ROSTER_STATES.NONE_REGISTERED} on this installation, so '${UNATTRIBUTED}' is the only accountAlias a meter record can carry. Register an account with tools/google-oauth-login.js.`
+    ? `accountAlias is invalid: ${ROSTER_STATES.NONE_REGISTERED} on this installation, so '${UNATTRIBUTED}' is the only accountAlias a meter record can carry. Register a Fleet worker account.`
     : 'accountAlias is invalid.');
   error.accountRosterState = roster.state;
   error.accountCount = roster.accountCount;

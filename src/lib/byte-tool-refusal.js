@@ -1,6 +1,6 @@
 'use strict';
 
-// Closed metadata projection for repository coordination refusals. Never
+// Closed metadata projection for host file coordination refusals. Never
 // expose arbitrary provider details or changed file bytes as a repair hint.
 const path = require('node:path');
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -11,13 +11,13 @@ const REASONS = new Set(['DEPENDENCY_UNREADABLE', 'UNMEDIATED_CHANGE',
 
 function publicByteRefusal(error) {
   const { ByteCoordinationRefusal } = require('./region-holds/byte-authority');
-  const repo = require('./providers/repo-files');
-  if (!(error instanceof ByteCoordinationRefusal) && !(error instanceof repo.RepoFileError)) return null;
+  const host = require('./providers/host-control');
+  if (!(error instanceof ByteCoordinationRefusal)) return null;
   const details = error.details;
   if (!details || typeof details !== 'object') return null;
   const relativeResource = resource => {
     if (typeof resource !== 'string' || !path.isAbsolute(resource)) return null;
-    const relative = path.relative(repo.ROOT, resource);
+    const relative = path.relative(host.HOME, resource);
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
     return relative.split(path.sep).join('/');
   };
@@ -31,7 +31,7 @@ function publicByteRefusal(error) {
         requiresWholeFileRead: value.requiresWholeFileRead === true };
       if (reference(value.receiptRef)) result.receiptRef = value.receiptRef;
       for (const field of ['startByte', 'endByte']) {
-        if (Number.isSafeInteger(value[field]) && value[field] >= 0 && value[field] <= repo.MAX_FILE_BYTES) result[field] = value[field];
+        if (Number.isSafeInteger(value[field]) && value[field] >= 0 && value[field] <= host.MAX_FILE_BYTES) result[field] = value[field];
       }
       for (const field of ['expectedContentSha256', 'currentContentSha256', 'currentFileSha256']) {
         if (typeof value[field] === 'string' && SHA256.test(value[field])) result[field] = value[field];

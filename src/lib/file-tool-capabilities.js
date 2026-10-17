@@ -6,7 +6,6 @@
 const active = new WeakSet();
 const issued = new WeakSet();
 const retirementCallbacks = new WeakMap();
-const guards = new WeakMap();
 const invocations = new WeakMap();
 
 function refused() {
@@ -22,14 +21,8 @@ function registerFileToolContext(context) {
   active.add(context);
   return context;
 }
-function guardFileToolContext(context, assertCurrent) {
-  requireFileToolContext(context);
-  if (typeof assertCurrent !== 'function' || guards.has(context)) throw refused();
-  guards.set(context, assertCurrent);
-}
 function requireFileToolContext(context) {
   if (!context || !active.has(context)) throw refused();
-  guards.get(context)?.();
   return context.binding;
 }
 function registerFileToolInvocation(context, metadata) {
@@ -84,6 +77,6 @@ function retireFileToolContext(context, reason = 'transport-retired') {
   return Promise.all([...(callbacks?.values() || [])].map(callback => Promise.resolve().then(() => callback(reason))));
 }
 
-module.exports = Object.freeze({ registerFileToolContext, guardFileToolContext, requireFileToolContext,
+module.exports = Object.freeze({ registerFileToolContext, requireFileToolContext,
   retireFileToolContext, onFileToolContextRetired, registerFileToolInvocation,
   consumeFileToolInvocation, assertFileToolInvocationCurrent, endFileToolInvocation });

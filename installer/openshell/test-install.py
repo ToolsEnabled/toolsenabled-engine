@@ -172,6 +172,8 @@ def legacy_install_check(archive_path):
 
 
 BETA3_VERSION = '1.4.2'
+BETA4_VERSION = '1.4.3'
+CURRENT_VERSION = '1.8.0'
 HELPERS = ('fleet_fs.py', 'fleet_install.py', 'fleet_bootstrap.py', 'fleet_upgrade.py',
            'fleet_uninstall.py', 'fleet_legacy_inventory.json')
 
@@ -183,6 +185,15 @@ class GateError(RuntimeError):
 def require(condition, message):
     if not condition:
         raise GateError(message)
+
+
+def guided_setup_status(status, workspace):
+    """Accept one exact guided Setup row for the expected working folder."""
+    if not isinstance(status, str):
+        return False
+    rows = [line for line in status.splitlines() if re.match(r'^Setup(?:[ \t]|$)', line)]
+    expected = r'Setup[ \t]+guided, working folder ' + re.escape(str(workspace))
+    return len(rows) == 1 and re.fullmatch(expected, rows[0]) is not None
 
 
 def sha256_file(path):
@@ -205,12 +216,12 @@ def inspect_release(archive_path, pin):
         require(len(entries) == 1 and entries[0].isfile() and entries[0].size <= 65536,
                 'Expected exactly one bounded regular release manifest')
         manifest = json.load(archive.extractfile(entries[0]))
-    require(isinstance(manifest, dict) and manifest.get('version') in ('1.4.0', '1.4.1', BETA3_VERSION),
+    require(isinstance(manifest, dict) and manifest.get('version') in ('1.4.0', '1.4.1', BETA3_VERSION, BETA4_VERSION, CURRENT_VERSION),
             'No reviewed installer contract for this archive version')
     require(manifest.get('name') == 'toolsenabled-openshell'
             and re.fullmatch(r'[a-f0-9]{40}', manifest.get('source_commit', '')) is not None,
             'Invalid release identity')
-    if manifest['version'] == BETA3_VERSION:
+    if manifest['version'] in (BETA3_VERSION, BETA4_VERSION, CURRENT_VERSION):
         require(pin is not None, 'Beta3 requires an independently supplied SHA-256; use TOOLSENABLED_CANDIDATE_SHA256')
     return manifest
 
@@ -245,7 +256,14 @@ def extract_beta3(archive_path, root, manifest):
             require(not any(part in entry.name for part in ('/payload/node', '/node_modules/npm/',
                     '/node_modules/@openai/codex/', '/node_modules/@anthropic-ai/claude-code/')),
                     'Bundled toolchain/provider is outside the runtime release contract')
+        directory_modes = [(entry.name, stat.S_IMODE(entry.mode)) for entry in archive.getmembers() if entry.isdir()]
         archive.extractall(root, filter='data')
+    # Python's data filter can retain the caller's group write bit. The
+    # review compares this staged tree to the archive's exact mode inventory.
+    for name, mode in directory_modes:
+        target = root / name
+        require(target.is_dir() and not target.is_symlink(), 'Extracted archive directory changed')
+        target.chmod(mode)
     package = root / 'toolsenabled-installer'
     require({entry.name for entry in package.iterdir()} == {'README.md', 'install.sh', 'manifest.json', 'payload', *HELPERS},
             'Beta3 package files differ from the reviewed layout')
@@ -256,7 +274,8 @@ def extract_beta3(archive_path, root, manifest):
         require((package / name).read_bytes() == (package / 'payload/engine/libexec' / name).read_bytes(),
                 'Packaged and installed lifecycle helper bytes differ: ' + name)
     readme = (package / 'README.md').read_text()
-    require(readme.startswith('# ToolsEnabled Fleet for OpenShell: runtime') and '1.4.2' in readme
+    version_line = BETA3_VERSION if manifest['version'] == BETA3_VERSION else 'ToolsEnabled Fleet ' + manifest['version']
+    require(readme.startswith('# ToolsEnabled Fleet for OpenShell: runtime') and version_line in readme
             and 'two commands' in readme and 'uninstall --keep-state --archive' in readme,
             'Release README does not describe the reviewed beta3 lifecycle')
     return package
@@ -415,7 +434,8 @@ def exercise_beta3(package, archive_path, pin, manifest, root, account_home, env
             'Installed version/source identity differs')
     status = run(['/bin/bash', '--noprofile', '--norc', '-c',
                   'source "$1"; command -v toolsenabled; toolsenabled status', 'artifact-check', str(prefix / 'env.sh')], environment)
-    require(str(cli) in status and 'Permission level   guided' in status, 'PATH/status did not retain explicit guided setup')
+    require(str(cli) in status and guided_setup_status(status, account_home / 'work'),
+            'PATH/status did not retain explicit guided setup')
     state = root / 'state'
     state.mkdir(exist_ok=True)
     (state / 'keep.txt').write_text('owned artifact gate state survives\n')
@@ -480,22 +500,20 @@ def beta3_install_check(archive_path, pin, manifest):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__, epilog='''Beta3 coordinator gate: use a NEW disposable Linux OpenShell sandbox/test account with no accountHome/work.
-Set TOOLSENABLED_CANDIDATE_ARCHIVE=/absolute/candidate-9/archive.tar.gz,
-TOOLSENABLED_CANDIDATE_SHA256=<independently published pin>, TOOLSENABLED_CANDIDATE_ISOLATED=1,
-TOOLSENABLED_CANDIDATE_EXPECT_UID=<actual dedicated UID>, TOOLSENABLED_CANDIDATE_EXPECT_ACCOUNT_HOME=<actual canonical account home>,
-and TOOLSENABLED_TEST_STRICT=1, then run: node tests/run-isolated.js --timeout-ms 900000 --summary /owned/evidence/installer.json tests/openshell-candidate-install.test.js.
-This runs real per-UID lifecycle locking. Never run it in the owner/current agent account.
-Use a separate disposable account for the real-provider gate. Preserve reported scratch/workspace and any pending barrier on failure.
-For the umask regression, invoke this gate under umask 0022, 0002 and 0077, each in a separate fresh disposable sandbox/account.
-The ARTIFACT_GATE receipt records the actual non-root UID and inherited umask; extraction uses the same Python data filter as the soak.
-The source contract suite uses mocks; it does not qualify a release. Legacy archives retain their historical checks.''')
+    parser = argparse.ArgumentParser(description=__doc__, epilog='''Run this release installation test in a fresh disposable Linux OpenShell sandbox with a dedicated non-root account and no existing workspace.
+Set TOOLSENABLED_CANDIDATE_ARCHIVE=<absolute archive path>,
+TOOLSENABLED_CANDIDATE_SHA256=<independently published digest>, TOOLSENABLED_CANDIDATE_ISOLATED=1,
+TOOLSENABLED_CANDIDATE_EXPECT_UID=<dedicated UID>, TOOLSENABLED_CANDIDATE_EXPECT_ACCOUNT_HOME=<canonical account home>,
+and TOOLSENABLED_TEST_STRICT=1. Then run: node tests/run-isolated.js --timeout-ms 900000 --summary /owned/evidence/installer.json tests/openshell-candidate-install.test.js.
+The test uses real per-UID lifecycle locking. Keep the receipt, scratch directory and any pending barrier on failure.
+To test umask handling, run under 0022, 0002 and 0077 in three separate fresh disposable accounts.
+The ARTIFACT_GATE receipt records the actual non-root UID and inherited umask. Source contract tests use mocks and do not qualify a release.''')
     parser.add_argument('archive', type=Path)
     parser.add_argument('--sha256', default=os.environ.get('TOOLSENABLED_CANDIDATE_SHA256'))
     args = parser.parse_args(argv)
     archive_path = args.archive.resolve(strict=True)
     manifest = inspect_release(archive_path, args.sha256)
-    if manifest['version'] == BETA3_VERSION:
+    if manifest['version'] in (BETA3_VERSION, BETA4_VERSION, CURRENT_VERSION):
         beta3_install_check(archive_path, args.sha256, manifest)
     else:
         legacy_install_check(archive_path)

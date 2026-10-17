@@ -3,7 +3,7 @@
 /* THE OWNER'S PER-PRINCIPAL DECISIONS ABOUT THEIR OWN VAULT RECORDS, AS READ BY
  * THE SIDE THAT ACTUALLY HANDS OUT VALUES.
  *
- * WHY THIS FILE EXISTS AT ALL -- the measured defect it closes. The desktop app
+ * WHY THIS FILE EXISTS AT ALL -- the measured defect it closes. The host application
  * already shipped the owner-facing half of this feature: shell/vault-access-
  * policy.cjs writes the decisions, the #/vault page draws the checkboxes, and
  * shell/vault-presence.cjs consults them in `vaultRecordValues`. But
@@ -86,8 +86,8 @@ function policyFilePath(stateRoot) {
   return path.join(stateRoot, 'state', 'vault-access-policy.json');
 }
 
-/* The state root this engine was started under. The desktop app sets it (its
-   shell/main.cjs assigns `process.env.TOOLSENABLED_STATE_ROOT =
+/* The state root this engine was started under. A host may set
+   `process.env.TOOLSENABLED_STATE_ROOT =
    CAPABILITY_STATE_ROOT`), which is the same directory its writer puts the
    policy in -- that assignment is the whole reason the two halves meet. */
 function defaultStateRoot(environment = process.env) {

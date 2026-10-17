@@ -154,6 +154,7 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
         feature('--permission-mode', true), feature('--model', true), feature('--mcp-config', true),
         feature('--strict-mcp-config', true), feature('--settings', true), feature('--tools', true),
         feature('--setting-sources', true), feature('--disable-slash-commands', true),
+        feature('--restricted', false),
         feature('--session-id', true), feature('--resume', true), feature('--fork-session', true),
         feature('--effort', false),
       ],
@@ -283,24 +284,8 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
         feature('--effort', false), feature('models', false),
       ],
     },
-  },
-  'playwright-mcp': {
-    id: 'playwright-mcp',
-    label: 'Browser tools (Playwright MCP)',
-    /* The package's own bin name (0.0.78 and 0.0.82). The gateway launches
-       only the owned copy; its tools/list check (playwright-gateway.js
-       checkPlaywrightTools) answers from FEATURE_STATES. */
-    commands: ['playwright-mcp'],
-    homeEnv: null,
-    signIn: null,
-    npmPackage: '@playwright/mcp',
-    nativeLayouts: [],
-    loginHomeBins: [],
-    selfUpdateOff: null,
-    updateCommand: {},
-    manualInstall: null,
-    features: { probe: 'mcp-tools', list: [] },
-  },
+  }
+
 });
 
 const PROVIDER_TOOLCHAIN_IDS = Object.freeze(Object.keys(PROVIDER_TOOLCHAIN));

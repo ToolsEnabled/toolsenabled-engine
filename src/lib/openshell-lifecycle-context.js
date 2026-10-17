@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const records = require('./setup/machine-record');
-const { safeLaunchEnvironment } = require('./providers/subscription-launch-env');
+const { safeLaunchEnvironment } = require('./supervision/launch-environment');
 
 function refuse(code, message) { throw Object.assign(new Error(`${code}: ${message}`), { code }); }
 
@@ -40,55 +40,65 @@ function onPath(name, env) {
   });
 }
 
-function providerEnv(env, cli) {
-  const names = ['HOME', 'PATH', 'USER', 'LANG', 'LC_ALL', 'TMPDIR'];
-  names.push(cli === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR');
+function providerEnv(env, descriptor) {
+  const names = ['HOME', 'PATH', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', descriptor.register.profile?.env].filter(Boolean);
   return safeLaunchEnvironment({ ...Object.fromEntries(names.filter(key => env[key] !== undefined).map(key => [key, env[key]])),
-    LANG: 'C', LC_ALL: 'C', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1' },
-  { context: 'Fleet fresh registration inspection' });
+    LANG: 'C', LC_ALL: 'C' }, { context: 'Fleet fresh registration inspection' });
 }
 
-function freshClaude(context, env, launch) {
-  const result = launch('claude', ['--version'], { env: providerEnv(env, 'claude'), cwd: context.home,
-    stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
-  if (result.error || result.signal || result.status !== 0 || result.stderr !== '' || result.stdout !== '2.1.284 (Claude Code)\n') {
-    refuse('INSPECTION_UNAVAILABLE', 'Claude version has no qualified nonconnecting freshness check');
+function freshProfile(descriptor, env, launch) {
+  const inspection = descriptor.register.inspection;
+  const result = launch(descriptor.command, ['--version'], { env: providerEnv(env, descriptor), cwd: env.HOME,
+    stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 5000, maxBuffer: 65536, shell: false });
+  if (result.error || result.signal || result.status !== 0 || result.stderr !== ''
+    || require('./agents/registry').qualifiedVersion(inspection, result.stdout) === null) {
+    refuse('INSPECTION_UNAVAILABLE', `${descriptor.name} has no qualified nonconnecting freshness check for this version`);
   }
-  // Claude get/list may start MCP servers. Do not call them or open config or
-  // auth files. This deliberately accepts only a missing/empty selected profile
-  // and no default USER-store/backup names. Existing profiles fail closed.
-  const selected = context.claudeProfile;
-  if (exists(selected)) {
-    const entry = fs.lstatSync(selected);
-    if (!entry.isDirectory() || entry.isSymbolicLink() || fs.readdirSync(selected).length !== 0) {
-      refuse('SCOPE_EXISTS', 'the selected Claude profile is not empty; nonconnecting freshness is unproven');
+  // Some list/get commands start servers. Only missing or empty profile
+  // metadata is evidence here; no sign-in or user-store contents are opened.
+  const selected = require('./agents/registration').profile(descriptor, env);
+  if (exists(selected.root)) {
+    const entry = fs.lstatSync(selected.root);
+    if (!entry.isDirectory() || entry.isSymbolicLink() || fs.readdirSync(selected.root).length !== 0) {
+      refuse('SCOPE_EXISTS', `the selected ${descriptor.name} profile is not empty; freshness is unproven`);
     }
   }
-  if (env.CLAUDE_CONFIG_DIR === undefined) {
-    if (fs.readdirSync(context.home).some(name => name === '.claude.json' || name.startsWith('.claude.json.'))) {
-      refuse('SCOPE_EXISTS', 'a Claude USER store or backup exists; it was not read or changed');
-    }
+  if (selected.mode === 'default' && inspection.storePrefix
+    && fs.readdirSync(selected.home).some(name => name.startsWith(inspection.storePrefix))) {
+    refuse('SCOPE_EXISTS', 'a selected user store or backup exists; it was not read or changed');
   }
 }
 
-function inspect({ prefix, tier = 'unrestricted', providers = 'codex,claude', fresh = false, env = process.env,
+function inspect({ prefix, tier = 'unrestricted', providers, fresh = false, env = process.env,
   launch = spawnSync } = {}) {
   if (env.OPENSHELL_SANDBOX !== '1' || process.platform !== 'linux') refuse('TARGET', 'run this lifecycle inside a Linux OpenShell sandbox');
-  if (!['unrestricted', 'standard', 'guided'].includes(tier) || !['codex,claude', 'codex', 'claude'].includes(providers)) {
+  const registry = require('./agents/registry').loadRegistry({ env });
+  const defaults = require('./agents/registry').workerAgentIds(registry);
+  providers ??= defaults.join(',');
+  if (!['unrestricted', 'standard', 'guided'].includes(tier) || !providers.split(',').every(id => registry.has(id))) {
     refuse('TARGET', 'invalid setup choices');
   }
   const home = canonical(env.HOME === undefined ? os.homedir() : env.HOME);
   const stateRoot = canonical(env.TOOLSENABLED_STATE_ROOT || path.join(home, '.toolsenabled'));
   const scopedEnv = { ...env, HOME: home, TOOLSENABLED_STATE_ROOT: stateRoot };
   const servicesRoot = canonical(records.resolveServicesRoot({ env: scopedEnv }));
-  const codexProfile = canonical(env.CODEX_HOME === undefined ? path.join(home, '.codex') : env.CODEX_HOME);
-  const claudeProfile = canonical(env.CLAUDE_CONFIG_DIR === undefined ? path.join(home, '.claude') : env.CLAUDE_CONFIG_DIR);
-  const protectedPaths = new Set([home, canonical(os.userInfo().homedir), stateRoot, servicesRoot, codexProfile, claudeProfile,
-    path.join(canonical(os.userInfo().homedir), 'work'),
-    path.join(home, '.codex'), path.join(home, '.claude'), path.join(home, '.claude.json'),
-    '/etc/openshell', `/tmp/toolsenabled-fleet-lifecycle-${process.getuid()}`]);
+  const agentProfiles = Object.fromEntries(registry.agents.map(agent => {
+    let selected;
+    try { selected = require('./agents/registration').profile(agent, scopedEnv); }
+    catch { refuse('SCOPE_UNSAFE', 'the selected profile must be an absolute folder without dot components'); }
+    return [agent.id, { root: canonical(selected.root), mode: selected.mode, file: selected.file ? canonical(selected.file) : null }];
+  }));
+  const protectedPaths = new Set([home, canonical(os.userInfo().homedir), stateRoot, servicesRoot,
+    path.join(canonical(os.userInfo().homedir), 'work'), '/etc/openshell', `/tmp/toolsenabled-fleet-lifecycle-${process.getuid()}`]);
+  for (const selected of Object.values(agentProfiles)) {
+    protectedPaths.add(selected.root); if (selected.file) protectedPaths.add(selected.file);
+  }
   for (const root of new Set([home, canonical(os.userInfo().homedir)])) {
-    for (const suffix of ['.codex', '.claude', '.claude.json', '.config/openshell', '.local/state/openshell', '.local/share/openshell']) protectedPaths.add(path.join(root, suffix));
+    for (const agent of registry.agents) {
+      const selected = require('./agents/registration').profile(agent, { HOME: root });
+      protectedPaths.add(selected.root); if (selected.file) protectedPaths.add(selected.file);
+    }
+    for (const suffix of ['.config/openshell', '.local/state/openshell', '.local/share/openshell']) protectedPaths.add(path.join(root, suffix));
   }
   for (const key of ['OPENSHELL_SYSTEM_GATEWAY_DIR', 'OPENSHELL_LOCAL_TLS_DIR', 'OPENSHELL_GATEWAY_CONFIG',
     'OPENSHELL_TLS_CERT', 'OPENSHELL_TLS_KEY', 'OPENSHELL_TLS_CLIENT_CA']) {
@@ -102,11 +112,12 @@ function inspect({ prefix, tier = 'unrestricted', providers = 'codex,claude', fr
     if (!match) refuse('SCOPE_UNSAFE', 'gateway database location is ambiguous');
     protectedPaths.add(canonical(match[1]));
   }
-  const available = ['codex', 'claude'].filter(cli => onPath(cli, env));
-  const context = { schemaVersion: 1, uid: process.getuid(), prefix: canonical(prefix), home,
+  const available = registry.agents.filter(agent => agent.register.kind !== 'none' && onPath(agent.command, env)).map(agent => agent.id);
+  const context = { schemaVersion: 2, uid: process.getuid(), prefix: canonical(prefix), home,
     accountHome: canonical(os.userInfo().homedir), stateRoot, servicesRoot,
-    codexProfile, claudeProfile, codexProfileMode: env.CODEX_HOME === undefined ? 'default' : 'explicit',
-    claudeProfileMode: env.CLAUDE_CONFIG_DIR === undefined ? 'default' : 'explicit',
+    agentProfiles,
+    ...Object.fromEntries(registry.agents.filter(agent => agent.register.profile?.legacyContext).flatMap(agent =>
+      [[`${agent.id}Profile`, agentProfiles[agent.id].root], [`${agent.id}ProfileMode`, agentProfiles[agent.id].mode]])),
     workspace: path.join(canonical(os.userInfo().homedir), 'work'), tier, providers, availableProviders: available,
     protectedPaths: [...protectedPaths].map(canonical).sort() };
   if (!fresh) return context;
@@ -114,15 +125,16 @@ function inspect({ prefix, tier = 'unrestricted', providers = 'codex,claude', fr
     || exists(records.machineRecordPath(servicesRoot)) || exists(records.machineRecordKeyPath(servicesRoot))) {
     refuse('SCOPE_EXISTS', 'an existing or uncertain Fleet setup was retained');
   }
-  if (available.length === 0 || providers !== 'codex,claude' && !available.includes(providers)) {
+  if (available.length === 0 || providers.split(',').length === 1 && !available.includes(providers)) {
     refuse('TARGET', 'install the selected provider CLI before setup');
   }
   // --add registers every installed CLI, independently of worker --providers.
   for (const cli of available) {
-    if (cli === 'claude') freshClaude(context, scopedEnv, launch);
-    else if (!require('./openshell-registration-inspection').probe('codex', {
-      env: providerEnv(scopedEnv, cli), cwd: home, spawnSync: launch
-    }).absent) refuse('SCOPE_EXISTS', 'Codex registration absence is unproven; nothing was changed');
+    const descriptor = registry.get(cli);
+    if (descriptor.register.inspection?.kind === 'remove-absence') freshProfile(descriptor, scopedEnv, launch);
+    else if (!require('./openshell-registration-inspection').probe(cli, {
+      env: providerEnv(scopedEnv, descriptor), cwd: home, spawnSync: launch
+    }).absent) refuse('SCOPE_EXISTS', `${descriptor.name} registration absence is unproven; nothing was changed`);
   }
   return context;
 }

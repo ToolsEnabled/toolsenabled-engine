@@ -1,6 +1,6 @@
 'use strict';
 
-// Q40: MCP clients cache their tool table at process startup.  A newly spawned
+// MCP clients cache their tool table at process startup. A newly spawned
 // one-shot broker can prove that the checked-in source works, but it cannot
 // prove that another long-lived stdio client has the same surface.  This module
 // records only bounded process identity and digests; it never stores tool
@@ -24,7 +24,7 @@ const TRANSPORTS = new Set(['stdio-direct', 'owner-host']);
 const REGISTRY_FILE = rootPath('src', 'lib', 'tool-registry.js');
 /* WHICH APP INSTANCE AN OWNER-HOST SURFACE BELONGS TO.
  *
- * T159, measured 2026-09-16 and 2026-09-18: a runtime-generation activation is
+ * Measurements on 2026-09-16 and 2026-09-18 found that runtime activation is
  * followed by an app restart, and every session bound to the previous instance
  * loses its tools. If the previous main process is still alive -- which is how
  * this box behaves, and what "1 observed 0 fresh" on 09-18 was looking at --
@@ -115,7 +115,7 @@ function validRecord(value) {
     && validMs(value.bootedAtMs)
     && typeof value.registryContentSha256 === 'string' && HASH_RE.test(value.registryContentSha256)
     && typeof value.surfaceSha256 === 'string' && HASH_RE.test(value.surfaceSha256)
-    // Q40 records written before profile-aware classification have no profile
+    // Records written before profile-aware classification have no profile
     // digest. Keep them readable; a mismatched legacy surface is UNKNOWN,
     // never an invented stale verdict.
     && (value.profileSha256 === undefined || (typeof value.profileSha256 === 'string' && HASH_RE.test(value.profileSha256)))
@@ -133,6 +133,18 @@ function validEnvelope(value) {
     && Array.isArray(value.instances) && value.instances.length <= MAX_INSTANCES
     && value.instances.every(validRecord)
     && new Set(value.instances.map(instance => instance.instanceId)).size === value.instances.length;
+}
+
+/* WHETHER A STORED ROW IS ONE THIS MODULE COULD HAVE WRITTEN.
+ *
+ * system.doctor asks, so a malformed envelope is reported as malformed with this
+ * module's own code rather than passed off as merely unverifiable. A generic
+ * "is it an object" test would call `{ definitely: "not an envelope" }` acceptable,
+ * which is a false negative in exactly the check meant to catch tampering.
+ * Returns an error code, or null when the row is well formed. */
+function inspectStoredRow(key, value) {
+  if (key !== MEMORY_KEY) return 'MCP_TOOL_SURFACE_KEY_UNKNOWN';
+  return validEnvelope(value) ? null : 'MCP_TOOL_SURFACE_RECORD_INVALID';
 }
 
 function defaultProcessIdentity(pid) {
@@ -531,6 +543,7 @@ function browserProjection(value) {
 
 module.exports = Object.freeze({
   MAX_CAS_ATTEMPTS, MAX_INSTANCES, MEMORY_KEY, MEMORY_NAMESPACE, REGISTRY_FILE, SCHEMA_VERSION,
+  inspectStoredRow,
   batchedProcessIdentity, browserProjection, classifyInstance, currentSurface, defaultProcessIdentity, recordStartup,
   profileDigest, stableJson, status, surfaceDigest, validEnvelope, validRecord
 });

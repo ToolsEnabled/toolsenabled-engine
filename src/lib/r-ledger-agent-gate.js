@@ -1,4 +1,5 @@
 'use strict';
+const { ledgerPlace } = require('./ledger-place');
 
 // MAY AN AGENT FILE ONE OF THE PERSON'S STANDING RULES? Decided here and
 // nowhere else. The r_ledger.* tools in tool-registry.js ask this module; the
@@ -6,7 +7,7 @@
 // agent is handed at session start, so the authority door and the judgement
 // door cannot drift apart.
 //
-// THE STARTING POINT, MEASURED (O7, 2026-08-19). The four R ledgers
+// THE STARTING POINT, MEASURED (ledger filing fix, 2026-08-19). The four R ledgers
 // (src/lib/r-ledger.js) had NO agent tool: the only write path was the person
 // typing /Request in the chat, and the paragraph the host hands every agent
 // said "you need no tool for that and should not act on the command
@@ -42,7 +43,7 @@
 // is read as a standing rule at boot (collectStack reads the four markdown
 // ledgers only). The row's consequence text says so in the person's words.
 //
-// THREE MORE DOORS ON THE SAME PATH (O7 improvements):
+// THREE MORE DOORS ON THE SAME PATH (ledger filing fix improvements):
 //
 // VERBATIM OR NOTHING. The words an agent files must be an exact contiguous
 // slice of something the person typed -- whitespace aside, no case folding,
@@ -52,10 +53,9 @@
 // the arguments an agent passes, so the id is often absent) the measure is
 // every turn the person typed to this ACTOR, in any session -- the actor is
 // transport-bound on the call, so an agent cannot widen the check by leaving
-// the id out, and another actor's turns never count. The check is skipped,
-// with the result saying 'skipped: no spool', ONLY when this computer has no
-// spool directory at all (a CLI or development context, not the product). A
-// bare "ok"/"yes"/"no" and anything that looks like a secret are refused
+// the id out, and another actor's turns never count. Filing refuses when this
+// computer has no spool directory at all: absent evidence cannot prove an
+// exact quote. A bare "ok"/"yes"/"no" and anything that looks like a secret are refused
 // outright, the secret shape judged by the audit module's own scrubber so
 // there is one definition of "looks like a secret" in this program.
 //
@@ -147,7 +147,23 @@ const SANDBOX_REFUSAL_WHEN_OFF = 'Agents may not file standing rules in this san
   + 'Nothing was filed. Do not ask the person whether to file it, do not suggest a rule, and do not offer to change the setting; '
   + 'the ledger is theirs to add to, with `toolsenabled ledger add rule` in the terminal. Carry on with the work.';
 
+// And on the ToolsEnabled host outside the sandboxes, whose settings and
+// ledger the person keeps with `toolsenabled-authority` on the machine itself.
+const HOST_REFUSAL_WHEN_OFF = 'Agents may not file standing rules on this ToolsEnabled host: "Who adds standing rules" (rules.filing_from, shown by `toolsenabled-authority settings`) does not include agents. '
+  + 'Nothing was filed. Do not ask the person whether to file it, do not suggest a rule, and do not offer to change the setting; '
+  + 'the ledger is theirs to add to, with `toolsenabled-authority ledger add rule` on the machine that runs OpenShell. Carry on with the work.';
+
 function refusalWhenOff() {
+  if (require('./openshell-inside').isOpenShellHost()) return HOST_REFUSAL_WHEN_OFF;
+  if (process.env.TOOLSENABLED_RUNTIME_MODE === 'host') {
+    if (process.env.TOOLSENABLED_HOST_SETUP_KIND === 'plugin') {
+      return 'Agents may not file standing rules: only the person adds them. Nothing was filed. '
+        + 'If the person asked you to record a rule, tell them to type /ledger rule followed by the rule, themselves, in Claude Code 2.1.287 or newer in a terminal; it is filed under their name without going through you, and a prompt cannot file one. '
+        + 'Do not suggest rules otherwise. Carry on with the work.';
+    }
+    return 'Agents may not file standing rules on this host: the saved rules.filing_from setting does not include agents. '
+      + 'Nothing was filed. Do not ask the person to file it or change the setting; the ledger is theirs to manage with `toolsenabled ledger` in the host terminal. Carry on with the work.';
+  }
   return require('./openshell-inside').isInsideOpenShellSandbox() ? SANDBOX_REFUSAL_WHEN_OFF : REFUSAL_WHEN_OFF;
 }
 
@@ -319,7 +335,7 @@ function loadAgentFilingMode({ valuesPath, env } = {}) {
 // ---------------------------------------------------------------------------
 // THE JUDGEMENT DOOR: the paragraph the host hands an agent with its standing
 // requests. One text per mode, exported from the engine so the host and the
-// onboarding packet cannot drift. The `off` text is the host's pre-O7
+// onboarding packet cannot drift. The `off` text is the earlier host
 // constant byte-for-byte (shell/agent-host.cjs REQUEST_CONTRACT_PARAGRAPH):
 // a session with the switch off must read exactly as it did before.
 // ---------------------------------------------------------------------------
@@ -328,7 +344,7 @@ function loadAgentFilingMode({ valuesPath, env } = {}) {
 // is not "Agents too"). The product note: when it is disabled, agents do
 // not ask either -- off means no filing, no proposing and no asking, so the
 // closing sentence is the same in both forms; only the door the person uses
-// differs. The first form is the host's pre-O7 constant with that sentence
+// differs. The first form is the earlier host constant with that sentence
 // appended; the second is for a person who types no /Request at all.
 const PARAGRAPH_NO_ASKING = 'Agents do not file, propose or ask about standing rules on this computer: when something the person says sounds like a rule, do not offer to record it and do not end your reply with a question about it — carry on with the work and leave the ledger to them.';
 
@@ -433,7 +449,9 @@ function isAssent(words) {
 const BARE_SECRET_PREFIX = /\b(?:token|secret|password|passwd|pwd|passphrase|otp)\s*[=:]\s*\S+/i;
 const LONG_TOKEN_RUN = /(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}/;
 function looksSecretShaped(words, { scrub } = {}) {
-  const text = String(words === undefined || words === null ? '' : words);
+  // The scrubber normalizes lone UTF-16 surrogates (audit projections are
+  // UTF-8). Normalize first so only a real secret shape changes the words.
+  const text = String(words === undefined || words === null ? '' : words).toWellFormed();
   if (!text) return false;
   const cleaner = typeof scrub === 'function' ? scrub : value => require('./audit').scrubText(value, Math.max(1, value.length));
   return cleaner(text) !== text || BARE_SECRET_PREFIX.test(text) || LONG_TOKEN_RUN.test(text);
@@ -477,7 +495,7 @@ function findStanding(entries, words) {
    the harness in `source` ("claude-code/UserPromptSubmit", "codex/..."), and
    the harness family is the actor. A record that names neither belongs to no
    actor and never counts for one. */
-const AGENT_ACTORS = Object.freeze(new Set(['human', 'codex', 'claude', 'gemini', 'grok', 'local']));
+const AGENT_ACTORS = Object.freeze(new Set(['human', ...require('./agents/registry').actorNames(require('./agents/registry').activeRegistry())]));
 function recordActor(record) {
   const direct = String(record && record.actor ? record.actor : '').trim().toLowerCase();
   if (AGENT_ACTORS.has(direct)) return direct;
@@ -491,7 +509,7 @@ function recordActor(record) {
    id: that session's turns (a turn that names a different actor still does
    not count). Without one: every turn typed to this actor, in any session,
    and nothing typed to another actor. Returns null ONLY when there is no
-   spool directory at all -- the one case the caller may skip the check in --
+   spool directory at all -- the case the caller must refuse filing in --
    and otherwise an array, empty when nothing matches. Any failure to inspect
    an existing spool throws: an unreadable spool cannot honestly prove that
    the person's words are absent. */
@@ -558,10 +576,8 @@ const REFUSAL_ASSENT = 'A bare yes, no or ok is an answer, not a standing rule; 
 const REFUSAL_SECRET = 'Those words look like a password, key or token, so they were not filed. Tell the person you did not file them.';
 const REFUSAL_NOT_VERBATIM = 'Those words are not an exact slice of anything the person typed to you, so they were not filed. '
   + 'File the sentence exactly as they typed it, or tell them what you would have filed.';
-const NOTE_SKIPPED_NO_SPOOL = ' Verbatim check skipped: this computer keeps no spool of the person\'s turns to check against.';
 const VERBATIM_CHECKED_SESSION = 'checked: this session';
 const VERBATIM_CHECKED_ACTOR = 'checked: every session of yours';
-const VERBATIM_SKIPPED_NO_SPOOL = 'skipped: no spool';
 
 class RLedgerAgentControl {
   constructor(dependencies = {}) {
@@ -585,15 +601,14 @@ class RLedgerAgentControl {
   /* The words door, in order: a bare assent, a secret shape, then verbatim
      against the person's turns -- this session's when the call names one,
      else every session of this actor's. Returns how the verbatim check went
-     so the result can say so; throws a typed refusal otherwise. The only
-     skip is a computer with no spool at all. */
+     so the result can say so; throws a typed refusal otherwise. */
   _checkWords(args) {
     const { RLedgerError } = this.ledger;
     if (isAssent(args.words)) throw new RLedgerError('R_LEDGER_WORDS_REFUSED', REFUSAL_ASSENT);
     if (looksSecretShaped(args.words, { scrub: this.scrub })) throw new RLedgerError('R_LEDGER_WORDS_REFUSED', REFUSAL_SECRET);
     const sessionId = typeof args.sessionId === 'string' && args.sessionId.trim() !== '' ? args.sessionId.trim() : null;
     const turns = this.turns({ sessionId, actor: args.actor });
-    if (turns === null) return { verbatim: VERBATIM_SKIPPED_NO_SPOOL, note: NOTE_SKIPPED_NO_SPOOL };
+    if (turns === null) throw new RLedgerError('R_LEDGER_WORDS_NOT_VERBATIM', REFUSAL_NOT_VERBATIM);
     if (!isVerbatimSlice(args.words, turns)) throw new RLedgerError('R_LEDGER_WORDS_NOT_VERBATIM', REFUSAL_NOT_VERBATIM);
     return { verbatim: sessionId ? VERBATIM_CHECKED_SESSION : VERBATIM_CHECKED_ACTOR, note: '' };
   }
@@ -645,7 +660,7 @@ class RLedgerAgentControl {
         filed: false, alreadyStanding: true, id: match.entry.id, scope: args.scope, key: standing.key, appliesTo, verbatim: check.verbatim,
         status: match.entry.status, awaitingApproval: waiting,
         note: waiting
-          ? `Already filed as ${match.entry.id} and waiting for the person's approval on the Ledger page — nothing new was written. It does not count until they approve it; say so.${check.note}`
+          ? `Already filed as ${match.entry.id} and waiting for the person's approval ${ledgerPlace()} — nothing new was written. It does not count until they approve it; say so.${check.note}`
           : `Already standing as ${match.entry.id} — nothing new was written. Tell the person it was already on file.${check.note}`
       });
     }
@@ -662,8 +677,8 @@ class RLedgerAgentControl {
       ? `Filed your refinement as ${filed.id} under ${parentId} — a standing rule for ${appliesTo}.`
       : `Filed ${filed.id} — a standing rule for ${appliesTo}.`;
     const note = awaitingApproval
-      ? `${what} It waits for the person's approval on the Ledger page before it counts; say so.${check.note}`
-      : `${what} Tell the person what you filed and where; they edit or delete it on the Ledger page.${check.note}`;
+      ? `${what} It waits for the person's approval ${ledgerPlace()} before it counts; say so.${check.note}`
+      : `${what} Tell the person what you filed and where; they edit or delete it ${ledgerPlace()}.${check.note}`;
     return Object.freeze({
       filed: true, id: filed.id, parentId: filed.parentId, scope: filed.scope, key: filed.key, filedBy: filed.filedBy, stamp: filed.stamp,
       appliesTo, verbatim: check.verbatim, status: filed.status, awaitingApproval, note
@@ -685,7 +700,7 @@ class RLedgerAgentControl {
         filed: false, alreadyStanding: true, id: match.entry.id, proposalId: match.entry.id, scope: args.scope, key: standing.key, appliesTo, verbatim: check.verbatim,
         status: match.entry.status, awaitingApproval: waiting,
         note: waiting
-          ? `Already suggested as ${match.entry.id} and waiting for the person's approval on the Ledger page — nothing new was written. It does not count until they approve it; say so.${check.note}`
+          ? `Already suggested as ${match.entry.id} and waiting for the person's approval ${ledgerPlace()} — nothing new was written. It does not count until they approve it; say so.${check.note}`
           : `Already on file as ${match.entry.id} — nothing new was written. Tell the person it was already there.${check.note}`
       });
     }
@@ -697,7 +712,7 @@ class RLedgerAgentControl {
     return Object.freeze({
       filed: false, proposalId: filed.id, id: filed.id, parentId: filed.parentId, scope: filed.scope, key: filed.key, proposedBy: args.actor,
       appliesTo, verbatim: check.verbatim, status: filed.status, awaitingApproval: true,
-      note: `Suggested ${filed.id} — a standing rule for ${appliesTo}. It waits for the person to approve or decline it on the Ledger page; say so.${check.note}`
+      note: `Suggested ${filed.id} — a standing rule for ${appliesTo}. It waits for the person to approve or decline it ${ledgerPlace()}; say so.${check.note}`
     });
   }
 }
@@ -725,6 +740,7 @@ module.exports = Object.freeze({
   modeOfValue,
   REFUSAL_WHEN_OFF,
   SANDBOX_REFUSAL_WHEN_OFF,
+  HOST_REFUSAL_WHEN_OFF,
   REFUSAL_WHEN_PROPOSE_ONLY,
   agentFilingMode,
   loadAgentFilingMode,

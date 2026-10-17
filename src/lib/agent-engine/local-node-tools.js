@@ -80,21 +80,44 @@ function appendBounded(current, chunk, limit = STDERR_LIMIT) {
  * Codex transports use, so the client below can be written against a fake
  * in a test and against a real child in the product without knowing which.
  */
-function createMcpStdioTransport({ command, args = [], env, cwd } = {}) {
+function createMcpStdioTransport({ command, args = [], env, cwd, containProcessTree = true, processGroup = false,
+  credentialEnvironment = null } = {}) {
   if (typeof command !== 'string' || command.length === 0) {
     throw fail('LOCAL_NODE_TOOLS_CONFIG_INVALID', 'A tool server entry names no program to start.');
+  }
+  // Explicit adapter choice only. OpenShell cannot use the desktop pidfd
+  // custodian, so its MCP child must instead lead an owned Linux process
+  // group. There is no bare uncontained mode or ambient environment switch.
+  const grouped = containProcessTree === false && processGroup === true;
+  if (!grouped && !(containProcessTree === true && processGroup === false && credentialEnvironment === null)) {
+    throw fail('LOCAL_NODE_TOOLS_CONTAINMENT_INVALID', 'A tool server requires desktop containment or an explicitly owned process group.');
   }
   const child = spawnHidden(command, args, {
     cwd,
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
-    containProcessTree: true
+    containProcessTree,
+    ...(grouped ? { processGroup: true } : {}),
+    ...(credentialEnvironment === null ? {} : { credentialEnvironment })
   });
   let buffered = '';
   let stderr = '';
   let handler = null;
   let ended = false;
   let spawnError = null;
+  let closing = false;
+  let groupTimer = null;
+  let groupCleanup = null;
+  const endOwnedGroup = () => {
+    if (groupTimer !== null) { clearTimeout(groupTimer); groupTimer = null; }
+    // spawnHidden captured this child's pid/start identity and owns the
+    // terminator. Never replace that receipt with a generic PID-tree kill.
+    if (groupCleanup === null) {
+      groupCleanup = Promise.resolve().then(() => typeof child.terminateJob === 'function' ? child.terminateJob() : undefined);
+      groupCleanup.catch(() => { /* Keep the owned cleanup; never signal an unrelated fallback tree. */ });
+    }
+    return groupCleanup;
+  };
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
@@ -136,10 +159,13 @@ function createMcpStdioTransport({ command, args = [], env, cwd } = {}) {
     }
   });
   child.on('error', error => { spawnError = error; finish(null, null); });
+  child.stdin.on('error', error => { spawnError = error; finish(null, null); if (grouped) endOwnedGroup(); });
+  if (grouped) child.once('exit', (code, signal) => { finish(code, signal); endOwnedGroup(); });
   child.on('close', (code, signal) => finish(code, signal));
 
   return {
     child,
+    ...(child.processGroup ? { processGroup: child.processGroup } : {}),
     onData(next) { handler = next; },
     send(message) {
       if (ended || !child.stdin.writable) {
@@ -149,6 +175,18 @@ function createMcpStdioTransport({ command, args = [], env, cwd } = {}) {
     },
     get stderr() { return stderr; },
     close() {
+      if (grouped) {
+        if (closing) return groupCleanup;
+        closing = true;
+        try { child.stdin.end(); } catch { /* The owned group still needs cleanup. */ }
+        if (groupCleanup !== null || child.exitCode !== null && child.exitCode !== undefined
+            || child.signalCode !== null && child.signalCode !== undefined) return endOwnedGroup();
+        // Protocol failure may already have marked the transport ended while
+        // the OS child remains alive. Preserve its teardown backstop anyway.
+        groupTimer = setTimeout(endOwnedGroup, CLOSE_GRACE_MS);
+        groupTimer.unref?.();
+        return;
+      }
       if (ended) return;
       try { child.stdin.end(); } catch { /* already gone */ }
       const timer = setTimeout(() => {
@@ -352,6 +390,7 @@ function validEntry(name, entry) {
 function createToolSurface({ document, env = null, cwd = null, transportFor = createMcpStdioTransport } = {}) {
   const entries = Object.entries((document && document.mcpServers) || {}).map(([name, entry]) => validEntry(name, entry));
   const clients = new Map();
+  const processGroups = new Map();
   const tools = new Map();
   const diagnostics = [];
   let opened = false;
@@ -359,6 +398,9 @@ function createToolSurface({ document, env = null, cwd = null, transportFor = cr
 
   const surface = {
     get servers() { return Object.freeze([...clients.keys()]); },
+    // Retain only successfully initialized servers' owned receipts. The
+    // OpenShell host persists these for recovery; desktop transports omit it.
+    get processGroups() { return Object.freeze([...processGroups.values()]); },
     get diagnostics() { return Object.freeze(diagnostics.map(entry => Object.freeze({ ...entry }))); },
     async open() {
       if (opened) return surface;
@@ -377,6 +419,7 @@ function createToolSurface({ document, env = null, cwd = null, transportFor = cr
           await client.initialize();
           const listed = await client.listTools();
           clients.set(entry.name, client);
+          if (transport.processGroup) processGroups.set(entry.name, Object.freeze({ ...transport.processGroup }));
           for (const tool of listed) {
             if (tools.has(tool.name)) {
               diagnostics.push({ server: entry.name, tool: tool.name, code: 'LOCAL_NODE_TOOL_DUPLICATE', message: `"${tool.name}" is also advertised by "${tools.get(tool.name).server}", which answers it.` });

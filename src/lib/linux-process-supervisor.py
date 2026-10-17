@@ -121,6 +121,18 @@ def prepare(backend):
     children()
 
 
+def probe():
+    """Check host native support without admitting a command or a fallback."""
+    try:
+        close_inherited()
+        prepare("linux-subreaper-pidfd-v2")
+    except Exception:
+        print('{"available":false,"code":"LINUX_PROCESS_NATIVE_UNAVAILABLE"}')
+        return 78
+    print('{"available":true,"backend":"linux-subreaper-pidfd-v2"}')
+    return 0
+
+
 def main():
     close_inherited()
     pending = b""
@@ -364,4 +376,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(probe() if sys.argv[1:] == ["--probe"] else main())

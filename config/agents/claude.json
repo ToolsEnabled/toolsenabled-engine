@@ -1,0 +1,278 @@
+{
+  "schemaVersion": 1,
+  "id": "claude",
+  "name": "Claude Code",
+  "command": "claude",
+  "worker": {
+    "driver": "stream-json"
+  },
+  "signIn": {
+    "statusArgs": [
+      "auth",
+      "status",
+      "--json"
+    ],
+    "result": "json",
+    "signedInField": "loggedIn",
+    "methodField": "authMethod",
+    "how": "Run `claude`, then /login, or set your own API key or cloud provider for Claude Code."
+  },
+  "register": {
+    "kind": "command",
+    "add": [
+      "mcp",
+      "add-json",
+      "--scope",
+      "user",
+      "{name}",
+      "{serverJson}"
+    ],
+    "remove": [
+      "mcp",
+      "remove",
+      "--scope",
+      "user",
+      "{name}"
+    ],
+    "replace": "remove-first",
+    "profile": {
+      "env": "CLAUDE_CONFIG_DIR",
+      "default": ".claude",
+      "file": ".claude.json",
+      "defaultFile": ".claude.json",
+      "legacyContext": true
+    },
+    "config": {
+      "format": "json",
+      "container": "mcpServers",
+      "entryType": "stdio"
+    },
+    "list": [
+      "mcp",
+      "list"
+    ],
+    "inspection": {
+      "kind": "remove-absence",
+      "qualified": [
+        {
+          "version": "2.1.284",
+          "versionOutput": "2.1.284 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.289",
+          "versionOutput": "2.1.289 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.292",
+          "versionOutput": "2.1.292 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.293",
+          "versionOutput": "2.1.293 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.295",
+          "versionOutput": "2.1.295 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.302",
+          "versionOutput": "2.1.302 (Claude Code)\n"
+        }
+      ],
+      "absentStderr": "No MCP server named \"{name}\" in user scope\n",
+      "storePrefix": ".claude.json"
+    },
+    "http": {
+      "kind": "command",
+      "add": [
+        "mcp",
+        "add",
+        "--transport",
+        "http",
+        "--scope",
+        "user",
+        "{name}",
+        "{url}",
+        "--header",
+        "{header}"
+      ],
+      "header": "Authorization",
+      "envSyntax": "dollar-braces"
+    }
+  },
+  "models": {
+    "flag": "--model",
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "effortAliases": {
+      "ultra": "max"
+    },
+    "defaults": {
+      "cheap": "claude-fable",
+      "standard": "claude-sonnet",
+      "premium": "claude-opus"
+    },
+    "choices": {
+      "claude-fable": {
+        "tier": "cheap",
+        "model": "claude/fable",
+        "cliModel": "fable"
+      },
+      "claude-sonnet": {
+        "tier": "standard",
+        "model": "claude/sonnet",
+        "cliModel": "sonnet"
+      },
+      "claude-opus": {
+        "tier": "premium",
+        "model": "claude/opus",
+        "cliModel": "opus"
+      },
+      "claude-opus-5-5": {
+        "tier": "premium",
+        "model": "claude/claude-opus-5-5",
+        "cliModel": "claude-opus-5-5"
+      },
+      "claude-opus-5": {
+        "tier": "premium",
+        "model": "claude/claude-opus-5",
+        "cliModel": "claude-opus-5"
+      },
+      "claude-sonnet-5-5": {
+        "tier": "standard",
+        "model": "claude/claude-sonnet-5-5",
+        "cliModel": "claude-sonnet-5-5"
+      },
+      "claude-sonnet-5": {
+        "tier": "standard",
+        "model": "claude/claude-sonnet-5",
+        "cliModel": "claude-sonnet-5"
+      },
+      "claude-fable-5-1": {
+        "tier": "cheap",
+        "model": "claude/claude-fable-5-1",
+        "cliModel": "claude-fable-5-1"
+      },
+      "claude-fable-5": {
+        "tier": "cheap",
+        "model": "claude/claude-fable-5",
+        "cliModel": "claude-fable-5"
+      },
+      "claude-haiku-4-5": {
+        "tier": "cheap",
+        "model": "claude/claude-haiku-4-5",
+        "cliModel": "claude-haiku-4-5",
+        "efforts": []
+      },
+      "claude-opus-4-8": {
+        "tier": "premium",
+        "model": "claude/claude-opus-4-8",
+        "cliModel": "claude-opus-4-8"
+      },
+      "claude-opus-4-7": {
+        "tier": "premium",
+        "model": "claude/claude-opus-4-7",
+        "cliModel": "claude-opus-4-7"
+      },
+      "claude-opus-4-6": {
+        "tier": "premium",
+        "model": "claude/claude-opus-4-6",
+        "cliModel": "claude-opus-4-6",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      },
+      "claude-sonnet-4-6": {
+        "tier": "standard",
+        "model": "claude/claude-sonnet-4-6",
+        "cliModel": "claude-sonnet-4-6",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "max"
+        ]
+      }
+    }
+  },
+  "permissions": {
+    "aliases": {},
+    "lead": [
+      {
+        "when": {
+          "--dangerously-skip-permissions": true
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--permission-mode": "bypassPermissions"
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--permission-mode": "acceptEdits"
+        },
+        "level": 3
+      },
+      {
+        "when": {
+          "--permission-mode": "auto"
+        },
+        "level": 3
+      },
+      {
+        "when": {
+          "--permission-mode": "plan"
+        },
+        "level": 1
+      }
+    ],
+    "worker": {
+      "1": {
+        "permissionMode": "plan"
+      },
+      "2": {
+        "permissionMode": "default"
+      },
+      "3": {
+        "permissionMode": "acceptEdits"
+      },
+      "4": {
+        "permissionMode": "bypassPermissions"
+      }
+    },
+    "remove": {
+      "shell": {
+        "args": [
+          "--disallowedTools",
+          "Bash,PowerShell,REPL,Monitor"
+        ]
+      },
+      "web": {
+        "args": [
+          "--disallowedTools",
+          "WebFetch,WebSearch"
+        ]
+      },
+      "subagents": {
+        "args": [
+          "--disallowedTools",
+          "Agent,Task,Workflow"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_WORKFLOWS": "1"
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 'use strict';
 
-// Live agent presence for R1146. This is observed runtime state, not authority.
+// Live agent presence for Fleet. This is observed runtime state, not authority.
 // Declared roles and relationships remain in config/agent-org.json. Each lane
 // runner owns one record for one runId; updates from another run are refused.
 
@@ -60,7 +60,18 @@ const TERMINAL = new Set(['finished', 'failed']);
 // a real seat here for the same reason the cloud kinds do: this registry is what
 // refuses a second live lane per identity, and a local node that skipped it
 // would be able to collide with itself while looking healthy.
-const KINDS = Object.freeze(['codex', 'claude', 'local', 'test-node']);
+const KINDS = Object.freeze([...require('./agents/registry').activeRegistry().ids, 'local', 'test-node']);
+// The agent a tier or model string belongs to: a described choice, a model a
+// choice names, or "<agent>/<model>". Anything else is the local runtime.
+function kindOfTier(tier) {
+  const loaded = require('./agents/registry').activeRegistry();
+  const value = String(tier || '');
+  if (Object.hasOwn(loaded.choices, value)) return loaded.choices[value].provider;
+  const named = Object.values(loaded.choices).find(row => row.model === value || row.cliModel === value);
+  if (named) return named.provider;
+  const prefix = value.split('/')[0];
+  return loaded.has(prefix) ? prefix : 'local';
+}
 const USEFUL_PROGRESS_KINDS = Object.freeze(['tool-success', 'checkpoint-change', 'terminal']);
 const MAX_RECORDS = 128;
 const MAX_STRING = 2048;
@@ -377,7 +388,7 @@ function emptyRegistry() {
 function normalizeRecord(input, options = {}) {
   if (!plain(input)) fail('AGENT_PRESENCE_INVALID', 'A presence record must be an object.');
   const suppliedRole = String(input.role ?? '');
-  // The pre-R1175 persisted vocabulary used `coordinator`. Read it as the
+  // The previous persisted vocabulary used `coordinator`. Read it as the
   // fixed `controller` role so one historical row cannot brick the live
   // registry; new records still reject the retired spelling.
   const role = options.allowLegacyRoles && suppliedRole === 'coordinator' ? 'controller' : suppliedRole;
@@ -408,7 +419,7 @@ function normalizeRecord(input, options = {}) {
   const reportsTo = input.reportsTo === null ? null : assertAgentId(input.reportsTo, 'reportsTo');
   const origin = dispatcher === 'owner' ? 'user' : 'self';
   const kind = input.kind === undefined
-    ? (String(input.tier || '').startsWith('claude/') ? 'claude' : 'codex')
+    ? kindOfTier(input.tier)
     : String(input.kind);
   if (!KINDS.includes(kind)) fail('AGENT_PRESENCE_INVALID', `kind must be one of: ${KINDS.join(', ')}.`, { field: 'kind' });
   const terminalAt = optionalEpoch(input.terminalAt, 'terminalAt');

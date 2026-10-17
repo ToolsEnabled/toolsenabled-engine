@@ -1,13 +1,13 @@
 'use strict';
 
-// P13 authoritative dispatch adapter. It is deliberately not an MCP tool.
-// A controller prepares one durable P12-bound authorization, then registry
+// Policy authoritative dispatch adapter. It is deliberately not an MCP tool.
+// A controller prepares one durable capability-bound authorization, then registry
 // dispatch consumes it exactly once. Raw policy facts are never accepted at
 // dispatch time.
 
 const { getStateStore, hashInput } = require('./state-store');
 const capabilityProfiles = require('./providers/capability-manifests');
-const scopedApprovals = require('./scoped-approvals');
+const scopedApprovals = require('./fleet-approval-dispatch');
 
 function error(code, message, details = {}) {
   const value = new Error(message);
@@ -36,7 +36,7 @@ function stateFor(dependencies = {}) { return dependencies.state || getStateStor
 
 function actionSpec(toolName) {
   // Deliberately lazy: tool-registry loads this unregistered adapter before it
-  // builds its protected P13 catalog. The catalog getter itself is non-writable
+  // builds its protected policy catalog. The catalog getter itself is non-writable
   // and returns startup-frozen, code-owned action semantics.
   const { p13PolicyActionCatalog } = require('./tool-registry');
   return p13PolicyActionCatalog().find(item => item.name === toolName) || null;
@@ -45,14 +45,14 @@ function actionSpec(toolName) {
 function resolvedTarget(toolName, argumentsValue, boundRequest) {
   const spec = actionSpec(toolName);
   if (!spec || spec.policyKind === 'unmapped' || typeof spec.targetKind !== 'string') {
-    throw error('POLICY_TARGET_AUTHORITY_UNAVAILABLE', 'P13 has no safe internal target resolver for this action.', { toolName });
+    throw error('POLICY_TARGET_AUTHORITY_UNAVAILABLE', 'Policy has no safe internal target resolver for this action.', { toolName });
   }
   if (!plainObject(boundRequest) || boundRequest.tool !== toolName) {
-    throw error('POLICY_TARGET_AUTHORITY_UNAVAILABLE', 'P13 requires a normalized P12 request before resolving the target.', { toolName });
+    throw error('POLICY_TARGET_AUTHORITY_UNAVAILABLE', 'Policy requires a normalized capability request before resolving the target.', { toolName });
   }
   // The target digest intentionally derives from the exact canonical tool
-  // arguments and P12-normalized selectors. Caller-supplied target hashes are
-  // never accepted or persisted as P13 authority.
+  // arguments and capability-normalized selectors. Caller-supplied target hashes are
+  // never accepted or persisted as policy authority.
   return Object.freeze({
     kind: spec.targetKind,
     identifierHash: hashInput({
@@ -67,7 +67,7 @@ function prepare(input, dependencies = {}) {
   exact(input, [
     'authorizationId', 'profileId', 'version', 'requestId', 'request', 'arguments',
     'risk', 'delegationDepth', 'userKind'
-  ], 'P13 authorization');
+  ], 'Policy authorization');
   const state = stateFor(dependencies);
   const capability = capabilityProfiles.authorizeBoundRequest({
     requestId: input.requestId,
@@ -84,8 +84,8 @@ function prepare(input, dependencies = {}) {
     argsHash: hashInput(input.arguments),
     targetKind: target.kind,
     targetHash: target.identifierHash,
-    // P08 envelopes supplied to this unregistered preparation adapter are
-    // untrusted observations, never an allow-grant. P14 must add a broker-owned
+    // broker provenance envelopes supplied to this unregistered preparation adapter are
+    // untrusted observations, never an allow-grant. scoped approval must add a broker-owned
     // provenance reference before confirmation-required dispatch can enable.
     provenance: null,
     risk: input.risk,
@@ -94,7 +94,7 @@ function prepare(input, dependencies = {}) {
     requestHash: capability.requestHash
   });
   if (!plainObject(saved) || typeof saved.replayed !== 'boolean') {
-    throw error('POLICY_AUTHORIZATION_STATE_INVALID', 'P13 could not establish whether the authorization was newly created or replayed.');
+    throw error('POLICY_AUTHORIZATION_STATE_INVALID', 'Policy could not establish whether the authorization was newly created or replayed.');
   }
   return Object.freeze({
     authorizationId: input.authorizationId,
@@ -108,9 +108,9 @@ function consume(input, dependencies = {}) {
   const keys = plainObject(input) && Object.hasOwn(input, 'approvalEvidence')
     ? ['authorizationId', 'toolName', 'arguments', 'approvalEvidence']
     : ['authorizationId', 'toolName', 'arguments'];
-  exact(input, keys, 'P13 dispatch consumption');
+  exact(input, keys, 'Policy dispatch consumption');
   const { authorizationId, toolName, arguments: argumentsValue, approvalEvidence = null } = input;
-  if (approvalEvidence !== null) exact(approvalEvidence, ['approvalId'], 'P13 approval evidence');
+  if (approvalEvidence !== null) exact(approvalEvidence, ['approvalId'], 'Policy approval evidence');
   return stateFor(dependencies).consumePolicyDispatchAuthorization({
     authorizationId,
     toolName,
@@ -121,10 +121,10 @@ function consume(input, dependencies = {}) {
 }
 
 function consumeScoped(input, dependencies = {}) {
-  // P14 intentionally accepts only the opaque UI response token.  It never
+  // Scoped approval intentionally accepts only the opaque UI response token.  It never
   // accepts an approval ID, a claimed status, a caller hash, raw provenance,
   // or a constructed preview as dispatch authority.
-  exact(input, ['authorizationId', 'toolName', 'arguments', 'approvalToken'], 'P14 scoped dispatch consumption');
+  exact(input, ['authorizationId', 'toolName', 'arguments', 'approvalToken'], 'scoped approval dispatch');
   const { authorizationId, toolName, arguments: argumentsValue, approvalToken } = input;
   return scopedApprovals.consumeForDispatch({ authorizationId, toolName, arguments: argumentsValue, approvalToken });
 }

@@ -4,7 +4,6 @@
 // deliberately a role-definition store, not another organisation schema or
 // rule language: agent-org.json remains the declared organisation.
 
-const { createStateStore } = require('./state-store');
 const {
   ROLES,
   RESERVED_ROLE_IDS,
@@ -105,7 +104,8 @@ const DEFAULT_ROLE_DEFINITIONS = deepFreeze(ROLES.map(id => {
     baseDefaultRole: null,
     rules: normalizeRules(rules),
     capabilities: DEFAULT_ROLE_CAPABILITIES[id],
-    ...defaultFunctionPolicy(id)
+    ...defaultFunctionPolicy(id),
+    removeNativeTools: require('./agent-roles').roleDefinition(id).removeNativeTools
   };
 }));
 
@@ -113,7 +113,7 @@ const DEFAULTS_BY_ID = new Map(DEFAULT_ROLE_DEFINITIONS.map(definition => [defin
 
 function normalizeDefinition(input, { custom }) {
   if (!plain(input) || !Object.hasOwn(input, 'id') || !Object.hasOwn(input, 'rules')
-    || Object.keys(input).some(key => !['id', 'baseDefaultRole', 'rules', 'capabilities', 'functions', 'requiresDirectUserAuthorization'].includes(key))) {
+    || Object.keys(input).some(key => !['id', 'baseDefaultRole', 'rules', 'capabilities', 'functions', 'requiresDirectUserAuthorization', 'maxLevel', 'removeNativeTools'].includes(key))) {
     fail('CUSTOM_ROLE_INVALID', 'definition has unsupported or missing fields.', { field: 'definition' });
   }
   if (typeof input.id !== 'string' || !ROLE_ID.test(input.id)) {
@@ -146,28 +146,36 @@ function normalizeDefinition(input, { custom }) {
       singleSeat: false,
       mayClaimWork: false,
       mayWakeReports: false,
-      requiresMutationContext: false,
-      mayUseMissionBridge: false,
-      mayReportMissionBridge: false,
-      mayMutateMissionBridge: false
+      requiresMutationContext: false
     }))
     : DEFAULT_ROLE_CAPABILITIES[input.id];
   let capabilities;
   try {
     capabilities = input.capabilities === undefined
       ? inherited
-      : normalizeRoleCapabilities(input.capabilities, 'definition.capabilities', {
-        legacyMayUseMissionBridge: inherited.mayUseMissionBridge,
-        legacyMayReportMissionBridge: inherited.mayReportMissionBridge,
-        legacyMayMutateMissionBridge: inherited.mayMutateMissionBridge
-      });
+      : normalizeRoleCapabilities(input.capabilities, 'definition.capabilities');
   } catch (error) {
     fail('CUSTOM_ROLE_INVALID', error.message, { field: 'definition.capabilities' });
   }
   // Stored/custom roles without a function field retain their previous normal
   // surface. Only the shipped definitions above deliberately gain new controls.
   const functionPolicy = normalizeFunctionPolicy(input, defaultFunctionPolicy(custom ? baseDefaultRole : input.id, { includeSlotConfiguration: false }));
-  return Object.freeze({ id: input.id, baseDefaultRole, rules: normalizeRules(input.rules), capabilities, ...functionPolicy });
+  // The most a session in this role may do (src/lib/agents/permission-level.js:
+  // 1 read only ... 4 everything). A role only ever lowers what the agent that
+  // started the session has. Unset keeps the shipped role's own maximum, if any.
+  const shippedMax = require('./agent-roles').roleDefinition(custom ? baseDefaultRole : input.id)?.maxLevel;
+  const maxLevel = input.maxLevel === undefined ? shippedMax : input.maxLevel;
+  if (maxLevel !== undefined && ![1, 2, 3, 4].includes(maxLevel)) {
+    fail('CUSTOM_ROLE_INVALID', 'maxLevel must be 1 (read only), 2 (asks), 3 (edits on its own) or 4 (everything).', { field: 'definition.maxLevel' });
+  }
+  let removeNativeTools;
+  try {
+    removeNativeTools = require('./agents/permission-level').nativeToolRemovals(
+      require('./agent-roles').roleDefinition(custom ? baseDefaultRole : input.id)?.removeNativeTools, input.removeNativeTools);
+  } catch (error) { fail('CUSTOM_ROLE_INVALID', error.message, { field: 'definition.removeNativeTools' }); }
+  return Object.freeze({ id: input.id, baseDefaultRole, rules: normalizeRules(input.rules), capabilities, ...functionPolicy,
+    removeNativeTools,
+    ...(maxLevel === undefined ? {} : { maxLevel }) });
 }
 
 function assertStructuralCapabilitiesUnchanged(existing, candidate) {
@@ -189,7 +197,17 @@ function storedValue(kind, definition) {
 }
 
 class CustomRoleStore {
-  constructor({ stateStore = createStateStore() } = {}) {
+  /* THE BACKING STORE IS REQUIRED, NEVER DEFAULTED.
+   *
+   * This used to default to the SQLite StateStore. Role definitions carry
+   * capabilities and function policy, and a definition read back from the store
+   * is trusted after normalizeDefinition, which does NOT bound a custom role to
+   * its base. The SQLite memory table is also the table the public memory.*
+   * tools expose, so a no-argument construction would have put role authority
+   * one ordinary tool call away from an agent. Every caller already injects the
+   * file-backed adapter (agent-org-store.js, installed-role-memory.js); the
+   * default existed only to be forgotten. */
+  constructor({ stateStore } = {}) {
     if (!stateStore || typeof stateStore.getMemory !== 'function' || typeof stateStore.setMemory !== 'function' || typeof stateStore.searchMemory !== 'function') {
       fail('CUSTOM_ROLE_INVALID', 'stateStore must expose getMemory, setMemory, and searchMemory.');
     }
@@ -210,7 +228,7 @@ class CustomRoleStore {
     if (!plain(value) || Object.keys(value).length !== 3 || value.schemaVersion !== SCHEMA_VERSION || value.kind !== kind || !Object.hasOwn(value, 'definition')) {
       fail('CUSTOM_ROLE_CORRUPT', 'Stored custom-role data is malformed.', { id, kind });
     }
-    const definition = normalizeDefinition(value.definition, { custom: kind === 'custom' });
+    const definition = this._inheritRemovals(normalizeDefinition(value.definition, { custom: kind === 'custom' }));
     if (definition.id !== id) fail('CUSTOM_ROLE_CORRUPT', 'Stored custom-role id does not match its key.', { id, kind });
     return Object.freeze({ definition, revision: entry.revision });
   }
@@ -263,7 +281,7 @@ class CustomRoleStore {
         || !['default', 'custom'].includes(value.kind) || !Object.hasOwn(value, 'definition')) {
         fail('CUSTOM_ROLE_CORRUPT', 'Stored custom-role data is malformed.', { key: entry.key });
       }
-      const definition = normalizeDefinition(value.definition, { custom: value.kind === 'custom' });
+      const definition = this._inheritRemovals(normalizeDefinition(value.definition, { custom: value.kind === 'custom' }));
       if (entry.key !== memoryKey(value.kind, definition.id)) {
         fail('CUSTOM_ROLE_CORRUPT', 'Stored custom-role id does not match its key.', { key: entry.key });
       }
@@ -276,8 +294,14 @@ class CustomRoleStore {
     ]);
   }
 
+  _inheritRemovals(definition) {
+    const base = definition.baseDefaultRole ? this.getRole(definition.baseDefaultRole) : null;
+    return Object.freeze({ ...definition, removeNativeTools: require('./agents/permission-level').nativeToolRemovals(
+      base?.removeNativeTools, definition.removeNativeTools) });
+  }
+
   createCustomRole(input) {
-    const definition = normalizeDefinition(input, { custom: true });
+    const definition = this._inheritRemovals(normalizeDefinition(input, { custom: true }));
     if (this._readEntry('custom', definition.id)) {
       fail('CUSTOM_ROLE_COLLISION', `Custom role "${definition.id}" already exists.`, { id: definition.id });
     }
@@ -294,7 +318,7 @@ class CustomRoleStore {
   }
 
   editRole(input) {
-    requiredAndOptionalKeys(input, ['id', 'rules', 'expectedRevision'], ['capabilities', 'functions', 'requiresDirectUserAuthorization'], 'edit');
+    requiredAndOptionalKeys(input, ['id', 'rules', 'expectedRevision'], ['capabilities', 'functions', 'requiresDirectUserAuthorization', 'maxLevel', 'removeNativeTools'], 'edit');
     if (typeof input.id !== 'string' || !ROLE_ID.test(input.id)) fail('CUSTOM_ROLE_INVALID', 'edit.id is invalid.', { field: 'edit.id' });
     if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
       fail('CUSTOM_ROLE_INVALID', 'edit.expectedRevision must be a positive integer.', { field: 'edit.expectedRevision' });
@@ -306,14 +330,16 @@ class CustomRoleStore {
       baseDefaultRole: existing.definition.baseDefaultRole,
       rules: input.rules,
       capabilities: Object.hasOwn(input, 'capabilities') ? input.capabilities : existing.definition.capabilities,
-      ...normalizeFunctionPolicy(input, existing.definition)
+      ...normalizeFunctionPolicy(input, existing.definition),
+      maxLevel: input.maxLevel === undefined ? existing.definition.maxLevel : input.maxLevel,
+      removeNativeTools: input.removeNativeTools === undefined ? existing.definition.removeNativeTools : input.removeNativeTools
     }, { custom: true });
     assertStructuralCapabilitiesUnchanged(existing.definition, candidate);
-    return this._write('custom', candidate, input.expectedRevision);
+    return this._write('custom', this._inheritRemovals(candidate), input.expectedRevision);
   }
 
   editDefaultRole(input) {
-    requiredAndOptionalKeys(input, ['id', 'rules', 'expectedRevision'], ['capabilities', 'functions', 'requiresDirectUserAuthorization'], 'default edit');
+    requiredAndOptionalKeys(input, ['id', 'rules', 'expectedRevision'], ['capabilities', 'functions', 'requiresDirectUserAuthorization', 'maxLevel', 'removeNativeTools'], 'default edit');
     if (typeof input.id !== 'string' || !DEFAULT_ROLE_IDS.has(input.id)) fail('CUSTOM_ROLE_NOT_FOUND', 'Default role id is invalid or unknown.', { field: 'default edit.id' });
     if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) {
       fail('CUSTOM_ROLE_INVALID', 'default edit.expectedRevision must be a non-negative integer.', { field: 'default edit.expectedRevision' });
@@ -324,7 +350,9 @@ class CustomRoleStore {
       baseDefaultRole: null,
       rules: input.rules,
       capabilities: Object.hasOwn(input, 'capabilities') ? input.capabilities : existing.capabilities,
-      ...normalizeFunctionPolicy(input, existing)
+      ...normalizeFunctionPolicy(input, existing),
+      maxLevel: input.maxLevel === undefined ? existing.maxLevel : input.maxLevel,
+      removeNativeTools: input.removeNativeTools === undefined ? existing.removeNativeTools : input.removeNativeTools
     }, { custom: false });
     assertStructuralCapabilitiesUnchanged(existing, candidate);
     return this._write('default', candidate, input.expectedRevision);

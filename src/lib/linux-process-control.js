@@ -20,7 +20,9 @@ const COMPLETE_KEYS = ['version', 'nonce', 'type', 'started', 'quiescent', 'canc
 const REASONS = new Set([null, 'INPUT_INVALID', 'NATIVE_UNAVAILABLE', 'EXEC_FAILED', 'CANCELLED', 'OBSERVER_FAILED']);
 const SIGNALS = new Set([...Object.keys(constants.signals), 'SIGRTMIN', 'SIGRTMAX',
   ...Array.from({ length: 31 }, (_, index) => `SIGRTMIN+${index + 1}`)]);
-const failure = code => Object.assign(new Error('The Linux process lifetime could not be established safely.'), { code });
+const failure = code => Object.assign(new Error(code === 'LINUX_PROCESS_NATIVE_UNAVAILABLE' && BACKEND === 'linux-subreaper-pidfd-v2'
+  ? 'Host workers need Linux 5.3+ with pidfd_open; this system lacks or blocks the required native process support.'
+  : 'The Linux process lifetime could not be established safely.'), { code });
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
@@ -158,6 +160,13 @@ class LinuxOwnedChild extends EventEmitter {
       outcome.resolve(result);
       closed.resolve(Object.freeze({ backend: BACKEND, failure: verified ? null : cause?.code || 'LINUX_PROCESS_CLEANUP_UNPROVEN' }));
       native.stdin.destroy();
+      // A verified pre-start refusal already proves zero owned processes.
+      // Tell transports its actual cause before their generic exit handling;
+      // no additional error is emitted for a prior protocol/spawn refusal.
+      if (verified && !this._started && !nativeError && !admissionError
+          && BACKEND === 'linux-subreaper-pidfd-v2' && cause?.code === 'LINUX_PROCESS_NATIVE_UNAVAILABLE') {
+        this.emit('error', cause);
+      }
       this.emit('exit', this.exitCode, this.signalCode);
       this.emit('close', this.exitCode, this.signalCode);
     });

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Build the runtime-only release from committed source. npm is a build tool.
+# Build the runtime-only release from committed source.
 set -euo pipefail
+umask 077
 
 cd "$(git rev-parse --show-toplevel)"
-if [[ -n $(git status --porcelain) ]]; then
+if ! git diff --quiet || ! git diff --cached --quiet; then
   printf '%s\n' 'Commit source changes before building a release.' >&2
   exit 1
 fi
@@ -18,9 +19,12 @@ package_dir="$build_tmp/toolsenabled-installer"
 engine_dir="$package_dir/payload/engine"
 mkdir -p -- "$engine_dir"
 
-git archive HEAD LICENSE NOTICE THIRD-PARTY-LICENSES.md package.json package-lock.json registry.json \
-  bin config schemas src tools packages sidecars adapters | tar -xf - -C "$engine_dir"
-rm -rf -- "$engine_dir/adapters/openshell/soak"
+mapfile -t release_paths < <(git show HEAD:installer/openshell/SOURCE-ALLOWLIST)
+if ((${#release_paths[@]} == 0)); then
+  printf '%s\n' 'The committed Fleet source list is empty.' >&2
+  exit 1
+fi
+git archive HEAD "${release_paths[@]}" | tar -xf - -C "$engine_dir"
 git show HEAD:installer/openshell/install.sh > "$package_dir/install.sh"
 git show HEAD:installer/openshell/README.md > "$package_dir/README.md"
 chmod 755 "$package_dir/install.sh"
@@ -29,8 +33,6 @@ for helper in fleet_fs.py fleet_install.py fleet_bootstrap.py fleet_upgrade.py f
   git show "HEAD:installer/openshell/$helper" > "$package_dir/$helper"
   cp -- "$package_dir/$helper" "$engine_dir/libexec/$helper"
 done
-(cd -- "$engine_dir" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
-
 node - "$package_dir" "$source_commit" <<'NODE'
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,7 +53,8 @@ fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
 }, null, 2) + '\n');
 NODE
 
-archive=toolsenabled-openshell-linux-x64.tar.gz
+release_version=$(node -p 'require(process.argv[1]).version' "$package_dir/manifest.json")
+archive="toolsenabled-openshell-${release_version}-linux-x64.tar.gz"
 tar --sort=name --mtime="@$source_epoch" --owner=0 --group=0 --numeric-owner --mode=go-w \
   -cf - -C "$build_tmp" toolsenabled-installer | gzip -n > "$output_dir/$archive"
 (cd -- "$output_dir" && sha256sum "$archive" > SHA256SUMS)

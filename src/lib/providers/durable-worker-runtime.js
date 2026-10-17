@@ -106,7 +106,7 @@ function windowsStartTicksMany(pids, collaborators = {}) {
     // process.env, and the repository's spawn-environment gate says so -- it
     // caught this call site the moment it was added. Required lazily because
     // this module is reached from runtime's own require graph.
-    const { safeLaunchEnvironment } = require('./subscription-launch-env');
+    const { safeLaunchEnvironment } = require('../supervision/launch-environment');
     const output = execute('powershell.exe', [
       '-NoProfile', '-WindowStyle', 'Hidden', '-NonInteractive', '-Command', command
     ], {

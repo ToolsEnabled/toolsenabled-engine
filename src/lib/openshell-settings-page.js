@@ -11,6 +11,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { terminalDisplayText } = require('./terminal-safe-text');
 
 const NOT_A_BOUNDARY = 'Inside one sandbox, agents could run this command too; it records you as the source but cannot prove it was you.';
 const LOCK_WAIT_MS = 5000;
@@ -29,7 +30,18 @@ function parseValue(text) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+/* A setting asked for by id is one the registry declares. `settings get`
+   with a mistyped or missing id used to print nothing but the closing note,
+   and exit as if it had answered. */
+function requireDeclared(ids, reg) {
+  for (const id of ids) {
+    if (typeof id !== 'string' || id === '') throw refuse('SETTINGS_PAGE_ID_REQUIRED', 'Name a setting, for example: toolsenabled settings get audit.enabled');
+    if (!reg.byId.has(id)) throw refuse('SETTINGS_PAGE_UNKNOWN', `There is no setting "${id}". \`toolsenabled settings\` lists them all.`);
+  }
+}
+
 function list({ ids = null } = {}, { load = () => require('./settings').loadSettings(), reg = registry() } = {}) {
+  if (ids) requireDeclared(ids, reg);
   const loaded = load();
   const wanted = ids ? new Set(ids) : null;
   return reg.entries
@@ -79,6 +91,7 @@ function readDocument(file) {
 function set(changes, { reg = registry(), file = require('./settings').resolveValuesPath(), now = Date.now() } = {}) {
   const { validateSettingValue } = require('./settings-values');
   for (const [id, value] of changes) {
+    if (typeof id !== 'string' || id === '') throw refuse('SETTINGS_PAGE_ID_REQUIRED', 'Name a setting and its value, for example: toolsenabled settings set audit.enabled true');
     const entry = reg.byId.get(id);
     if (!entry) throw refuse('SETTINGS_PAGE_UNKNOWN', `There is no setting "${id}".`);
     if (entry.control === 'readback') throw refuse('SETTINGS_PAGE_READ_ONLY', `"${id}" is read-only here.`);
@@ -104,7 +117,7 @@ function format(rows) {
   return [
     'ToolsEnabled Fleet — Settings',
     '',
-    ...rows.map((row) => `${row.id} = ${JSON.stringify(row.value)}${row.source === 'default' ? '' : `  (${row.source})`}${row.readOnly ? '  read-only' : ''}${row.options ? `  [${row.options.join(' | ')}]` : ''}`),
+    ...rows.map((row) => `${terminalDisplayText(row.id)} = ${terminalDisplayText(JSON.stringify(row.value))}${row.source === 'default' ? '' : `  (${terminalDisplayText(row.source)})`}${row.readOnly ? '  read-only' : ''}${row.options ? `  [${terminalDisplayText(row.options.join(' | '))}]` : ''}`),
     '',
     NOT_A_BOUNDARY
   ];

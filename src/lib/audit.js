@@ -4,7 +4,22 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { canonicalJson, createAuditStore, DEFAULT_AUDIT_DB, MAX_EVENT_BYTES, ZERO_HASH, sha256, eventHashInput, publicKeyHash, withReadOnlyLedger } = require('./audit-store');
-const { rootPath, ensureDir, getSecret, getOrCreateSecret, setMonotonicSecret, vaultContentDigest } = require('./runtime');
+const runtime = require('./runtime');
+const { rootPath, ensureDir } = runtime;
+const hostAuditKeys = require('./host-audit-keystore');
+let hostKeyStore = null;
+function auditSecretPlane() {
+  if (!hostAuditKeys.enabled()) return runtime;
+  if (!hostKeyStore) hostKeyStore = hostAuditKeys.createHostAuditKeyStore({ runtime });
+  return hostKeyStore;
+}
+const getSecret = (...args) => auditSecretPlane().getSecret(...args);
+const getOrCreateSecret = (...args) => auditSecretPlane().getOrCreateSecret(...args);
+const setMonotonicSecret = (...args) => auditSecretPlane().setMonotonicSecret(...args);
+const vaultContentDigest = () => hostAuditKeys.enabled() ? null : runtime.vaultContentDigest();
+function keyStoreStatus() {
+  return hostAuditKeys.enabled() ? (hostKeyStore?.status() || { kind: 'unselected' }) : null;
+}
 const { resolveVaultLocation } = require('./vault-location');
 const { emitCheckpoint } = require('./audit-checkpoint');
 const { loadPolicy } = require('./policy');
@@ -25,7 +40,7 @@ const AUDIT_RETENTION_SETTING_ID = 'audit.retention';
 const LEGACY_METADATA_KEY = 'legacy-jsonl-import-v1';
 const EMERGENCY_PREFIX = 'audit-emergency';
 const MAX_EMERGENCY_BYTES = 10 * 1024 * 1024;
-// AUDIT-F-03 / CRED-F7: emergency-spool entries are wrapped with an
+// audit-spool envelope check / credential ingestion check: emergency-spool entries are wrapped with an
 // authentication tag before they ever touch disk, so ingestEmergency() can
 // tell "a line this process itself spooled" apart from arbitrary
 // attacker-writable bytes later dropped into the same directory (a lower-
@@ -36,7 +51,7 @@ const MAX_EMERGENCY_BYTES = 10 * 1024 * 1024;
 // canonical write already requires, rather than a second vault secret --
 // see deriveSpoolMacKey() below for why.  A valid mac proves provenance; it
 // does not by itself prove the content is still safe to canonicalize, which
-// is what re-scrubbing at ingestion (CRED-F7) is for.
+// is what re-scrubbing at ingestion (credential ingestion check) is for.
 const SPOOL_ENVELOPE_DOMAIN = 'toolsenabled.audit.spool.v1';
 const SPOOL_MAC_CHALLENGE = Buffer.from('toolsenabled.audit.spool.mac.v1', 'utf8');
 // Durability health signal.  A failed canonical write is already fail-safe:
@@ -135,7 +150,10 @@ class AuditRequiredError extends Error {
 
 function scrubText(value, maximum = 4000) {
   const limit = Number.isSafeInteger(maximum) && maximum >= 1 ? maximum : 4000;
-  return String(value)
+  // UTF-8 projection files replace isolated UTF-16 surrogates. Normalize
+  // before signing and before reconstructing a projection from an older row,
+  // so the ledger and its text sink agree on the same visible character.
+  return String(value).toWellFormed()
     .replace(privateKeyValue, '[REDACTED PRIVATE KEY]')
     .replace(bearerValue, '$1 REDACTED')
     .replace(providerTokenValue, 'REDACTED')
@@ -597,6 +615,7 @@ function signingKeyUnavailable(message, ...rest) {
   if (!rest.length) {
     const plain = new Error(message);
     plain.code = 'AUDIT_SIGNING_KEY_UNAVAILABLE';
+    if (hostAuditKeys.enabled()) plain.retryable = false;
     return plain;
   }
   const cause = rest[0];
@@ -621,6 +640,7 @@ function signingKeyUnavailable(message, ...rest) {
   const text = message.includes(reason) ? message : `${message} Underlying cause: ${reason}`;
   const error = new Error(text, { cause: attached });
   error.code = 'AUDIT_SIGNING_KEY_UNAVAILABLE';
+  if (hostAuditKeys.enabled()) error.retryable = false;
   return error;
 }
 
@@ -673,7 +693,11 @@ function boundLedgerFile(dependencies = {}) {
 // belongs to the audit-root write-path owner.
 function assertLedgerVaultBinding(store, dependencies = {}) {
   // An injected secret plane is not the installation vault by construction.
-  if (dependencies.anchorStore || dependencies.getSecret || dependencies.setMonotonicSecret) return;
+  const host = hostAuditKeys.enabled();
+  if (host
+    ? (dependencies.signer && dependencies.anchorStore)
+      || (dependencies.getSecret && dependencies.getOrCreateSecret && dependencies.setMonotonicSecret)
+    : dependencies.anchorStore || dependencies.getSecret || dependencies.setMonotonicSecret) return;
   const environment = dependencies.env || process.env;
   const configuredVault = environment.TOOLSENABLED_VAULT_PATH;
   const file = store && store.file;
@@ -681,6 +705,15 @@ function assertLedgerVaultBinding(store, dependencies = {}) {
   // Comparing resolved paths, not the raw variable: setting TOOLSENABLED_AUDIT_DB
   // to this installation's own ledger is not a redirect.
   if (file !== ':memory:' && path.resolve(file) === path.resolve(DEFAULT_AUDIT_DB)) return;
+
+  // Host's private backend is bound to STATE_ROOT, not VAULT_PATH. A vault
+  // override therefore cannot authorize a second ledger to share this audit
+  // signing identity/head. Only a completely injected secret plane is exempt.
+  if (host) {
+    const error = new Error('A redirected host audit ledger cannot share this installation\'s audit signing key and head; use a separate host state root.');
+    error.code = 'AUDIT_LEDGER_VAULT_MISMATCH';
+    throw error;
+  }
 
   if (typeof configuredVault === 'string' && configuredVault.trim() !== '') {
     // Installed runtime.js publishes the installation vault path into the
@@ -773,7 +806,7 @@ function spoolMac(item, key) {
 // audit signer. A same-user process without vault access can still write
 // bytes into the spool directory, but it cannot forge this tag -- that is
 // what turns "attacker-writable JSON" into something ingestEmergency() can
-// safely refuse (AUDIT-F-03) instead of handing to the trusted canonical
+// safely refuse (audit-spool envelope check) instead of handing to the trusted canonical
 // signer unexamined. `signerHint` is the signer prepare() already obtained
 // for this call, when one is available; if it is not (the canonical store
 // failed before a signer could be registered at all), this falls back to
@@ -818,7 +851,7 @@ function verifySpoolEnvelope(record, signer, dependencies) {
   return item;
 }
 
-// CRED-F7: even an authenticated spool item is untrusted disk content by the
+// credential ingestion check: even an authenticated spool item is untrusted disk content by the
 // time it reaches ingestion -- re-run the same scrub() a fresh eventInput()
 // would apply rather than trust that whatever produced the original spooled
 // event object already did (or still does, if scrub()'s own patterns have
@@ -2772,7 +2805,7 @@ function spoolEmergency(files, item, dependencies, signerHint) {
   const makeDirectory = dependencies.ensureDir || ensureDir;
   makeDirectory(path.dirname(files.emergency));
   const current = io.existsSync(files.emergency) ? io.statSync(files.emergency).size : 0;
-  // AUDIT-F-03: the raw item is never written bare. It is wrapped with a
+  // audit-spool envelope check: the raw item is never written bare. It is wrapped with a
   // mac derived from the trusted audit signer so ingestEmergency() can tell
   // "this process's own emergency write" apart from arbitrary attacker-
   // writable bytes dropped into the same directory later.
@@ -2835,7 +2868,7 @@ function readDurabilityState(files, dependencies = {}) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.version !== 1 || !Array.isArray(parsed.breaches)) {
     return { ...empty, present: true, readable: false, reason: 'The audit durability state is not canonical.' };
   }
-  // CRED-F6: re-scrub on every read, not just on write. A sidecar file
+  // credential sidecar check: re-scrub on every read, not just on write. A sidecar file
   // written by a pre-fix build (or hand-edited) may still carry an
   // unsanitized action on disk; scrubbing here means the very next breach
   // that reads-then-rewrites this file (noteDurabilityBreach) launders that
@@ -2870,7 +2903,7 @@ function readDurabilityState(files, dependencies = {}) {
       // The mechanical classification, likewise: `null` here means "this entry
       // names no failure", which is a gap to report, not a clean bill.
       classified: typeof entry.code === 'string' && MECHANICAL_CODE.test(entry.code),
-      // CRED-F6, same as every other field here: re-validate on every read,
+      // credential sidecar check, same as every other field here: re-validate on every read,
       // not just on write, so a pre-fix or hand-edited sidecar entry cannot
       // reach a caller as a fabricated object. safeDetails() re-applies the
       // same scrub/size bound the write side already used.
@@ -2919,7 +2952,7 @@ function writeDurabilityState(files, state, dependencies = {}) {
 function noteDurabilityBreach(files, entry, dependencies = {}) {
   try {
     const prior = readDurabilityState(files, dependencies);
-    // CRED-F6: the caller's action string is arbitrary, untrusted input --
+    // credential sidecar check: the caller's action string is arbitrary, untrusted input --
     // e.g. a caller that mistakenly interpolated a secret into an action
     // name -- and this sidecar is a plain, unsigned JSON file, not the
     // scrubbed-and-canonicalized ledger. Never persist it raw.
@@ -3294,8 +3327,8 @@ function ingestEmergency(store, signer, files, dependencies) {
     // linear in the record count, so there is no O(n^2) left behind here.
     //
     // Nothing about admission changes. Each line is still parsed, still
-    // mac-verified against the trusted signer (AUDIT-F-03), still re-scrubbed
-    // (CRED-F7), and still individually skipped into invalidLines /
+    // mac-verified against the trusted signer (audit-spool envelope check), still re-scrubbed
+    // (credential ingestion check), and still individually skipped into invalidLines /
     // unauthenticatedLines on its own merits. Only the commit boundary moves.
     //
     // A skipped line cannot poison the open transaction: every error class
@@ -3318,7 +3351,7 @@ function ingestEmergency(store, signer, files, dependencies) {
       let record;
       try { record = JSON.parse(line); }
       catch { invalidLines.push(index + 1); return 0; }
-      // AUDIT-F-03: a line that does not carry a valid mac from the current
+      // audit-spool envelope check: a line that does not carry a valid mac from the current
       // spool authentication key is never handed to the trusted canonical
       // signer -- attacker-writable JSON in this directory (or a bare
       // pre-fix spool line) is quarantined below exactly like malformed
@@ -3328,7 +3361,7 @@ function ingestEmergency(store, signer, files, dependencies) {
         unauthenticatedLines.push(index + 1);
         return 0;
       }
-      // CRED-F7: re-scrub before it ever reaches the canonical, signed
+      // credential ingestion check: re-scrub before it ever reaches the canonical, signed
       // ledger -- the mac only proves who wrote these bytes, not that the
       // content inside them is still safe to make permanent.
       const item = rescrubSpoolItem(envelopeItem);
@@ -4074,8 +4107,8 @@ function record(action, target, details = {}, dependencies = {}) {
 // The per-record path above serializes the whole product on one cross-process
 // writer lock and pays the admission's fixed cost for every event. That was
 // measured as the reason a tool call cost 70-120 ms of held lock and the
-// desktop app read as "laggy" under a handful of agents: every tool call from
-// every agent lands here, and the owner host runs inside the desktop app's
+// host application read as "laggy" under a handful of agents: every tool call from
+// every agent lands here, and the owner host runs inside the host application's
 // main process. src/lib/audit-admission.js coalesces concurrent records into
 // batches and hands them here, so a burst of tool calls costs one lock, one
 // verification, one projection pass and at most one anchor write.
@@ -4511,6 +4544,7 @@ function status(dependencies = {}) {
   const quarantinedEmergencyFiles = quarantineFiles(context.files, dependencies.fs || fs).length;
   return {
     ...durable, disabled: false, pendingEmergency, quarantinedEmergencyFiles, anchor: context.anchor,
+    ...(keyStoreStatus() ? { keyStore: keyStoreStatus() } : {}),
     durability: durabilitySummary(context.files, dependencies)
   };
 }
@@ -4807,6 +4841,7 @@ function verify(dependencies = {}) {
 }
 
 function resetForTests() {
+  hostKeyStore = null;
   if (defaultStore) { try { defaultStore.close(); } catch { /* test reset */ } }
   defaultStore = null;
   defaultSigner = null;
@@ -4876,6 +4911,7 @@ function verificationStats(dependencies = {}) {
 }
 
 module.exports = {
+  keyStoreStatus,
   operationAudit: require('./operation-audit'),
   close, HEAD_VAULT_KEY, signerFromPrivateKey, readAnchor, validateAnchor, resolveFiles, verifyReadOnlyProjections,
   verificationStats, unanchoredSuffix,

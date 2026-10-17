@@ -1,6 +1,6 @@
 'use strict';
 
-// Composition root for the Q90 agent communications modules.  This file owns
+// Composition root for the agent communications modules. This file owns
 // adapters and operation ordering only; validation, lifecycle transitions,
 // durable history, routing, wake decisions, and home-node rules stay in their
 // respective modules.
@@ -638,8 +638,8 @@ function createAgentCommsFabric({
       channelId: OWNER_JOURNAL_STREAM,
       message: { streamId, message }
     });
-    /* WHO THIS STREAM EXISTS FOR, so retention can tell read from unread
-       (T201). A direct stream is `direct.<digest of machineId+agentId>` -- one
+    /* WHO THIS STREAM EXISTS FOR, so retention can tell read from unread.
+       A direct stream is `direct.<digest of machineId+agentId>` -- one
        stream per RECIPIENT, shared by every sender -- so its reader set is
        exactly that one agent, and history.append() may then evict only what
        that agent has acknowledged rather than whatever is oldest.
@@ -661,7 +661,7 @@ function createAgentCommsFabric({
     } catch (error) {
       /* THE SENDER IS TOLD, IN ITS OWN VOCABULARY, and told something it can
          act on. Retention refuses rather than destroying a record the
-         recipient has never read (T201); without this the caller received a
+         recipient has never read; without this the caller received a
          raw HistoryError carrying an engine-internal code, from a function
          whose whole contract is to answer with FABRIC_ refusals.
 
@@ -978,7 +978,7 @@ function createAgentCommsFabric({
       fail('FABRIC_DELIVERY_RECEIPTS_UNAVAILABLE', 'This broker cannot read delivery receipts.');
     }
     // Read-only here, so the shared frozen state is enough when the broker
-    // offers it (T1800): an unchanged spool is not re-checked or copied on
+    // offers it: an unchanged spool is not re-checked or copied on
     // every courier round. An injected broker without it is read as before.
     const state = typeof activeBroker.getStateView === 'function'
       ? activeBroker.getStateView()

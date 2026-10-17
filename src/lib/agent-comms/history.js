@@ -197,7 +197,7 @@ function cloneSafeMessage(value, label = 'message', depth = 0, seen = new Set(),
     /* A NUL BYTE IS NOT A CREDENTIAL. These shared one sentence, so an agent
        whose message carried a stray NUL was told it had leaked a secret and
        went looking for one. Two findings, two sentences, two codes. */
-    if (value.includes(' ')) {
+    if (value.includes('\u0000')) {
       fail('HISTORY_MESSAGE_INVALID', `${label} contains a NUL character, which cannot be stored.`, { field: label });
     }
     if (looksLikeCredential(value, screening)) {
@@ -291,7 +291,7 @@ function emptyChannel(channelId) {
   };
 }
 
-/* WHO THIS CHANNEL IS FOR, AND WHY RETENTION HAS TO KNOW (T201).
+/* WHO THIS CHANNEL IS FOR, AND WHY RETENTION HAS TO KNOW.
  *
  * Retention used to evict the oldest record on every append, by count and then
  * by bytes, without reference to anyone's read position:
@@ -385,7 +385,7 @@ function validateChannel(value, channelId) {
   return { schemaVersion: SCHEMA_VERSION, channelId, floorSequence: state.floorSequence, headSequence: state.headSequence, records, readers };
 }
 
-/* A STORED CHANNEL IS VALIDATED ONCE PER STORED VALUE, NOT ONCE PER READ (T1762).
+/* A STORED CHANNEL IS VALIDATED ONCE PER STORED VALUE, NOT ONCE PER READ.
  *
  * The tree courier reads every circle's direct channel every 1.2 s, and each
  * read ran validateChannel over the WHOLE stored channel -- a structural clone
@@ -457,6 +457,38 @@ function storageEntry(store, namespace, key) {
     fail('HISTORY_STORAGE_INVALID', 'Durable history storage returned an invalid entry.', { namespace, key });
   }
   return entry;
+}
+
+/* WHETHER A STORED ROW IS ONE THIS MODULE COULD HAVE WRITTEN.
+ *
+ * Used by system.doctor, which has to tell a row Fleet wrote from one it cannot
+ * parse. Both row kinds are checked with the validators the reader itself uses:
+ *
+ *   history/<channelId>  validateChannel, which also binds the stored channelId
+ *                        to the one in the key.
+ *   cursor/<a>/<c>       the key holds HASHED ids, so the row's own claimed ids
+ *                        are what the shape is checked against, and the key
+ *                        binding is then checked by recomputing the key from
+ *                        them. A row whose claimed ids do not hash to its own key
+ *                        is not a row this module wrote.
+ *
+ * Returns an error code, or null when the row is well formed. */
+function inspectStoredRow(key, value) {
+  try {
+    if (typeof key !== 'string') return 'HISTORY_KEY_UNKNOWN';
+    if (key.startsWith('history/')) { validateChannel(value, key.slice('history/'.length)); return null; }
+    if (key.startsWith('cursor/')) {
+      const claimed = plainObject(value, 'stored history cursor', 'HISTORY_STATE_CORRUPT');
+      validateCursor(value, claimed.agentId, claimed.channelId);
+      if (storageKey('cursor', claimed.agentId, claimed.channelId) !== key) {
+        fail('HISTORY_STATE_CORRUPT', 'Stored cursor does not belong to its own key.', {});
+      }
+      return null;
+    }
+    return 'HISTORY_KEY_UNKNOWN';
+  } catch (error) {
+    return error && typeof error.code === 'string' ? error.code : 'HISTORY_STATE_CORRUPT';
+  }
 }
 
 function isRevisionConflict(error) {
@@ -534,7 +566,7 @@ function createHistory({
     if (jsonBytes(message) > maxMessageBytes) {
       fail('HISTORY_MESSAGE_TOO_LARGE', 'Message exceeds the configured durable history limit.', { channelId, maximumBytes: maxMessageBytes });
     }
-    /* WHO MUST HAVE READ A RECORD BEFORE IT MAY EXPIRE (T201). Optional, so
+    /* WHO MUST HAVE READ A RECORD BEFORE IT MAY EXPIRE. Optional, so
        every existing caller keeps the behaviour it has; a caller that knows the
        audience says so and the channel remembers it from then on. */
     if (source.readers !== undefined && !Array.isArray(source.readers)) {
@@ -708,6 +740,7 @@ function createHistory({
 }
 
 module.exports = Object.freeze({
+  inspectStoredRow,
   DEFAULT_MAX_CHANNEL_BYTES,
   DEFAULT_MAX_MESSAGE_BYTES,
   DEFAULT_MAX_WRITE_RETRIES,

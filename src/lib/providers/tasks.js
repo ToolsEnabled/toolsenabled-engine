@@ -213,7 +213,7 @@ function transitionMetadata(value) {
 // only the returned transition metadata after a successful state operation;
 // it never receives payloads, checkpoints, claim tokens, result bodies, or
 // failure messages.  Canonical-audit outages keep their existing emergency
-// spool/recovery semantics because P11 delegates the write to audit.record.
+// spool/recovery semantics because legacy policy delegates the write to audit.record.
 function recordTaskTransition(operation, value, dependencies = {}) {
   const task = taskMetadata(value);
   if (typeof task.taskId !== 'string' || typeof task.status !== 'string') return null;
@@ -408,7 +408,7 @@ async function fail(input, dependencies = {}) {
     message: input && input.message
   }));
   // Preserve the legacy bounded/sanitized task error fields for compatibility;
-  // the public task reader attaches P15's closed taxonomy so controllers do
+  // the public task reader attaches a closed error classification so controllers do
   // not parse those legacy details to decide retry/block/fail.
   if (input.disposition === 'retry') {
     const current = state.getTask({ taskId: input.handle.taskId, includePayload: false, includeCheckpoint: false });

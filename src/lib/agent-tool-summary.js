@@ -1,47 +1,14 @@
 'use strict';
 
-// THE STANDARD TOOL NOTE A PRODUCT AGENT IS HANDED AT THE START OF ITS SESSION.
-//
-// THE PROBLEM: having to tell agents what the tools are called, what to do,
-// and which tool to use is hard on a user. Product rule: a short standard note
-// shares exactly what exists -- small enough not to eat tokens, complete enough
-// that agents know. A setting may disable it; it is on by default.
-//
-// And the first outside user's version of the same failure: their agents
-// could not use the credential manager or vault -- on a default (Guided)
-// install, where the credential requester is deliberately withheld. Nothing
-// told the agent that, so the agent could not tell the person, so the limit
-// read as a breakage. The note this module writes is where that silence ends:
-// what exists is named, and what this level withholds is named too.
-//
-// DERIVED, NEVER LISTED. The tool names come from the caller -- in the product,
-// from src/lib/setup/machine-record.js tierToolAllowlist(), the same derivation
-// the generated MCP configuration is written from -- so the note and the
-// running servers cannot disagree. The only hand-written prose here is the
-// one-clause purpose a family carries; an unmapped family still appears by
-// name, so a new tool family cannot silently vanish from the note.
-//
-// TOKEN-LEAN IS A CONTRACT, NOT AN ASPIRATION. The note carries a budget
-// (DEFAULT_BUDGET_TOKENS, estimated at four characters per token) and when a
-// composition is over budget it sheds DETAIL -- purpose clauses, then exact
-// ids, then sentence trim -- and never a family: a family dropped to save
-// tokens is an agent taught that a capability does not exist.
-//
-// THE SETTING IS REAL. agent.tool_summary (config/settings-registry.json,
-// default on) is read through src/lib/settings.js with its provenance rules;
-// off means briefToolSummary() answers { enabled: false, text: null } and the
-// caller injects nothing. This module is the row's named enforcer.
-//
-// FAIL CLOSED TO SILENCE, NEVER TO A WRONG NOTE. An unreadable registry, an
-// unrecognised tier, or an empty surface produces no note and a named code. A
-// session must never fail to start over its own introduction, and an agent
-// must never be handed a note about a surface nobody measured.
+// Summarize the measured Fleet tool surface for an agent session. The tool
+// names come from the registry and tier policy; family descriptions are hints.
+// An unreadable setting or surface suppresses the note rather than guessing.
 
 const TOOL_SUMMARY_SETTING_ID = 'agent.tool_summary';
 const DEFAULT_BUDGET_TOKENS = 450;
 
-// Required lazily. The tool registry pulls in every provider; a caller asking
-// only whether the setting is on has no reason to pay for that.
+// Require policy and registry lazily so a settings-only check does not load
+// the runtime tool catalogue.
 function permissionTierPolicy() { return require('./permission-tier-policy'); }
 function machineRecordModule() { return require('./setup/machine-record'); }
 function toolRegistryModule() { return require('./tool-registry'); }
@@ -63,12 +30,8 @@ const REACH_FOR = Object.freeze([
   ['memory.set', 'save a durable note'],
   ['memory.get', 'read one back'],
   ['memory.search', 'find saved notes'],
-  ['web.search', 'search the public web'],
-  ['web.fetch', 'read a page'],
   ['system.doctor', 'what is configured here'],
-  ['settings.read', 'this installation\'s settings'],
-  ['browser.playwright_tools', 'browser schemas and navigation help'],
-  ['screen.status', 'your screen-access grant']
+  ['settings.read', 'this installation\'s settings']
 ]);
 
 /* One clause per family, attached when the budget allows. An absent entry is
@@ -76,34 +39,14 @@ const REACH_FOR = Object.freeze([
 const FAMILY_PURPOSES = Object.freeze({
   memory: 'durable notes',
   agent_comms: 'agent-to-agent messages',
-  web: 'public web search and fetch',
-  screen: 'use the screen, mouse and keyboard with temporary access',
-  window: 'list and focus windows',
   task: 'the durable task queue',
-  system: 'status, notifications, credential requests',
-  owner_prompts: 'guarded owner-input forms',
-  owner_forms: 'the forms\' public directions',
-  payment_method: 'guarded card record',
-  pay: 'the capped spend ledger',
-  purchase: 'the owner\'s shopping list',
-  browser: 'the product-owned browser',
-  http: 'allowlisted HTTPS requests',
-  sandbox: 'disposable work sandboxes',
-  research: 'the research pipeline',
+  system: 'runtime status and diagnostics',
   r_ledger: 'the person\'s standing rules (propose or file one only when they allow it)',
   ledger: 'read saved rules, tasks, asks and answers, and purchase records',
   t_ledger: 'file, complete or remove task records; read them with ledger.read',
   a_ledger: 'file or settle durable asks; check answers with ledger.read',
-  p_ledger: 'settle purchase records; records do not grant spend permission',
-  scheduler: 'recurring scheduled actions',
-  model: 'bounded model completions',
   search: 'the local search index',
   audit: 'the local audit ledger',
-  calendar: 'Google Calendar',
-  personal_calendar: 'the personal calendar',
-  gmail: 'Gmail',
-  drive: 'Google Drive',
-  github: 'GitHub',
   settings: 'read settings'
 });
 
@@ -192,7 +135,8 @@ function builtInClause(agentApiOn, level, allowedSet) {
   return `Agent API mode: ${agentApiOn}. ${native} ${shellReplacement(allowedSet)}`;
 }
 
-function compose({ tierName, readOnly, allowed, allowedSet, families, absentFamilies, credentialWithheld, agentApiOn, level, packed = false, openShell = false }) {
+function compose({ tierName, readOnly, allowed, allowedSet, families, absentFamilies, agentApiOn,
+  level, packed = false, openShell = false, setupKind }) {
   const lines = [];
   const availability = packed
     ? `${allowed.length} ToolsEnabled tools; "${tierName}" permissions${readOnly ? ' (read-only)' : ''}. Use exact ids.`
@@ -214,7 +158,7 @@ function compose({ tierName, readOnly, allowed, allowedSet, families, absentFami
     lines.push(`Reach for these first: ${reachShown.map(([name, why]) => (level >= 1 ? `${name} (${why})` : name)).join(', ')}.`);
   }
 
-  const keyFamilies = new Set(['memory', 'agent_comms', 'web', 'system', 'owner_prompts', 'task']);
+  const keyFamilies = new Set(['memory', 'agent_comms', 'system', 'task']);
   const familyNames = [...families.keys()].sort();
   const familyLine = familyNames.map(family => {
     const purpose = FAMILY_PURPOSES[family];
@@ -224,32 +168,7 @@ function compose({ tierName, readOnly, allowed, allowedSet, families, absentFami
   }).join(', ');
   lines.push(`Tool families here: ${familyLine}.`);
 
-  /* THE LINE NAMES THE STORES IT IS NOT, BECAUSE THAT IS THE HALF THAT FAILED.
-   *
-   * A live pre-beta report, 2026-08-25: agents "come back having used Google's
-   * or Windows' credential manager instead of ours." The previous line said
-   * where secrets live and how to ask for one, and never said what NOT to
-   * reach for -- and an agent that has three plausible credential stores in
-   * front of it and no steer picks the one it has seen most often, which is
-   * never ours. So the two wrong stores are named by name.
-   *
-   * IT RIDES AT EVERY LEVEL THIS LINE EXISTS AT (level >= 0), and it was
-   * costed to keep it there. Measured against today's surface: this line is 56
-   * estimated tokens against the 53 it replaced, and the Standard note -- the
-   * tightest of the three, 443 tokens against a 450 budget -- lands at 446 and
-   * stays at the same detail level it was at before. If a later lane's new
-   * family does push Standard down a level, the shedding contract still holds
-   * for the part that matters: detail around this line goes, this line does
-   * not. Do not spend the remaining headroom without re-measuring
-   * tests/agent-tool-summary.test.js's per-level token report. */
-  if (allowedSet.has('system.credential_request') && level >= 0) {
-    lines.push('Credentials: the owner\'s encrypted vault, not Windows\' or Google\'s manager, is the only store ToolsEnabled tools read; values are never shown to you. Add or update one: owner_forms.describe, then system.credential_request.');
-  }
-
   const withheld = [];
-  if (credentialWithheld) {
-    withheld.push('asking for or storing credentials (system.credential_request and the vault-writing tools start at the Standard level)');
-  }
   if (readOnly) {
     withheld.push('every tool that changes anything -- this toolkit only reads');
   }
@@ -273,28 +192,15 @@ function compose({ tierName, readOnly, allowed, allowedSet, families, absentFami
       : `Not at this level: ${withheld.join('; ')}.`);
   }
 
-  /* PACKED COMPRESSES THIS SENTENCE, IT NEVER DROPS IT. The full sentence
-   * carries two halves an agent needs, and this module's own review history
-   * (an internal review record, Finding 2)
-   * found that this line is the ONLY copy of that guidance actually delivered
-   * to an agent anywhere in the codebase -- tests/mcp-initialize-instructions
-   * .test.js proves this text is handed to a real agent verbatim as the MCP
-   * `initialize` handshake's `instructions` field, so there is no other place
-   * a session that hits `packed` mode can learn either half from:
-   *   (a) a missing tool is a deliberate permission-level choice, not a bug;
-   *   (b) the person can go change the level in Settings.
-   * An earlier version of this fix dropped the line outright under packed
-   * mode to buy back tokens. That was a guidance loss, not a harmless trim --
-   * so packed instead emits a compressed form that keeps both halves in
-   * roughly a third of the tokens. Every family name still lives on the
-   * "Tool families here" / "Not at this level" lines above, which `packed`
-   * never touches: the budget contract sheds detail, never a family, and
-   * now never this sentence's two facts either, all the way to the last
-   * token. */
+  // Keep the missing-tool guidance even when the note is compressed.
   if (openShell) {
-    lines.push(packed
-      ? 'Missing tools: not offered here; say so. Level: toolsenabled setup --tier. Settings = toolsenabled settings; Ledger page = toolsenabled ledger.'
-      : 'If a tool you expect is not offered, say so plainly instead of looking for another route. The person changes the level from the terminal with `toolsenabled setup --tier unrestricted|standard|guided`. Where a tool or refusal mentions Settings or the Ledger page, in this sandbox the person uses `toolsenabled settings` and `toolsenabled ledger` in the terminal.');
+    lines.push(setupKind === 'plugin'
+      ? (packed
+        ? 'Missing tools: say so. Setup: /tefleet setup in Claude Code. Inspect with settings.read and ledger.read.'
+        : 'If a tool is absent, say so. The person configures this Claude plugin with /tefleet setup in the current project. Inspect saved settings and ledger records with settings.read and ledger.read.')
+      : packed
+      ? 'Missing tools: not offered here; say so. Level: toolsenabled setup --tier. Settings = toolsenabled settings; Ledger page = toolsenabled ledger; system.ask answers = toolsenabled approvals.'
+      : 'If a tool you expect is not offered, say so plainly instead of looking for another route. The person changes the level from the terminal with `toolsenabled setup --tier unrestricted|standard|guided`. Where a tool or refusal mentions Settings or the Ledger page, in this sandbox the person uses `toolsenabled settings` and `toolsenabled ledger` in the terminal, and answers system.ask with `toolsenabled approvals`.');
   } else {
     lines.push(packed
       ? 'Missing tools: permissions; change in Settings.'
@@ -320,7 +226,8 @@ function briefToolSummary({
   budgetTokens = DEFAULT_BUDGET_TOKENS,
   enabled,
   valuesPath,
-  env
+  env,
+  setupKind
 } = {}) {
   const isOn = typeof enabled === 'boolean' ? enabled : toolSummaryEnabled({ valuesPath, env });
   if (isOn === null) return refusal('TOOL_SUMMARY_SETTING_UNAVAILABLE');
@@ -347,58 +254,13 @@ function briefToolSummary({
   let total;
   try {
     const registered = toolRegistryModule().registeredTools();
-    /* THE DENOMINATOR IS A FACT ABOUT THE BUILD, NOT ABOUT THIS PROCESS.
-     *
-     * THE DEFECT THIS CLOSES, measured 2026-08-25 inside a generated MCP server
-     * process. `total` used to default to registeredTools(), and that call
-     * applies TOOLSENABLED_TOOL_ALLOWLIST -- a process-global environment
-     * variable the server sets to the tier's own catalogue. So in the server
-     * the denominator WAS the numerator: registeredTools() returned 106, not
-     * 268, and `system.credential_request` was not among them.
-     *
-     * The consequence was silent and it was the worst available one. `withheld`
-     * came out empty and `credentialWithheld` came out false -- because the
-     * totals set did not carry the name either -- so a GUIDED install served:
-     *
-     *   "Not at this level: every tool that changes anything -- this toolkit
-     *    only reads."
-     *
-     * where the truth is:
-     *
-     *   "Not at this level: asking for or storing credentials
-     *    (system.credential_request and the vault-writing tools start at the
-     *    Standard level); every tool that changes anything ...; the agent,
-     *    clipboard, code, http, owner_host, r_ledger, repo, sound, stripe, tts,
-     *    workspace families."
-     *
-     * The dropped sentence is the one this module's own header says it exists
-     * for -- the first outside user whose agents could not use the
-     * credential manager or vault. A note that silently stops naming the
-     * withheld credential tool is this file's founding failure, reinstated.
-     *
-     * TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM IS ABOUT THIS PROCESS.
-     * The NUMERATOR is "what does this session actually offer", and it must
-     * stay narrowed: tool-registry.js states that an operator's env filter may
-     * legitimately be NARROWER than the tier ("the tier is a ceiling over
-     * whatever survives it"), and a note naming tools this process refuses
-     * would be the same lie pointed the other way. The DENOMINATOR is "what
-     * does this product have", which no process-local filter can change. So
-     * `registered` still feeds the numerator below and TOOL_REGISTRY feeds the
-     * total.
-     *
-     * An explicit `totalNames` still wins, unchanged -- that is the seam the
-     * tests and any caller holding a better answer already use. */
+    // The denominator is the build's full catalogue. A process-level allowlist
+    // may narrow registeredTools(), so it only supplies the offered numerator.
     total = Array.isArray(totalNames)
       ? totalNames.slice()
       : toolRegistryModule().TOOL_REGISTRY.map(tool => tool.name);
     const declared = allowedNames === undefined ? machineRecordModule().tierToolAllowlist(validated) : allowedNames;
-    /* A null allowlist means "no configured narrowing", which has never meant
-     * "every registered name works here": the Full tier still refuses the
-     * fra-only tools (workspace.list/read work only between connected
-     * computers). Derive the offered set through the same policy the
-     * dispatcher enforces, so this note cannot advertise a tool the session
-     * would refuse -- the exact silence-reads-as-capability shape this module
-     * exists to end. */
+    // A null allowlist still follows the same policy as the dispatcher.
     allowed = declared === null
       ? [...permissionTierPolicy().allowedToolNames(registered, session)]
       : Array.isArray(declared) ? declared.slice() : null;
@@ -419,7 +281,6 @@ function briefToolSummary({
   }
   const families = familiesOf(allowed);
   const absentFamilies = [...familiesOf(total).keys()].filter(family => !families.has(family)).sort();
-  const credentialWithheld = totalSet.has('system.credential_request') && !allowedSet.has('system.credential_request');
   const readOnly = session.profile === 'read-only';
   /* Read once, here, rather than inside compose(): the note is composed up to
      four times while it sheds detail, and a settings read per composition would
@@ -437,8 +298,8 @@ function briefToolSummary({
     allowedSet,
     families,
     absentFamilies,
-    credentialWithheld,
-    agentApiOn
+    agentApiOn,
+    setupKind
   };
 
   for (const level of [2, 1, 0, -1]) {

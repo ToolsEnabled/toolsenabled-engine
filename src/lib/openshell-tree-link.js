@@ -8,7 +8,7 @@
 // server holds the tree -- the workers' processes, the records, the courier --
 // so a worker's server does not decide anything about the tree itself. It
 // carries each agent.* and agent_comms.* request to the root over a Unix socket
-// under the state root (or a named pipe on Windows), and brings the answer back,
+// in a short private per-user runtime directory (or a named pipe on Windows), and brings the answer back,
 // refusals included.
 //
 // WHO IS ASKING is established here, never claimed. Each worker session is
@@ -80,12 +80,13 @@ function readOneLine(socket, onLine, onFail) {
     if (done) return;
     buffered += chunk;
     const index = buffered.indexOf('\n');
-    if (index >= 0) {
-      done = true;
-      onLine(buffered.slice(0, index));
-    } else if (Buffer.byteLength(buffered, 'utf8') > MAX_LINE_BYTES) {
+    const line = index >= 0 ? buffered.slice(0, index) : buffered;
+    if (Buffer.byteLength(line, 'utf8') > MAX_LINE_BYTES) {
       done = true;
       onFail(refusal('OPENSHELL_TREE_LINK_TOO_LARGE', 'A tree request or answer was larger than the link carries.'));
+    } else if (index >= 0) {
+      done = true;
+      onLine(line);
     }
   });
   socket.on('end', () => { if (!done) { done = true; onFail(refusal('OPENSHELL_TREE_LINK_CLOSED', 'The tree link closed before answering.')); } });
@@ -107,7 +108,7 @@ function probe(socketPath) {
  * The root's side. `handle(token, op, request)` answers one request (a value
  * or a promise); a throw becomes a refusal with its code and message.
  */
-function createTreeLinkServer({ socketPath, handle }) {
+function createTreeLinkServer({ socketPath, handle, refuseExisting = false }) {
   if (typeof socketPath !== 'string' || !path.isAbsolute(socketPath)) {
     throw refusal('OPENSHELL_TREE_LINK_INVALID', 'The tree link needs an absolute socket path.');
   }
@@ -115,8 +116,9 @@ function createTreeLinkServer({ socketPath, handle }) {
   const connections = new Set();
   const namedPipe = process.platform === 'win32';
   const server = net.createServer(socket => {
+    const lifetime = new AbortController();
     connections.add(socket);
-    socket.on('close', () => connections.delete(socket));
+    socket.on('close', () => { connections.delete(socket); lifetime.abort(); });
     readOneLine(socket, async line => {
       let answer;
       try {
@@ -124,7 +126,9 @@ function createTreeLinkServer({ socketPath, handle }) {
         if (!message || message.v !== PROTOCOL || typeof message.op !== 'string') {
           throw refusal('OPENSHELL_TREE_LINK_INVALID', 'The tree request was not understood.');
         }
-        answer = { ok: true, result: await handle(message.token, message.op, message.request || {}) };
+        // A signal can come only from this connection's lifetime, never JSON.
+        answer = { ok: true, result: await handle(message.token, message.op,
+          { ...(message.request || {}), signal: lifetime.signal }) };
       } catch (error) {
         answer = { ok: false, error: publicError(error) };
       }
@@ -137,7 +141,11 @@ function createTreeLinkServer({ socketPath, handle }) {
     async listen() {
       if (!namedPipe) {
         fs.mkdirSync(path.dirname(socketPath), { recursive: true, mode: 0o700 });
-        if (fs.existsSync(socketPath)) {
+        let existing;
+        try { existing = fs.lstatSync(socketPath); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        if (existing) {
+          if (refuseExisting) throw refusal('OPENSHELL_TREE_LINK_IN_USE', 'The private worker socket path is already occupied.');
           if (await probe(socketPath)) {
             throw refusal('OPENSHELL_TREE_LINK_IN_USE', 'Another ToolsEnabled server already holds this tree.');
           }
@@ -170,7 +178,8 @@ function createTreeLinkServer({ socketPath, handle }) {
 }
 
 /** A worker server's side: one request, one answer. Refusals arrive as errors with their code. */
-function treeLinkRequest({ socketPath, token, op, request = {}, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+function treeLinkRequest({ socketPath, token, op, request = {}, timeoutMs = DEFAULT_TIMEOUT_MS, signal }) {
+  if (signal?.aborted) return Promise.reject(refusal('ABORT_ERR', 'The tree request was cancelled before submission.'));
   return new Promise((resolve, reject) => {
     const socket = net.connect(socketPath);
     let settled = false;
@@ -179,9 +188,13 @@ function treeLinkRequest({ socketPath, token, op, request = {}, timeoutMs = DEFA
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       socket.destroy();
       if (error) reject(error); else resolve(value);
     }
+    const onAbort = () => finish(refusal('ABORT_ERR', 'The tree request was cancelled; no acceptance was inferred.'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     socket.once('connect', () => socket.write(`${JSON.stringify({ v: PROTOCOL, token, op, request })}\n`));
     readOneLine(socket, line => {
       let answer;
@@ -199,6 +212,7 @@ function treeLinkRequest({ socketPath, token, op, request = {}, timeoutMs = DEFA
 module.exports = Object.freeze({
   PROTOCOL,
   MAX_SOCKET_PATH_BYTES,
+  MAX_LINE_BYTES,
   socketPathFor,
   newToken,
   sameToken,

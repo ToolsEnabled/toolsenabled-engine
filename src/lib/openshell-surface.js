@@ -20,6 +20,10 @@ const OPENSHELL_TOOLS = Object.freeze([
   'ledger.read', 't_ledger.file', 't_ledger.progress', 't_ledger.complete', 'r_ledger.file',
   // Asks for the person, answered with `toolsenabled-openshell ledger answer`.
   'a_ledger.file',
+  // Questions for the person, answered at the
+  // terminal (`toolsenabled approvals`), and notices (`toolsenabled watch`):
+  // Answers do not change tool or agent permissions.
+  'system.ask', 'system.notify',
   // Byte-mediated file editing (docs/byte-coordination.md, host section): a
   // write or patch needs this agent's read of the current bytes, byte-disjoint
   // edits by different agents are rebased, and stale edits refuse, so agents
@@ -48,8 +52,8 @@ const OPENSHELL_TOOLS = Object.freeze([
 // them (the slot controls are an explicit role grant, src/lib/role-functions.js).
 // agent.set_account is not offered: a sandbox has one sign-in per CLI.
 const OPENSHELL_AGENT_TOOLS = Object.freeze([
-  'agent.spawn', 'agent.stop', 'agent.restart', 'agent.remove', 'agent.resume',
-  'agent.set_model', 'agent.set_effort', 'agent.set_provider', 'agent.set_role',
+  'agent.spawn', 'agent.wait', 'agent.stop', 'agent.restart', 'agent.remove', 'agent.resume',
+  'agent.set_model', 'agent.set_effort', 'agent.set_speed', 'agent.set_provider', 'agent.set_role',
   'agent_comms.send_local', 'agent_comms.local_roster',
 ]);
 
@@ -60,4 +64,15 @@ function openShellAllowlist(tierAllowlist, { agents = false } = {}) {
   return agents ? [...base, ...OPENSHELL_AGENT_TOOLS] : base;
 }
 
-module.exports = Object.freeze({ OPENSHELL_TOOLS, OPENSHELL_AGENT_TOOLS, openShellAllowlist });
+// A beta 3 registration is retained across the runtime-only upgrade. Its
+// agent list predates agent.wait; add that one tool only to a tree-enabled
+// registration that already granted agent.spawn.
+function upgradedAgentAllowlist(names, env = process.env) {
+  if (env.OPENSHELL_SANDBOX === '1' && env.TOOLSENABLED_OPENSHELL_AGENTS === '1'
+      && names.includes('agent.spawn') && !names.includes('agent.wait')) {
+    return [...names, 'agent.wait'];
+  }
+  return names;
+}
+
+module.exports = Object.freeze({ OPENSHELL_TOOLS, OPENSHELL_AGENT_TOOLS, openShellAllowlist, upgradedAgentAllowlist });

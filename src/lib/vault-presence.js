@@ -50,7 +50,7 @@ const { rootPath } = require('./runtime');
 // environment and can reach a provider CLI. The scrub removes credential names
 // only, so TOOLSENABLED_VAULT_PATH and TOOLSENABLED_STATE_ROOT published by
 // the require above still reach the script and it still reads the same vault.
-const { safeLaunchEnvironment } = require('./providers/subscription-launch-env.js');
+const { safeLaunchEnvironment } = require('./supervision/launch-environment.js');
 const {
   VAULT_PLATFORM_UNSUPPORTED,
   VAULT_PLATFORM_UNSUPPORTED_MESSAGE,
@@ -195,7 +195,7 @@ function vaultRecordPresence(key) {
     if (remembered) return remembered;
     try {
       presenceMeasurements.probes += 1;
-      const answer = (require('./openshell-inside').isInsideOpenShellSandbox() ? require('./vault-openshell') : require('./vault-linux')).presence(key);
+      const answer = (require('./openshell-inside').usesStateFileVault() ? require('./vault-openshell') : require('./vault-linux')).presence(key);
       if (answer === 'present') return rememberPresence(key, digest, ANSWER_PRESENT);
       if (answer === 'absent') return rememberPresence(key, digest, ANSWER_ABSENT);
       if (answer === 'no-store') return ANSWER_NO_STORE;

@@ -30,7 +30,10 @@ function createLocalThreadStore({ directory = statePath('state', 'local-model-th
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_THREAD_BYTES) throw new Error('invalid conversation file');
       const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
       const record = saved?.record;
-      if (saved.version !== 1 || saved.threadId !== id || !record || !explicitModel(record.model) ||
+      const modelValid = record && (record.transportIdentity === undefined ? explicitModel(record.model)
+        : typeof record.transportIdentity === 'string' && /^[a-f0-9]{64}$/.test(record.transportIdentity) && typeof record.model === 'string'
+          && /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,199}$/.test(record.model));
+      if (saved.version !== 1 || saved.threadId !== id || !record || !modelValid ||
           !Array.isArray(record.messages) || record.messages.length > 400 ||
           record.messages.some(message => !message || !['system', 'user', 'assistant', 'tool'].includes(message.role) ||
             typeof message.content !== 'string' || (message.turnId !== null && !ID.test(message.turnId)))) {

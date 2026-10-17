@@ -2,7 +2,7 @@
 
 const { isRequestId, compareRequestIds } = require('./request-id');
 
-// Q64/R173 foundation: make owner-request scope explicit before a rule can be
+// Make owner-request scope explicit before a rule can be
 // resolved for a launch.  This module is deliberately pure.  It validates
 // and resolves an already supplied rule set; it does not read the owner ledger,
 // write state, launch an agent, or grant authority.
@@ -343,7 +343,7 @@ function resolveScopeRules(input, options = {}) {
     groups.set(rule.ruleKey, list);
   }
 
-  // R241: this is a clause merge, not a whole-directive overwrite. Each
+  // this is a clause merge, not a whole-directive overwrite. Each
   // ruleKey is one independently applicable clause. Select the newest
   // applicable rule only inside that key, while retaining winners from every
   // other key. Conflict provenance keeps the replaced clause auditable.

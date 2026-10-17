@@ -16,6 +16,7 @@ const { plaintextCredentialPattern } = require('./secret-patterns');
 const audit = require('./audit');
 const { isInsideAllowedRoots, usableRoots } = require('./code-file-containment');
 const workspaceBoundary = require('./workspace-boundary');
+const { isCredentialProtectedPath } = require('./providers/host-control');
 
 const DB_PATH = process.env.TOOLSENABLED_SEARCH_DB || rootPath('state', 'search-index.sqlite');
 const OLLAMA_HOST = '127.0.0.1';
@@ -25,6 +26,7 @@ const LEXICAL_DIM = 256;
 const CHUNK_SIZE = 1200;
 const CHUNK_OVERLAP = 150;
 const MAX_QUERY_CHUNKS = 200000;
+const BUSY_TIMEOUT_MS = 30000;
 const TEXT_EXT = new Set([
   '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.json', '.md', '.txt', '.py', '.ps1', '.psm1',
   '.sh', '.bash', '.html', '.htm', '.css', '.scss', '.yml', '.yaml', '.toml', '.ini', '.cfg',
@@ -70,11 +72,20 @@ function databaseIsOpen(database) {
   return true;
 }
 
+/* Stored search rows are only answerable when they were written by this epoch.
+ * See the purge in getDb(). */
+const INDEX_EPOCH = 1;
+
 function getDb() {
   if (databaseIsOpen(db)) return db;
   db = null;
   ensureDir(path.dirname(DB_PATH));
-  db = new DatabaseSync(DB_PATH);
+  // Every agent's server opens this index. Without a busy timeout, a second
+  // agent indexing while another wrote was refused at once ("database is
+  // locked"), which reached it as an internal error; writes also take the
+  // write lock when they begin (BEGIN IMMEDIATE), so the wait applies.
+  db = new DatabaseSync(DB_PATH, { timeout: BUSY_TIMEOUT_MS });
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, root TEXT NOT NULL, mtimeMs REAL NOT NULL, size INTEGER NOT NULL, embedder TEXT NOT NULL, dim INTEGER NOT NULL, chunkCount INTEGER NOT NULL, indexedAt INTEGER NOT NULL);');
@@ -87,6 +98,26 @@ function getDb() {
   // the other root's results.
   db.exec('CREATE TABLE IF NOT EXISTS memberships (root TEXT NOT NULL, path TEXT NOT NULL, PRIMARY KEY (root, path));');
   db.exec('CREATE INDEX IF NOT EXISTS idx_memberships_path ON memberships(path);');
+  /* CONTENT INDEXED BY AN EARLIER EPOCH IS NOT ANSWERABLE.
+   *
+   * A query answers from the stored text, not from the file, so a current-file
+   * check cannot vouch for a row an older version put there. Concretely: content
+   * reachable only through a hard link was indexable before that was refused;
+   * replacing the workspace name with an unrelated single-link file then satisfies
+   * every check made at query time while the answer still comes from the old row.
+   * Re-checking the leaf is necessary and is not sufficient.
+   *
+   * So rows carry an epoch, and rows from a different one are dropped rather than
+   * trusted. The cost is one re-index after an upgrade, which search.index does
+   * and which says plainly that it found nothing until then. Bump this whenever
+   * stored rows can no longer be vouched for. */
+  const stored = db.prepare('PRAGMA user_version').get();
+  if (Number(stored?.user_version ?? 0) !== INDEX_EPOCH) {
+    db.exec('DELETE FROM chunks;');
+    db.exec('DELETE FROM files;');
+    db.exec('DELETE FROM memberships;');
+    db.exec(`PRAGMA user_version = ${INDEX_EPOCH};`);
+  }
   db.exec('INSERT OR IGNORE INTO memberships(root, path) SELECT root, path FROM files;');
   return db;
 }
@@ -232,8 +263,18 @@ function chunkText(text) {
   }
   return chunks;
 }
-function* walk(dir) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+// A file or folder this user may not read (EACCES, EPERM) is skipped and
+// counted; one that vanished during the run is skipped. Either used to end
+// the whole run as an internal error, with nothing after it indexed.
+const unreadable = error => ['EACCES', 'EPERM'].includes(error && error.code);
+
+function* walk(dir, onUnreadable = () => {}) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (error) {
+    if (unreadable(error)) { onUnreadable(dir); return; }
+    if (error && error.code === 'ENOENT') return;
+    throw error;
+  }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       // Case-insensitive on purpose. A declared skip name is typed by a person
@@ -243,7 +284,7 @@ function* walk(dir) {
       // the way in, so folding here is strictly more protective for the
       // built-in entries too.
       if (SKIP_DIRS.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) continue;
-      yield* walk(path.join(dir, entry.name));
+      yield* walk(path.join(dir, entry.name), onUnreadable);
     } else if (entry.isFile()) {
       yield path.join(dir, entry.name);
     }
@@ -254,6 +295,12 @@ function sensitiveFile(file, content) {
   const base = path.basename(file);
   return SENSITIVE_FILE.test(base) || SENSITIVE_EXTENSION.has(path.extname(base).toLowerCase())
     || PLAINTEXT_SECRET.test(content);
+}
+
+function credentialProtected(file) {
+  if (isCredentialProtectedPath(file)) return true;
+  try { return isCredentialProtectedPath(fs.realpathSync(file)); }
+  catch { return true; }
 }
 
 function close() {
@@ -313,7 +360,14 @@ async function indexPath(args = {}) {
   }
   let rootStat;
   try { rootStat = fs.statSync(rootAbs); } catch (error) {
-    if (error && error.code === 'ENOENT') throw searchInputError('SEARCH_ROOT_INVALID', `root does not exist: ${rootAbs}`);
+    if (error && error.code === 'ENOENT') {
+      // A folder deleted from disk: what the index still holds for it is
+      // dropped here, the only call that names it. Refusing it left its
+      // files in every query for good.
+      const dropped = dropVanishedRoot(rootAbs);
+      if (dropped !== null) return dropped;
+      throw searchInputError('SEARCH_ROOT_INVALID', `root does not exist: ${rootAbs}`);
+    }
     throw error;
   }
   if (!rootStat.isDirectory()) throw searchInputError('SEARCH_ROOT_INVALID', `root is not a directory: ${rootAbs}. Index the folder that contains it.`);
@@ -335,7 +389,7 @@ async function indexPath(args = {}) {
   // leaves every root.
   const removeIndexedFile = file => {
     const existed = Boolean(selFile.get(file));
-    database.exec('BEGIN');
+    database.exec('BEGIN IMMEDIATE');
     try {
       delChunks.run(file);
       delFile.run(file);
@@ -350,7 +404,7 @@ async function indexPath(args = {}) {
   // A file gone from this root leaves this root only; its embedding goes when
   // no root holds it any more.
   const leaveRoot = file => {
-    database.exec('BEGIN');
+    database.exec('BEGIN IMMEDIATE');
     try {
       delMember.run(rootAbs, file);
       const orphaned = memberCount.get(file).c === 0;
@@ -366,18 +420,64 @@ async function indexPath(args = {}) {
   const started = Date.now();
   const discovered = new Set();
   let filesIndexed = 0, filesSkipped = 0, filesSensitiveSkipped = 0;
-  let filesRemoved = 0, chunksIndexed = 0, filesScanned = 0, truncated = false;
-  for (const file of walk(rootAbs)) {
+  let filesRemoved = 0, chunksIndexed = 0, filesScanned = 0, filesUnreadable = 0, truncated = false;
+  // Read one file's metadata or text; null when it cannot be read (counted)
+  // or vanished meanwhile (left for the removal pass below).
+  const readable = (file, read) => {
+    try { return read(); } catch (error) {
+      if (unreadable(error)) { filesUnreadable++; return null; }
+      if (error && error.code === 'ENOENT') { discovered.delete(file); return null; }
+      throw error;
+    }
+  };
+  for (const file of walk(rootAbs, () => { filesUnreadable++; })) {
     discovered.add(file);
     if (!TEXT_EXT.has(path.extname(file).toLowerCase())) continue;
     if (filesScanned >= maxFiles) { truncated = true; break; }
-    const stat = fs.statSync(file);
     filesScanned++;
-    if (stat.size === 0 || stat.size > maxFileKb * 1024) {
+    if (credentialProtected(file)) {
+      filesSensitiveSkipped++;
       if (removeIndexedFile(file)) filesRemoved++;
       continue;
     }
-    const content = fs.readFileSync(file, 'utf8');
+    /* THE LEAF IS OPENED ONCE AND JUDGED ON ITS DESCRIPTOR.
+     *
+     * stat() then readFileSync(path) judged one file and read whatever the name
+     * meant a moment later.
+     *
+     * A MULTIPLY LINKED LEAF IS SKIPPED HERE, THOUGH host.read_file ALLOWS ONE.
+     * That asymmetry is deliberate, and it is OPTIONAL HARDENING rather than
+     * boundary correctness: an authorised in-root pathname does not become
+     * "outside" merely because its inode has another name. What persistence
+     * changes is the consequence of indexing something by accident -- a stored
+     * row can be retrieved later by any agent without naming the path, which
+     * reaches further than one read of a path an agent named itself.
+     * The measured compatibility cost that made the same rule wrong for
+     * host.read_file -- pnpm's hard-linked node_modules -- does not arise here
+     * because the walk already skips node_modules. Hard-linked AUTHORED trees
+     * elsewhere are possible, so if a real cost appears, remove this rule rather
+     * than defend it. See SECURITY-SCOPE.md. A leaf already in the index is
+     * dropped on the next run, as a credential-protected one is. */
+    let descriptor;
+    let stat;
+    try {
+      descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      stat = fs.fstatSync(descriptor);
+    } catch (error) {
+      if (unreadable(error)) filesUnreadable++;
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+      if (removeIndexedFile(file)) filesRemoved++;
+      continue;
+    }
+    let content;
+    try {
+      if (!stat.isFile() || stat.nlink !== 1 || stat.size === 0 || stat.size > maxFileKb * 1024) {
+        if (removeIndexedFile(file)) filesRemoved++;
+        continue;
+      }
+      content = readable(file, () => fs.readFileSync(descriptor, 'utf8'));
+      if (content === null) { if (removeIndexedFile(file)) filesRemoved++; continue; }
+    } finally { fs.closeSync(descriptor); }
     if (content.includes('\u0000')) {
       if (removeIndexedFile(file)) filesRemoved++;
       continue; // binary
@@ -396,7 +496,7 @@ async function indexPath(args = {}) {
     const pieces = chunkText(content);
     const vectors = [];
     for (const piece of pieces) vectors.push(normalize(await embedder.embed(piece)));
-    database.exec('BEGIN');
+    database.exec('BEGIN IMMEDIATE');
     try {
       delChunks.run(file);
       let dim = 0;
@@ -430,8 +530,46 @@ async function indexPath(args = {}) {
   audit.record('search.index_completed', rootAbs, { filesIndexed, filesScanned, chunksIndexed });
   return {
     root: rootAbs, embedder: embedder.name, filesScanned, filesIndexed, filesSkipped,
-    filesSensitiveSkipped, filesRemoved, chunksIndexed, truncated, durationMs: Date.now() - started
+    filesSensitiveSkipped, filesRemoved, chunksIndexed, truncated, durationMs: Date.now() - started,
+    ...(filesUnreadable ? { filesUnreadable, note: `${filesUnreadable} file(s) or folder(s) could not be read (permission denied) and were skipped.` } : {})
   };
+}
+
+// The index entries of a root that is gone from disk, removed; null when the
+// index holds nothing for it. A file another root still holds stays for that
+// root only while it exists.
+function dropVanishedRoot(rootAbs) {
+  const database = getDb();
+  const members = database.prepare('SELECT path FROM memberships WHERE root = ?').all(rootAbs);
+  if (members.length === 0) return null;
+  let filesRemoved = 0;
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    for (const { path: file } of members) {
+      database.prepare('DELETE FROM memberships WHERE root = ? AND path = ?').run(rootAbs, file);
+      const held = database.prepare('SELECT COUNT(*) AS c FROM memberships WHERE path = ?').get(file).c > 0;
+      if (held && fs.existsSync(file)) continue;
+      database.prepare('DELETE FROM memberships WHERE path = ?').run(file);
+      database.prepare('DELETE FROM chunks WHERE path = ?').run(file);
+      database.prepare('DELETE FROM files WHERE path = ?').run(file);
+      filesRemoved++;
+    }
+    database.exec('COMMIT');
+  } catch (error) { database.exec('ROLLBACK'); throw error; }
+  audit.record('search.index_root_dropped', rootAbs, { filesRemoved });
+  return {
+    root: rootAbs, rootMissing: true, filesScanned: 0, filesIndexed: 0, filesSkipped: 0, filesSensitiveSkipped: 0,
+    filesRemoved, chunksIndexed: 0, truncated: false,
+    note: 'This folder no longer exists; what the index held for it was removed.'
+  };
+}
+
+// Whether an indexed file is still what was indexed: 'gone' when it was
+// deleted (its text is never returned), 'changed' when it was edited since.
+function indexedFileState(row) {
+  let stat;
+  try { stat = fs.statSync(row.path); } catch { return 'gone'; }
+  return stat.mtimeMs === row.mtimeMs && stat.size === row.size ? 'current' : 'changed';
 }
 
 function currentlyAllowedSearchRows(rows) {
@@ -442,13 +580,33 @@ function currentlyAllowedSearchRows(rows) {
     if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return false;
     if (!checked.has(candidate)) {
       try {
+        if (credentialProtected(candidate)) { checked.set(candidate, false); return false; }
         workspaceBoundary.assertInsideRoots(candidate, roots, { label: 'indexed path' });
         checked.set(candidate, true);
       } catch { checked.set(candidate, false); }
     }
     return checked.get(candidate);
   };
-  return rows.filter(row => allowed(row.root) && (row.path === undefined || allowed(row.path)));
+  /* A LEAF THAT GAINED A SECOND NAME IS NO LONGER PROVABLY INSIDE THE ROOT.
+   *
+   * assertInsideRoots above proves the NAME is inside a granted root. A hard
+   * link gives the same inode another name, which may sit anywhere the account
+   * can write, and no path check can see it. Checked here as well as at index
+   * time so content indexed before that rule existed stops being queryable
+   * immediately, rather than waiting for the next index run. A leaf that has
+   * since disappeared or stopped being a regular file is dropped by the same
+   * check. */
+  const leaves = new Map();
+  const singleLink = candidate => {
+    if (!leaves.has(candidate)) {
+      try {
+        const stat = fs.lstatSync(candidate);
+        leaves.set(candidate, stat.isFile() && stat.nlink === 1);
+      } catch { leaves.set(candidate, false); }
+    }
+    return leaves.get(candidate);
+  };
+  return rows.filter(row => allowed(row.root) && (row.path === undefined || (allowed(row.path) && singleLink(row.path))));
 }
 
 async function query(args = {}) {
@@ -483,24 +641,40 @@ async function query(args = {}) {
   if (!lexical) queryVector = await ollamaEmbedOne(q, embedderName.slice('ollama:'.length));
   else queryVector = embedderName === LEXICAL_EMBEDDER ? lexicalEmbed(q) : lexicalEmbedV1(q);
   queryVector = normalize(queryVector);
+  const indexed = '(SELECT mtimeMs FROM files WHERE path = c.path) AS mtimeMs, (SELECT size FROM files WHERE path = c.path) AS size';
   const candidates = rootFilter
-    ? database.prepare('SELECT m.root AS root, c.path AS path, c.chunkIndex AS chunkIndex, c.text AS text, c.vector AS vector, c.dim AS dim FROM chunks c JOIN memberships m ON m.path = c.path WHERE m.root = ? AND c.embedder = ? LIMIT ?').all(rootFilter, embedderName, MAX_QUERY_CHUNKS)
-    : database.prepare('SELECT (SELECT root FROM memberships WHERE path = c.path LIMIT 1) AS root, c.path AS path, c.chunkIndex AS chunkIndex, c.text AS text, c.vector AS vector, c.dim AS dim FROM chunks c WHERE c.embedder = ? AND EXISTS (SELECT 1 FROM memberships WHERE path = c.path) LIMIT ?').all(embedderName, MAX_QUERY_CHUNKS);
+    ? database.prepare(`SELECT m.root AS root, c.path AS path, c.chunkIndex AS chunkIndex, c.text AS text, c.vector AS vector, c.dim AS dim, ${indexed} FROM chunks c JOIN memberships m ON m.path = c.path WHERE m.root = ? AND c.embedder = ? LIMIT ?`).all(rootFilter, embedderName, MAX_QUERY_CHUNKS)
+    : database.prepare(`SELECT (SELECT root FROM memberships WHERE path = c.path LIMIT 1) AS root, c.path AS path, c.chunkIndex AS chunkIndex, c.text AS text, c.vector AS vector, c.dim AS dim, ${indexed} FROM chunks c WHERE c.embedder = ? AND EXISTS (SELECT 1 FROM memberships WHERE path = c.path) LIMIT ?`).all(embedderName, MAX_QUERY_CHUNKS);
   // Embedding may await a local service. Re-read grants afterwards, and check
   // each stored file as well as its root before scoring or exposing snippets.
   const rows = currentlyAllowedSearchRows(candidates);
-  const scored = rows.map(r => ({ path: r.path, chunkIndex: r.chunkIndex, score: dot(queryVector, fromBlob(r.vector, r.dim)), text: r.text }));
+  const scored = rows.map(r => ({ path: r.path, chunkIndex: r.chunkIndex, score: dot(queryVector, fromBlob(r.vector, r.dim)), text: r.text, mtimeMs: r.mtimeMs, size: r.size }));
   scored.sort((a, b) => b.score - a.score);
   // Lexical vectors share nothing with unrelated text; a score at or below
   // zero is no match, not a weak one, and is not returned as one.
-  const matches = (lexical ? scored.filter(m => m.score > 1e-6) : scored).slice(0, k).map(m => ({ path: m.path, chunkIndex: m.chunkIndex, score: Math.round(m.score * 1000) / 1000, snippet: m.text.slice(0, 400) }));
+  // The index is a cache of what the files said when they were indexed. A
+  // file deleted since is never returned; one edited since is returned marked
+  // stale, with a note, rather than as its current text.
+  const matches = [];
+  const states = new Map();
+  for (const m of lexical ? scored.filter(candidate => candidate.score > 1e-6) : scored) {
+    if (matches.length === k) break;
+    if (!states.has(m.path)) states.set(m.path, indexedFileState(m));
+    const state = states.get(m.path);
+    if (state === 'gone') continue;
+    matches.push({ path: m.path, chunkIndex: m.chunkIndex, score: Math.round(m.score * 1000) / 1000, snippet: m.text.slice(0, 400), ...(state === 'changed' ? { stale: true } : {}) });
+  }
+  const stale = matches.filter(match => match.stale).length;
   // A successful read of previously indexed content is audited too, not only
   // a refusal or the tool-name-level mcp.tool.succeeded record -- same
   // reasoning as indexPath's own completion audit above. Not fired for the
   // "index is empty for that scope" early return, since nothing was
   // actually disclosed there.
   audit.record('search.query_completed', rootFilter || 'all', { matches: matches.length });
-  return { query: q, embedder: embedderName, candidatesScored: rows.length, matches };
+  return {
+    query: q, embedder: embedderName, candidatesScored: rows.length, matches,
+    ...(stale ? { note: `${stale === 1 ? 'One match is from a file that' : `${stale} matches are from files that`} changed since it was indexed (stale: true); its snippet is the old text. Run search.index on its folder to refresh it.` } : {})
+  };
 }
 
 async function status() {

@@ -5,10 +5,8 @@
 Please do not report security problems in public issues. Report them
 privately in either of these ways:
 
-- **Email:** security@toolsenabled.ai
-- **GitHub:** open this repository's **Security** tab and choose **Report a
-  vulnerability**, or go to
-  https://github.com/ToolsEnabled/toolsenabled-engine/security/advisories/new
+- **Email:** security@toolsenabled.ai, or support@toolsenabled.ai if that
+  address does not answer.
 
 Please include:
 
@@ -81,9 +79,10 @@ The "What we ask of you" and "Safe harbor" sections are adapted from the
 
 ## Scope
 
-**In scope:** the ToolsEnabled engine in this repository, including
-`adapters/openshell/` (the image recipe, `codex-openshell-auth`, the sandbox
-policy) and the `toolsenabled` command (also installed as `toolsenabled-openshell`).
+**In scope:** ToolsEnabled Fleet in this repository, including its OpenShell
+and host installers, local MCP runtime, worker tools, and development image
+recipe. The `toolsenabled` command is also installed as
+`toolsenabled-openshell` inside an OpenShell sandbox.
 
 **Report these to their owners instead:**
 
@@ -96,22 +95,20 @@ policy) and the `toolsenabled` command (also installed as `toolsenabled-openshel
 If you are not sure where a problem belongs, send it to us and we will pass
 it on with your permission.
 
-**The ToolsEnabled desktop app is paused.** It gets no new releases or
-fixes while paused. You can still report problems in it, and we will read
-them.
-
 ## Supported versions
 
-Only the latest published release of ToolsEnabled for OpenShell gets
+Only the latest published release of ToolsEnabled Fleet for OpenShell gets
 security fixes.
 
 ## Where the security boundary is
 
-In ToolsEnabled for OpenShell, **OpenShell is the security boundary.** It
+In ToolsEnabled Fleet for OpenShell, **OpenShell is the security boundary.** It
 enforces the filesystem and network policy, holds the credentials it
 manages, and decides access approvals. ToolsEnabled's own rules (the work
 record, actor labels, the tool list) run inside the sandbox as the same user
 as the agents, so they are not a security boundary. The "Who enforces what"
 table in `adapters/openshell/README.md` lists each part.
 
-No independent security review of ToolsEnabled has taken place yet.
+Review scope and remaining limits are recorded in each release's notes. Host
+mode runs with the user's own permissions and network, so it does not inherit
+OpenShell's confinement or credential custody.

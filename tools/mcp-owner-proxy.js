@@ -26,32 +26,28 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const PIPE_RE = /^\\\\\.\\pipe\\[A-Za-z0-9._-]{1,180}$/;
 const AGENT_ACTORS = new Set(['codex', 'claude', 'gemini']);
 const DECLARED_AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const REFUSAL = 'REFUSING TO SERVE: cannot reach this ToolsEnabled app instance. Close and reopen ToolsEnabled normally, then start the agent again.';
+const REFUSAL = 'REFUSING TO SERVE: cannot reach the ToolsEnabled Fleet host. Check toolsenabled status, then restart this agent session.';
 
 /* WHAT A RUNNING SESSION IS TOLD WHEN ITS TOOL HOST GOES AWAY, and why it is
  * told at all.
  *
- * MEASURED, twice, and filed as T159. Activating a runtime generation is
- * pointer-only, but the app restart that follows it ends every agent session
- * in the app (tooling/live/supervisor.mjs says so in its own header). The
- * agent CLI processes outlive that restart. Before this, their proxy saw the
+ * A host restart can end a tool connection while the agent CLI remains open.
+ * Before this recovery path, the proxy saw the
  * socket close, wrote one line to STDERR -- which an MCP client does not show
  * anybody -- and exited, so:
  *   - the tool call that was RUNNING at that moment was never answered at all;
  *   - the agent read a transport-level "MCP server disconnected" with no
  *     product reason and no recovery;
- *   - the owner read nothing.
- * On two occasions lanes "worked on then idled unreachable"; later the
- * Controller could still only say "MCP is still down".
+ *   - the user read nothing.
  *
  * So a lost transport is now ANSWERED IN THE PROTOCOL, with a named reason the
  * agent reads as a tool result in its own transcript. The three reasons are
- * told apart by EVIDENCE -- the capability record the app publishes -- never
+ * told apart by the host capability record, never
  * guessed:
- *   record gone            -> the app is not running.
- *   record names ANOTHER   -> this app instance was replaced (the restart that
- *   generation                follows a runtime-generation activation).
- *   record names THE SAME  -> the app is still running and ended this session.
+ *   record gone            -> the host is unavailable.
+ *   record names ANOTHER   -> the host generation was replaced.
+ *   generation
+ *   record names THE SAME  -> the host ended this session.
  * A same-generation loss is the only one worth reconnecting through, and that
  * reconnect cannot resurrect anything: the host still has to authorize the
  * credential, so a deliberate revoke stays a revoke. */
@@ -59,25 +55,25 @@ const TRANSPORT_LOST_CODES = Object.freeze({
   SUPERSEDED: 'OWNER_HOST_GENERATION_SUPERSEDED',
   UNAVAILABLE: 'OWNER_HOST_UNAVAILABLE',
   SESSION_ENDED: 'OWNER_HOST_SESSION_ENDED',
-  /* NOT a lost transport: the connection came back on the SAME app instance.
+  /* NOT a lost transport: the connection came back on the SAME host generation.
      Only the one call that was running across the drop is unanswerable, and
-     telling the agent that ToolsEnabled ended its tool access and it should be
-     resumed from the app, while the session is serving again, is false in the
-     expensive direction -- the agent stops working and the owner is asked to
+     telling the agent that Fleet ended its tool access and it should be
+     restarted, while the session is serving again, is false in the
+     expensive direction -- the agent stops working and the user is asked to
      resume a session that never needed it. */
   CALL_INTERRUPTED: 'OWNER_HOST_CALL_INTERRUPTED'
 });
 const TRANSPORT_LOST_MESSAGES = Object.freeze({
-  [TRANSPORT_LOST_CODES.SUPERSEDED]: 'ToolsEnabled restarted into a newer runtime while this session was running, so this session\'s tools belong to an app instance that no longer exists. Nothing here is lost: resume this agent from the app to get a working toolkit again.',
-  [TRANSPORT_LOST_CODES.UNAVAILABLE]: 'ToolsEnabled is not running, so this session has no toolkit to call. Open ToolsEnabled and resume this agent to get one again.',
-  [TRANSPORT_LOST_CODES.SESSION_ENDED]: 'ToolsEnabled ended this session\'s tool access. Resume this agent from the app to get a working toolkit again.',
-  [TRANSPORT_LOST_CODES.CALL_INTERRUPTED]: 'ToolsEnabled dropped this session\'s tool connection while this call was running, and the connection is back: the toolkit is working again and the next call will be served normally.'
+  [TRANSPORT_LOST_CODES.SUPERSEDED]: 'ToolsEnabled Fleet restarted into a newer runtime while this session was running. This session\'s tool connection belongs to the previous host generation. Check toolsenabled status and restart this agent session.',
+  [TRANSPORT_LOST_CODES.UNAVAILABLE]: 'The ToolsEnabled Fleet host is unavailable, so this session has no toolkit to call. Check toolsenabled status and restart this agent session.',
+  [TRANSPORT_LOST_CODES.SESSION_ENDED]: 'ToolsEnabled Fleet ended this session\'s tool access. Check toolsenabled status and restart this agent session.',
+  [TRANSPORT_LOST_CODES.CALL_INTERRUPTED]: 'The ToolsEnabled Fleet host dropped this session\'s tool connection while this call was running, and the connection is back: the toolkit is working again and the next call will be served normally.'
 });
 /* A call that was IN FLIGHT when the transport dropped is a different answer
  * from a call made after it, and conflating them would be a lie in the one
  * direction that costs the most. The proxy cannot know whether the host
  * finished that work before it went away, so it says exactly that, and it
- * never re-sends the request: host.exec, a purchase and a credential write all
+ * never re-sends the request: host.exec and other outward actions can
  * ride this transport, and replaying one of those to "recover" would be worse
  * than the outage. */
 const IN_FLIGHT_SUFFIX = ' One tool call was already running when this happened; whether it finished is not known here, so do not assume either way and do not repeat it blindly.';
@@ -85,10 +81,10 @@ const TRANSPORT_LOST_RPC_CODE = -32001;
 /* Bounds, declared.
  *
  * RESOLVE_WINDOW_MS is the one that matters, and it exists because "the record
- * is gone" and "the record is not back yet" are different answers. An app that
+ * is gone" and "the record is not back yet" are different answers. A host that
  * is restarting removes its capability record on the way out and publishes the
  * next one on the way in; measured 2026-09-18, that gap was 12 seconds. Reading
- * the absence once and calling the app gone would convict a restart in
+ * the absence once and calling the host gone would misclassify a restart in
  * progress, so an absent record is polled to a deadline before it is allowed to
  * mean anything. A record that names ANOTHER generation is not polled: it is
  * already a complete answer.
@@ -110,13 +106,13 @@ const DEGRADED_LINGER_MS = 15 * 60_000;
 /* THE STATE BETWEEN A DROPPED CONNECTION AND THE VERDICT ON IT. Named so the
  * process log (which MCP clients keep) says what this proxy is doing instead
  * of nothing: the client's requests are held, not refused, and are forwarded
- * the moment the same app instance authorizes the credential again. */
+ * the moment the same host generation authorizes the credential again. */
 const TRANSPORT_RECOVERING_CODE = 'OWNER_HOST_RECONNECTING';
-const TRANSPORT_RECOVERING_MESSAGE = 'ToolsEnabled dropped this session\'s tool connection; reconnecting to the same app instance. Tool calls made now are held and answered once the connection is back.';
+const TRANSPORT_RECOVERING_MESSAGE = 'The ToolsEnabled Fleet host dropped this session\'s tool connection; reconnecting to the same host generation. Tool calls made now are held and answered once the connection is back.';
 // Only the FRONT of a JSON-RPC line is scanned for its `id`, so a 40 MB
 // screenshot result costs one indexOf and no retained copy. Both hosts write
 // `{"jsonrpc":"2.0","id":...` as the first two keys (src/mcp-server.js
-// errorResponse/write, src/owner-host.js), so this prefix is generous.
+// errorResponse/write, the host transport), so this prefix is generous.
 const RPC_ID_SCAN_BYTES = 1024;
 const MAX_TRACKED_REQUESTS = 64;
 
@@ -308,12 +304,12 @@ function startInProcess(actor, agentId = null) {
   broker.start({ agentActor: actor, ...(agentId ? { agentId } : {}) });
 }
 
-/* WHY THE TRANSPORT WENT AWAY, ANSWERED FROM THE RECORD THE APP PUBLISHES.
+/* WHY THE TRANSPORT WENT AWAY, ANSWERED FROM THE HOST RECORD.
  *
  * The capability record is already this proxy's only discovery mechanism and
- * it already carries the app instance's `generation`. Re-reading it at the
+ * it already carries the host's `generation`. Re-reading it at the
  * moment of loss is therefore evidence, not inference: a record that now names
- * a different generation is a different app instance, which is exactly what a
+ * a different generation is a different host instance, which is exactly what a
  * runtime-generation activation's restart produces. `previous` is the record
  * this session actually authorized against; when it carries no generation
  * (a direct caller with a hand-made capability) nothing can be claimed about
@@ -434,7 +430,7 @@ function connectOwnerHost(capability, credential, dependencies = {}) {
 
   /* THE DEGRADED STATE: NAMED, VISIBLE, AND STILL ANSWERING.
    *
-   * Exiting here is what made T159 invisible. The process stays, the client's
+   * Exiting here used to hide the failure. The process stays, the client's
    * stdin stays open, and every request -- the one that was in flight and
    * every one after it -- is answered with the named reason, so the agent
    * reads a product sentence in its own transcript instead of a dead pipe.
@@ -486,7 +482,7 @@ function connectOwnerHost(capability, credential, dependencies = {}) {
       route = verdict.record;
       errorOutput.write(`${TRANSPORT_RECOVERING_CODE}: reconnect attempt ${reconnectAttempts - remaining} of ${reconnectAttempts}\n`);
       attempt(verdict.record, () => {
-        // Back in service on the same app instance. The call that was running
+        // Back in service on the same host generation. The call that was running
         // when the transport dropped is still unanswerable, so it is answered
         // now rather than left to hang behind a working connection -- but it is
         // answered as an INTERRUPTED CALL, not an ended session: this session

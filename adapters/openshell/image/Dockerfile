@@ -3,7 +3,7 @@
 # Recipe for a ToolsEnabled sandbox image for NVIDIA OpenShell.
 #
 # Build it yourself with build.sh; do not publish the resulting image. It
-# installs third-party agent CLIs (Claude Code, Codex) exactly as their vendors
+# installs third-party agent CLIs (Claude Code, Codex, Gemini CLI, OpenCode) exactly as their vendors
 # publish them, and each stays under its own licence and terms.
 #
 # The CLIs are installed unmodified from the npm registry. Nothing here signs
@@ -16,8 +16,6 @@ FROM nvcr.io/nvidia/base/ubuntu:24.04
 
 ARG TARGETARCH
 ARG NODE_VERSION=22.19.0
-ARG CLAUDE_CODE_VERSION=2.1.284
-ARG CODEX_VERSION=0.158.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -47,35 +45,28 @@ RUN set -eu; \
     rm "${file}"; \
     node --version
 
-# The agent CLIs, unmodified, pinned to the versions this recipe was tested with.
-RUN npm install --global \
-        "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-        "@openai/codex@${CODEX_VERSION}" \
+# One reviewed list supplies both the build and the hand-test identity check.
+# npm installs the official packages without patches or sign-in configuration.
+COPY adapters/openshell/image/agent-versions.json /tmp/agent-versions.json
+RUN node -e 'const cp = require("node:child_process"); const agents = require("/tmp/agent-versions.json"); const run = (cmd, args) => { const r = cp.spawnSync(cmd, args, { stdio: "inherit" }); if (r.status !== 0) process.exit(r.status || 1); }; run("npm", ["install", "--global", ...agents.map(a => a.package + "@" + a.version)]); for (const a of agents) run(a.command, ["--version"]);' \
     && npm cache clean --force \
-    && claude --version \
-    && codex --version
+    && rm /tmp/agent-versions.json
 
-# /usr/local is read-only inside the sandbox, so Claude Code's self-updater
-# cannot work there; update by rebuilding with a newer CLAUDE_CODE_VERSION.
-# OpenShell starts sandbox commands with its own environment rather than the
-# image's, so pass `--env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` to
-# `openshell sandbox create` (it also stops telemetry and error reporting).
+# /usr/local is read-only in the sandbox; update by rebuilding the image.
 
-# The ToolsEnabled engine: only its runtime files and production dependencies.
+# The ToolsEnabled Fleet development image. Release installations use the
+# verified runtime archive, not this image recipe.
 WORKDIR /opt/toolsenabled/engine
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md registry.json ./
+RUN npm ci --omit=dev --ignore-scripts --offline --no-audit --no-fund && npm cache clean --force
+COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md ./
 COPY bin ./bin
 COPY config ./config
 COPY schemas ./schemas
 COPY src ./src
 COPY tools ./tools
-COPY packages ./packages
-COPY sidecars ./sidecars
 COPY adapters ./adapters
 
-COPY --chmod=0755 adapters/openshell/image/codex-openshell-auth /usr/local/bin/codex-openshell-auth
 RUN ln -s /opt/toolsenabled/engine/bin/toolsenabled-openshell.js /usr/local/bin/toolsenabled-openshell \
     && ln -s /opt/toolsenabled/engine/bin/toolsenabled-openshell.js /usr/local/bin/toolsenabled
 

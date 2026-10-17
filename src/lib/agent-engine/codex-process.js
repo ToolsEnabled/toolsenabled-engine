@@ -2,11 +2,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const providerIsolation = require('../provider-session-isolation');
 const { spawnHidden, resolveHiddenInvocation, waitForRootSpawn } = require('../proc/hidden-spawn');
 const { CodexAdapter, CodexAdapterError, assertPinnedVersion } = require('./codex-adapter');
 const { resumeRefusalFor } = require('./resume-provider-guard');
 const { createStartupControl } = require('./startup-control');
+const { createEnvironmentRedactor } = require('./stream-redactor');
+// Retain the established name list in its protocol module; both transports
+// also cover secret-bearing names from the environment of their own child.
+const { CREDENTIAL_ENV_NAMES } = require('./claude-cli-process');
 const { DEFAULT_CLEANUP_TIMEOUT_MS, createStartupCleanup, cleanupFailure, validateCleanupTimeout, withOwnedStartupCleanup } = require('./codex-startup-cleanup');
 /* MEASURED 2026-09-03: a session's app-server child is one half of a process
    PAIR. `codex.exe app-server` spawns its own `codex-code-mode-host.exe`
@@ -171,20 +174,16 @@ function spawnCodex(command, args, {
   processGroup = false, credentialEnvironment = null
 } = {}) {
   validateInvocation(command, args);
-  if (!['codex', 'gemini', 'grok'].includes(provider)) {
+  // The shared JSON-RPC transport serves agents whose descriptor speaks the
+  // app-server or ACP protocol (config/agents/*.json).
+  const agentDriver = require('../agents/registry').driverOf(require('../agents/registry').activeRegistry(env), provider);
+  if (!['app-server', 'acp'].includes(agentDriver)) {
     throw Object.assign(new Error('This shared process transport has no contract for the selected provider.'),
       { code: 'AGENT_CONFINEMENT_PROVIDER_INVALID' });
   }
-  // ACP reuses the process custodian, but owns a different account and CLI.
-  // Requiring CODEX_HOME here made a signed-in private Grok/Gemini session
-  // fail; supplying one would instead have selected the wrong executable.
-  const baseEnv = providerIsolation.providerSessionEnvironment(env === undefined ? process.env : env,
-    { provider, requireHome: !args.includes('--version') });
-  const privateExecutable = providerIsolation.resolvePrivateProviderExecutable(provider, baseEnv);
-  const providerArgs = provider === 'codex' ? providerIsolation.codexFileCredentialArgs(args, baseEnv) : args;
-  const invocation = privateExecutable
-    ? { command: privateExecutable.command, args: [...privateExecutable.prefixArgs, ...providerArgs] }
-    : resolveInvocation(command, providerArgs, baseEnv);
+  // The agent runs as the person installed it, with the person's environment.
+  const baseEnv = env === undefined ? process.env : env;
+  const invocation = resolveInvocation(command, args, baseEnv);
   /* ELECTRON_RUN_AS_NODE belongs ONLY to the branch that re-enters our own
      binary as a script host. hidden-spawn resolves the npm launcher to the
      native codex.exe whenever this machine has one, and that child must not
@@ -192,13 +191,16 @@ function spawnCodex(command, args, {
      does to an unrelated child. So the decision is made against what will
      ACTUALLY be executed, not against what was asked for. */
   const executed = resolveHiddenInvocation(invocation.command, invocation.args, baseEnv);
-  const launchedEnvironment = privateExecutable ? { ...baseEnv, ...privateExecutable.env } : baseEnv;
+  const launchedEnvironment = baseEnv;
   const childEnv = executed.command === process.execPath
     ? { ...launchedEnvironment, ELECTRON_RUN_AS_NODE: '1' }
     : launchedEnvironment;
   return spawnHidden(invocation.command, invocation.args, {
     cwd,
     env: childEnv,
+    // An agent CLI the person runs: its sign-in environment passes through
+    // (src/lib/proc/hidden-spawn.js, agentCliEnvironment).
+    agentCli: true,
     stdio: ['pipe', 'pipe', 'pipe'],
     containProcessTree,
     ...(processGroup ? { processGroup: true } : {}),
@@ -232,6 +234,7 @@ function createCodexProcessTransport({
     throw new TypeError('A process group of its own and a stated credential environment are only for an uncontained Codex transport');
   }
   const child = spawnCodex(command, args, { env, cwd, containProcessTree, rootLaunch, provider, processGroup, credentialEnvironment });
+  const stderrRedactor = createEnvironmentRedactor({ ...(env ?? process.env), ...credentialEnvironment }, CREDENTIAL_ENV_NAMES);
   const rootReady = rootLaunch ? waitForRootSpawn(child) : null;
   rootReady?.catch(() => {});
   const startupCleanup = createStartupCleanup(child);
@@ -252,15 +255,21 @@ function createCodexProcessTransport({
     }
   });
 
-  child.stderr.on('data', chunk => {
-    stderrBuffer = appendBounded(stderrBuffer, chunk, STDERR_LIMIT);
+  function recordStderr(redacted) {
+    if (!redacted) return;
+    stderrBuffer = appendBounded(stderrBuffer, redacted, STDERR_LIMIT);
     for (const listener of stderrListeners) {
-      try { listener(chunk); } catch { /* A stderr observer cannot disrupt the child process. */ }
+      try { listener(redacted); } catch { /* A stderr observer cannot disrupt the child process. */ }
     }
-  });
+  }
+  function flushStderr() { recordStderr(stderrRedactor.end()); }
+  child.stderr.on('data', chunk => recordStderr(stderrRedactor.write(chunk)));
+  child.stderr.once('end', flushStderr);
+  child.stderr.once('close', flushStderr);
 
   function notifyExit({ code = null, signal = null, error = null } = {}) {
     if (exitInfo) return;
+    flushStderr();
     exitInfo = Object.freeze({ code, signal, error, stderr: stderrBuffer });
     deliverExit();
   }
@@ -274,6 +283,9 @@ function createCodexProcessTransport({
   }
 
   child.once('error', error => notifyExit({ error }));
+  // Exit, not close: Codex's own code-mode host can hold the pipes open after the
+  // app-server exits. The redactor's held tail is flushed into the exit record;
+  // bytes that arrive after exit are dropped, as the frozen record always did.
   child.once('exit', (code, signal) => notifyExit({ code, signal }));
   child.stdin.on('error', error => notifyExit({ error }));
 
@@ -394,19 +406,25 @@ async function detectCodexVersion({
       let stdout = '';
       let stderr = '';
       let spawnError = null;
+      // This probe also uses agentCli:true, so its diagnostics need the same
+      // protection as a session (including stdout used as a version fallback).
+      const stdoutRedactor = createEnvironmentRedactor(env, CREDENTIAL_ENV_NAMES);
+      const stderrRedactor = createEnvironmentRedactor(env, CREDENTIAL_ENV_NAMES);
 
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', chunk => {
-        stdout = appendBounded(stdout, chunk, VERSION_OUTPUT_LIMIT);
+        stdout = appendBounded(stdout, stdoutRedactor.write(chunk), VERSION_OUTPUT_LIMIT);
       });
       child.stderr.on('data', chunk => {
-        stderr = appendBounded(stderr, chunk, VERSION_OUTPUT_LIMIT);
+        stderr = appendBounded(stderr, stderrRedactor.write(chunk), VERSION_OUTPUT_LIMIT);
       });
       child.once('error', error => {
         spawnError = error;
       });
       child.once('close', code => {
+        stdout = appendBounded(stdout, stdoutRedactor.end(), VERSION_OUTPUT_LIMIT);
+        stderr = appendBounded(stderr, stderrRedactor.end(), VERSION_OUTPUT_LIMIT);
         const output = stdout.trim() || stderr.trim();
         if (!spawnError && code === 0 && output) {
           resolve(output);
@@ -517,11 +535,15 @@ async function startCodexSession({
   clientInfo,
   threadOptions = {},
   onEvent = null,
+  requestInput = null,
+  observeThreadPolicy = null,
   command = 'codex',
+  provider = 'codex',
   args = ['app-server'],
   env,
   rootLaunch,
   signal = null,
+  beforeThread = null,
   startupTimeoutMs = DEFAULT_START_TIMEOUT_MS,
   cleanupTimeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS,
   // See createCodexProcessTransport: false only for the OpenShell agent tree.
@@ -540,19 +562,20 @@ async function startCodexSession({
     startup.throwIfStopped();
     // This operation owns its child and observes startup.signal itself. Racing
     // it again would return before its cleanup outcome could reach the host.
-    const codexVersion = await detectCodexVersion({ command, env, signal: startup.signal,
+    const codexVersion = await detectCodexVersion({ command, provider, env, signal: startup.signal,
       containProcessTree: containProcessTree !== false, cleanupTimeoutMs });
     startup.throwIfStopped();
     assertPinnedVersion(codexVersion);
-    transport = createCodexProcessTransport({ command, args, cwd, env, rootLaunch,
+    transport = createCodexProcessTransport({ command, provider, args, cwd, env, rootLaunch,
       ...(containProcessTree === false ? { containProcessTree: false } : {}),
       ...(processGroup ? { processGroup: true } : {}),
       ...(credentialEnvironment ? { credentialEnvironment } : {}) });
-    adapter = new CodexAdapter({ transport, codexVersion, clientInfo });
+    adapter = new CodexAdapter({ transport, codexVersion, clientInfo, requestInput, observeThreadPolicy });
     if (onEvent) adapter.onEvent(onEvent);
     if (rootLaunch) await startup.wait(() => transport.rootReady);
     await startup.wait(() => adapter.initialize())
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
+    if (beforeThread) await startup.wait(() => beforeThread(adapter));
     const started = await startup.wait(() => adapter.startThreadWithNativeModeSettings({ ...(cwd ? { cwd } : {}), ...threadOptions }))
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
     const { threadId } = started;
@@ -562,6 +585,7 @@ async function startCodexSession({
       threadId,
       nativeModeSettings: started.nativeModeSettings,
       nativeModeUnavailableReason: started.nativeModeUnavailableReason,
+      resolvedSandbox: started.resolvedSandbox,
       ...(transport.processGroup ? { processGroup: transport.processGroup } : {}),
       close() {
         if (closed) return;
@@ -601,11 +625,15 @@ async function restoreCodexSession({
   clientInfo,
   threadOptions = {},
   onEvent = null,
+  requestInput = null,
+  observeThreadPolicy = null,
   command = 'codex',
+  provider = 'codex',
   args = ['app-server'],
   env,
   rootLaunch,
   signal = null,
+  beforeThread = null,
   startupTimeoutMs = DEFAULT_START_TIMEOUT_MS,
   cleanupTimeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS,
   /* THE PROVIDER THAT MINTED THIS THREAD, when the record has one. Absent means
@@ -680,20 +708,21 @@ async function restoreCodexSession({
       assertSource();
       startup.throwIfStopped();
     }
-    const codexVersion = await detectCodexVersion({ command, env, signal: startup.signal,
+    const codexVersion = await detectCodexVersion({ command, provider, env, signal: startup.signal,
       containProcessTree: containProcessTree !== false, cleanupTimeoutMs });
     startup.throwIfStopped();
     assertPinnedVersion(codexVersion);
-    transport = createCodexProcessTransport({ command,
+    transport = createCodexProcessTransport({ command, provider,
       args: resumeDatabaseHome ? [...args, '-c', 'sqlite_home=' + JSON.stringify(resumeDatabaseHome)] : args, cwd, env, rootLaunch,
       ...(containProcessTree === false ? { containProcessTree: false } : {}),
       ...(processGroup ? { processGroup: true } : {}),
       ...(credentialEnvironment ? { credentialEnvironment } : {}) });
-    adapter = new CodexAdapter({ transport, codexVersion, clientInfo });
+    adapter = new CodexAdapter({ transport, codexVersion, clientInfo, requestInput, observeThreadPolicy });
     if (onEvent) adapter.onEvent(onEvent);
     if (rootLaunch) await startup.wait(() => transport.rootReady);
     await startup.wait(() => adapter.initialize())
       .catch(error => { throw startIncompatibility(error, codexVersion, { methodMissing: true }); });
+    if (beforeThread) await startup.wait(() => beforeThread(adapter));
     if ((forkSourcePath || resumeSourcePath) && typeof assertSource === 'function') assertSource();
     const resumed = await startup.wait(() => forkSourcePath
       ? adapter.forkThreadFromPath(threadId, importedSourcePath, threadOptions)
@@ -716,6 +745,7 @@ async function restoreCodexSession({
       // speech was left in Codex (codex-adapter.js SMALLER_TURN_VIEW).
       historyComplete: resumed.historyComplete !== false,
       threadCwd: resumed.cwd,
+      resolvedSandbox: resumed.resolvedSandbox,
       model: resumed.model,
       reasoningEffort: resumed.reasoningEffort,
       ...(transport.processGroup ? { processGroup: transport.processGroup } : {}),

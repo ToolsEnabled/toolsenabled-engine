@@ -47,7 +47,10 @@ function parseDenialLine(line) {
     return Object.freeze({
       kind: 'net_open',
       riskLevel: level.toUpperCase(),
-      binary,
+      // OpenShell writes "-" when it could not tell which program connected
+      // (reason transparent_tcp_identity_unavailable, seen in OpenShell
+      // 0.1.2's log). That is no program at all, never a path to allow.
+      binary: binary === '-' ? null : binary,
       pid: Number(pid),
       host,
       port: Number(port),
@@ -119,7 +122,29 @@ function ruleNameFor(parsed, binary) {
  * one (true for every `HTTP:<method>` line -- confirmed against the
  * tutorial's own example, which names no binary at all).
  */
-function explainDenial(lineOrParsed, { sandboxName = '<sandbox-name>', binary } = {}) {
+/**
+ * The explanation, without any drafted command when the request went to the
+ * ToolsEnabled host outside the sandbox (src/lib/openshell-host-reach.js): no
+ * rule is ever drafted there, and the plain text says why. `hostPorts`
+ * defaults to the host's default port; /mcp/ paths are refused on any port.
+ */
+function explainDenial(lineOrParsed, { hostPorts, ...options } = {}) {
+  const explained = explainAnyDenial(lineOrParsed, options);
+  if (!explained.understood || !explained.parsed) return explained;
+  const parsed = explained.parsed;
+  const reach = require('./openshell-host-reach');
+  if (!reach.endpointReachesHost({ host: parsed.host, port: parsed.port, path: parsed.path }, hostPorts ? { hostPorts } : {})) return explained;
+  const refusal = reach.proposalRefusal({ host: parsed.host, port: parsed.port, path: parsed.path, binary: options.binary || parsed.binary });
+  return Object.freeze({
+    ...explained,
+    plainText: `${explained.plainText} ${refusal.message}`,
+    suggestedCommand: null,
+    note: null,
+    hostRefusal: Object.freeze({ code: refusal.code, message: refusal.message })
+  });
+}
+
+function explainAnyDenial(lineOrParsed, { sandboxName = '<sandbox-name>', binary } = {}) {
   const parsed = typeof lineOrParsed === 'string' ? parseDenialLine(lineOrParsed) : lineOrParsed;
   if (!parsed) {
     return Object.freeze({
@@ -132,6 +157,22 @@ function explainDenial(lineOrParsed, { sandboxName = '<sandbox-name>', binary } 
   const effectiveBinary = binary || parsed.binary;
   const ruleName = ruleNameFor(parsed, effectiveBinary);
   const riskWord = riskLevelWord(parsed.riskLevel);
+
+  if (parsed.kind === 'net_open' && !parsed.binary) {
+    return Object.freeze({
+      understood: true,
+      kind: parsed.kind,
+      riskLevel: parsed.riskLevel,
+      plainText:
+        `A program OpenShell could not identify tried to reach ${parsed.host}:${parsed.port}, and OpenShell blocked the connection -- ` +
+        `${riskWord} risk. A rule names the programs it allows, and this line names none, so a proposal needs the path of the program ` +
+        `that made the request. OpenShell's own reason: "${parsed.reason}".`,
+      suggestedCommand: null,
+      ruleName,
+      binaryRequired: !effectiveBinary,
+      parsed
+    });
+  }
 
   if (parsed.kind === 'net_open') {
     const plainText =
@@ -232,7 +273,7 @@ function explainDenial(lineOrParsed, { sandboxName = '<sandbox-name>', binary } 
  * caller must supply the binary it knows about (for an `http_request` denial,
  * the log line never carries one).
  */
-function buildNarrowestProposal(lineOrParsed, { intentSummary, binary } = {}) {
+function buildNarrowestProposal(lineOrParsed, { intentSummary, binary, hostPorts } = {}) {
   const parsed = typeof lineOrParsed === 'string' ? parseDenialLine(lineOrParsed) : lineOrParsed;
   if (!parsed) {
     const error = new Error('Cannot build a proposal from a denial line that did not match a known shape.');
@@ -246,11 +287,30 @@ function buildNarrowestProposal(lineOrParsed, { intentSummary, binary } = {}) {
     error.code = 'OPENSHELL_PROPOSAL_DNS_ONLY';
     throw error;
   }
+  // The narrowest rule allows the program the denial names, and no other: a
+  // different path here would propose access for a program OpenShell never
+  // blocked, under the name of this denial.
+  if (binary && parsed.binary && binary !== parsed.binary) {
+    const error = new Error(
+      `This denial names the program OpenShell blocked, ${parsed.binary}, and a proposal for it allows exactly that program. ` +
+        'Leave binary out, or propose the denial of the program you mean.'
+    );
+    error.code = 'OPENSHELL_PROPOSAL_BINARY_MISMATCH';
+    throw error;
+  }
+  // Never a rule that reaches the ToolsEnabled host outside the sandbox: it
+  // would hand an agent CLI's grant there to this binary
+  // (src/lib/openshell-host-reach.js).
+  const reach = require('./openshell-host-reach');
+  if (reach.endpointReachesHost({ host: parsed.host, port: parsed.port, path: parsed.path }, hostPorts ? { hostPorts } : {})) {
+    throw reach.proposalRefusal({ host: parsed.host, port: parsed.port, path: parsed.path, binary: binary || parsed.binary });
+  }
+
   const effectiveBinary = binary || parsed.binary;
   if (!effectiveBinary) {
     const error = new Error(
-      'No binary is known for this denial (an HTTP:<method> line never names one) -- pass { binary } explicitly, ' +
-        'or the proposed rule would allow nothing.'
+      'No binary is known for this denial (an HTTP:<method> line never names one, and OpenShell could not identify the program ' +
+        'behind a NET:OPEN line that shows "-") -- pass { binary } explicitly, or the proposed rule would allow nothing.'
     );
     error.code = 'OPENSHELL_PROPOSAL_NO_BINARY';
     throw error;

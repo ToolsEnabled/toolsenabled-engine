@@ -1,24 +1,23 @@
-# Suggested sandbox policy for running ToolsEnabled with the person's own
-# Claude and Codex subscriptions.
+# Suggested sandbox policy for running ToolsEnabled next to agent CLIs that
+# sign in with the person's own accounts.
 #
 # OpenShell never loads this file on its own and ToolsEnabled never applies it.
 # Review it, edit it for your image, then use it yourself:
 #
 #   openshell sandbox create --name <name> --from <image> \
-#     --policy adapters/openshell/policy/cli-sign-in.yaml --provider codex --detach
+#     --policy adapters/openshell/policy/cli-sign-in.yaml --detach
 #
-# Codex: attach an OpenShell `codex` provider with gateway-managed refresh
-# (NVIDIA OpenShell examples/codex-app-server). The provider contributes its
-# own network rule, and the sandbox holds only placeholders. Inside the
-# sandbox, run `codex-openshell-auth` once before `codex`.
+# Each agent signs in with its own sign-in inside the sandbox (`claude` then
+# /login; `codex login`). The rules below are what those sign-ins and the
+# agents' inference need. Each agent keeps its sign-in in the sandbox's home
+# folder, where processes in the sandbox can read it. ToolsEnabled never reads,
+# copies or relays it.
 #
-# Claude Code: OpenShell's Claude provider takes API keys only, and gateway-held
-# subscription sign-in is tracked upstream (NVIDIA/OpenShell#3331). Until then
-# the person signs in with Claude Code's own flow inside the sandbox (`claude`,
-# then /login). Claude Code stores that sign-in under /sandbox/.claude, where
-# processes in the sandbox can read it; OpenShell's placeholders do not cover
-# it. ToolsEnabled never reads, copies or relays it. The claude_code rule below
-# is what that sign-in needs, and goes away once the provider can hold it.
+# To use an API key instead, attach an OpenShell provider for it
+# (`--provider <name>`); the provider contributes its own network rule and the
+# sandbox holds only a placeholder. Other sign-in routes (for example Claude
+# Code through Amazon Bedrock, Google Vertex or Microsoft Foundry) need a rule
+# for that service's hosts; add it here or attach the matching provider.
 #
 # Each network rule covers the listed executables and every process they start
 # (upstream network-rules documentation). An MCP server that an agent CLI starts
@@ -72,20 +71,18 @@ network_policies:
     binaries:
       - path: /usr/local/lib/node_modules/@anthropic-ai/**
 
-  # Optional, instead of the `codex` provider: Codex signed in inside this
-  # sandbox by the person (`codex login`, see README.md). Run
+  # Codex signed in inside this sandbox by the person (`codex login`). Run
   # `toolsenabled setup --add` so Codex keeps its interactive app server
-  # inside the session, under the npm-installed binary path below. Prefer the
-  # provider when you can.
-  # codex_signed_in_here:
-  #   name: Codex signed in inside the sandbox
-  #   endpoints:
-  #     - { host: api.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
-  #     - { host: auth.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
-  #     - { host: chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
-  #     - { host: ab.chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
-  #   binaries:
-  #     - path: /usr/local/lib/node_modules/@openai/**
+  # inside the session, under the npm-installed binary path below.
+  codex_signed_in_here:
+    name: Codex signed in inside the sandbox
+    endpoints:
+      - { host: api.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+      - { host: auth.openai.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+      - { host: chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+      - { host: ab.chatgpt.com, port: 443, protocol: rest, access: read-write, enforcement: enforce }
+    binaries:
+      - path: /usr/local/lib/node_modules/@openai/**
 
 # Not allowed on purpose: Claude Code's telemetry and error logging
 # (http-intake.logs.us5.datadoghq.com and others) and Codex's update check

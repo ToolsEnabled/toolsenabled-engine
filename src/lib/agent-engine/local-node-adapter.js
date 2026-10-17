@@ -47,6 +47,7 @@
  */
 
 const { createHash, randomUUID } = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 const {
   assertEngineAdapter,
   validateApprovalAnswer,
@@ -77,16 +78,45 @@ const MAX_THREADS_HELD = 256;
 const MAX_HISTORY_MESSAGES = 400;
 /* What a resume reports, matching the Codex adapter's own cap. */
 const MAX_RESUMED_TURNS = 200;
-/* How many times one turn may go back to the model after tool results
-   before the turn is stopped. A model that keeps calling tools without ever
-   answering is looping, and a loop that is also spending the person's GPU
-   deserves a sentence rather than a spinner. */
-const MAX_TOOL_ROUNDS = 24;
+/* NO WORK BUDGETS (2026-10-17). Fleet does not stop a worker for the number of rounds it takes, the
+   tokens it uses or how long its work runs: the person gives it a task and gets what it produces.
+   A 24-round cap on local models, and a 16-round, 1,048,576-token, 3-minute default for generic
+   workers (hard maxima 64 rounds and one hour), were added without the owner asking and ended
+   working assignments on free local GPUs. Spending limits for paid endpoints belong at the provider.
+   What stays is liveness: a model request or a tool call that gives no answer for turnTimeoutMs
+   (30 minutes by default) means the server or tool is dead, and the assignment says so rather than
+   hanging. MAX_TOOL_ROUNDS stays exported for compatibility and is not enforced. */
+const MAX_TOOL_ROUNDS = Infinity;
+const MODEL_API_DEFAULT_LIMITS = Object.freeze({ maxOutputTokens: 2048 });
+const MODEL_API_MAX_LIMITS = Object.freeze({ maxOutputTokens: 32768 });
+/* Older saved connections carry these. They still load, and nothing enforces them. */
+const MODEL_API_LEGACY_LIMITS = Object.freeze(['maxTurns', 'maxTotalTokens', 'timeoutMs']);
 const RECEIPT_STATUSES = Object.freeze(['pending', 'success', 'error', 'interrupted']);
 const TURN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fail(code, message, details = {}) {
   return new LocalNodeError(code, message, details);
+}
+
+function unresponsiveSentence(ms) {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  return `The model or one of its tools gave no answer for ${minutes} minute${minutes === 1 ? '' : 's'}, so the assignment `
+    + 'was stopped as unresponsive. Fleet does not limit how long a worker that is making progress may run.';
+}
+
+function modelLimits(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).some(key => !Object.hasOwn(MODEL_API_DEFAULT_LIMITS, key) && !MODEL_API_LEGACY_LIMITS.includes(key))) {
+    throw new TypeError('Generic model limits may name only maxOutputTokens (maxTurns, maxTotalTokens and timeoutMs are accepted from older connections and not enforced)');
+  }
+  const result = { ...MODEL_API_DEFAULT_LIMITS };
+  for (const name of Object.keys(MODEL_API_DEFAULT_LIMITS)) {
+    if (Object.hasOwn(value, name)) result[name] = value[name];
+    if (!Number.isSafeInteger(result[name]) || result[name] < 1 || result[name] > MODEL_API_MAX_LIMITS[name]) {
+      throw new TypeError(`Generic model ${name} must be an integer from 1 through ${MODEL_API_MAX_LIMITS[name]}`);
+    }
+  }
+  return Object.freeze(result);
 }
 
 /* ---------------------------------------------------------------- threads -- */
@@ -99,8 +129,9 @@ function rememberThread(threadId, record) {
   while (THREADS.size > MAX_THREADS_HELD) THREADS.delete(THREADS.keys().next().value);
 }
 
-function threadRecord(threadId, store = null) {
-  const record = THREADS.get(threadId) || (store ? store.load(threadId) : null);
+function threadRecord(threadId, store = null, requireSaved = false) {
+  const record = requireSaved && store ? store.load(threadId)
+    : THREADS.get(threadId) || (store ? store.load(threadId) : null);
   if (!record) return null;
   validateRetainedMetadata(record);
   /* Touched threads move to the young end, so the ones dropped are the ones
@@ -185,11 +216,13 @@ function systemTextOf(threadOptions) {
 
 /* What goes on the wire: role and content only. `turnId` is this module's own
    bookkeeping and the runtime must never see it. */
-function wireMessages(record) {
+function wireMessages(record, preserveToolCallIds = false) {
   const messages = record.messages.map(message => {
     const wire = { role: message.role, content: message.content };
     if (Array.isArray(message.tool_calls)) wire.tool_calls = message.tool_calls;
     if (typeof message.tool_name === 'string') wire.tool_name = message.tool_name;
+    if (preserveToolCallIds && typeof message.tool_call_id === 'string') wire.tool_call_id = message.tool_call_id;
+    if (preserveToolCallIds && Array.isArray(message.response_items)) wire.response_items = message.response_items;
     return wire;
   });
   const instructions = record.sessionInstructions;
@@ -202,6 +235,41 @@ function wireMessages(record) {
     messages.splice(first < 0 ? messages.length : first, 0, { role: 'user', content });
   }
   return messages;
+}
+
+// Chat Completions requires a result for every assistant tool-call id. A stop
+// or process loss can leave an intent without a recorded result. Preserve
+// that uncertainty explicitly; never replay a tool to repair the protocol.
+function closeUnrecordedToolResults(record) {
+  const repaired = [], pending = new Map(), seen = new Set();
+  const invalid = () => { throw fail('MODEL_API_HISTORY_INVALID', 'The saved model tool history is inconsistent. It was not replayed. Start a new conversation after inspecting the unfinished work.'); };
+  const flush = () => {
+    for (const [id, call] of pending) repaired.push({ role: 'tool', tool_call_id: id,
+      tool_name: call.name, turnId: call.turnId, resultUnknown: true,
+      content: 'No result was recorded for this tool call before the conversation stopped. It may not have run, or may have completed. Inspect the current state before deciding whether to repeat it.' });
+    pending.clear();
+  };
+  for (const message of record.messages) {
+    if (message.role === 'tool') {
+      const call = pending.get(message.tool_call_id);
+      if (!call || call.name !== message.tool_name) invalid();
+      pending.delete(message.tool_call_id);
+    } else {
+      flush();
+      if (message.tool_calls !== undefined) {
+        if (message.role !== 'assistant' || !Array.isArray(message.tool_calls)) invalid();
+        for (const call of message.tool_calls) {
+          if (typeof call?.id !== 'string' || !call.id || seen.has(call.id)
+              || typeof call.function?.name !== 'string' || !call.function.name) invalid();
+          seen.add(call.id);
+          pending.set(call.id, { name: call.function.name, turnId: message.turnId });
+        }
+      }
+    }
+    repaired.push(message);
+  }
+  flush();
+  record.messages = repaired;
 }
 
 /* Drop whole turns from the front until the conversation fits, keeping a
@@ -281,7 +349,7 @@ function failureSentence(error) {
 }
 
 class LocalNodeAdapter {
-  constructor({ transport, model, runtimeOptions = localOptions.DEFAULTS, threadStore = null, clientInfo = null, tools = null, turnTimeoutMs = DEFAULT_TURN_TIMEOUT_MS, maxOutputTokens = MAX_OUTPUT_TOKENS } = {}) {
+  constructor({ transport, model, runtimeOptions = localOptions.DEFAULTS, threadStore = null, clientInfo = null, tools = null, turnTimeoutMs = DEFAULT_TURN_TIMEOUT_MS, maxOutputTokens = MAX_OUTPUT_TOKENS, sessionIdentity = null, limits = null, requireToolCall } = {}) {
     if (!transport || typeof transport.chat !== 'function') {
       throw new TypeError('LocalNodeAdapter requires a transport with chat()');
     }
@@ -293,6 +361,12 @@ class LocalNodeAdapter {
     }
     this.transport = transport;
     this.model = model;
+    if (sessionIdentity !== null && (typeof sessionIdentity !== 'string' || !/^[a-f0-9]{64}$/.test(sessionIdentity))) {
+      throw new TypeError('A model session identity must be a complete connection hash');
+    }
+    this.sessionIdentity = sessionIdentity;
+    this.limits = limits === null ? null : modelLimits(limits);
+    this.requireToolCall = requireToolCall === undefined ? this.limits !== null : requireToolCall === true;
     this.runtimeOptions = localOptions.resolveOptions({}, runtimeOptions);
     this.threadStore = threadStore;
     /* The circle's tool surface (local-node-tools.js), or null for a session
@@ -300,8 +374,9 @@ class LocalNodeAdapter {
        model with nothing to call is never shown an empty list. */
     this.tools = tools;
     this.clientInfo = clientInfo;
+    // Liveness, not a deadline: the longest one model request or one tool call may go without answering.
     this.turnTimeoutMs = turnTimeoutMs;
-    this.maxOutputTokens = Number.isInteger(maxOutputTokens) && maxOutputTokens > 0 && maxOutputTokens <= MAX_OUTPUT_TOKENS
+    this.maxOutputTokens = this.limits ? this.limits.maxOutputTokens : Number.isInteger(maxOutputTokens) && maxOutputTokens > 0 && maxOutputTokens <= MAX_OUTPUT_TOKENS
       ? maxOutputTokens
       : MAX_OUTPUT_TOKENS;
     this.threadId = null;
@@ -347,6 +422,12 @@ class LocalNodeAdapter {
     if (this.threadStore) this.threadStore.save(threadId, record);
   }
 
+  assertThreadIdentity(record) {
+    if ((record.transportIdentity || null) !== this.sessionIdentity) {
+      throw fail('MODEL_CONNECTION_CHANGED', 'This conversation belongs to a different model connection. Start a new conversation for the selected connection.');
+    }
+  }
+
   async startThread(threadOptions = {}) {
     const options = validateThreadOptions(threadOptions);
     if (this.closed) throw fail('LOCAL_NODE_CLOSED', 'This local model session is closed.');
@@ -357,6 +438,7 @@ class LocalNodeAdapter {
       systemText: systemTextOf(options)
     });
     record.ephemeral = options.ephemeral === true;
+    if (this.sessionIdentity !== null) record.transportIdentity = this.sessionIdentity;
     this.saveThread(threadId, record);
     rememberThread(threadId, record);
     this.threadId = threadId;
@@ -366,12 +448,14 @@ class LocalNodeAdapter {
   async resumeThread(threadId, threadOptions = {}) {
     validateThreadOptions(threadOptions);
     const id = validateThreadId(threadId);
-    const record = threadRecord(id, this.threadStore);
+    const record = threadRecord(id, this.threadStore, this.sessionIdentity !== null);
     if (!record) {
       throw fail('LOCAL_NODE_THREAD_UNKNOWN',
         'This local conversation is no longer available in memory or in saved recovery history. Start a new agent instead.',
         { threadId: id });
     }
+    this.assertThreadIdentity(record);
+    if (this.transport.preserveToolCallIds === true) closeUnrecordedToolResults(record);
     /* The person's current model choice wins over the one the thread began
        on: they changed it on purpose, and the history is words either can read. */
     record.model = this.model;
@@ -394,6 +478,7 @@ class LocalNodeAdapter {
     const id = validateThreadId(threadId);
     const record = threadRecord(id, this.threadStore);
     if (!record) throw fail('LOCAL_NODE_THREAD_UNKNOWN', 'That conversation is not one this copy still holds.', { threadId: id });
+    this.assertThreadIdentity(record);
     if (this.activeTurn) throw fail('LOCAL_NODE_TURN_ACTIVE', 'This session is still working on a turn; stop it before rewinding.');
     let messages = record.messages;
     if (options.lastTurnId !== undefined) {
@@ -409,6 +494,7 @@ class LocalNodeAdapter {
       cwd: options.cwd || record.cwd,
       model: record.model,
       ephemeral: options.ephemeral ?? record.ephemeral,
+      ...(record.transportIdentity ? { transportIdentity: record.transportIdentity } : {}),
       localToolNames: Array.isArray(record.localToolNames) ? record.localToolNames.slice() : [],
       ...(record.sessionInstructions ? { sessionInstructions: copySessionInstructions(record.sessionInstructions) } : {}),
       ...(record.turnReceipt && (options.lastTurnId === undefined || messages.some(message => message.turnId === record.turnReceipt.turnId))
@@ -434,6 +520,7 @@ class LocalNodeAdapter {
     if (this.activeTurn) throw fail('LOCAL_NODE_TURN_ACTIVE', 'This session is already working on a turn.');
     const record = threadRecord(threadId, this.threadStore);
     if (!record) throw fail('LOCAL_NODE_THREAD_UNKNOWN', 'That conversation is not one this session holds.', { threadId });
+    this.assertThreadIdentity(record);
     if (images.length > 0) {
       /* Refused rather than dropped: answering the words alone would answer a
          question about a picture the model never received. */
@@ -458,6 +545,7 @@ class LocalNodeAdapter {
          until the round is committed to the history. */
       roundText: '',
       roundToolCalls: [],
+      roundResponseItems: [],
       roundUsage: null,
       roundPending: false,
       thinking: '',
@@ -479,13 +567,7 @@ class LocalNodeAdapter {
       turn.resolve = resolve;
       turn.reject = reject;
     });
-    turn.timer = setTimeout(() => {
-      if (this.activeTurn === turn) {
-        turn.timedOut = true;
-        turn.controller.abort();
-      }
-    }, this.turnTimeoutMs);
-    if (turn.timer.unref) turn.timer.unref();
+    this.armLiveness(turn);
     this.activeTurn = turn;
 
     /* The question joins the history before the request is made, so an
@@ -508,35 +590,76 @@ class LocalNodeAdapter {
     return surface ? surface.list().map(wireTool) : [];
   }
 
+  /* Liveness, not a deadline. Re-armed whenever the work moves -- each model request and each tool
+     call -- so only a model or a tool that gives NO answer for turnTimeoutMs stops the assignment. */
+  armLiveness(turn) {
+    if (turn.timer) clearTimeout(turn.timer);
+    turn.timer = setTimeout(() => {
+      if (this.activeTurn === turn) {
+        turn.timedOut = true;
+        turn.controller.abort();
+      }
+    }, this.turnTimeoutMs);
+    if (turn.timer.unref) turn.timer.unref();
+  }
+
+  assertTurnLive(turn) {
+    if (turn.controller.signal.aborted || turn.settled || this.closed) {
+      throw fail(this.limits && turn.timedOut ? 'MODEL_API_TIMEOUT' : 'LOCAL_NODE_INTERRUPTED',
+        turn.timedOut ? unresponsiveSentence(this.turnTimeoutMs) : 'This model assignment has stopped.');
+    }
+  }
+
+  // A new model request is progress: it re-arms liveness. No round, token or size budget is applied.
+  admitModelRequest(turn) {
+    this.assertTurnLive(turn);
+    this.armLiveness(turn);
+  }
+
+  observeModelUsage(turn) {
+    if (!this.limits || !turn.roundUsage) return;
+    if (turn.roundUsage.outputTokens > this.maxOutputTokens) {
+      throw fail('MODEL_API_OUTPUT_LIMIT', 'The model exceeded its output-token limit; no further tool was dispatched.');
+    }
+  }
+
   /* ONE TURN IS ONE OR MORE ROUNDS. Each round streams one reply. A reply
      that names tools is committed to the history with its calls, every call
      is made through the surface and answered into the history as a `tool`
      message, and the model is asked again with those answers in front of
-     it; a reply that names none is the answer, and the turn ends. The
-     rounds are bounded (MAX_TOOL_ROUNDS) so a looping model ends in a
-     sentence. */
+     it; a reply that names none is the answer, and the turn ends. Nothing
+     counts the rounds: the work ends when the model answers. */
   async runTurn(turn, record) {
     const base = { threadId: turn.threadId, turnId: turn.turnId };
     const signal = turn.controller.signal;
     let outcome;
     try {
-      const surface = createLocalToolView(this.tools, record, this.runtimeOptions.contextTokens);
+      const surface = this.transport.preserveToolCallIds === true
+        ? this.tools : createLocalToolView(this.tools, record, this.runtimeOptions.contextTokens);
       for (let round = 1; ; round += 1) {
+        this.assertTurnLive(turn);
         const toolsForModel = this.toolsForModel(surface);
+        if (this.requireToolCall && toolsForModel.length === 0) {
+          throw fail('MODEL_API_TOOLS_UNAVAILABLE', 'A generic Fleet worker needs at least one reviewed tool at its assigned permission level.');
+        }
         turn.roundText = '';
         turn.roundToolCalls = [];
+        turn.roundResponseItems = [];
         turn.roundUsage = null;
         turn.roundPending = true;
         turn.thinking = '';
         turn.thinkingEmitted = false;
         turn.done = null;
-        await this.transport.chat({
+        const request = {
           model: record.model,
-          messages: wireMessages(record),
+          messages: wireMessages(record, this.transport.preserveToolCallIds === true),
           stream: true,
           ...localOptions.requestFields(this.runtimeOptions, this.maxOutputTokens),
-          ...(toolsForModel.length ? { tools: toolsForModel } : {})
-        }, {
+          ...(toolsForModel.length ? { tools: toolsForModel } : {}),
+          ...(this.requireToolCall && round === 1 ? { tool_choice: 'required' } : {})
+        };
+        this.admitModelRequest(turn, request, round);
+        await this.transport.chat(request, {
           signal,
           onAccepted: () => {
             if (turn.accepted || turn.settled) return;
@@ -547,6 +670,8 @@ class LocalNodeAdapter {
           onPacket: packet => this.handlePacket(turn, packet, base)
         });
         if (turn.roundUsage) turn.usage = turn.usage ? addUsage(turn.usage, turn.roundUsage) : turn.roundUsage;
+        this.assertTurnLive(turn);
+        this.observeModelUsage(turn);
         if (signal.aborted) { outcome = 'interrupted'; break; }
         if (turn.runtimeError) {
           outcome = 'error';
@@ -558,6 +683,9 @@ class LocalNodeAdapter {
           turn.error = fail('LOCAL_NODE_RESPONSE_INVALID', 'The local model runtime closed the stream before finishing the answer.');
           break;
         }
+        if (this.requireToolCall && round === 1 && turn.roundToolCalls.length === 0) {
+          throw fail('MODEL_API_TOOL_UNSUPPORTED', 'This endpoint did not return the required tool call. Select a model and endpoint that support function tool calling.');
+        }
         if (turn.roundToolCalls.length === 0 || !this.tools) {
           if (!turn.roundText.trim()) {
             outcome = 'error';
@@ -567,15 +695,26 @@ class LocalNodeAdapter {
           } else outcome = 'success';
           break;
         }
+        if (this.transport.preserveToolCallIds === true) {
+          const seen = new Set(record.messages.flatMap(message => (message.tool_calls || []).map(call => call.id)));
+          for (const call of turn.roundToolCalls) {
+            if (seen.has(call.id)) throw fail('MODEL_API_HISTORY_INVALID', 'The model reused a tool-call identifier. No tool from that reply was dispatched.');
+            seen.add(call.id);
+          }
+        }
 
         /* A TOOL ROUND. The reply goes into the history WITH its calls, so
            the model's next request shows it what it asked for. */
         this.commitRound(turn, record, base, turn.roundToolCalls);
         await this.waitForEvents();
+        if (this.transport.preserveToolCallIds === true) this.saveThread(turn.threadId, record);
         let stopped = false;
         for (const call of turn.roundToolCalls) {
+          this.assertTurnLive(turn);
+          this.armLiveness(turn); // a tool call is progress
           this.emit({ type: 'tool_call', ...base, toolCallId: call.id, tool: call.name, payload: call.arguments });
           await this.waitForEvents();
+          this.assertTurnLive(turn);
           let result;
           try {
             result = await surface.call(call.name, call.arguments, { signal });
@@ -589,18 +728,12 @@ class LocalNodeAdapter {
             text: result.text, payload: { text: result.text, status }, status
           });
           await this.waitForEvents();
-          record.messages.push({ role: 'tool', content: result.text, turnId: turn.turnId, tool_name: call.name });
+          record.messages.push({ role: 'tool', content: result.text, turnId: turn.turnId, tool_name: call.name,
+            ...(this.transport.preserveToolCallIds === true ? { tool_call_id: call.id } : {}) });
           boundHistory(record);
           this.saveThread(turn.threadId, record);
         }
         if (stopped || signal.aborted) { outcome = 'interrupted'; break; }
-        if (round >= MAX_TOOL_ROUNDS) {
-          outcome = 'error';
-          turn.error = fail('LOCAL_NODE_TOOL_ROUNDS_EXCEEDED',
-            `The local model called tools ${round} times in one turn without finishing its answer, so the turn was stopped.`,
-            { rounds: round });
-          break;
-        }
       }
     } catch (error) {
       if (signal.aborted) outcome = 'interrupted';
@@ -615,17 +748,25 @@ class LocalNodeAdapter {
   commitRound(turn, record, base, toolCalls = []) {
     if (!turn.roundPending) return;
     turn.roundPending = false;
+    // A refused/unexecuted round drops its normalized tool intents. Responses
+    // must drop the matching provider function items too, or replay would
+    // contain actions that the saved conversation never dispatched.
+    const responseItems = (turn.roundResponseItems || []).filter(item => item.type !== 'function_call'
+      || toolCalls.some(call => call.id === item.call_id));
     this.flushThinking(turn, base);
     if (turn.roundText) {
       this.emit({ type: 'assistant_text', ...base, text: turn.roundText });
       turn.text = turn.text ? `${turn.text}\n${turn.roundText}` : turn.roundText;
     }
-    if (turn.roundText || toolCalls.length) {
+    if (turn.roundText || toolCalls.length || responseItems.length) {
       record.messages.push({
         role: 'assistant',
         content: turn.roundText,
         turnId: turn.turnId,
-        ...(toolCalls.length ? { tool_calls: toolCalls.map(call => ({ function: { name: call.name, arguments: call.arguments } })) } : {})
+        ...(responseItems.length ? { response_items: responseItems } : {}),
+        ...(toolCalls.length ? { tool_calls: toolCalls.map(call => ({
+          ...(this.transport.preserveToolCallIds === true ? { id: call.id, type: 'function' } : {}),
+          function: { name: call.name, arguments: call.arguments } })) } : {})
       });
     }
   }
@@ -638,6 +779,12 @@ class LocalNodeAdapter {
     }
     const message = packet.message;
     if (message && typeof message === 'object') {
+      if (this.transport.preserveToolCallIds === true && Array.isArray(message.response_items)) {
+        // The API transport validates the original Responses output sequence
+        // before giving it to the conversation. Keep item IDs/order and opaque
+        // encrypted reasoning for stateless Responses continuation.
+        turn.roundResponseItems.push(...message.response_items);
+      }
       if (typeof message.thinking === 'string' && message.thinking) turn.thinking += message.thinking;
       if (typeof message.content === 'string' && message.content) {
         this.flushThinking(turn, base);
@@ -689,6 +836,11 @@ class LocalNodeAdapter {
     const waiters = turn.waiters;
     turn.waiters = [];
 
+    if (this.transport.preserveToolCallIds === true) {
+      try { closeUnrecordedToolResults(record); }
+      catch (error) { turn.error = error; outcome = 'error'; }
+    }
+
     if (turn.closing) {
       if (!record.messages.some(message => message.turnId === turn.turnId && message.role !== 'user')) {
         record.messages = record.messages.filter(message => message.turnId !== turn.turnId);
@@ -705,8 +857,9 @@ class LocalNodeAdapter {
       }
       record.turnReceipt = settledReceipt(record, turn.turnId, 'interrupted');
       try { this.saveThread(turn.threadId, record); } catch (error) { this.emitDiagnostic(error); }
-      for (const waiter of waiters) waiter.reject(fail('LOCAL_NODE_TURN_TIMEOUT', 'The local model did not finish this turn in time.'));
-      turn.reject(fail('LOCAL_NODE_TURN_TIMEOUT', 'The local model did not finish this turn in time.'));
+      const code = this.limits ? 'MODEL_API_TIMEOUT' : 'LOCAL_NODE_TURN_TIMEOUT';
+      for (const waiter of waiters) waiter.reject(fail(code, unresponsiveSentence(this.turnTimeoutMs)));
+      turn.reject(fail(code, unresponsiveSentence(this.turnTimeoutMs)));
       return;
     }
 
@@ -753,6 +906,7 @@ class LocalNodeAdapter {
       isError: outcome === 'error',
       text: turn.text || null,
       usage: turn.usage ? Object.freeze({ ...turn.usage }) : null,
+      ...(outcome === 'error' && typeof turn.error?.code === 'string' ? { code: turn.error.code } : {}),
       ...(failureText ? { failure: failureText } : {})
     }));
   }
@@ -823,6 +977,9 @@ class LocalNodeAdapter {
 module.exports = {
   DEFAULT_TURN_TIMEOUT_MS,
   LocalNodeAdapter,
+  // The conversation/tool loop is shared with direct model API transports.
+  ModelSessionAdapter: LocalNodeAdapter,
+  MODEL_API_DEFAULT_LIMITS,
   MAX_HISTORY_MESSAGES,
   MAX_THREADS_HELD,
   MAX_TOOL_ROUNDS,

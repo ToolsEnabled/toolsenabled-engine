@@ -13,7 +13,7 @@
 //
 // What changed for a caller, and nothing else:
 //   - ids are R-numbered for every scope (R1, R2, R2.1); RS/RT/RTH are retired,
-//     and the R2000 floor with them -- a clean store files R1.
+//     and the old identifier floor with them -- a clean store files R1.
 //   - a person-filed entry carries no filedBy; an agent-filed one names the
 //     agent, exactly as before. A row an agent filed that still waits for the
 //     person carries status 'proposed'.

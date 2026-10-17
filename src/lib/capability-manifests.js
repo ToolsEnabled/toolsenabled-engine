@@ -1,6 +1,6 @@
 'use strict';
 
-// P12 capability-manifest core.  This module is deliberately pure: it has no
+// Capability manifest core. This module is pure: it has no
 // MCP registration, provider, browser, vault, or state-store side effect.  The
 // durable adapter owns persistence and auditing; callers inject a trusted tool
 // catalog and named base-profile configuration.

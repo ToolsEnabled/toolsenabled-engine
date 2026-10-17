@@ -95,7 +95,8 @@ function mountPaths(text) {
       || !/^\d+$/.test(before[0]) || !/^\d+$/.test(before[1]) || !/^\d+:\d+$/.test(before[2])) {
       throw unsafe('malformed mount inventory');
     }
-    decodeMountPath(before[3]); // The filesystem root is also an escaped absolute path.
+    // The filesystem root can be a namespace identifier such as nsfs:[...].
+    // Only the mount point participates in the prefix safety decision.
     mounts.push(decodeMountPath(before[4]));
   }
   return mounts;
@@ -117,8 +118,18 @@ function assertUninstallPrefixSafe(prefix, {
   let inventory;
   try { inventory = readMountInfo(); }
   catch { throw unsafe('mount inventory unreadable'); }
+  // The kernel reports mount points already resolved, so a mount this user
+  // cannot traverse (for example a container's root-only overlay) is compared
+  // as written instead of making every uninstall refuse; any path that can be
+  // resolved is still checked through its links as well.
+  const mountInsidePrefix = candidate => {
+    let resolvedMount = null;
+    try { resolvedMount = canonical(candidate); } catch { /* compared as written below */ }
+    return within(candidate, selected) || within(candidate, resolved)
+      || (resolvedMount !== null && (within(resolvedMount, selected) || within(resolvedMount, resolved)));
+  };
   for (const mountedPath of mountPaths(inventory)) {
-    if (insidePrefix(mountedPath)) {
+    if (mountInsidePrefix(mountedPath)) {
       throw unsafe('mounted filesystem within runtime');
     }
   }

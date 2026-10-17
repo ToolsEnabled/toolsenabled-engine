@@ -1,77 +1,10 @@
 'use strict';
 
-// WHERE THE RUNNING PRODUCT KEEPS THE THINGS IT WRITES.
-//
-// THE DEFECT THIS FILE EXISTS TO FIX, measured on a real per-user install at
-// %LOCALAPPDATA%\Programs\toolsenabled on 2026-08-11. After one session the
-// INSTALL DIRECTORY -- the directory that holds the program -- contained:
-//
-//     resources/capability/state/mission-bridge-token.json      (a bearer token)
-//     resources/capability/state/mission-bridge-bootstrap-proof.json
-//     resources/capability/state/mission-bridge-runtime.json
-//     resources/capability/state/owner-public-prompts.json
-//     resources/capability/state/audit.sqlite3{,-wal,-shm}      (the audit ledger)
-//     resources/capability/logs/actions.{jsonl,log}
-//     resources/capability/vault/secrets.json{,.access.log,.lock}   (the vault)
-//
-// None of that belongs there, and each line is a different failure:
-//
-//   1. AN INSTALL DIRECTORY IS NOT GUARANTEED WRITABLE. This build installs
-//      per-user, so the writes happened to succeed. A per-machine install --
-//      the same NSIS target with `perMachine: true`, or any managed
-//      deployment -- lands under Program Files, where they would fail or
-//      demand an elevation the product has no business asking for.
-//
-//   2. AN UPDATE REPLACES THE INSTALL DIRECTORY. Whatever is in it at the
-//      time is gone. The customer's audit ledger and their VAULT -- every
-//      credential they ever entered -- were sitting in the blast radius of
-//      the next version. That is silent, total, unrecoverable data loss on a
-//      routine upgrade.
-//
-//   3. A PROGRAM DIRECTORY IS THE WRONG ACL FOR A SECRET. It is readable by
-//      every account on the machine by default. The per-boot bearer that
-//      authorizes the whole action bridge, and the vault file, were written
-//      into it. The individual files carry owner-only ACLs, but a credential's
-//      location should not depend on remembering to lock each file.
-//
-// THE RULE, THEN: program resources are read from where the program lives;
-// everything the program WRITES goes to a per-user state root. This module is
-// the one place that distinction is made, because the alternative -- deciding
-// it again at each of the ~60 call sites that join a path onto the repo root --
-// is how the first six of them were right and the seventh shipped.
-//
-// HOW THE ROOT IS CHOSEN, in order:
-//
-//   1. TOOLSENABLED_STATE_ROOT, if it is set to an absolute path that does not
-//      cross into another Windows account. The Electron shell sets this to
-//      <userData>/capability so that a relocated profile (--user-data-dir, a
-//      portable install, a test harness) carries the capability layer's state
-//      with it instead of stranding it. A stale Administrator environment must
-//      not turn that configured owner path into a second state tree.
-//
-//   2. Otherwise, IF THIS IS A CUT PAYLOAD, a per-user directory. "Cut
-//      payload" is not a guess and not a build flag: tools/pack-capability-layer.mjs
-//      writes PAYLOAD.json at the root of every payload it stages, and a source
-//      checkout has no such file. So the question "am I installed?" is answered
-//      by looking, which means a payload started by something other than our
-//      own shell -- a customer's MCP client launching src/mcp-server.js
-//      straight out of the install directory, with no environment set -- still
-//      does not write where it must not. An env var alone would have left that
-//      path defective and looking fixed.
-//
-//   3. Otherwise the program root. A developer checkout keeps state/, logs/ and
-//      vault/ exactly where every existing tool, test and document expects
-//      them. This module changes nothing about running from a checkout, which
-//      is why it can be introduced under a live system.
-//
-// AND THE EXISTING INSTALL IS NOT ABANDONED. A customer upgrading from a build
-// with this defect has real state in the old place -- a vault they filled in, a
-// signed audit ledger. When the program root is a cut payload,
-// adoptLegacyPayloadState() carries it across once, on the first redirected run,
-// before anything reads. A configured source checkout is not a legacy install
-// and is never inspected for migration. Adoption COPIES and never deletes:
-// deleting would be a write to the install directory, which is the thing this
-// file exists to stop, and one of the files in question is audit history.
+// Separate mutable per-user state from installed program files. An absolute
+// TOOLSENABLED_STATE_ROOT takes precedence. A packaged payload without that
+// setting uses a per-user state directory; a source checkout uses its own
+// root. Legacy payload state is copied on first use so an upgrade preserves
+// audit history and vault data. Adoption never deletes the source files.
 
 const fs = require('node:fs');
 const os = require('node:os');
@@ -106,20 +39,9 @@ function indeterminateAdoption(message, entries, pending) {
   };
 }
 
-// EVERY TOP-LEVEL DIRECTORY THE RUNNING PRODUCT WRITES INTO, and nothing else.
-// Derived by sweeping the repo for writes joined onto the repo root, not by
-// recollection:
-//   state/     mission-bridge tokens, the audit sqlite ledger, per-feature records
-//   logs/      the audit jsonl/text sinks, lane consoles, escalation logs
-//   vault/     the DPAPI secret file, its lock and its access log
-//   captures/  screenshots taken by desktop.js
-//   profiles/  the owned browser profile
-//   reports/   the owner request ledger
-// A directory NOT on this list resolves against the program root, which is the
-// safe direction to be wrong in: a read of config/ or tools/ that accidentally
-// pointed at the state root would fail loudly on a missing file, whereas a
-// write that accidentally pointed at the program root is exactly the silent
-// defect above.
+// Top-level mutable directories resolved under the state root. Other paths
+// resolve under the program root. Keep this list aligned with state adoption
+// and host file protections.
 const RUNTIME_STATE_DIRECTORIES = Object.freeze([
   'state',
   'logs',

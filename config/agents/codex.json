@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "id": "codex",
+  "name": "Codex",
+  "command": "codex",
+  "worker": {
+    "driver": "app-server"
+  },
+  "signIn": {
+    "statusArgs": [
+      "login",
+      "status"
+    ],
+    "result": "exit-code",
+    "how": "Run `codex login`, or set your own OpenAI API key for Codex."
+  },
+  "register": {
+    "kind": "command",
+    "add": [
+      "mcp",
+      "add",
+      "{name}",
+      "{env...}",
+      "--",
+      "{command}",
+      "{args...}"
+    ],
+    "remove": [
+      "mcp",
+      "remove",
+      "{name}"
+    ],
+    "profile": {
+      "env": "CODEX_HOME",
+      "relatedEnv": [
+        "CODEX_SQLITE_HOME"
+      ],
+      "default": ".codex",
+      "file": "config.toml",
+      "legacyContext": true
+    },
+    "config": {
+      "format": "toml",
+      "container": "mcp_servers",
+      "entryType": "command"
+    },
+    "list": [
+      "mcp",
+      "list"
+    ],
+    "envFlag": "--env",
+    "settings": [
+      {
+        "table": [
+          "mcp_servers",
+          "{name}"
+        ],
+        "key": "omit_tools_from",
+        "value": [
+          "deferred"
+        ]
+      },
+      {
+        "table": [
+          "mcp_servers",
+          "{name}"
+        ],
+        "key": "required",
+        "value": true,
+        "sandboxOnly": true
+      },
+      {
+        "table": [
+          "features"
+        ],
+        "key": "daemon_auto_start",
+        "value": false,
+        "sandboxOnly": true
+      }
+    ],
+    "inspection": {
+      "kind": "command-absence",
+      "qualified": [
+        {
+          "version": "0.158.0",
+          "versionOutput": "codex-cli 0.158.0\n"
+        },
+        {
+          "version": "0.160.0",
+          "versionOutput": "codex-cli 0.160.0\n"
+        },
+        {
+          "version": "0.161.0",
+          "versionOutput": "codex-cli 0.161.0\n"
+        },
+        {
+          "version": "0.162.1",
+          "versionOutput": "codex-cli 0.162.1\n"
+        }
+      ],
+      "args": [
+        "mcp",
+        "get",
+        "{name}"
+      ],
+      "absentStderr": "Error: No MCP server named '{name}' found.\n"
+    },
+    "http": {
+      "kind": "command",
+      "add": [
+        "mcp",
+        "add",
+        "{name}",
+        "--url",
+        "{url}",
+        "--bearer-token-env-var",
+        "{tokenEnv}"
+      ],
+      "header": "Authorization",
+      "envSyntax": "bearer-token-env"
+    },
+    "forwardEnv": {
+      "kind": "toml-list",
+      "table": [
+        "mcp_servers",
+        "{name}"
+      ],
+      "key": "env_vars"
+    }
+  },
+  "models": {
+    "flag": "--model",
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+    ],
+    "defaults": {
+      "cheap": "luna",
+      "standard": "terra",
+      "premium": "sol"
+    },
+    "choices": {
+      "astra": {
+        "tier": "premium",
+        "model": "gpt-6-astra",
+        "cliModel": "gpt-6-astra"
+      },
+      "luna": {
+        "tier": "cheap",
+        "model": "gpt-6-luna",
+        "cliModel": "gpt-6-luna",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "terra": {
+        "tier": "standard",
+        "model": "gpt-5.6-terra",
+        "cliModel": "gpt-5.6-terra"
+      },
+      "sol": {
+        "tier": "premium",
+        "model": "gpt-6.1-sol",
+        "cliModel": "gpt-6.1-sol"
+      }
+    }
+  },
+  "permissions": {
+    "aliases": {
+      "-s": "--sandbox",
+      "-a": "--ask-for-approval",
+      "--yolo": "--dangerously-bypass-approvals-and-sandbox"
+    },
+    "lead": [
+      {
+        "when": {
+          "--dangerously-bypass-approvals-and-sandbox": true
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--sandbox": "read-only"
+        },
+        "level": 1
+      },
+      {
+        "when": {
+          "--sandbox": "danger-full-access",
+          "--ask-for-approval": "never"
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--full-auto": true
+        },
+        "level": 3
+      },
+      {
+        "when": {
+          "--ask-for-approval": "never"
+        },
+        "level": 3
+      }
+    ],
+    "openShellMinimumLevel": 4,
+    "worker": {
+      "1": {
+        "sandbox": "read-only",
+        "approvalPolicy": "never"
+      },
+      "2": {
+        "approvalPolicy": "on-request"
+      },
+      "3": {
+        "sandbox": "workspace-write",
+        "approvalPolicy": "never"
+      },
+      "4": {
+        "sandbox": "danger-full-access",
+        "approvalPolicy": "never"
+      }
+    },
+    "remove": {
+      "shell": {
+        "overrides": {
+          "features.shell_tool": false,
+          "features.unified_exec": false
+        }
+      },
+      "web": {
+        "overrides": {
+          "web_search": "disabled"
+        }
+      },
+      "subagents": {
+        "overrides": {
+          "agents.enabled": false,
+          "agents.max_depth": 0,
+          "features.multi_agent": false,
+          "features.multi_agent_v2.enabled": false,
+          "features.multi_agent_v2.max_concurrent_threads_per_session": 1
+        }
+      }
+    }
+  }
+}

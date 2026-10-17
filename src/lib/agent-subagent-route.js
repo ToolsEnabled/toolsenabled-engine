@@ -167,6 +167,28 @@ function subagentRoute({
       reason: CHOICES.includes(choice) ? 'chosen' : 'not-recognised'
     });
 
+  /* INSIDE AN OPENSHELL SANDBOX WITH ITS AGENT TREE ON, THE TREE IS THE ONLY
+     ROUTE. A detached lane needs a launcher outside the sandbox, so a lane
+     requested there failed deep in the engine with "The initiating principal
+     is invalid." (measured 2026-09-29). A lane request,
+     or the setting that keeps every worker off the tree, is refused here in
+     words the agent and the person can act on. */
+  if (require('./openshell-agent-host').openShellAgentsEnabled(env || process.env)) {
+    if (requested === ROUTE.LANE) {
+      return refuse(
+        'AGENT_SPAWN_LANE_ROUTE_CLOSED',
+        'Inside an OpenShell sandbox every worker runs on the sandbox\'s agent tree; there are no detached lanes. Nothing was started. Leave surface out or pass "tree".'
+      );
+    }
+    if (setting.choice === CHOICE.LANE) {
+      return refuse(
+        'AGENT_SPAWN_TREE_ROUTE_CLOSED',
+        `The setting ${SUBAGENT_ROUTE_SETTING_ID} keeps workers off the tree, and inside an OpenShell sandbox the tree is the only place a worker can run, so nothing was started. `
+          + `The person can change it with \`toolsenabled settings set ${SUBAGENT_ROUTE_SETTING_ID} "${CHOICE.ASSISTANT}"\`.`
+      );
+    }
+  }
+
   /* A FORCING CHOICE WINS OVER THE REQUEST, because that is what the person set
      it to do. It refuses the opposite request by name rather than quietly
      redirecting it: an assistant told "on the tree" that silently got a lane

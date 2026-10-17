@@ -271,9 +271,30 @@ function selectedAgentApiMode(agentApi, roleFunctionsOnly = false) {
  * `permissionMode` is the confinement plan's own word when the caller has a
  * plan, so the one recorded level has one reader; without it the mode is
  * derived from the sandbox word, failing closed to 'plan'. */
-function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, extraArgs = [] }) {
+function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, preserveSettingsSources = false, workspaceFileTools = false, nativeToolArgs = [], extraArgs = [] }) {
+  if (typeof preserveSettingsSources !== 'boolean') {
+    throw new ClaudeCliError('CLAUDE_CLI_PLAN_INVALID', 'The saved-settings preservation choice must be a boolean.');
+  }
+  // Descriptor removals are additive deny rules, also in Only/Disabled mode.
+  // Merge the variadic flag once so no later occurrence can replace a deny.
+  const denied = [];
+  if (!Array.isArray(nativeToolArgs) || nativeToolArgs.length % 2) {
+    throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'Native tool removals must be deny arguments.');
+  }
+  for (let index = 0; index < nativeToolArgs.length; index += 2) {
+    if (!['--disallowedTools', '--disallowed-tools'].includes(nativeToolArgs[index])
+      || typeof nativeToolArgs[index + 1] !== 'string' || !/^[A-Za-z][A-Za-z0-9,]*$/.test(nativeToolArgs[index + 1])) {
+      throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'Native tool removals must name tools to deny.');
+    }
+    denied.push(...nativeToolArgs[index + 1].split(','));
+  }
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
   roleFunctionsOnly = roleFunctionsOnly || apiMode === 'Only';
+  if (typeof workspaceFileTools !== 'boolean' || workspaceFileTools
+      && (!roleFunctionsOnly || preserveSettingsSources || permissionMode !== 'dontAsk' || !settings || !mcpConfig)) {
+    throw new ClaudeCliError('CLAUDE_WORKSPACE_TOOLS_INVALID',
+      'Workspace file tools require a role-scoped, explicit server and settings with dontAsk and no saved settings sources.');
+  }
   if (typeof roleFunctionsOnly !== 'boolean' || (roleFunctionsOnly && extraArgs.length)) {
     throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'Role-scoped tools cannot be overridden by native CLI arguments.');
   }
@@ -291,6 +312,9 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
       `Claude does not support the requested effort "${requestedEffort}".`
     );
   }
+  // The mode comes from the level the worker inherited (src/lib/agents/permission-level.js):
+  // never wider than the agent that started it.
+  const mode = typeof permissionMode === 'string' && permissionMode.length > 0 ? permissionMode : permissionModeFor(threadOptions);
   return [
     '--print',
     '--input-format', 'stream-json',
@@ -300,9 +324,7 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
     /* Token-by-token text. Without it a person watches nothing happen for a
        minute and then a wall of text appears at once. */
     '--include-partial-messages',
-    '--permission-mode', typeof permissionMode === 'string' && permissionMode.length > 0
-      ? permissionMode
-      : permissionModeFor(threadOptions),
+    '--permission-mode', mode,
     ...(model ? ['--model', model] : []),
     ...(effort ? ['--effort', effort] : []),
     ...(apiMode === 'Disabled'
@@ -310,8 +332,11 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
       : mcpConfigArgs(mcpConfig)),
     ...settingsArgs(settings),
     ...(roleFunctionsOnly
-      ? ['--tools', '', '--setting-sources', '', '--disable-slash-commands']
+      ? ['--tools', workspaceFileTools ? require('../claude-workspace-file-tools').NATIVE_TOOLS : '',
+        ...(workspaceFileTools ? ['--restricted'] : []),
+        ...(!preserveSettingsSources ? ['--setting-sources', ''] : []), '--disable-slash-commands']
       : agentApiToolArgs(apiMode)),
+    ...(denied.length ? ['--disallowedTools', [...new Set(denied)].join(',')] : []),
     ...extraArgs
   ];
 }
@@ -334,13 +359,13 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
  * tier and account, or null. See mcpConfigArgs() for why strictness rides
  * with it and why null means no flag rather than an empty one.
  */
-function claudeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, extraArgs = [] }) {
+function claudeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, preserveSettingsSources = false, workspaceFileTools = false, nativeToolArgs = [], extraArgs = [] }) {
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
   if (extraArgs.length && (roleFunctionsOnly || apiMode !== 'Enabled')) {
     throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'The selected tool restrictions cannot be overridden by extra CLI arguments.');
   }
   return [
-    ...baseClaudeArgs({ threadOptions, permissionMode, mcpConfig, settings, agentApi: apiMode, roleFunctionsOnly, extraArgs: [] }),
+    ...baseClaudeArgs({ threadOptions, permissionMode, mcpConfig, settings, agentApi: apiMode, roleFunctionsOnly, preserveSettingsSources, workspaceFileTools, nativeToolArgs, extraArgs: [] }),
     '--session-id', threadId,
     ...extraArgs
   ];
@@ -355,13 +380,13 @@ function claudeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpCo
  * The MCP config travels through unchanged: a resumed conversation continues
  * under the same plan, and dropping it here would be a session whose tools
  * vanish between turns of one conversation. */
-function claudeResumeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, extraArgs = [] }) {
+function claudeResumeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, preserveSettingsSources = false, workspaceFileTools = false, nativeToolArgs = [], extraArgs = [] }) {
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
   if (extraArgs.length && (roleFunctionsOnly || apiMode !== 'Enabled')) {
     throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'The selected tool restrictions cannot be overridden by extra CLI arguments.');
   }
   return [
-    ...baseClaudeArgs({ threadOptions, permissionMode, mcpConfig, settings, agentApi: apiMode, roleFunctionsOnly, extraArgs: [] }),
+    ...baseClaudeArgs({ threadOptions, permissionMode, mcpConfig, settings, agentApi: apiMode, roleFunctionsOnly, preserveSettingsSources, workspaceFileTools, nativeToolArgs, extraArgs: [] }),
     '--resume', threadId,
     ...extraArgs
   ];
@@ -417,7 +442,7 @@ function imageContentBlock(image, imageLoader) {
 }
 
 class ClaudeCliAdapter {
-  constructor({ transport, clientInfo = null, turnTimeoutMs = DEFAULT_TURN_TIMEOUT_MS, expectedFork = null, expectedResumeThreadId = null, imageLoader = null, modePolicy = null, modeTimeoutMs = 10_000 } = {}) {
+  constructor({ transport, clientInfo = null, turnTimeoutMs = DEFAULT_TURN_TIMEOUT_MS, expectedFork = null, expectedResumeThreadId = null, imageLoader = null, modePolicy = null, modeTimeoutMs = 10_000, workspaceFileTools = false } = {}) {
     if (!transport || typeof transport.send !== 'function' || typeof transport.onData !== 'function') {
       throw new TypeError('ClaudeCliAdapter requires a transport with send() and onData()');
     }
@@ -441,6 +466,7 @@ class ClaudeCliAdapter {
     }
     this.allowedModes = modePolicy === null ? null : Object.freeze([...new Set(modePolicy.allowedModes)]);
     this.modeTimeoutMs = modeTimeoutMs;
+    this.workspaceFileTools = workspaceFileTools === true;
     this.currentModeId = null;
     this.modeRevision = 0;
     this.modeSelecting = false;
@@ -468,7 +494,7 @@ class ClaudeCliAdapter {
        and neither caller could tell which events were theirs. */
     this.activeTurn = null;
     this.thinkingStream = null;
-    /* Provider message id -> its streamed blocks still waiting for their final (B20). */
+    /* Provider message id -> its streamed blocks still waiting for their final (streamed block fix). */
     this.streamedBlocks = new Map();
     /* Usage from the last completed turn, for getUsage(). Kept rather than
        recomputed because the figures are the PROVIDER'S and must never be
@@ -499,7 +525,7 @@ class ClaudeCliAdapter {
      which is where a malformed event would reach a renderer. A listener that
      throws must not stop the others or kill the turn, so each is called in its
      own try. */
-  emit(event) {
+  validateAndTrackEvent(event) {
     let validated;
     try {
       validated = validateEngineEvent(event);
@@ -509,7 +535,7 @@ class ClaudeCliAdapter {
          prevent -- but it must not be silent, or a whole event type could go
          missing with nothing to show for it. */
       this.emitDiagnostic(error);
-      return;
+      return null;
     }
     const turn = this.activeTurn;
     const textActivity = ['assistant_text_delta', 'assistant_text', 'thinking'].includes(validated.type)
@@ -521,7 +547,12 @@ class ClaudeCliAdapter {
       // a stalled model alive. Explicit close still clears this same timer.
       turn.timer.refresh();
     }
-    return this.eventBoundary.emit(validated);
+    return validated;
+  }
+
+  emit(event) {
+    const validated = this.validateAndTrackEvent(event);
+    if (validated) return this.eventBoundary.emit(validated);
   }
 
   emitDiagnostic(error) {
@@ -549,7 +580,14 @@ class ClaudeCliAdapter {
     let releaseHold = null;
     let result;
     try {
-      result = this.eventBoundary.emitSequence(events);
+      const adapter = this;
+      function* validatedEvents() {
+        for (const event of events) {
+          const validated = adapter.validateAndTrackEvent(event);
+          if (validated) yield validated;
+        }
+      }
+      result = this.eventBoundary.emitSequence(validatedEvents());
       if (!isThenable(result)) return result;
       // Hold the source for the entire packet. emitSequence advances its
       // iterator only after each accepted event settles; this extra hold
@@ -599,6 +637,26 @@ class ClaudeCliAdapter {
         this.pendingControl.delete(requestId);
         clearTimeout(pending.timer);
         pending.resolve(packet.response);
+      }
+      return;
+    }
+
+    /* A REQUEST FROM THE CLI THAT A FLEET WORKER DOES NOT OFFER (for example a
+       permission or question callback). Fleet starts workers without any such
+       callback, so none is expected; one left unanswered would hold the turn
+       until its silence timeout. It is refused at once, grants nothing, and is
+       counted on the active turn so its report can say so. */
+    if (packet.type === 'control_request') {
+      const requestId = packet.request_id;
+      if (typeof requestId !== 'string' || requestId.length === 0 || requestId.length > 512) return;
+      this.transport.send({ type: 'control_response', response: { subtype: 'error', request_id: requestId,
+        error: 'A Fleet worker does not support this request.' } });
+      const turn = this.activeTurn;
+      if (turn) {
+        const record = turn.unsupportedRequests || (turn.unsupportedRequests = { count: 0, methods: new Set() });
+        record.count += 1;
+        const subtype = packet.request && typeof packet.request.subtype === 'string' ? packet.request.subtype : '';
+        if (record.methods.size < 8) record.methods.add(/^[A-Za-z0-9_][A-Za-z0-9_./-]{0,63}$/.test(subtype) ? subtype : 'an unnamed request');
       }
       return;
     }
@@ -727,7 +785,7 @@ class ClaudeCliAdapter {
       }
       turn.failure = { code: packet.error, text: text || null };
     }
-    /* A FINAL NAMES THE BLOCK ITS STREAM NAMED (B20, found by hand on the 1.0.48 candidate). Claude
+    /* A FINAL NAMES THE BLOCK ITS STREAM NAMED (streamed block fix, found by hand on the 1.0.48 candidate). Claude
        2.1.283 sends each content block of one provider message as its own assistant packet under
        the same message id, so a packet's array position is not the provider block index the
        deltas carry: a text block after a thinking block streamed as block 1 and arrived as [text]
@@ -807,7 +865,7 @@ class ClaudeCliAdapter {
       this.lastUsage = packet.usage;
       this.emit({ type: 'usage', ...base, usage: packet.usage });
     }
-    /* A TURN THE PERSON STOPPED ENDS AS INTERRUPTED, NOT AS AN ERROR (B7, found by hand on the
+    /* A TURN THE PERSON STOPPED ENDS AS INTERRUPTED, NOT AS AN ERROR (interrupted turn fix, found by hand on the
        installed 1.0.46 with Claude Sonnet, 2026-09-25). The CLI answers an interrupt by ending the
        turn with an is_error result, so every Halt read "turn error" while Codex's identical stop
        read "turn interrupted". Only a turn this adapter asked to stop, and only an error result,
@@ -834,8 +892,36 @@ class ClaudeCliAdapter {
       : packet.is_error === true && typeof packet.result === 'string' && packet.result.length > 0
         ? packet.result
         : retainedFailure?.text || null;
+    // The CLI is authoritative about denied calls. Carry only bounded tool
+    // names for this active session/turn; tool inputs may contain private data.
+    // This is diagnostic evidence, never a request to add a permission grant.
+    const permissionDenied = Boolean(turn && turn.turnId === base.turnId && base.threadId === this.threadId
+      && packet.session_id === this.threadId && Array.isArray(packet.permission_denials) && packet.permission_denials.length);
+    const permissionDeniedTools = permissionDenied
+      ? [...new Set(packet.permission_denials.slice(0, 128).map(denial => denial?.tool_name)
+        .filter(name => typeof name === 'string' && /^[A-Za-z0-9_.-]{1,160}$/.test(name)))].slice(0, 32)
+      : [];
+    // Only native file paths are useful to a workspace-confined worker's
+    // caller. Other tool inputs can contain private values and stay omitted.
+    const permissionDeniedFiles = permissionDenied && this.workspaceFileTools
+      ? packet.permission_denials.slice(0, 128).flatMap(denial => {
+        const tool = denial?.tool_name;
+        const file = denial?.tool_input?.file_path;
+        return ['Edit', 'Write'].includes(tool) && typeof file === 'string'
+          && file.length > 0 && file.length <= 240 && path.isAbsolute(file)
+          && !/[\x00-\x1f\x7f]/.test(file)
+          ? [{ tool, path: file }] : [];
+      }).slice(0, 4)
+      : [];
+    const unsupported = turn && turn.turnId === base.turnId && turn.unsupportedRequests
+      ? { count: turn.unsupportedRequests.count, methods: [...turn.unsupportedRequests.methods] } : null;
     this.emit({ type: 'turn_completed', ...base, status, ...(failureText ? { text: failureText } : {}),
-      ...(retainedFailure ? { payload: { code: retainedFailure.code } } : {}) });
+      ...(retainedFailure || permissionDenied || unsupported ? { payload: {
+        ...(retainedFailure ? { code: retainedFailure.code } : {}),
+        ...(permissionDenied ? { permissionDenied: true, permissionDeniedTools,
+          ...(permissionDeniedFiles.length ? { permissionDeniedFiles } : {}) } : {}),
+        ...(unsupported ? { unsupportedRequests: unsupported } : {})
+      } } : {}) });
 
     if (!turn || this.activeTurn !== turn) return;
     this.activeTurn = null;
@@ -865,16 +951,24 @@ class ClaudeCliAdapter {
       /* A child that dies mid-turn must REJECT rather than resolve. A resolved
          turn with no answer reads to every caller as a successful empty reply,
          which is the silence this project keeps paying for. */
-      turn.reject(new ClaudeCliError(
+      turn.reject(this.nativeProcessFailure() || new ClaudeCliError(
         'CLAUDE_CLI_EXITED',
         `The Claude program stopped before finishing the turn (exit ${exitInfo && exitInfo.code}).`
       ));
     }
     for (const pending of this.pendingControl.values()) {
       clearTimeout(pending.timer);
-      pending.reject(new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped.'));
+      pending.reject(this.nativeProcessFailure() || new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped.'));
     }
     this.pendingControl.clear();
+  }
+
+  nativeProcessFailure() {
+    // Only the transport's process error carries this code. Provider protocol
+    // packets and their prose cannot supply a native prerequisite failure.
+    if (this.exitInfo?.error?.code !== 'LINUX_PROCESS_NATIVE_UNAVAILABLE') return null;
+    return new ClaudeCliError('LINUX_PROCESS_NATIVE_UNAVAILABLE',
+      'Host workers need Linux 5.3+ with pidfd_open; this system lacks or blocks the required native process support.');
   }
 
   /* ------------------------------------------------------------ thread -- */
@@ -890,7 +984,7 @@ class ClaudeCliAdapter {
   // Waiting here prevents the host from handing a doomed session to a sender.
   async initialize({ timeoutMs = 60_000 } = {}) {
     if (this.closed || this.exitInfo) {
-      throw new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped before opening the conversation.');
+      throw this.nativeProcessFailure() || new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped before opening the conversation.');
     }
     const requestId = randomUUID();
     const answered = new Promise((resolve, reject) => {
@@ -916,7 +1010,7 @@ class ClaudeCliAdapter {
       throw new ClaudeCliError('CLAUDE_CLI_INITIALIZE_REFUSED', 'The Claude program could not open the conversation.');
     }
     if (this.closed || this.exitInfo) {
-      throw new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped before opening the conversation.');
+      throw this.nativeProcessFailure() || new ClaudeCliError('CLAUDE_CLI_EXITED', 'The Claude program stopped before opening the conversation.');
     }
     return response;
   }
@@ -999,6 +1093,8 @@ class ClaudeCliAdapter {
       throw new ClaudeCliError('CLAUDE_MODE_UNCONFIRMED', 'Confirm the pending native mode before starting a turn.');
     }
     const { threadId, text, images } = validateSendTurnRequest(request);
+    const nativeFailure = this.nativeProcessFailure();
+    if (nativeFailure) throw nativeFailure;
     if (this.closed) throw new ClaudeCliError('CLAUDE_CLI_CLOSED', 'This Claude session is closed.');
     if (this.activeTurn) {
       throw new ClaudeCliError('CLAUDE_CLI_TURN_ACTIVE', 'This session is already working on a turn.');

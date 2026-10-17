@@ -33,11 +33,11 @@ const { spawnHidden, waitForRootSpawn } = require('../proc/hidden-spawn');
 const { createStartupCleanup, DEFAULT_CLEANUP_TIMEOUT_MS, withOwnedStartupCleanup } = require('./codex-startup-cleanup');
 const path = require('node:path');
 const fs = require('node:fs');
-const providerIsolation = require('../provider-session-isolation');
 const toolchain = require('../providers/provider-toolchain');
 const { ClaudeCliAdapter, ClaudeCliError, claudeArgs, claudeResumeArgs, claudeForkArgs, nativeModePolicyFor } = require('./claude-cli-adapter');
 const { resumeRefusalFor } = require('./resume-provider-guard');
-const { deleteEnvNames, envValues } = require('../env-scrub');
+const agents = require('../agents/registry');
+const { createEnvironmentRedactor } = require('./stream-redactor');
 /* THE ONE CANDIDATE LIST. Where `claude` may be, which installer put it there
  * and what its version does with a model alias all live in
  * ./claude-cli-install.js, and this file READS that list rather than keeping a
@@ -63,28 +63,20 @@ const STDERR_LIMIT = 64 * 1024;
    lines remain deliverable, while an unframed line cannot grow forever. */
 const MAX_CLAUDE_LINE_BYTES = 8_000_000;
 
-/* WHAT THE CHILD MUST NEVER INHERIT, and this is not the same list as a scrub
- * for tidiness.
+/* SIGN-IN VARIABLES ARE THE PERSON'S, AND THEY PASS THROUGH.
  *
- * Claude Code gives ANTHROPIC_API_KEY precedence over the claude.ai
- * subscription login. An inherited key can therefore route a session to a
- * metered account even while `claude auth status` reports a valid login.
+ * Claude Code can sign in with an account login, an API key, a cloud provider
+ * (Bedrock, Vertex, Foundry) or a gateway. Which one is the person's choice,
+ * and Anthropic's terms for running Claude Code in a product forbid removing,
+ * disabling or restricting any of its authentication methods. Earlier builds
+ * deleted these variables so a worker would always use the subscription; that
+ * restricted the API-key and cloud routes, so a worker now gets exactly the
+ * environment the person's own session has.
  *
- * So this engine's entire purpose -- run on the person's own subscription --
- * depends on the key NOT reaching the child. Stripping it is not defensive
- * tidying; it is the mechanism.
- *
- * BASE_URL IS HERE FOR A DIFFERENT HARM. It redirects the conversation, and the
- * file contents it carries, to an arbitrary host. The session still starts,
- * still answers, and is indistinguishable from a correct one, so there is no
- * failure for anyone to notice.
- *
- * src/lib/providers/subscription-launch-env.js is the product's fuller answer
- * and the shell already applies it before calling in here. This list is the
- * floor, applied again locally, because an embedder or a test that calls this
- * module directly must not be able to reach a state the shell would have
- * prevented. Scrubbing twice costs nothing; scrubbing never is the whole
- * outage. */
+ * The list below is kept for stderr redaction, alongside names that look
+ * secret-bearing. Exact values at least eight characters long are blanked
+ * across pipe chunks before stderr capture or durable logs; see
+ * stream-redactor.js for the precise name matching and limits. */
 const CREDENTIAL_ENV_NAMES = Object.freeze([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
@@ -118,14 +110,15 @@ function appendBounded(current, chunk, limit = STDERR_LIMIT) {
  * the buffer went with the app. There is no record anywhere on this machine of
  * what the CLI said about those deaths.
  *
- * So the same bytes go to a file as they arrive. Not instead of the buffer --
- * the exit path still hands the caller what it always did -- but beside it, in
- * the one place that survives a process that never gets to write anything down.
+ * Safe diagnostic text goes to a file while the child runs, beside the buffer
+ * the exit path hands to the caller. The bounded undecided tail stays only in
+ * memory until redaction can rule out a split match or the stderr stream ends.
  *
  * BOUNDED THREE WAYS, because a log that fills a disk is its own incident: 256
  * KB per session, 50 files kept in the directory, and nothing written after the
- * cap. WRITTEN AFTER REDACTION, on the redacted chunk, so a credential that
- * reached the environment cannot reach the file either.
+ * cap. WRITTEN AFTER REDACTION of the exact environment values covered by
+ * stream-redactor.js (matching names and at least eight characters), including
+ * occurrences split across pipe chunks.
  *
  * SYNCHRONOUS, and that is a considered cost rather than an oversight: this is
  * the stderr of one child, it is silent in a healthy session, and 256 KB is the
@@ -195,34 +188,14 @@ function durableStderrSink(childPid) {
   }
 }
 
-/* Redact any credential VALUE that still reached the environment, before its
-   text can reach an observer. Mirrors claude-process.js, including the reason
-   that file gives: the lookup must be case-insensitive, because a child
-   resolves environment names through a case-insensitive OS and can therefore
-   print a value stored under a spelling an exact-case redactor never finds. */
-function redactCredentials(chunk, env) {
-  let output = String(chunk);
-  const secrets = envValues(env, CREDENTIAL_ENV_NAMES).sort((a, b) => b.length - a.length);
-  for (const secret of secrets) output = output.split(secret).join('[REDACTED]');
-  return output;
-}
-
-/* THE ENVIRONMENT THE CHILD ACTUALLY GETS.
- *
- * `env === undefined` DOES NOT MEAN "the whole ambient environment". That
- * fallback is exactly the defect codex-process.js documents and the shell had
- * to work around at every call site: a caller who simply forgot to pass an
- * environment handed the child every credential on the machine. Here an omitted
- * env means the ambient one MINUS the credentials, never the raw one, so the
- * careless path is the safe path rather than the dangerous one.
- *
- * PATH SURVIVES, and must: it is how `claude` is found at all. The scrub is a
- * named credential list, not a filter. */
+/* THE ENVIRONMENT THE CHILD ACTUALLY GETS: the one the caller supplied, or the
+ * ambient one when none was given, copied so this file never mutates a caller's
+ * object. Sign-in variables are not removed (see above); session-bound bindings
+ * of the launching session are removed by the caller (host-worker-session.js
+ * HOST_SESSION_ENV), because they belong to that one session. */
 function launchEnvironment(env) {
   const source = env === undefined || env === null ? process.env : env;
-  const copy = { ...source };
-  deleteEnvNames(copy, CREDENTIAL_ENV_NAMES);
-  return copy;
+  return { ...source };
 }
 
 /* WHICH SIGN-IN THE CHILD USES, when and only when a caller names one.
@@ -236,10 +209,8 @@ function launchEnvironment(env) {
  *     omitted directory returns the environment IDENTICALLY, so the default path
  *     is not "the same as before in effect" but the same object contents.
  *   - It does not open, read, copy or move anything. It assigns a name.
- *   - It does not scrub, re-add, or reorder any other variable. The credential
- *     scrub above has already run and is not repeated, weakened or bypassed --
- *     ANTHROPIC_API_KEY is gone before this is reached, which is what keeps the
- *     session on the subscription rather than on a metered key.
+ *   - It does not scrub, re-add, or reorder any other variable. The
+ *     environment it receives is the person's own, sign-in variables included.
  *   - It does not create the directory. A directory nobody has signed into is
  *     the official program's business to report, in its own words, to the person
  *     who owns the account. Making it here would manufacture a home that looks
@@ -253,16 +224,14 @@ function launchEnvironment(env) {
  * spawned child is not a place anyone chose."
  */
 function configDirEnvironment(environment, configDir, { requireHome = true } = {}) {
-  if (typeof configDir !== 'string' || configDir.trim().length === 0) {
-    return providerIsolation.providerSessionEnvironment(environment, { provider: 'claude', requireHome });
-  }
+  if (typeof configDir !== 'string' || configDir.trim().length === 0) return environment;
   const named = configDir.trim();
   if (!path.isAbsolute(named)) {
     throw new ClaudeCliError('CLAUDE_CLI_CONFIG_DIR_RELATIVE',
       'The folder for this sign-in has to be a full path, so the assistant signs in where you meant.');
   }
   environment.CLAUDE_CONFIG_DIR = path.resolve(named);
-  return providerIsolation.providerSessionEnvironment(environment, { provider: 'claude', home: path.resolve(named), requireHome });
+  return environment;
 }
 
 /* THE VERSION OF THE PROGRAM WE ACTUALLY RESOLVED.
@@ -288,23 +257,22 @@ function claudeCliVersion({ command = 'claude', timeoutMs = 5_000, env, configDi
   // A Linux desktop can discover a different exact program after installation,
   // and each selected account has its own provider home. Do not reuse an
   // ambient probe from another launch. The Windows cache remains unchanged.
-  const cache = process.platform !== 'linux' && !providerIsolation.isolationRequested(env);
+  const cache = process.platform !== 'linux';
   if (cache && cliVersionPromise !== undefined) return cliVersionPromise;
   const reading = new Promise(resolve => {
     let settled = false;
     const finish = value => { if (!settled) { settled = true; resolve(value); } };
     let child;
     try {
-      const environment = process.platform === 'linux' || providerIsolation.isolationRequested(env)
+      const environment = process.platform === 'linux'
         ? configDirEnvironment(launchEnvironment(env), configDir, { requireHome: false })
         : launchEnvironment(undefined);
-      const privateExecutable = providerIsolation.resolvePrivateProviderExecutable('claude', environment);
       /* Resolved against the environment the probe itself runs in, so the
          version read belongs to the program a session with that environment
          would start, not to whatever the ambient PATH happens to find. */
-      const invocation = privateExecutable || resolveInvocation(command, { env: environment });
-      child = spawnHidden(invocation.command, [...(privateExecutable?.prefixArgs || []), '--version'], {
-        env: privateExecutable ? { ...environment, ...privateExecutable.env } : environment,
+      const invocation = resolveInvocation(command, { env: environment });
+      child = spawnHidden(invocation.command, ['--version'], {
+        env: environment,
         stdio: ['ignore', 'pipe', 'ignore']
       });
     } catch { finish(null); return; }
@@ -365,16 +333,15 @@ function claudeCliFeatures({ command = 'claude', env, configDir = null, timeoutM
     let copy = null;
     try {
       const environment = configDirEnvironment(launchEnvironment(env), configDir, { requireHome: false });
-      const privateExecutable = providerIsolation.resolvePrivateProviderExecutable('claude', environment);
-      const invocation = privateExecutable || resolveInvocation(command, { env: environment });
-      const target = privateExecutable ? privateExecutable.executablePath : invocation.command;
+      const invocation = resolveInvocation(command, { env: environment });
+      const target = invocation.command;
       if (typeof target === 'string' && path.isAbsolute(target)) {
         copy = toolchain.describeCopy('claude', target, { source: 'path' });
         const held = toolchain.recallProbe(copy);
         if (held) { finish(held); return; }
       }
-      child = spawnHidden(invocation.command, [...(privateExecutable?.prefixArgs || []), '--help'], {
-        env: { ...(privateExecutable ? { ...environment, ...privateExecutable.env } : environment), ...ownedSelfUpdateOff(target, env) },
+      child = spawnHidden(invocation.command, ['--help'], {
+        env: { ...environment, ...ownedSelfUpdateOff(target, env) },
         stdio: ['ignore', 'pipe', 'ignore']
       });
     } catch { finish(null); return; }
@@ -399,6 +366,19 @@ function refuseUnsupported(features) {
   if (!features || features.state !== 'update-needed') return;
   throw new ClaudeCliError('CLAUDE_CLI_UPDATE_NEEDED',
     `This version of the Claude CLI (\`claude\`) cannot run a ToolsEnabled session: it does not support ${features.missingRequired.join(', ')}. Update the Claude CLI, then start again.`);
+}
+
+function requireRestrictedWorkspaceTools(facts, features) {
+  if (!facts.workspaceFileTools) return;
+  if (!features) {
+    throw new ClaudeCliError('CLAUDE_CLI_FEATURE_PROBE_FAILED',
+      'Could not read the Claude CLI --help output to verify --restricted. Retry starting this worker; if it persists, check that the Claude CLI can run and print --help.');
+  }
+  if (features.missingRequired?.includes('--restricted')
+      || features.missingOptional?.includes('--restricted')) {
+    throw new ClaudeCliError('CLAUDE_CLI_RESTRICTED_REQUIRED',
+      'Workspace file tools require a Claude CLI with --restricted. Update Claude Code, then start this worker again.');
+  }
 }
 
 /* An optional option the program lacks is left out of the arguments. */
@@ -534,8 +514,18 @@ async function cliFacts({ command, env, configDir, args }) {
  * codex transport uses, so the adapter above can be written without knowing
  * which engine it is talking to.
  */
+function streamAgent(provider, env) {
+  const registry = agents.activeRegistry(env);
+  agents.assertWorkerAvailable(registry, provider);
+  const agent = registry.get(provider);
+  if (agent?.worker.driver !== 'stream-json') {
+    throw new ClaudeCliError('STREAM_JSON_AGENT_UNSUPPORTED', 'This worker needs an agent descriptor with the stream-json driver.');
+  }
+  return agent;
+}
+
 function createClaudeCliTransport({
-  command = 'claude', args = [], cwd, env, configDir = null,
+  provider = 'claude', command = null, args = [], cwd, env, configDir = null,
   rootLaunch,
   /* Injectable so the durable-log rule can be asserted without writing into the
      running installation's own logs directory. Defaults to the real sink. */
@@ -553,6 +543,8 @@ function createClaudeCliTransport({
   processGroup = false,
   credentialEnvironment = null,
 } = {}) {
+  const agent = streamAgent(provider, env);
+  command ??= agent.command;
   const contained = containProcessTree === true && processGroup === false && credentialEnvironment === null;
   const grouped = containProcessTree === false && processGroup === true && rootLaunch === undefined;
   if (!contained && !grouped) {
@@ -560,14 +552,15 @@ function createClaudeCliTransport({
       'An uncontained Claude program is only started as the leader of its own process group, with no root launch admission.');
   }
   const childEnv = configDirEnvironment(launchEnvironment(env), configDir);
-  const privateExecutable = providerIsolation.resolvePrivateProviderExecutable('claude', childEnv);
   /* Resolved against the CHILD's environment: the profile and PATH the session
      will actually run with are the ones its program is looked up in. */
-  const invocation = privateExecutable || resolveInvocation(command, { env: childEnv });
+  const invocation = resolveInvocation(command, { env: childEnv });
   Object.assign(childEnv, ownedSelfUpdateOff(invocation.command, env));
-  const child = spawnHidden(invocation.command, [...(privateExecutable?.prefixArgs || []), ...args], {
+  const child = spawnHidden(invocation.command, args, {
     cwd,
-    env: privateExecutable ? { ...childEnv, ...privateExecutable.env } : childEnv,
+    env: childEnv,
+    // An agent CLI the person runs: its sign-in environment passes through.
+    agentCli: true,
     stdio: ['pipe', 'pipe', 'pipe'],
     // The CLI launches workspace tools of its own. A Windows PID-tree walk
     // cannot find one after the CLI exits, so establish kernel containment
@@ -600,11 +593,16 @@ function createClaudeCliTransport({
      still the caller's, and this is the one that survives an app that dies
      without running its shutdown. */
   const sink = stderrSink(child.pid);
-  child.stderr.on('data', chunk => {
-    const redacted = redactCredentials(chunk, redactionEnv);
+  const stderrRedactor = createEnvironmentRedactor(redactionEnv, CREDENTIAL_ENV_NAMES);
+  function recordStderr(redacted) {
+    if (!redacted) return;
     stderr = appendBounded(stderr, redacted);
     if (sink) sink(redacted);
-  });
+  }
+  function flushStderr() { recordStderr(stderrRedactor.end()); }
+  child.stderr.on('data', chunk => recordStderr(stderrRedactor.write(chunk)));
+  child.stderr.once('end', flushStderr);
+  child.stderr.once('close', flushStderr);
 
   function pauseSource() {
     if (paused) return;
@@ -631,6 +629,7 @@ function createClaudeCliTransport({
 
   function finish(code, signal) {
     if (ended || pendingFinish) return;
+    flushStderr();
     const info = { code, signal, stderr, error: spawnError };
     if (paused || processing) {
       pendingFinish = info;
@@ -830,12 +829,21 @@ function sessionFactsFrom({ plan = null, configDir = null, mcpConfig = null, set
     if (plan.roleFunctionsOnly !== undefined && typeof plan.roleFunctionsOnly !== 'boolean') {
       throw new ClaudeCliError('CLAUDE_CLI_PLAN_INVALID', 'The native role-tool restriction is not a boolean.');
     }
+    if (plan.preserveSettingsSources !== undefined && typeof plan.preserveSettingsSources !== 'boolean') {
+      throw new ClaudeCliError('CLAUDE_CLI_PLAN_INVALID', 'The saved-settings preservation choice must be a boolean.');
+    }
+    if (plan.workspaceFileTools !== undefined && typeof plan.workspaceFileTools !== 'boolean') {
+      throw new ClaudeCliError('CLAUDE_CLI_PLAN_INVALID', 'The workspace file-tool choice must be a boolean.');
+    }
     return {
       configDir: typeof plan.configDir === 'string' ? plan.configDir : null,
       mcpConfig: typeof plan.mcpConfig === 'string' ? plan.mcpConfig : null,
       settings: typeof plan.settings === 'string' ? plan.settings : null,
       permissionMode: typeof plan.claudePermissionMode === 'string' ? plan.claudePermissionMode : null,
+      nativeToolArgs: plan.nativeToolArgs || [],
       roleFunctionsOnly: plan.roleFunctionsOnly === true,
+      preserveSettingsSources: plan.preserveSettingsSources === true,
+      workspaceFileTools: plan.workspaceFileTools === true,
       agentApi: plan.agentApiMode ?? null
     };
   }
@@ -909,7 +917,8 @@ async function startClaudeSession({
   clientInfo = null,
   threadOptions = {},
   onEvent = null,
-  command = 'claude',
+  provider = 'claude',
+  command = null,
   args = null,
   env,
   rootLaunch,
@@ -929,6 +938,8 @@ async function startClaudeSession({
   processGroup = false,
   credentialEnvironment = null
 } = {}) {
+  const agent = streamAgent(provider, env);
+  command ??= agent.command;
   let transport = null;
   let adapter = null;
   const grouping = containProcessTree === true && processGroup === false && credentialEnvironment === null
@@ -941,6 +952,7 @@ async function startClaudeSession({
     seed.close();
     const features = givenArgs ? null : await claudeCliFeatures({ command, env, configDir: facts.configDir });
     refuseUnsupported(features);
+    requireRestrictedWorkspaceTools(facts, features);
 
     const argv = givenArgs || claudeArgs({
       threadId,
@@ -949,10 +961,13 @@ async function startClaudeSession({
       settings: facts.settings,
       permissionMode: facts.permissionMode,
       roleFunctionsOnly: facts.roleFunctionsOnly,
+      preserveSettingsSources: facts.preserveSettingsSources,
+      workspaceFileTools: facts.workspaceFileTools,
+      nativeToolArgs: facts.nativeToolArgs,
       agentApi: facts.agentApi
     });
     transport = createClaudeCliTransport({
-      command,
+      command, provider,
       args: argv,
       cwd,
       env,
@@ -960,7 +975,8 @@ async function startClaudeSession({
       configDir: facts.configDir,
       ...grouping
     });
-    adapter = new ClaudeCliAdapter({ transport, clientInfo, modePolicy: nativeModePolicy(facts) });
+    adapter = new ClaudeCliAdapter({ transport, clientInfo, modePolicy: nativeModePolicy(facts),
+      workspaceFileTools: facts.workspaceFileTools });
     adapter.threadId = threadId;
     if (onEvent) adapter.onEvent(onEvent);
     if (rootLaunch) await transport.rootReady;
@@ -1000,7 +1016,8 @@ async function restoreClaudeSession({
   clientInfo = null,
   threadOptions = {},
   onEvent = null,
-  command = 'claude',
+  provider = 'claude',
+  command = null,
   args = null,
   env,
   rootLaunch,
@@ -1024,6 +1041,8 @@ async function restoreClaudeSession({
   processGroup = false,
   credentialEnvironment = null
 } = {}) {
+  const agent = streamAgent(provider, env);
+  command ??= agent.command;
   if (typeof threadId !== 'string' || threadId.length === 0) {
     throw new TypeError('resumeClaudeSession requires the threadId of the conversation to continue');
   }
@@ -1033,7 +1052,7 @@ async function restoreClaudeSession({
      `resumeThread`, but by the time it runs the transport -- and therefore the
      child -- already exists, so a refusal there has already paid for the process
      it exists to avoid. */
-  const refusal = resumeRefusalFor({ adapterProvider: 'claude', threadProvider });
+  const refusal = resumeRefusalFor({ adapterProvider: provider, threadProvider });
   if (refusal) throw new ClaudeCliError(refusal.code, refusal.message);
   let transport = null;
   let adapter = null;
@@ -1059,6 +1078,7 @@ async function restoreClaudeSession({
     }
     const features = givenArgs ? null : await claudeCliFeatures({ command, env, configDir: facts.configDir });
     refuseUnsupported(features);
+    requireRestrictedWorkspaceTools(facts, features);
     const argv = givenArgs || (forkSource ? claudeForkArgs : claudeResumeArgs)({
         ...(forkSource ? { sourceThreadId: threadId } : {}),
         threadId: newThreadId || threadId,
@@ -1067,10 +1087,13 @@ async function restoreClaudeSession({
         settings: facts.settings,
         permissionMode: facts.permissionMode,
         roleFunctionsOnly: facts.roleFunctionsOnly,
+        preserveSettingsSources: facts.preserveSettingsSources,
+        workspaceFileTools: facts.workspaceFileTools,
+        nativeToolArgs: facts.nativeToolArgs,
         agentApi: facts.agentApi
       });
     transport = createClaudeCliTransport({
-      command,
+      command, provider,
       args: argv,
       cwd,
       env,
@@ -1079,6 +1102,7 @@ async function restoreClaudeSession({
       ...grouping
     });
     adapter = new ClaudeCliAdapter({ transport, clientInfo, modePolicy: nativeModePolicy(facts),
+      workspaceFileTools: facts.workspaceFileTools,
       expectedResumeThreadId: forkSource ? null : threadId,
       expectedFork: forkSource ? { sourceThreadId: threadId, threadId: newThreadId } : null });
     const resumed = await adapter.resumeThread(newThreadId || threadId, threadOptions);

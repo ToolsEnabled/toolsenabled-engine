@@ -6,6 +6,7 @@ const path = require('node:path');
 const readline = require('node:readline/promises');
 const { spawnSync } = require('node:child_process');
 const { assertUninstallPrefixSafe } = require('./openshell-uninstall-path-safety');
+const { safeLaunchEnvironment } = require('./supervision/launch-environment');
 
 function installedManifest(binDir) {
   const prefix = path.resolve(binDir, '../../..');
@@ -112,7 +113,8 @@ async function uninstall(binDir, { keepState = false, archive, sha256 } = {}) {
   const fd = Number(process.env.TOOLSENABLED_FLEET_LOCK_FD);
   const driver = path.join(binDir, '../libexec/fleet_uninstall.py');
   const result = spawnSync('/usr/bin/python3', ['-B', driver, '--prefix', prefix, '--keep-state', ...pins], {
-    env: { ...process.env, TOOLSENABLED_FLEET_LOCK_FD: '3' }, stdio: ['inherit', 'inherit', 'inherit', fd],
+    env: { ...safeLaunchEnvironment(process.env, { context: 'Fleet uninstall driver' }), TOOLSENABLED_FLEET_LOCK_FD: '3' },
+    stdio: ['inherit', 'inherit', 'inherit', fd],
     windowsHide: true
   });
   if (result.error || result.signal || !Number.isInteger(result.status)) {

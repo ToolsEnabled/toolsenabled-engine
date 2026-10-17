@@ -12,8 +12,7 @@
 //
 // ATOMICITY: claiming a queue item is a read-modify-write across processes, so
 // it runs inside an exclusive on-disk lock (O_EXCL create, PID recorded, stale
-// holder reclaimed -- the same shape as src/lib/agent-digest/lock.js, which
-// already solved this for the digest). The state file itself is replaced by
+// holder reclaimed). The state file itself is replaced by
 // write-temp-then-rename so a crash mid-write can never leave a half-written
 // file: readers see either the old bytes or the new bytes.
 
@@ -77,7 +76,7 @@ function emptyState(now = new Date()) {
     supervisor: null,
     lanes: {},
     items: {},
-    // Per-phase planning-pass records (Q10.1: phase decomposition). Keyed by
+    // Per-phase planning-pass records (phase decomposition). Keyed by
     // the BUILD-QUEUE phase id, e.g. "Q21". Never keyed on a subtask id --
     // subtasks live inside `plans[phaseId].subtasks` and get their OWN entries
     // in `items`, keyed `"${phaseId}::${subtaskId}"`, so all existing

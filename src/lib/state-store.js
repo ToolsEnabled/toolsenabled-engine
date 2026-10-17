@@ -5,13 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ensureDir, rootPath } = require('./runtime');
 const { plaintextCredentialOutsideGeneratedIds, plaintextCredentialPattern } = require('./secret-patterns');
-const { normalizeScheduledAction, SUPPORTED_SCHEDULED_ACTIONS } = require('./scheduled-actions');
-const { SCHEDULER_RUN_RECOVERY_MS } = require('./scheduler-constants');
-const { deriveAcceptedWorkflow } = require('./coordinator-workflow/broker-verification');
 const capabilityManifests = require('./capability-manifests');
 const provenanceEnvelopes = require('../../schemas/generated/platform.provenance');
-const { validatePinnedFiles, assertProcessReceipt } = require('./research/provenance');
-const { validateStudyProtocol, assertStudyProtocolDeclaration } = require('./research/study-protocol');
 // Discord left the product on 2026-08-22 (product decision) and
 // src/lib/discord-owner-commands.js went with it. The V19 migration below
 // still creates the three discord_* tables -- user_version numbering is
@@ -90,12 +85,15 @@ const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_TASK_PAYLOAD_BYTES = 64 * 1024;
 const MAX_TASK_CHECKPOINT_BYTES = 256 * 1024;
 const MAX_TASK_CHECKPOINTS = 1000;
+// What a worker does when a task it holds was cancelled (task.cancel): the
+// sentence ends every TASK_CANCEL_REQUESTED refusal an agent reads.
+const TASK_CANCEL_ACKNOWLEDGE = 'Stop the work and acknowledge it with task.fail with disposition cancelled.';
 const MAX_ACTIVE_TASKS_PER_QUEUE = 10000;
 const DEFAULT_TASK_LEASE_MS = 5 * 60 * 1000;
 const MAX_TELEGRAM_BATCH_BYTES = 8 * 1024 * 1024;
 const MAX_MEMORY_VALUE_BYTES = 32 * 1024;
 const MAX_MEMORY_NOTE_CHARS = 8 * 1024;
-/* A STORED MEMORY ROW IS VERIFIED ONCE PER STORED VALUE, NOT ONCE PER READ (T1762).
+/* A STORED MEMORY ROW IS VERIFIED ONCE PER STORED VALUE, NOT ONCE PER READ.
  *
  * _memoryRow re-serializes the value canonically, re-hashes it and scans it for
  * plaintext credentials. Every one of those checks is a pure function of four
@@ -118,20 +116,15 @@ const MEMORY_VERIFIED_MAX_CHARS = 8 * 1024 * 1024;
 const MAX_MEMORY_TAGS = 32;
 const MAX_MEMORY_TAG_CHARS = 64;
 const MAX_APPROVAL_TTL_MS = 15 * 60 * 1000;
-const MAX_REMOTE_ASK_TTL_MS = 10 * 60 * 1000;
-const REMOTE_ASK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MEMORY_NAMESPACE_PATTERN = /^[a-z0-9][a-z0-9._-]{0,99}$/;
 const MEMORY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 const MEMORY_TAG_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 // Read only by the _validateSchema invariant for legacy databases at 19, 20 or 21;
 // MIGRATION_V22 drops the table this describes.
 const DISCORD_GATEWAY_STATES = new Set(['idle', 'connecting', 'ready', 'resuming', 'reconnecting', 'error']);
-const MAX_LEGACY_BYTES = 10 * 1024 * 1024;
-const OPERATION_STATES = new Set(['reserved', 'executing', 'succeeded', 'retryable_failed', 'uncertain']);
 const TASK_STATES = new Set(['queued', 'leased', 'running', 'retry_wait', 'succeeded', 'failed', 'uncertain', 'cancelled']);
 // Expired is a read-time lease projection, never a persisted lifecycle state.
 const TASK_READ_STATES = new Set([...TASK_STATES, 'expired']);
-const SCHEDULER_OUTBOX_STATES = new Set(['pending', 'executing', 'succeeded', 'retryable_failed', 'error', 'uncertain', 'superseded']);
 const STARTUP_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const REQUIRED_SCHEMA_V1 = Object.freeze({
   spend_entries: ['id', 'spend_date', 'timestamp_ms', 'amount_cents', 'purpose', 'provider', 'reference'],
@@ -564,48 +557,7 @@ function equalHash(left, right) {
 }
 
 const SENSITIVE_RESULT_KEY = /(?:^(?:access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|authorization|password|cookie|cvc|cvv|security[_-]?code|securityCode|number|card[_-]?number|private[_-]?key|privateKey|credential|credentials|session|session[_-]?id|stripe_(?:secret|restricted)_key)$|(?:^|[_-])(?:token|secret|credential|session)(?:$|[_-])|(?:token|secret|credential|session|privateKey)$)/i;
-function assertSafeOperationResult(value, depth = 0, seen = new Set()) {
-  if (depth > 24) throw stateError('OPERATION_RESULT_INVALID', 'Operation result nesting exceeds the safe persistence limit.');
-  if (!value || typeof value !== 'object') return;
-  if (seen.has(value)) return;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    for (const entry of value) assertSafeOperationResult(entry, depth + 1, seen);
-  } else {
-    for (const [key, entry] of Object.entries(value)) {
-      if (SENSITIVE_RESULT_KEY.test(key)) {
-        throw stateError('OPERATION_RESULT_SENSITIVE', 'Operation results may not persist sensitive credential or payment fields.', { field: key });
-      }
-      assertSafeOperationResult(entry, depth + 1, seen);
-    }
-  }
-  seen.delete(value);
-}
-
 const PLAINTEXT_SECRET = plaintextCredentialPattern();
-// Only a payload minted below from an existing research row and a computed
-// parameter digest has this identity. JSON properties, clones and queue names
-// cannot grant it. Nothing about the shared credential patterns is relaxed.
-const RESEARCH_REFERENCE_PAYLOADS = new WeakSet();
-// Only an immutable completion object minted inside completeResearchRun owns
-// this exact computed digest. Caller fields, copies and other task results
-// cannot turn digest-shaped text into an exemption from the secret scanner.
-const RESEARCH_COMPLETION_DIGESTS = new WeakMap();
-function researchReferencePayload(experimentRow, paramsHash) {
-  const experimentId = experimentRow && experimentRow.experiment_id;
-  if (typeof experimentId !== 'string' || !/^rx-[a-f0-9]{36}$/.test(experimentId)
-      || typeof paramsHash !== 'string' || !/^[a-f0-9]{64}$/.test(paramsHash)) {
-    throw stateError('RESEARCH_RUN_REFERENCE_INVALID', 'Research task references must bind a saved generated experiment ID and a computed parameter digest.');
-  }
-  // Preserve the original bytes: the task input hash and idempotent replay
-  // already bind this exact title/objective representation in existing data.
-  const payload = Object.freeze({
-    title: `Research run ${paramsHash.slice(0, 12)}`,
-    objective: JSON.stringify({ experimentId, paramsHash })
-  });
-  RESEARCH_REFERENCE_PAYLOADS.add(payload);
-  return payload;
-}
 
 function assertNoPlaintextTaskSecrets(value, label = 'value', depth = 0, seen = new Set()) {
   if (depth > 32) throw stateError('STATE_JSON_DEPTH', `${label} nesting exceeds the safe persistence limit.`, { field: label });
@@ -648,72 +600,10 @@ function assertNoPlaintextMemorySecrets(value, label = 'memory value', depth = 0
   seen.delete(value);
 }
 
-function assertNoPlaintextSchedulerSecrets(value, label = 'args') {
-  try { assertNoPlaintextTaskSecrets(value, label); }
-  catch (error) {
-    if (error instanceof StateStoreError && error.code === 'TASK_SECRET_REJECTED') {
-      throw stateError('SCHEDULER_SECRET_REJECTED', error.message, error.details, error);
-    }
-    throw error;
-  }
-}
-
 function assertOnlyKeys(value, allowed, label, code = 'STATE_INVALID_ARGUMENT') {
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) throw stateError(code, `${label} contains unsupported field '${key}'.`, { field: `${label}.${key}` });
   }
-}
-
-const LEGACY_SCHEDULER_ACTION_SCHEMAS = Object.freeze({
-  'instagram.publish_image': { required: ['imageUrl'], strings: ['imageUrl', 'caption', 'idempotencyKey'] },
-  'gmail.send': { required: ['to', 'subject'], strings: ['to', 'subject', 'text', 'cc', 'bcc'] },
-  'calendar.create': { required: ['summary', 'start', 'end'], strings: ['calendarId', 'summary', 'description', 'start', 'end'], stringArrays: ['attendees'] },
-  'launch.execute': {
-    required: [], strings: ['cwd', 'projectId', 'provider', 'only'], booleans: ['deploy', 'skipTests'], objects: ['firebaseProvision', 'chromeWebStore']
-  },
-  'deployment.execute': { required: [], strings: ['cwd', 'provider', 'projectId', 'only'] }
-});
-
-function normalizeLegacySchedulerAction(value, label) {
-  const action = assertString(value, label, { max: 100 });
-  const normalized = normalizeScheduledAction(action);
-  if (!SUPPORTED_SCHEDULED_ACTIONS.includes(normalized) || !LEGACY_SCHEDULER_ACTION_SCHEMAS[normalized]) {
-    throw stateError('SCHEDULER_ACTION_UNSUPPORTED', `Scheduled action '${action}' is not supported.`, { action });
-  }
-  return normalized;
-}
-
-function validateLegacySchedulerArgs(action, value, label) {
-  const args = assertPlainObject(value, label);
-  assertNoPlaintextSchedulerSecrets(args, label);
-  const schema = LEGACY_SCHEDULER_ACTION_SCHEMAS[action];
-  const allowed = new Set([...(schema.strings || []), ...(schema.booleans || []), ...(schema.objects || []), ...(schema.stringArrays || []), ...Object.keys(schema.integers || {})]);
-  assertOnlyKeys(args, allowed, label, 'SCHEDULER_LEGACY_INVALID');
-  for (const key of schema.required || []) {
-    if (args[key] === undefined) throw stateError('SCHEDULER_LEGACY_INVALID', `${label}.${key} is required.`, { field: `${label}.${key}` });
-  }
-  for (const key of schema.strings || []) {
-    if (args[key] !== undefined) assertString(args[key], `${label}.${key}`, { min: schema.required.includes(key) ? 1 : 0, max: 10000 });
-  }
-  for (const key of schema.booleans || []) {
-    if (args[key] !== undefined && typeof args[key] !== 'boolean') {
-      throw stateError('SCHEDULER_LEGACY_INVALID', `${label}.${key} must be a boolean.`, { field: `${label}.${key}` });
-    }
-  }
-  for (const [key, [min, max]] of Object.entries(schema.integers || {})) {
-    if (args[key] !== undefined) assertInteger(args[key], `${label}.${key}`, { min, max });
-  }
-  for (const key of schema.objects || []) {
-    if (args[key] !== undefined) assertPlainObject(args[key], `${label}.${key}`);
-  }
-  for (const key of schema.stringArrays || []) {
-    if (args[key] !== undefined) {
-      if (!Array.isArray(args[key]) || args[key].length > 100 || args[key].some(item => typeof item !== 'string' || item.length > 1000)) {
-        throw stateError('SCHEDULER_LEGACY_INVALID', `${label}.${key} must be an array of at most 100 bounded strings.`, { field: `${label}.${key}` });
-      }
-    }
-  }
-  return args;
 }
 
 function hashText(value) {
@@ -732,82 +622,14 @@ function parseJson(value, label) {
   }
 }
 
-function isEmptyLegacySchedulerTombstone(text) {
-  try {
-    const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
-    const keys = Object.keys(parsed).sort();
-    return keys.length === 2 && keys[0] === 'jobs' && keys[1] === 'version'
-      && parsed.version === 1 && Array.isArray(parsed.jobs) && parsed.jobs.length === 0;
-  } catch {
-    return false;
-  }
-}
-
-function legacySchedulerCleanupCandidates(text) {
-  let parsed;
-  try { parsed = JSON.parse(text); }
-  catch (error) {
-    throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', 'The imported scheduler archive is not valid JSON.', {}, error);
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
-    || parsed.version !== 1 || !Array.isArray(parsed.jobs) || parsed.jobs.length > 10000) {
-    throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', 'The imported scheduler archive has an invalid top-level shape.');
-  }
-  const keys = Object.keys(parsed);
-  if (keys.some(key => !['version', 'jobs'].includes(key))) {
-    throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', 'The imported scheduler archive has unsupported top-level fields.');
-  }
-  const names = new Set();
-  return parsed.jobs.map((raw, index) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', `Archived jobs[${index}] is invalid.`);
-    }
-    const name = assertString(raw.name, `archived jobs[${index}].name`, { max: 80, pattern: /^[A-Za-z0-9_.-]{1,80}$/ });
-    if (names.has(name)) throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', 'The imported scheduler archive has duplicate job names.', { name });
-    names.add(name);
-    if (!['daily', 'hourly'].includes(raw.schedule)) {
-      throw stateError('SCHEDULER_LEGACY_ARCHIVE_INVALID', `Archived jobs[${index}].schedule is invalid.`, { name });
-    }
-    const createdAtMs = typeof raw.createdAt === 'string' && Number.isFinite(Date.parse(raw.createdAt))
-      ? Date.parse(raw.createdAt) : null;
-    return { name, schedule: raw.schedule, createdAtMs };
-  });
-}
-
 function iso(ms) {
   return new Date(ms).toISOString();
-}
-
-function centsToUsd(cents) {
-  return cents / 100;
-}
-
-function legacyUsdToCents(value, label) {
-  const amount = Number(value);
-  const cents = Math.round(amount * 100);
-  if (!Number.isFinite(amount) || amount < 0 || !Number.isSafeInteger(cents) || Math.abs(amount * 100 - cents) > 1e-7) {
-    throw stateError('LEGACY_IMPORT_INVALID', `${label} must be a non-negative USD value with at most two decimal places.`, { field: label });
-  }
-  return cents;
 }
 
 function validUtcDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function parseLegacyTimestamp(value, label, fallbackMs) {
-  if (value === undefined || value === null || value === '') return fallbackMs;
-  if (typeof value !== 'string') {
-    throw stateError('LEGACY_IMPORT_INVALID', `${label} must be an ISO timestamp string.`, { field: label });
-  }
-  const parsed = Date.parse(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw stateError('LEGACY_IMPORT_INVALID', `${label} must be a valid timestamp.`, { field: label });
-  }
-  return parsed;
 }
 
 const SCHEMA_V1 = `
@@ -1272,7 +1094,7 @@ const MIGRATION_V10 = `
   PRAGMA user_version = 10;
 `;
 
-// Q11 acceptance records are kept in the broker's durable state database, not
+// Historical acceptance records are kept in the broker's durable state database, not
 // in a worker-owned file.  The unique constraints make a restart replay safe
 // while refusing the same identifier with different semantic content.
 const MIGRATION_V11 = `
@@ -1358,7 +1180,7 @@ const MIGRATION_V11 = `
   PRAGMA user_version = 11;
 `;
 
-// P12 keeps resolved capability profiles in the existing durable broker state.
+// Capability keeps resolved capability profiles in the existing durable broker state.
 // Profile bodies never update in place: new scope means a new version and
 // revocation is an append-only separate fact.  SQLite triggers protect this
 // property even if a future caller bypasses the Node adapter.
@@ -1440,9 +1262,9 @@ const MIGRATION_V12 = `
   PRAGMA user_version = 12;
 `;
 
-// P13 dispatch authorizations are intentionally separate from P12 profiles:
-// P12 grants bounded capability; this append-only record binds one exact
-// prepared invocation's P08 provenance, target, and canonical argument hash.
+// Policy dispatch authorizations are intentionally separate from capability profiles:
+// Capability grants bounded capability; this append-only record binds one exact
+// prepared invocation's broker provenance, target, and canonical argument hash.
 // Consumption is a separate immutable fact, so a stale worker cannot replay a
 // once-authorized consequential request after a crash or handoff.
 const MIGRATION_V13 = `
@@ -1487,7 +1309,7 @@ const MIGRATION_V13 = `
   PRAGMA user_version = 13;
 `;
 
-// P13 confirmation evidence is append-only with the dispatch consumption. It
+// Policy confirmation evidence is append-only with the dispatch consumption. It
 // references the existing canonical approval grant by opaque ID; the matching
 // action/input hash and consumed status are checked transactionally at use.
 const MIGRATION_V14 = `
@@ -1496,7 +1318,7 @@ const MIGRATION_V14 = `
   PRAGMA user_version = 14;
 `;
 
-// An approval is a single-use authorization fact.  P13 records the exact
+// An approval is a single-use authorization fact.  policy records the exact
 // attachment as part of its immutable consumption, so the same consumed grant
 // cannot authorize two independently prepared dispatches, even across tasks.
 const MIGRATION_V15 = `
@@ -1506,8 +1328,8 @@ const MIGRATION_V15 = `
   PRAGMA user_version = 15;
 `;
 
-// P14 keeps the controller-created action, its broker-owned P08 evidence
-// reference, UI decision, and final P13 dispatch consumption in one durable
+// Scoped approval keeps the controller-created action, its broker-owned provenance evidence
+// reference, UI decision, and final policy dispatch consumption in one durable
 // authority.  The action is immutable; its append-only event stream carries
 // every terminal outcome rather than rewriting a mutable approval status.
 const MIGRATION_V16 = `
@@ -2217,7 +2039,7 @@ class StateStore {
           WHERE job_id = ? AND generation = ?`);
         for (const row of active) {
           const spec = parseJson(row.spec_json, 'schema-3 scheduler registration spec');
-          const normalizedAction = normalizeScheduledAction(row.action);
+          const normalizedAction = row.action === 'instagram.publishImage' ? 'instagram.publish_image' : row.action;
           db.prepare('UPDATE scheduler_jobs SET action = ? WHERE id = ?').run(normalizedAction, row.id);
           const principalMissing = typeof spec.principalId !== 'string' || !/^S-\d-(?:\d+-){1,14}\d+$/i.test(spec.principalId);
           const actionRefreshRequired = normalizedAction !== row.action
@@ -2299,7 +2121,7 @@ class StateStore {
           FROM policy_dispatch_consumptions WHERE approval_id IS NOT NULL
           GROUP BY approval_id HAVING COUNT(*) > 1 LIMIT 1`).get();
         if (duplicateApproval) {
-          throw stateError('POLICY_APPROVAL_EVIDENCE_REPLAYED', 'State migration found an approval grant attached to multiple P13 dispatches.', {
+          throw stateError('POLICY_APPROVAL_EVIDENCE_REPLAYED', 'State migration found an approval grant attached to multiple policy dispatches.', {
             approvalId: duplicateApproval.approval_id,
             attachments: duplicateApproval.count
           });
@@ -2449,25 +2271,6 @@ class StateStore {
           table: 'scheduler_jobs', jobId: invalidActive.id
         });
       }
-      // SQLite's structural checks cannot prove that canonical payloads and
-      // their application-level identity bindings still agree. Scan every v4
-      // scheduler row during health/open validation so corruption is surfaced
-      // even before a particular job is selected for reconciliation or run.
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      const mappedJobs = new Map();
-      for (const row of db.prepare('SELECT * FROM scheduler_jobs ORDER BY id').all()) {
-        mappedJobs.set(row.id, this._schedulerJobRow(row));
-      }
-      for (const row of db.prepare('SELECT * FROM scheduler_registrations ORDER BY job_id, generation').all()) {
-        const mappedJob = mappedJobs.get(row.job_id);
-        if (!mappedJob) {
-          throw stateError('STATE_SCHEMA_INVALID', 'A scheduler registration has no owning job.', {
-            table: 'scheduler_registrations', jobId: row.job_id, generation: row.generation
-          });
-        }
-        this._schedulerRegistrationRow(row, installationId, mappedJob);
-      }
-      this._validateSchedulerOutboxIntegrity(db);
     }
   }
 
@@ -2540,96 +2343,6 @@ class StateStore {
     }
   }
 
-  _spendVerdict(db, { amountCents, dailyLimitCents, purpose }, now) {
-    const date = iso(now).slice(0, 10);
-    const currentSpendCents = db.prepare('SELECT COALESCE(SUM(amount_cents), 0) AS total FROM spend_entries WHERE spend_date = ?').get(date).total;
-    return {
-      date,
-      currentSpendCents,
-      currentSpendUsd: centsToUsd(currentSpendCents),
-      requestedCents: amountCents,
-      requestedUsd: centsToUsd(amountCents),
-      limitCents: dailyLimitCents,
-      limitUsd: centsToUsd(dailyLimitCents),
-      allowed: dailyLimitCents <= 0 || currentSpendCents + amountCents <= dailyLimitCents,
-      purpose
-    };
-  }
-
-  _validateSpend({ amountCents, dailyLimitCents, purpose = '' }) {
-    assertInteger(amountCents, 'amountCents');
-    assertInteger(dailyLimitCents, 'dailyLimitCents');
-    assertString(purpose, 'purpose', { min: 0, max: 1000 });
-    return { amountCents, dailyLimitCents, purpose };
-  }
-
-  checkSpend(input) {
-    const values = this._validateSpend(assertPlainObject(input, 'spend'));
-    return this._read(db => this._spendVerdict(db, values, this._now()));
-  }
-
-  _spendRow(row) {
-    if (!row) return null;
-    return {
-      id: row.id,
-      date: row.spend_date,
-      timestamp: iso(row.timestamp_ms),
-      timestampMs: row.timestamp_ms,
-      amountCents: row.amount_cents,
-      amountUsd: centsToUsd(row.amount_cents),
-      purpose: row.purpose,
-      provider: row.provider,
-      reference: row.reference || ''
-    };
-  }
-
-  recordSpend(input) {
-    const source = assertPlainObject(input, 'spend');
-    const values = this._validateSpend(source);
-    const provider = source.provider === undefined ? 'manual' : assertString(source.provider, 'provider', { max: 100 });
-    const reference = source.reference === undefined || source.reference === '' ? null : assertString(source.reference, 'reference', { max: 500 });
-    return this.transaction(db => {
-      const now = this._now();
-      if (reference) {
-        const prior = db.prepare('SELECT * FROM spend_entries WHERE provider = ? AND reference = ?').get(provider, reference);
-        if (prior) {
-          if (prior.amount_cents !== values.amountCents || prior.purpose !== values.purpose) {
-            throw stateError('SPEND_REFERENCE_CONFLICT', 'The spend reference was already used with different details.', { provider, reference });
-          }
-          return { ...this._spendVerdict(db, values, now), allowed: true, replayed: true, entry: this._spendRow(prior) };
-        }
-      }
-      const verdict = this._spendVerdict(db, values, now);
-      if (!verdict.allowed) {
-        throw stateError('SPEND_LIMIT_EXCEEDED', 'The atomic daily spend limit would be exceeded.', {
-          date: verdict.date,
-          currentSpendCents: verdict.currentSpendCents,
-          requestedCents: values.amountCents,
-          limitCents: values.dailyLimitCents
-        });
-      }
-      const id = this._newId('spend');
-      db.prepare(`INSERT INTO spend_entries(id, spend_date, timestamp_ms, amount_cents, purpose, provider, reference)
-        VALUES(?, ?, ?, ?, ?, ?, ?)`).run(id, verdict.date, now, values.amountCents, values.purpose, provider, reference);
-      const entry = db.prepare('SELECT * FROM spend_entries WHERE id = ?').get(id);
-      return { ...verdict, replayed: false, entry: this._spendRow(entry) };
-    });
-  }
-
-  listSpend(options = {}) {
-    assertPlainObject(options, 'options');
-    const limit = assertInteger(options.limit === undefined ? 100 : options.limit, 'limit', { min: 1, max: 1000 });
-    if (options.date !== undefined && !validUtcDate(options.date)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'date must use YYYY-MM-DD UTC format.', { field: 'date' });
-    }
-    return this._read(db => {
-      const rows = options.date === undefined
-        ? db.prepare('SELECT * FROM spend_entries ORDER BY timestamp_ms DESC, id DESC LIMIT ?').all(limit)
-        : db.prepare('SELECT * FROM spend_entries WHERE spend_date = ? ORDER BY timestamp_ms DESC, id DESC LIMIT ?').all(options.date, limit);
-      return rows.map(row => this._spendRow(row));
-    });
-  }
-
   _modelUsageInput(input) {
     const source = assertPlainObject(input, 'model usage');
     const model = assertString(source.model, 'model', {
@@ -2700,41 +2413,6 @@ class StateStore {
             : db.prepare(`SELECT * FROM model_usage_daily
               ORDER BY usage_date DESC, model ASC LIMIT ?`).all(limit);
       return rows.map(row => this._modelUsageRow(row));
-    });
-  }
-
-  _tavilyUsageRow(row) {
-    if (!row) return null;
-    return {
-      yearMonth: row.year_month,
-      routineCredits: row.routine_credits,
-      researchCredits: row.research_credits,
-      updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  getTavilyUsage(yearMonth) {
-    if (typeof yearMonth !== 'string' || !/^\d{4}-\d{2}$/.test(yearMonth)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'yearMonth must be in YYYY-MM format.', { field: 'yearMonth' });
-    }
-    return this._read(db => this._tavilyUsageRow(
-      db.prepare('SELECT * FROM tavily_usage_monthly WHERE year_month = ?').get(yearMonth)
-    ));
-  }
-
-  recordTavilyUsage({ yearMonth, routineCredits = 0, researchCredits = 0 }) {
-    if (typeof yearMonth !== 'string' || !/^\d{4}-\d{2}$/.test(yearMonth)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'yearMonth must be in YYYY-MM format.', { field: 'yearMonth' });
-    }
-    assertInteger(routineCredits, 'routineCredits', { min: 0 });
-    assertInteger(researchCredits, 'researchCredits', { min: 0 });
-    if (routineCredits === 0 && researchCredits === 0) {
-      return this.getTavilyUsage(yearMonth) || { yearMonth, routineCredits: 0, researchCredits: 0, updatedAtMs: 0 };
-    }
-    return this.transaction(db => {
-      const now = this._now();
-      db.prepare('INSERT INTO tavily_usage_monthly(year_month, routine_credits, research_credits, updated_at_ms) VALUES(?, ?, ?, ?) ON CONFLICT(year_month) DO UPDATE SET routine_credits = routine_credits + excluded.routine_credits, research_credits = research_credits + excluded.research_credits, updated_at_ms = excluded.updated_at_ms').run(yearMonth, routineCredits, researchCredits, now);
-      return this._tavilyUsageRow(db.prepare('SELECT * FROM tavily_usage_monthly WHERE year_month = ?').get(yearMonth));
     });
   }
 
@@ -2839,6 +2517,21 @@ class StateStore {
     };
   }
 
+  /* EVERY ROW IN ONE NAMESPACE, REMOVED, AND THE COUNT RETURNED.
+   *
+   * Recovery only. An installation that ran a release where the public memory
+   * tools could reach Fleet's reserved namespaces may hold a row an agent wrote,
+   * and a forged row is indistinguishable from a legitimate one after the fact --
+   * so the only honest repair is to reset the namespace, which is a decision for
+   * the person, taken with Fleet stopped. recover-state.js is the only caller.
+   *
+   * This is NOT reachable from the memory tools: those expose get, set and search
+   * and refuse these namespaces outright. Adding it here does not widen them. */
+  clearMemoryNamespace({ namespace } = {}) {
+    const checked = assertString(namespace, 'namespace', { max: 100, pattern: MEMORY_NAMESPACE_PATTERN });
+    return this.transaction(db => db.prepare('DELETE FROM memory_entries WHERE namespace = ?').run(checked).changes);
+  }
+
   setMemory(input) {
     const entry = this._prepareMemoryEntry(input);
     return this.transaction(db => {
@@ -2878,6 +2571,19 @@ class StateStore {
     return this._read(db => this._memoryRow(db.prepare('SELECT * FROM memory_entries WHERE namespace = ? AND entry_key = ?').get(namespace, key)));
   }
 
+  /* THE KEYS IN ONE NAMESPACE, AND NOTHING ELSE.
+   *
+   * system.doctor has to say whether Fleet's own reserved namespaces hold rows
+   * and whether the modules that own them can still parse those rows. It must do
+   * that without putting retained message bodies in front of anyone, so this
+   * returns keys only and never a value. Read-only, and not reachable from the
+   * public memory tools, which refuse these namespaces outright. */
+  memoryKeys({ namespace } = {}) {
+    const checked = assertString(namespace, 'namespace', { max: 100, pattern: MEMORY_NAMESPACE_PATTERN });
+    return this._read(db => db.prepare('SELECT entry_key FROM memory_entries WHERE namespace = ? ORDER BY entry_key ASC')
+      .all(checked).map(row => row.entry_key));
+  }
+
   searchMemory(input = {}) {
     const source = assertPlainObject(input, 'memory search');
     const query = assertString(source.query, 'query', { max: 256 });
@@ -2885,45 +2591,40 @@ class StateStore {
     const namespace = source.namespace === undefined
       ? undefined : assertString(source.namespace, 'namespace', { max: 100, pattern: MEMORY_NAMESPACE_PATTERN });
     const limit = assertInteger(source.limit === undefined ? 10 : source.limit, 'limit', { min: 1, max: 20 });
+    /* Namespaces this caller may not see. providers/memory.js passes its own
+     * internal set so the exclusion lands in SQL, BEFORE the row limit:
+     * filtering the returned page instead would hand back a short or empty page
+     * whenever excluded rows sorted first, which reads as "no matches". */
+    const exclude = source.excludeNamespaces === undefined ? [] : (() => {
+      if (!Array.isArray(source.excludeNamespaces)) {
+        throw stateError('STATE_INVALID_ARGUMENT', 'excludeNamespaces must be an array of namespaces.', { field: 'excludeNamespaces' });
+      }
+      if (source.excludeNamespaces.length > 32) {
+        throw stateError('STATE_INVALID_ARGUMENT', 'excludeNamespaces exceeds 32 entries.', { field: 'excludeNamespaces' });
+      }
+      return source.excludeNamespaces.map((value, index) =>
+        assertString(value, `excludeNamespaces[${index}]`, { max: 100, pattern: MEMORY_NAMESPACE_PATTERN }));
+    })();
     return this._read(db => {
       // Fold the query before escaping it: folding can turn a compatibility
       // character (a full-width percent sign, say) into a wildcard, and the
       // query stays a literal substring either way.
       const folded = this._unicodeFold ? foldSearchText(query) : query;
-      const pattern = `%${folded.replace(/[\\%_]/g, character => `\\${character}`)}%`;
+      const like = text => `%${text.replace(/[\\%_]/g, character => `\\${character}`)}%`;
+      const pattern = like(folded);
+      // Values are stored as JSON text, where a quote, a backslash, a tab or
+      // a line break is written escaped: the query is matched there in the
+      // same escaped form too, or a value such as 'He said "ship it"' was
+      // not found by its own words.
+      const valuePattern = like(JSON.stringify(folded).slice(1, -1));
       const column = name => (this._unicodeFold ? `te_fold(${name}) LIKE ? ESCAPE '\\'` : `${name} LIKE ? ESCAPE '\\' COLLATE NOCASE`);
-      const where = `(${column('namespace')} OR ${column('entry_key')} OR ${column('note')} OR ${column('tags_json')} OR ${column('value_json')})`;
+      const where = `(${column('namespace')} OR ${column('entry_key')} OR ${column('note')} OR ${column('tags_json')} OR ${column('value_json')} OR ${column('value_json')})`;
+      const skip = exclude.length ? ` AND namespace NOT IN (${exclude.map(() => '?').join(', ')})` : '';
       const rows = namespace === undefined
-        ? db.prepare(`SELECT * FROM memory_entries WHERE ${where}
-          ORDER BY updated_at_ms DESC, namespace ASC, entry_key ASC LIMIT ?`).all(pattern, pattern, pattern, pattern, pattern, limit)
-        : db.prepare(`SELECT * FROM memory_entries WHERE namespace = ? AND ${where}
-          ORDER BY updated_at_ms DESC, entry_key ASC LIMIT ?`).all(namespace, pattern, pattern, pattern, pattern, pattern, limit);
-      return rows.map(row => this._memoryRow(row));
-    });
-  }
-
-  listReminderEntries(input = {}) {
-    const source = assertPlainObject(input, 'reminder listing');
-    const namespace = assertString(source.namespace, 'namespace', { max: 100, pattern: MEMORY_NAMESPACE_PATTERN });
-    const limit = assertInteger(source.limit === undefined ? 20 : source.limit, 'limit', { min: 1, max: 20 });
-    const before = source.dueBefore === undefined ? undefined : assertString(source.dueBefore, 'dueBefore', { max: 40 });
-    if (before !== undefined && (!Number.isFinite(Date.parse(before)) || new Date(before).toISOString() !== before)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'dueBefore must be a normalized UTC timestamp.', { field: 'dueBefore' });
-    }
-    return this._read(db => {
-      const conditions = ['namespace = ?'];
-      const parameters = [namespace];
-      if (source.includeCompleted !== true) conditions.push("COALESCE(json_extract(value_json, '$.status'), '') != 'completed'");
-      if (before !== undefined) {
-        conditions.push("json_extract(value_json, '$.dueAt') <= ?");
-        parameters.push(before);
-      }
-      // General memory search limits by recency. Reminder filters and deadline
-      // order must happen before LIMIT or newer future/completed entries can
-      // hide an older deadline. Selected rows retain all memory integrity checks.
-      const rows = db.prepare(`SELECT * FROM memory_entries WHERE ${conditions.join(' AND ')}
-        ORDER BY json_extract(value_json, '$.dueAt') IS NULL ASC,
-          json_extract(value_json, '$.dueAt') ASC, entry_key ASC LIMIT ?`).all(...parameters, limit);
+        ? db.prepare(`SELECT * FROM memory_entries WHERE ${where}${skip}
+          ORDER BY updated_at_ms DESC, namespace ASC, entry_key ASC LIMIT ?`).all(pattern, pattern, pattern, pattern, pattern, valuePattern, ...exclude, limit)
+        : db.prepare(`SELECT * FROM memory_entries WHERE namespace = ? AND ${where}${skip}
+          ORDER BY updated_at_ms DESC, entry_key ASC LIMIT ?`).all(namespace, pattern, pattern, pattern, pattern, pattern, valuePattern, ...exclude, limit);
       return rows.map(row => this._memoryRow(row));
     });
   }
@@ -3076,9 +2777,9 @@ class StateStore {
 
   _assertP13DispatchBinding(db, authorizationId, toolName, argsHash, now) {
     const authorization = db.prepare(`SELECT * FROM policy_dispatch_authorizations WHERE authorization_id = ?`).get(authorizationId);
-    if (!authorization) throw stateError('POLICY_AUTHORIZATION_MISSING', 'The P13 dispatch authorization was not found.', { authorizationId });
+    if (!authorization) throw stateError('POLICY_AUTHORIZATION_MISSING', 'The policy dispatch authorization was not found.', { authorizationId });
     if (authorization.tool_name !== toolName || !equalHash(authorization.args_hash, argsHash)) {
-      throw stateError('POLICY_AUTHORIZATION_BINDING_MISMATCH', 'The P13 authorization is not bound to these exact tool arguments.', { authorizationId });
+      throw stateError('POLICY_AUTHORIZATION_BINDING_MISMATCH', 'The policy authorization is not bound to these exact tool arguments.', { authorizationId });
     }
     // A task-scoped grant cannot outlive its task or the person's Stop request.
     // Read this in the same transaction as dispatch consumption so cancellation
@@ -3092,11 +2793,11 @@ class StateStore {
     }
     const profile = db.prepare(`SELECT * FROM capability_profile_versions WHERE profile_id = ? AND version = ?`).get(authorization.profile_id, authorization.profile_version);
     if (!profile || !equalHash(profile.manifest_hash, authorization.profile_hash) || profile.task_id !== authorization.task_id) {
-      throw stateError('CAPABILITY_MANIFEST_BINDING_MISMATCH', 'The P12 profile no longer matches this P13 authorization.', { authorizationId });
+      throw stateError('CAPABILITY_MANIFEST_BINDING_MISMATCH', 'The capability profile no longer matches this policy authorization.', { authorizationId });
     }
-    if (now >= profile.expires_at_ms) throw stateError('CAPABILITY_MANIFEST_EXPIRED', 'The P12 profile expired before dispatch.', { authorizationId });
+    if (now >= profile.expires_at_ms) throw stateError('CAPABILITY_MANIFEST_EXPIRED', 'The capability profile expired before dispatch.', { authorizationId });
     if (db.prepare(`SELECT 1 FROM capability_profile_revocations WHERE profile_id = ? AND profile_version = ?`).get(authorization.profile_id, authorization.profile_version)) {
-      throw stateError('CAPABILITY_MANIFEST_REVOKED', 'The P12 profile was revoked before dispatch.', { authorizationId });
+      throw stateError('CAPABILITY_MANIFEST_REVOKED', 'The capability profile was revoked before dispatch.', { authorizationId });
     }
     const request = db.prepare(`SELECT * FROM capability_profile_requests WHERE request_hash = ?`).get(authorization.request_hash);
     const bound = request && parseJson(request.request_json, 'authorized capability request');
@@ -3104,7 +2805,7 @@ class StateStore {
       || request.profile_id !== authorization.profile_id || request.profile_version !== authorization.profile_version
       || !equalHash(request.profile_hash, authorization.profile_hash) || !bound || !bound.request
       || bound.request.tool !== authorization.tool_name || bound.request.taskId !== authorization.task_id) {
-      throw stateError('POLICY_CAPABILITY_REQUEST_MISMATCH', 'The P12 request no longer binds this P13 authorization.', { authorizationId });
+      throw stateError('POLICY_CAPABILITY_REQUEST_MISMATCH', 'The capability request no longer binds this policy authorization.', { authorizationId });
     }
     return authorization;
   }
@@ -3118,7 +2819,7 @@ class StateStore {
     const taskId = assertString(source.taskId, 'taskId', { min: 8, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/ });
     let provenance;
     try { provenance = provenanceEnvelopes.validateEnvelope(source.provenance); }
-    catch (error) { throw stateError('SCOPED_APPROVAL_PROVENANCE_INVALID', 'Scoped approval provenance must be a canonical P08 envelope.', { evidenceId }, error); }
+    catch (error) { throw stateError('SCOPED_APPROVAL_PROVENANCE_INVALID', 'Scoped approval provenance must be a canonical broker provenance envelope.', { evidenceId }, error); }
     const provenanceJson = canonicalJson(provenance);
     const provenanceHash = hashInput({ domain: 'coordinator.scoped-approval-provenance.v1', evidenceId, taskId, provenance });
     return this.transaction(db => {
@@ -3164,13 +2865,13 @@ class StateStore {
           && existing.provenance_evidence_id === provenanceEvidenceId && existing.expires_at_ms === expiresAtMs) {
           return Object.freeze({ replayed: true, action: this._scopedApprovalRow(db, existing) });
         }
-        throw stateError('SCOPED_APPROVAL_ACTION_CONFLICT', 'A P13 authorization already has a different immutable scoped approval action.', { authorizationId });
+        throw stateError('SCOPED_APPROVAL_ACTION_CONFLICT', 'A policy authorization already has a different immutable scoped approval action.', { authorizationId });
       }
       const authorization = this._assertP13DispatchBinding(db, authorizationId,
         db.prepare('SELECT tool_name FROM policy_dispatch_authorizations WHERE authorization_id = ?').get(authorizationId)?.tool_name || '', parametersHash, now);
       const provenanceRecord = db.prepare('SELECT * FROM scoped_approval_provenance WHERE evidence_id = ?').get(provenanceEvidenceId);
       if (!provenanceRecord || provenanceRecord.task_id !== authorization.task_id) {
-        throw stateError('SCOPED_APPROVAL_PROVENANCE_MISMATCH', 'The broker-owned provenance evidence is not bound to this P13 task.', { authorizationId, provenanceEvidenceId });
+        throw stateError('SCOPED_APPROVAL_PROVENANCE_MISMATCH', 'The broker-owned provenance evidence is not bound to this policy task.', { authorizationId, provenanceEvidenceId });
       }
       let provenance;
       try { provenance = provenanceEnvelopes.validateEnvelope(parseJson(provenanceRecord.provenance_json, 'scoped approval provenance')); }
@@ -3340,7 +3041,7 @@ class StateStore {
     const outcome = this.transaction(db => {
       const now = this._now();
       const action = db.prepare('SELECT * FROM scoped_approval_actions WHERE authorization_id = ?').get(authorizationId);
-      if (!action) throw stateError('APPROVAL_REQUIRED', 'The P13 action has no controller-created scoped approval.', { authorizationId });
+      if (!action) throw stateError('APPROVAL_REQUIRED', 'The policy action has no controller-created scoped approval.', { authorizationId });
       const current = this._scopedApprovalState(db, action.approval_id);
       if (action.tool_name !== toolName || !equalHash(action.args_hash, argsHash)) {
         if (current && ['created', 'approved'].includes(current.state)) this._scopedApprovalEvent(db, action.approval_id, 'mismatch', 'ACTION_BINDING_MISMATCH', now);
@@ -3366,7 +3067,7 @@ class StateStore {
         throw error;
       }
       if (db.prepare('SELECT 1 FROM policy_dispatch_consumptions WHERE authorization_id = ?').get(authorizationId)) {
-        throw stateError('POLICY_AUTHORIZATION_REPLAYED', 'The P13 dispatch authorization was already consumed.', { authorizationId });
+        throw stateError('POLICY_AUTHORIZATION_REPLAYED', 'The policy dispatch authorization was already consumed.', { authorizationId });
       }
       const provenanceRecord = db.prepare('SELECT * FROM scoped_approval_provenance WHERE evidence_id = ?').get(action.provenance_evidence_id);
       if (!provenanceRecord || provenanceRecord.task_id !== authorization.task_id || !equalHash(provenanceRecord.provenance_hash, action.provenance_hash)) {
@@ -3399,508 +3100,8 @@ class StateStore {
     return outcome.result;
   }
 
-  _remoteAskInput(input) {
-    const source = assertPlainObject(input, 'remote ask');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    const yesCallbackHash = assertString(source.yesCallbackHash, 'yesCallbackHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
-    const noCallbackHash = assertString(source.noCallbackHash, 'noCallbackHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
-    if (yesCallbackHash === noCallbackHash) throw stateError('REMOTE_ASK_INVALID', 'Remote ask callbacks must be distinct.', { field: 'callbackHash' });
-    return {
-      id,
-      yesCallbackHash,
-      noCallbackHash,
-      chatId: assertString(source.chatId, 'chatId', { min: 1, max: 100 }),
-      expiresAtMs: assertInteger(source.expiresAtMs, 'expiresAtMs')
-    };
-  }
-
-  _remoteAskRow(row) {
-    if (!row) return null;
-    return {
-      askId: row.id,
-      chatId: row.chat_id,
-      messageId: row.message_id,
-      status: row.status,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms,
-      expiresAt: iso(row.expires_at_ms),
-      expiresAtMs: row.expires_at_ms,
-      resolvedAt: row.resolved_at_ms === null ? null : iso(row.resolved_at_ms),
-      resolvedAtMs: row.resolved_at_ms,
-      resolutionUpdateId: row.resolution_update_id,
-      disarmedAt: row.disarmed_at_ms === null ? null : iso(row.disarmed_at_ms),
-      disarmedAtMs: row.disarmed_at_ms,
-      errorCode: row.error_code
-    };
-  }
-
-  _pruneRemoteAsks(db, now) {
-    db.prepare(`UPDATE remote_asks SET status = 'timeout', resolved_at_ms = ?, resolution_update_id = NULL, error_code = NULL
-      WHERE status = 'pending' AND expires_at_ms <= ?`).run(now, now);
-    return db.prepare(`DELETE FROM remote_asks WHERE status <> 'pending' AND resolved_at_ms <= ?`).run(
-      Math.max(0, now - REMOTE_ASK_RETENTION_MS)
-    ).changes;
-  }
-
-  createRemoteAsk(input) {
-    const ask = this._remoteAskInput(input);
-    return this.transaction(db => {
-      const now = this._now();
-      this._pruneRemoteAsks(db, now);
-      if (ask.expiresAtMs <= now || ask.expiresAtMs > now + MAX_REMOTE_ASK_TTL_MS) {
-        throw stateError('REMOTE_ASK_EXPIRY_INVALID', `Remote ask expiry must be after now and within ${MAX_REMOTE_ASK_TTL_MS} ms.`, {
-          expiresAtMs: ask.expiresAtMs, now
-        });
-      }
-      db.prepare(`INSERT INTO remote_asks(id, yes_callback_hash, no_callback_hash, chat_id, message_id, status,
-        created_at_ms, expires_at_ms, resolved_at_ms, resolution_update_id, disarmed_at_ms, error_code)
-        VALUES(?, ?, ?, ?, NULL, 'pending', ?, ?, NULL, NULL, NULL, NULL)`).run(
-        ask.id, ask.yesCallbackHash, ask.noCallbackHash, ask.chatId, now, ask.expiresAtMs
-      );
-      return this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(ask.id));
-    });
-  }
-
-  attachRemoteAskMessage(input) {
-    const source = assertPlainObject(input, 'remote ask message');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    const messageId = assertInteger(source.messageId, 'messageId', { min: 0 });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id);
-      if (!row) throw stateError('REMOTE_ASK_NOT_FOUND', 'The remote ask was not found.', { askId: id });
-      if (row.message_id !== null && row.message_id !== messageId) {
-        throw stateError('REMOTE_ASK_MESSAGE_CONFLICT', 'The historical remote ask is already bound to a different message receipt.', { askId: id });
-      }
-      if (row.message_id === null) db.prepare('UPDATE remote_asks SET message_id = ? WHERE id = ?').run(messageId, id);
-      return this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id));
-    });
-  }
-
-  getRemoteAsk(input) {
-    const source = assertPlainObject(input, 'remote ask selector');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    return this._read(db => this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id)));
-  }
-
-  _finishRemoteAsk(db, row, status, now, errorCode = null) {
-    if (row.status !== 'pending') return this._remoteAskRow(row);
-    const update = db.prepare(`UPDATE remote_asks SET status = ?, resolved_at_ms = ?, resolution_update_id = NULL, error_code = ?
-      WHERE id = ? AND status = 'pending'`).run(status, now, errorCode, row.id);
-    if (update.changes !== 1) return this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(row.id));
-    return this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(row.id));
-  }
-
-  expireRemoteAsk(input) {
-    const source = assertPlainObject(input, 'remote ask expiry');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    return this.transaction(db => {
-      const now = this._now();
-      const row = db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id);
-      if (!row) throw stateError('REMOTE_ASK_NOT_FOUND', 'The remote ask was not found.', { askId: id });
-      if (row.status === 'pending' && row.expires_at_ms > now) {
-        throw stateError('REMOTE_ASK_NOT_EXPIRED', 'The remote ask has not expired.', { askId: id, expiresAtMs: row.expires_at_ms });
-      }
-      return this._finishRemoteAsk(db, row, 'timeout', now);
-    });
-  }
-
-  markRemoteAskUnavailable(input) {
-    const source = assertPlainObject(input, 'remote ask failure');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    const errorCode = assertString(source.errorCode, 'errorCode', { min: 1, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/ });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id);
-      if (!row) throw stateError('REMOTE_ASK_NOT_FOUND', 'The remote ask was not found.', { askId: id });
-      return this._finishRemoteAsk(db, row, 'unavailable', this._now(), errorCode);
-    });
-  }
-
-  markRemoteAskDisarmed(input) {
-    const source = assertPlainObject(input, 'remote ask disarm');
-    const id = assertString(source.id, 'id', { min: 16, max: 60, pattern: /^[A-Za-z0-9_-]+$/ });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id);
-      if (!row) throw stateError('REMOTE_ASK_NOT_FOUND', 'The remote ask was not found.', { askId: id });
-      if (row.status === 'pending') throw stateError('REMOTE_ASK_PENDING', 'The remote ask cannot be disarmed before it is resolved.', { askId: id });
-      if (row.disarmed_at_ms === null) db.prepare('UPDATE remote_asks SET disarmed_at_ms = ? WHERE id = ?').run(this._now(), id);
-      return this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(id));
-    });
-  }
-
-  _remoteAskCallback(update) {
-    const query = update && update.callback_query;
-    const chat = query && query.message && query.message.chat;
-    const rawChatId = chat && chat.id;
-    const chatId = typeof rawChatId === 'number' && Number.isSafeInteger(rawChatId)
-      ? String(rawChatId) : (typeof rawChatId === 'string' ? rawChatId : null);
-    if (!query || typeof query !== 'object' || typeof query.data !== 'string' || query.data.length < 1 || query.data.length > 64
-      || chatId === null || chatId.length < 1 || chatId.length > 100 || !Number.isSafeInteger(update.update_id) || update.update_id < 0) {
-      return null;
-    }
-    return { callbackHash: hashText(query.data), chatId, updateId: update.update_id };
-  }
-
-  _resolveRemoteAskCallback(db, update, now) {
-    const callback = this._remoteAskCallback(update);
-    if (!callback) return null;
-    const row = db.prepare(`SELECT * FROM remote_asks
-      WHERE yes_callback_hash = ? OR no_callback_hash = ?`).get(callback.callbackHash, callback.callbackHash);
-    if (!row || row.chat_id !== callback.chatId) return null;
-    if (row.status !== 'pending') return { matched: true, accepted: false, ask: this._remoteAskRow(row) };
-    if (row.expires_at_ms <= now) {
-      const ask = this._finishRemoteAsk(db, row, 'timeout', now);
-      return { matched: true, accepted: false, ask };
-    }
-    const status = row.yes_callback_hash === callback.callbackHash ? 'yes' : 'no';
-    const changed = db.prepare(`UPDATE remote_asks SET status = ?, resolved_at_ms = ?, resolution_update_id = ?, error_code = NULL
-      WHERE id = ? AND status = 'pending' AND expires_at_ms > ?`).run(status, now, callback.updateId, row.id, now);
-    const ask = this._remoteAskRow(db.prepare('SELECT * FROM remote_asks WHERE id = ?').get(row.id));
-    return { matched: true, accepted: changed.changes === 1, ask };
-  }
-
-  // _leaseMs IS NOT A TELEGRAM METHOD. It sat between getTelegramCursor() and
-  // acquireTelegramPollLease() purely by placement, and it is the shared lease
-  // bound used by reserveOperation() and every task-lease path in this file. It
-  // stays exactly where it was.
   _leaseMs(value, label = 'leaseMs') {
     return assertInteger(value, label, { min: 1000, max: 24 * 60 * 60 * 1000 });
-  }
-
-  // THE TELEGRAM STORE METHODS WERE REMOVED 2026-08-23, WITH THE TABLES THEY READ.
-  //
-  // Fifteen methods lived here: getTelegramCursor, acquireTelegramPollLease,
-  // releaseTelegramPollLease, commitTelegramUpdates, listTelegramUpdates,
-  // getTelegramCommand, pruneTelegramUpdates and their eight private helpers
-  // (_validateTelegramHandle, _requireTelegramLease, _prepareTelegramUpdates,
-  // _telegramCommandMetadata, _telegramCommandMessage, _prepareTelegramCommandTasks,
-  // _pruneTelegram). Every one of them read or wrote telegram_cursor,
-  // telegram_poll_lease or telegram_updates, which MIGRATION_V23 above drops.
-  // Leaving them would leave methods that can only ever raise "no such table".
-  //
-  // Their only caller was src/lib/providers/messaging.js, which was Telegram-only
-  // once Discord left and is deleted too. Telegram left the product by a product
-  // decision to remove it; the product now ships its own mobile app.
-
-  _validateOperationIdentity({ type, key, inputHash: digest }) {
-    return {
-      type: assertString(type, 'type', { max: 200 }),
-      key: assertString(key, 'key', { max: 500 }),
-      inputHash: assertString(digest, 'inputHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ })
-    };
-  }
-
-  _operationRow(row) {
-    if (!row) return null;
-    return {
-      id: row.id,
-      type: row.operation_type,
-      key: row.idempotency_key,
-      inputHash: row.input_hash,
-      inputVerified: Boolean(row.input_verified),
-      status: row.status,
-      fence: row.fence,
-      attempt: row.attempt,
-      leaseOwner: row.lease_owner,
-      leaseExpiresAtMs: row.lease_expires_at_ms,
-      result: row.result_json === null ? null : parseJson(row.result_json, 'operation result'),
-      error: row.error_code === null ? null : { code: row.error_code, message: row.error_message || '' },
-      retryAtMs: row.retry_at_ms,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms,
-      updatedAt: iso(row.updated_at_ms),
-      updatedAtMs: row.updated_at_ms,
-      completedAt: row.completed_at_ms === null ? null : iso(row.completed_at_ms),
-      completedAtMs: row.completed_at_ms
-    };
-  }
-
-  _operationHandle(row) {
-    return { operationId: row.id, ownerId: row.lease_owner, token: row.lease_token, fence: row.fence, expiresAtMs: row.lease_expires_at_ms };
-  }
-
-  reserveOperation(input) {
-    const source = assertPlainObject(input, 'operation');
-    const identity = this._validateOperationIdentity(source);
-    const ownerId = source.ownerId === undefined ? this.ownerId : assertString(source.ownerId, 'ownerId', { max: 200 });
-    const leaseMs = this._leaseMs(source.leaseMs, 'leaseMs');
-    const outcome = this.transaction(db => {
-      const now = this._now();
-      let row = db.prepare('SELECT * FROM operations WHERE operation_type = ? AND idempotency_key = ?').get(identity.type, identity.key);
-      if (!row) {
-        const id = this._newId('operation');
-        const token = this._newId('operation-lease');
-        db.prepare(`INSERT INTO operations(id, operation_type, idempotency_key, input_hash, input_verified, status, fence, attempt,
-          lease_owner, lease_token, lease_expires_at_ms, created_at_ms, updated_at_ms)
-          VALUES(?, ?, ?, ?, 1, 'reserved', 1, 1, ?, ?, ?, ?, ?)`).run(
-          id, identity.type, identity.key, identity.inputHash, ownerId, token, now + leaseMs, now, now
-        );
-        row = db.prepare('SELECT * FROM operations WHERE id = ?').get(id);
-        return { disposition: 'reserved', handle: this._operationHandle(row), operation: this._operationRow(row) };
-      }
-
-      if (!row.input_verified && row.status === 'succeeded') {
-        db.prepare('UPDATE operations SET input_hash = ?, input_verified = 1, updated_at_ms = ? WHERE id = ?').run(identity.inputHash, now, row.id);
-        row = db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id);
-      } else if (row.input_hash !== identity.inputHash) {
-        throw stateError('OPERATION_INPUT_CONFLICT', 'The idempotency key was already used with a different input hash.', { type: identity.type, key: identity.key });
-      }
-
-      if (row.status === 'succeeded') {
-        const operation = this._operationRow(row);
-        return { disposition: 'replay', operation, result: operation.result };
-      }
-      if (row.status === 'uncertain') {
-        throw stateError('OPERATION_UNCERTAIN', 'The prior external outcome is uncertain and must be reconciled before retry.', { operationId: row.id });
-      }
-      if (row.status === 'executing' && row.lease_expires_at_ms <= now) {
-        // Keep the original capability token and fence. Nobody may retry an
-        // uncertain operation, but the original worker may still report a
-        // definitive late success from an already-issued provider request.
-        db.prepare(`UPDATE operations SET status = 'uncertain',
-          error_code = 'LEASE_EXPIRED_DURING_EXECUTION', error_message = 'Execution lease expired before a terminal outcome was recorded.',
-          completed_at_ms = ?, updated_at_ms = ? WHERE id = ?`).run(now, now, row.id);
-        return { error: stateError('OPERATION_UNCERTAIN', 'An executing lease expired; automatic replay is unsafe until reconciliation.', { operationId: row.id }) };
-      }
-      if ((row.status === 'reserved' || row.status === 'executing') && row.lease_expires_at_ms > now) {
-        throw stateError('OPERATION_LEASE_HELD', 'The operation already has an active lease.', { operationId: row.id, status: row.status, expiresAtMs: row.lease_expires_at_ms });
-      }
-      if (row.status === 'retryable_failed' && row.retry_at_ms !== null && row.retry_at_ms > now) {
-        throw stateError('OPERATION_RETRY_NOT_READY', 'The operation is not eligible for retry yet.', { operationId: row.id, retryAtMs: row.retry_at_ms });
-      }
-      if (row.status !== 'reserved' && row.status !== 'retryable_failed') {
-        throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${row.status}' cannot be reserved.`, { operationId: row.id, status: row.status });
-      }
-      const token = this._newId('operation-lease');
-      db.prepare(`UPDATE operations SET status = 'reserved', fence = fence + 1, attempt = attempt + 1, lease_owner = ?, lease_token = ?,
-        lease_expires_at_ms = ?, error_code = NULL, error_message = NULL, retry_at_ms = NULL, completed_at_ms = NULL, updated_at_ms = ? WHERE id = ?`).run(
-        ownerId, token, now + leaseMs, now, row.id
-      );
-      row = db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id);
-      return { disposition: 'reserved', handle: this._operationHandle(row), operation: this._operationRow(row) };
-    });
-    if (outcome.error) throw outcome.error;
-    return outcome;
-  }
-
-  _validateOperationHandle(handle) {
-    assertPlainObject(handle, 'handle');
-    return {
-      operationId: assertString(handle.operationId, 'handle.operationId', { max: 500 }),
-      ownerId: assertString(handle.ownerId, 'handle.ownerId', { max: 200 }),
-      token: assertString(handle.token, 'handle.token', { max: 500 }),
-      fence: assertInteger(handle.fence, 'handle.fence', { min: 1 })
-    };
-  }
-
-  _requireOperationLease(db, handle, now, allowedStates) {
-    const row = db.prepare('SELECT * FROM operations WHERE id = ?').get(handle.operationId);
-    if (!row || row.fence !== handle.fence || row.lease_owner !== handle.ownerId || row.lease_token !== handle.token) {
-      throw stateError('OPERATION_FENCE_LOST', 'The operation handle is stale or no longer owns the lease fence.', { operationId: handle.operationId, fence: handle.fence });
-    }
-    if (!allowedStates.includes(row.status)) {
-      throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${row.status}' does not allow this transition.`, { operationId: row.id, status: row.status, allowedStates });
-    }
-    if (row.lease_expires_at_ms <= now) {
-      throw stateError('OPERATION_LEASE_EXPIRED', 'The operation lease expired before the transition.', { operationId: row.id, expiresAtMs: row.lease_expires_at_ms });
-    }
-    return row;
-  }
-
-  _leasedOperationResult(db, operationId) {
-    const row = db.prepare('SELECT * FROM operations WHERE id = ?').get(operationId);
-    return { handle: this._operationHandle(row), operation: this._operationRow(row) };
-  }
-
-  markOperationExecuting(handle, { leaseMs } = {}) {
-    const lease = this._validateOperationHandle(handle);
-    this._leaseMs(leaseMs);
-    return this.transaction(db => {
-      const now = this._now();
-      this._requireOperationLease(db, lease, now, ['reserved']);
-      const result = db.prepare(`UPDATE operations SET status = 'executing', lease_expires_at_ms = ?, updated_at_ms = ?
-        WHERE id = ? AND fence = ? AND lease_owner = ? AND lease_token = ? AND status = 'reserved' AND lease_expires_at_ms > ?`).run(
-        now + leaseMs, now, lease.operationId, lease.fence, lease.ownerId, lease.token, now
-      );
-      if (result.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation lease changed before execution began.', { operationId: lease.operationId });
-      return this._leasedOperationResult(db, lease.operationId);
-    });
-  }
-
-  heartbeatOperation(handle, { leaseMs } = {}) {
-    const lease = this._validateOperationHandle(handle);
-    this._leaseMs(leaseMs);
-    return this.transaction(db => {
-      const now = this._now();
-      this._requireOperationLease(db, lease, now, ['executing']);
-      const result = db.prepare(`UPDATE operations SET lease_expires_at_ms = MAX(lease_expires_at_ms, ?), updated_at_ms = ?
-        WHERE id = ? AND fence = ? AND lease_owner = ? AND lease_token = ? AND status = 'executing' AND lease_expires_at_ms > ?`).run(
-        now + leaseMs, now, lease.operationId, lease.fence, lease.ownerId, lease.token, now
-      );
-      if (result.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation lease changed before its heartbeat.', { operationId: lease.operationId });
-      return this._leasedOperationResult(db, lease.operationId);
-    });
-  }
-
-  succeedOperation(handle, { result } = {}) {
-    const lease = this._validateOperationHandle(handle);
-    assertSafeOperationResult(result);
-    const resultJson = boundedJson(result, 'result');
-    return this.transaction(db => {
-      const now = this._now();
-      const prior = db.prepare('SELECT * FROM operations WHERE id = ?').get(lease.operationId);
-      if (!prior || prior.fence !== lease.fence || prior.lease_owner !== lease.ownerId || prior.lease_token !== lease.token) {
-        throw stateError('OPERATION_FENCE_LOST', 'The operation handle is stale or no longer owns the success fence.', { operationId: lease.operationId, fence: lease.fence });
-      }
-      if (prior.status !== 'executing' && prior.status !== 'uncertain') {
-        throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${prior.status}' cannot record provider success.`, { operationId: prior.id, status: prior.status });
-      }
-      const changed = db.prepare(`UPDATE operations SET status = 'succeeded', result_json = ?, error_code = NULL, error_message = NULL,
-        retry_at_ms = NULL, lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL, completed_at_ms = ?, updated_at_ms = ?
-        WHERE id = ? AND fence = ? AND lease_owner = ? AND lease_token = ? AND status IN ('executing','uncertain')`).run(
-        resultJson, now, now, lease.operationId, lease.fence, lease.ownerId, lease.token
-      );
-      if (changed.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation lease changed before success could be recorded.', { operationId: lease.operationId });
-      const operation = this._operationRow(db.prepare('SELECT * FROM operations WHERE id = ?').get(lease.operationId));
-      return { operation, result: operation.result };
-    });
-  }
-
-  // Resolve an uncertain operation only when a separate, durable observation
-  // has proved success after the original lease handle was lost. Callers must
-  // bind the exact original identity and provide a non-sensitive result; this
-  // method deliberately has no retry or provider-side behavior of its own.
-  reconcileOperationSuccess(input) {
-    const source = assertPlainObject(input, 'operation reconciliation');
-    const identity = this._validateOperationIdentity(source);
-    assertSafeOperationResult(source.result);
-    const resultJson = boundedJson(source.result, 'result');
-    return this.transaction(db => {
-      const now = this._now();
-      let row = db.prepare('SELECT * FROM operations WHERE operation_type = ? AND idempotency_key = ?').get(identity.type, identity.key);
-      if (!row) throw stateError('OPERATION_NOT_FOUND', 'The operation to reconcile was not found.', { type: identity.type, key: identity.key });
-      if (!row.input_verified && row.status === 'succeeded') {
-        db.prepare('UPDATE operations SET input_hash = ?, input_verified = 1, updated_at_ms = ? WHERE id = ?').run(identity.inputHash, now, row.id);
-        row = db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id);
-      } else if (row.input_hash !== identity.inputHash) {
-        throw stateError('OPERATION_INPUT_CONFLICT', 'The idempotency key was already used with a different input hash.', { type: identity.type, key: identity.key });
-      }
-      if (row.status === 'succeeded') {
-        const operation = this._operationRow(row);
-        return { disposition: 'replay', operation, result: operation.result };
-      }
-      if (row.status !== 'uncertain') {
-        throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${row.status}' cannot be reconciled as success.`, { operationId: row.id, status: row.status });
-      }
-      const changed = db.prepare(`UPDATE operations SET status = 'succeeded', result_json = ?, error_code = NULL, error_message = NULL,
-        retry_at_ms = NULL, lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL, completed_at_ms = ?, updated_at_ms = ?
-        WHERE id = ? AND status = 'uncertain'`).run(resultJson, now, now, row.id);
-      if (changed.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation changed before reconciliation could record success.', { operationId: row.id });
-      const operation = this._operationRow(db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id));
-      return { disposition: 'reconciled', operation, result: operation.result };
-    });
-  }
-
-  // Resolve an uncertain operation as no-effect only when a separate, durable
-  // observation proves the expected provider resource is absent. This method
-  // performs no retry itself and cannot alter a succeeded operation.
-  reconcileOperationFailure(input) {
-    const source = assertPlainObject(input, 'operation reconciliation');
-    const identity = this._validateOperationIdentity(source);
-    const errorCode = assertString(source.errorCode, 'errorCode', { max: 200, pattern: /^[A-Za-z0-9_.:-]+$/ });
-    const errorMessage = assertString(source.errorMessage === undefined ? '' : source.errorMessage, 'errorMessage', { min: 0, max: 1000 });
-    const retryAtMs = source.retryAtMs === undefined ? this._now() : assertInteger(source.retryAtMs, 'retryAtMs');
-    return this.transaction(db => {
-      const now = this._now();
-      let row = db.prepare('SELECT * FROM operations WHERE operation_type = ? AND idempotency_key = ?').get(identity.type, identity.key);
-      if (!row) throw stateError('OPERATION_NOT_FOUND', 'The operation to reconcile was not found.', { type: identity.type, key: identity.key });
-      if (!row.input_verified && row.status === 'succeeded') {
-        db.prepare('UPDATE operations SET input_hash = ?, input_verified = 1, updated_at_ms = ? WHERE id = ?').run(identity.inputHash, now, row.id);
-        row = db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id);
-      } else if (row.input_hash !== identity.inputHash) {
-        throw stateError('OPERATION_INPUT_CONFLICT', 'The idempotency key was already used with a different input hash.', { type: identity.type, key: identity.key });
-      }
-      if (row.status === 'retryable_failed') return { disposition: 'replay', operation: this._operationRow(row) };
-      if (row.status !== 'uncertain') {
-        throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${row.status}' cannot be reconciled as no-effect.`, { operationId: row.id, status: row.status });
-      }
-      const changed = db.prepare(`UPDATE operations SET status = 'retryable_failed', result_json = NULL, error_code = ?, error_message = ?,
-        retry_at_ms = ?, lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL, completed_at_ms = ?, updated_at_ms = ?
-        WHERE id = ? AND status = 'uncertain'`).run(errorCode, errorMessage, retryAtMs, now, now, row.id);
-      if (changed.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation changed before reconciliation could record no-effect.', { operationId: row.id });
-      return { disposition: 'reconciled', operation: this._operationRow(db.prepare('SELECT * FROM operations WHERE id = ?').get(row.id)) };
-    });
-  }
-
-  _operationFailure(handle, { errorCode, errorMessage = '', retryAtMs = null }, uncertain) {
-    const lease = this._validateOperationHandle(handle);
-    assertString(errorCode, 'errorCode', { max: 200, pattern: /^[A-Za-z0-9_.:-]+$/ });
-    assertString(errorMessage, 'errorMessage', { min: 0, max: 1000 });
-    if (retryAtMs !== null) assertInteger(retryAtMs, 'retryAtMs');
-    return this.transaction(db => {
-      const now = this._now();
-      if (uncertain) {
-        const prior = db.prepare('SELECT * FROM operations WHERE id = ?').get(lease.operationId);
-        if (!prior || prior.fence !== lease.fence || prior.lease_owner !== lease.ownerId || prior.lease_token !== lease.token) {
-          throw stateError('OPERATION_FENCE_LOST', 'The operation handle is stale or no longer owns the uncertainty fence.', { operationId: lease.operationId, fence: lease.fence });
-        }
-        if (prior.status !== 'executing' && prior.status !== 'uncertain') {
-          throw stateError('OPERATION_INVALID_TRANSITION', `Operation state '${prior.status}' cannot be marked uncertain.`, { operationId: prior.id, status: prior.status });
-        }
-        const changed = db.prepare(`UPDATE operations SET status = 'uncertain', error_code = ?, error_message = ?, retry_at_ms = NULL,
-          result_json = NULL, completed_at_ms = COALESCE(completed_at_ms, ?), updated_at_ms = ?
-          WHERE id = ? AND fence = ? AND lease_owner = ? AND lease_token = ? AND status IN ('executing','uncertain')`).run(
-          errorCode, errorMessage, now, now, lease.operationId, lease.fence, lease.ownerId, lease.token
-        );
-        if (changed.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation lease changed before uncertainty could be recorded.', { operationId: lease.operationId });
-        return { operation: this._operationRow(db.prepare('SELECT * FROM operations WHERE id = ?').get(lease.operationId)) };
-      }
-      this._requireOperationLease(db, lease, now, ['reserved', 'executing']);
-      const changed = db.prepare(`UPDATE operations SET status = 'retryable_failed', error_code = ?, error_message = ?, retry_at_ms = ?, result_json = NULL,
-        lease_owner = NULL, lease_token = NULL, lease_expires_at_ms = NULL, completed_at_ms = ?, updated_at_ms = ?
-        WHERE id = ? AND fence = ? AND lease_owner = ? AND lease_token = ? AND status IN ('reserved','executing') AND lease_expires_at_ms > ?`).run(
-        errorCode, errorMessage, retryAtMs, now, now,
-        lease.operationId, lease.fence, lease.ownerId, lease.token, now
-      );
-      if (changed.changes !== 1) throw stateError('OPERATION_FENCE_LOST', 'The operation lease changed before failure could be recorded.', { operationId: lease.operationId });
-      return { operation: this._operationRow(db.prepare('SELECT * FROM operations WHERE id = ?').get(lease.operationId)) };
-    });
-  }
-
-  failOperation(handle, options = {}) {
-    return this._operationFailure(handle, assertPlainObject(options, 'failure'), false);
-  }
-
-  markOperationUncertain(handle, options = {}) {
-    return this._operationFailure(handle, assertPlainObject(options, 'failure'), true);
-  }
-
-  getOperation(selector) {
-    const value = assertPlainObject(selector, 'selector');
-    let row;
-    if (value.id !== undefined) {
-      if (value.type !== undefined || value.key !== undefined) throw stateError('STATE_INVALID_ARGUMENT', 'Select an operation by id or by type and key, not both.', { field: 'selector' });
-      const id = assertString(value.id, 'id', { max: 500 });
-      row = this._read(db => db.prepare('SELECT * FROM operations WHERE id = ?').get(id));
-    } else {
-      const type = assertString(value.type, 'type', { max: 200 });
-      const key = assertString(value.key, 'key', { max: 500 });
-      row = this._read(db => db.prepare('SELECT * FROM operations WHERE operation_type = ? AND idempotency_key = ?').get(type, key));
-    }
-    return this._operationRow(row);
-  }
-
-  listOperations(options = {}) {
-    assertPlainObject(options, 'options');
-    const limit = assertInteger(options.limit === undefined ? 100 : options.limit, 'limit', { min: 1, max: 1000 });
-    if (options.status !== undefined && !OPERATION_STATES.has(options.status)) throw stateError('STATE_INVALID_ARGUMENT', 'status is invalid.', { field: 'status' });
-    if (options.type !== undefined) assertString(options.type, 'type', { max: 200 });
-    const clauses = [];
-    const values = [];
-    if (options.status !== undefined) { clauses.push('status = ?'); values.push(options.status); }
-    if (options.type !== undefined) { clauses.push('operation_type = ?'); values.push(options.type); }
-    values.push(limit);
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    return this._read(db => db.prepare(`SELECT * FROM operations ${where} ORDER BY updated_at_ms DESC, id DESC LIMIT ?`).all(...values).map(row => this._operationRow(row)));
   }
 
   _capabilityManifest(value) {
@@ -4124,9 +3325,9 @@ class StateStore {
   }
 
   createPolicyDispatchAuthorization(input) {
-    const source = assertPlainObject(input, 'policy dispatch authorization');
+    const source = assertPlainObject(input, 'Policy dispatch authorization');
     const allowed = ['authorizationId', 'taskId', 'toolName', 'argsHash', 'targetKind', 'targetHash', 'provenance', 'risk', 'delegationDepth', 'userKind', 'requestHash'];
-    if (Object.keys(source).some(key => !allowed.includes(key))) throw stateError('STATE_INVALID_ARGUMENT', 'policy dispatch authorization contains unsupported fields.', { field: 'policy dispatch authorization' });
+    if (Object.keys(source).some(key => !allowed.includes(key))) throw stateError('STATE_INVALID_ARGUMENT', 'Policy dispatch authorization contains unsupported fields.', { field: 'Policy dispatch authorization' });
     const authorizationId = assertString(source.authorizationId, 'authorizationId', { min: 8, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/ });
     const taskId = assertString(source.taskId, 'taskId', { min: 8, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/ });
     const toolName = assertString(source.toolName, 'toolName', { min: 3, max: 200, pattern: /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/ });
@@ -4138,27 +3339,27 @@ class StateStore {
     const userKind = assertString(source.userKind, 'userKind', { min: 5, max: 64, pattern: /^(owner-authenticated|agent|unknown)$/ });
     const requestHash = assertString(source.requestHash, 'requestHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
     if (source.provenance !== null) {
-      throw stateError('POLICY_PROVENANCE_AUTHORITY_UNAVAILABLE', 'Raw P08 provenance cannot grant P13 dispatch authority; a future broker-owned reference is required.', {});
+      throw stateError('POLICY_PROVENANCE_AUTHORITY_UNAVAILABLE', 'Raw broker provenance cannot grant policy dispatch authority; a future broker-owned reference is required.', {});
     }
     const provenanceJson = 'null';
     return this.transaction(db => {
       const now = this._now();
       const request = db.prepare(`SELECT * FROM capability_profile_requests WHERE request_hash = ?`).get(requestHash);
       if (!request || request.status !== 'authorized' || request.request_kind !== 'tool' || request.task_id !== taskId) {
-        throw stateError('POLICY_CAPABILITY_REQUEST_MISSING', 'Policy dispatch authorization requires an existing authorized P12 tool request.', { taskId });
+        throw stateError('POLICY_CAPABILITY_REQUEST_MISSING', 'Policy dispatch authorization requires an existing authorized capability tool request.', { taskId });
       }
       const bound = parseJson(request.request_json, 'authorized capability request');
       if (!bound || !bound.request || bound.request.taskId !== taskId || bound.request.tool !== toolName
         || bound.profileHash !== request.profile_hash || bound.requestHash !== request.request_hash) {
-        throw stateError('POLICY_CAPABILITY_REQUEST_MISMATCH', 'The P12 request does not bind this exact policy tool action.', { toolName });
+        throw stateError('POLICY_CAPABILITY_REQUEST_MISMATCH', 'The capability request does not bind this exact policy tool action.', { toolName });
       }
       const profile = db.prepare(`SELECT * FROM capability_profile_versions WHERE profile_id = ? AND version = ?`).get(request.profile_id, request.profile_version);
       if (!profile || !equalHash(profile.manifest_hash, request.profile_hash) || profile.task_id !== taskId) {
-        throw stateError('CAPABILITY_MANIFEST_BINDING_MISMATCH', 'The P12 profile no longer matches this policy authorization.', { taskId });
+        throw stateError('CAPABILITY_MANIFEST_BINDING_MISMATCH', 'The capability profile no longer matches this policy authorization.', { taskId });
       }
-      if (now >= profile.expires_at_ms) throw stateError('CAPABILITY_MANIFEST_EXPIRED', 'The P12 profile expired before policy authorization.', { taskId });
+      if (now >= profile.expires_at_ms) throw stateError('CAPABILITY_MANIFEST_EXPIRED', 'The capability profile expired before policy authorization.', { taskId });
       if (db.prepare(`SELECT 1 FROM capability_profile_revocations WHERE profile_id = ? AND profile_version = ?`).get(request.profile_id, request.profile_version)) {
-        throw stateError('CAPABILITY_MANIFEST_REVOKED', 'The P12 profile was revoked before policy authorization.', { taskId });
+        throw stateError('CAPABILITY_MANIFEST_REVOKED', 'The capability profile was revoked before policy authorization.', { taskId });
       }
       const existing = db.prepare(`SELECT * FROM policy_dispatch_authorizations WHERE authorization_id = ?`).get(authorizationId);
       if (existing) {
@@ -4178,28 +3379,28 @@ class StateStore {
   }
 
   consumePolicyDispatchAuthorization(input) {
-    const source = assertPlainObject(input, 'policy dispatch consumption');
-    if (Object.keys(source).some(key => !['authorizationId', 'toolName', 'argsHash', 'approvalId', 'approvalInputHash'].includes(key))) throw stateError('STATE_INVALID_ARGUMENT', 'policy dispatch consumption contains unsupported fields.', { field: 'policy dispatch consumption' });
+    const source = assertPlainObject(input, 'Policy dispatch consumption');
+    if (Object.keys(source).some(key => !['authorizationId', 'toolName', 'argsHash', 'approvalId', 'approvalInputHash'].includes(key))) throw stateError('STATE_INVALID_ARGUMENT', 'Policy dispatch consumption contains unsupported fields.', { field: 'Policy dispatch consumption' });
     const authorizationId = assertString(source.authorizationId, 'authorizationId', { min: 8, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/ });
     const toolName = assertString(source.toolName, 'toolName', { min: 3, max: 200, pattern: /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/ });
     const argsHash = assertString(source.argsHash, 'argsHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
     const approvalId = source.approvalId === undefined || source.approvalId === null ? null : assertString(source.approvalId, 'approvalId', { min: 8, max: 200 });
     const approvalInputHash = source.approvalInputHash === undefined || source.approvalInputHash === null ? null : assertString(source.approvalInputHash, 'approvalInputHash', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
-    if ((approvalId === null) !== (approvalInputHash === null)) throw stateError('STATE_INVALID_ARGUMENT', 'P13 approval evidence must include both ID and input hash.', { field: 'approval evidence' });
+    if ((approvalId === null) !== (approvalInputHash === null)) throw stateError('STATE_INVALID_ARGUMENT', 'Policy approval evidence must include both ID and input hash.', { field: 'approval evidence' });
     return this.transaction(db => {
       const now = this._now();
       const authorization = this._assertP13DispatchBinding(db, authorizationId, toolName, argsHash, now);
       if (db.prepare(`SELECT 1 FROM policy_dispatch_consumptions WHERE authorization_id = ?`).get(authorizationId)) {
-        throw stateError('POLICY_AUTHORIZATION_REPLAYED', 'The P13 dispatch authorization was already consumed.', { authorizationId });
+        throw stateError('POLICY_AUTHORIZATION_REPLAYED', 'The policy dispatch authorization was already consumed.', { authorizationId });
       }
       if (approvalId !== null) {
         const approval = db.prepare(`SELECT * FROM approval_grants WHERE id = ?`).get(approvalId);
         if (!approval || approval.status !== 'consumed' || approval.action !== authorization.tool_name || !equalHash(approval.input_hash, approvalInputHash)) {
-          throw stateError('POLICY_APPROVAL_EVIDENCE_INVALID', 'The P13 approval evidence is not a consumed grant for these exact tool arguments.', { authorizationId, approvalId });
+          throw stateError('POLICY_APPROVAL_EVIDENCE_INVALID', 'The policy approval evidence is not a consumed grant for these exact tool arguments.', { authorizationId, approvalId });
         }
         const attachment = db.prepare(`SELECT authorization_id FROM policy_dispatch_consumptions WHERE approval_id = ?`).get(approvalId);
         if (attachment) {
-          throw stateError('POLICY_APPROVAL_EVIDENCE_REPLAYED', 'The P13 approval evidence is already attached to another dispatch authorization.', {
+          throw stateError('POLICY_APPROVAL_EVIDENCE_REPLAYED', 'The policy approval evidence is already attached to another dispatch authorization.', {
             authorizationId,
             approvalId,
             attachedAuthorizationId: attachment.authorization_id
@@ -4209,9 +3410,9 @@ class StateStore {
       db.prepare(`INSERT INTO policy_dispatch_consumptions(authorization_id, args_hash, consumed_at_ms, approval_id) VALUES(?, ?, ?, ?)`).run(authorizationId, argsHash, now, approvalId);
       let provenance;
       try {
-        const storedProvenance = parseJson(authorization.provenance_json, 'policy provenance');
+        const storedProvenance = parseJson(authorization.provenance_json, 'Policy provenance');
         provenance = storedProvenance === null ? null : provenanceEnvelopes.validateEnvelope(storedProvenance);
-      } catch (error) { throw stateError('POLICY_PROVENANCE_CORRUPT', 'Stored P13 provenance is invalid.', { authorizationId }, error); }
+      } catch (error) { throw stateError('POLICY_PROVENANCE_CORRUPT', 'Stored policy provenance is invalid.', { authorizationId }, error); }
       return Object.freeze({
         authorizationId, taskId: authorization.task_id, toolName: authorization.tool_name, argsHash: authorization.args_hash,
         target: Object.freeze({ kind: authorization.target_kind, identifierHash: authorization.target_hash, pinned: true }),
@@ -4272,7 +3473,7 @@ class StateStore {
     return assertString(value, label, { min: 8, max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/ });
   }
 
-  _taskPayload(value, scope = {}) {
+  _taskPayload(value) {
     const body = assertPlainObject(value, 'payload');
     const unknown = Object.keys(body).filter(key => !['title', 'objective', 'context'].includes(key));
     if (unknown.length) throw stateError('STATE_INVALID_ARGUMENT', 'payload contains unsupported fields.', { field: 'payload', fields: unknown });
@@ -4281,14 +3482,7 @@ class StateStore {
       objective: assertString(body.objective, 'payload.objective', { max: 16000 })
     };
     if (body.context !== undefined) normalized.context = assertString(body.context, 'payload.context', { min: 0, max: 32000 });
-    const typedReferences = scope.queue === 'research-runs' && scope.type === 'research-run'
-      && RESEARCH_REFERENCE_PAYLOADS.has(body);
-    // This immutable objective was constructed from two typed local values,
-    // not supplied as free text. A random hex ID/hash can otherwise match EAA
-    // credential syntax. All other fields and every unbranded payload retain
-    // the ordinary secret check, even on the reserved research queue.
-    assertNoPlaintextTaskSecrets(typedReferences ? { ...normalized, objective: '' } : normalized, 'payload');
-    if (typedReferences) RESEARCH_REFERENCE_PAYLOADS.delete(body);
+    assertNoPlaintextTaskSecrets(normalized, 'payload');
     return normalized;
   }
 
@@ -4450,7 +3644,7 @@ class StateStore {
     const queue = this._taskIdentifier(source.queue, 'queue');
     const type = this._taskIdentifier(source.type, 'type');
     const idempotencyKey = this._taskKey(source.idempotencyKey, 'idempotencyKey');
-    const payload = this._taskPayload(source.payload, { queue, type });
+    const payload = this._taskPayload(source.payload);
     const bodyJson = boundedTaskJson(payload, 'payload', MAX_TASK_PAYLOAD_BYTES, 'TASK_PAYLOAD_TOO_LARGE');
     const priority = assertInteger(source.priority === undefined ? 0 : source.priority, 'priority', { min: -100, max: 100 });
     const maxAttempts = assertInteger(source.maxAttempts === undefined ? 3 : source.maxAttempts, 'maxAttempts', { min: 1, max: 10 });
@@ -4582,7 +3776,7 @@ class StateStore {
       }
       const current = this._currentTaskClaim(db, claim, now, ['leased']);
       if (current.task.cancel_requested_at_ms !== null) {
-        throw stateError('TASK_CANCEL_REQUESTED', 'Cancellation was requested before task execution started.', { taskId: current.task.id });
+        throw stateError('TASK_CANCEL_REQUESTED', `Cancellation was requested before task execution started. ${TASK_CANCEL_ACKNOWLEDGE}`, { taskId: current.task.id });
       }
       if (current.task.attempt + 1 !== claim.attempt || claim.attempt > current.task.max_attempts) {
         throw stateError('TASK_INVALID_TRANSITION', 'The claimed execution attempt is no longer eligible to start.', { taskId: current.task.id, attempt: claim.attempt });
@@ -4685,7 +3879,7 @@ class StateStore {
       }
       const current = this._currentTaskClaim(db, claim, now, ['running']);
       if (current.task.cancel_requested_at_ms !== null) {
-        throw stateError('TASK_CANCEL_REQUESTED', 'Cancellation was requested before this checkpoint could be saved.', { taskId: claim.taskId });
+        throw stateError('TASK_CANCEL_REQUESTED', `Cancellation was requested before this checkpoint could be saved. ${TASK_CANCEL_ACKNOWLEDGE}`, { taskId: claim.taskId });
       }
       if (current.task.checkpoint_revision !== expectedRevision) {
         throw stateError('TASK_CHECKPOINT_REVISION_CONFLICT', 'The checkpoint revision changed before this update.', {
@@ -4728,13 +3922,7 @@ class StateStore {
 
   _taskResult(value) {
     const result = assertPlainObject(value, 'result');
-    const computed = RESEARCH_COMPLETION_DIGESTS.get(result);
-    RESEARCH_COMPLETION_DIGESTS.delete(result);
-    if (computed !== undefined && Object.isFrozen(result) && result.collectionHash === computed.digest
-        && JSON.stringify(result) === computed.json) {
-      const { collectionHash, ...callerFields } = result;
-      assertNoPlaintextTaskSecrets(callerFields, 'result');
-    } else assertNoPlaintextTaskSecrets(result, 'result');
+    assertNoPlaintextTaskSecrets(result, 'result');
     return result;
   }
 
@@ -4762,7 +3950,7 @@ class StateStore {
       return { replayed: true, task: this._taskRow(task), result };
     }
     if (task && task.cancel_requested_at_ms !== null) {
-      throw stateError('TASK_CANCEL_REQUESTED', 'Cancellation was requested before task completion could be recorded.', { taskId: claim.taskId });
+      throw stateError('TASK_CANCEL_REQUESTED', `Cancellation was requested before task completion could be recorded. ${TASK_CANCEL_ACKNOWLEDGE}`, { taskId: claim.taskId });
     }
     if (!task || task.fence !== claim.fence || task.attempt !== claim.attempt || !['running', 'uncertain'].includes(task.status)
       || !['running', 'uncertain'].includes(attempt.status)) {
@@ -4955,621 +4143,6 @@ class StateStore {
       .map(row => this._checkpointRow(row)));
   }
 
-  _coordinatorText(value, label, maximum) {
-    const text = assertString(value, label, { min: 0, max: maximum });
-    assertNoPlaintextTaskSecrets(text, label);
-    return text;
-  }
-
-  _coordinatorTextList(value, label, maximumItems, maximumItemLength) {
-    if (!Array.isArray(value) || value.length > maximumItems) {
-      throw stateError('COORDINATOR_MISSION_INVALID', `${label} must be an array of at most ${maximumItems} safe strings.`, { field: label });
-    }
-    return value.map((item, index) => this._coordinatorText(item, `${label}[${index}]`, maximumItemLength));
-  }
-
-  _coordinatorMission(value) {
-    const source = assertPlainObject(value, 'coordinator mission');
-    assertOnlyKeys(source, new Set(['version', 'ownerRequest', 'constraints', 'decisions', 'acceptanceGates', 'reportPointer']), 'coordinator mission', 'COORDINATOR_MISSION_INVALID');
-    if (source.version !== 1) throw stateError('COORDINATOR_MISSION_INVALID', 'coordinator mission version must be 1.', { field: 'mission.version' });
-    const mission = {
-      version: 1,
-      ownerRequest: this._coordinatorText(source.ownerRequest, 'mission.ownerRequest', 12000),
-      constraints: this._coordinatorTextList(source.constraints, 'mission.constraints', 32, 1000),
-      decisions: this._coordinatorTextList(source.decisions, 'mission.decisions', 64, 1000),
-      acceptanceGates: this._coordinatorTextList(source.acceptanceGates, 'mission.acceptanceGates', 32, 1000),
-      reportPointer: assertString(source.reportPointer, 'mission.reportPointer', {
-        min: 1, max: 400, pattern: /^reports\/[A-Za-z0-9._-]+\.(?:json|pdf)$/
-      })
-    };
-    assertNoPlaintextTaskSecrets(mission, 'coordinator mission');
-    const json = boundedTaskJson(mission, 'coordinator mission', 64 * 1024, 'COORDINATOR_MISSION_TOO_LARGE');
-    return { mission, json, hash: hashText(json) };
-  }
-
-  _coordinatorMissionRow(row) {
-    if (!row) return null;
-    return {
-      runId: row.run_id,
-      taskId: row.task_id,
-      revision: row.owner_revision,
-      mission: parseJson(row.owner_json, 'coordinator mission'),
-      hash: row.owner_hash,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms,
-      updatedAt: iso(row.updated_at_ms),
-      updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  submitCoordinatorMission(input) {
-    const source = assertPlainObject(input, 'coordinator mission submission');
-    assertOnlyKeys(source, new Set(['runId', 'task', 'mission']), 'coordinator mission submission', 'COORDINATOR_MISSION_INVALID');
-    const runId = assertString(source.runId, 'runId', { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ });
-    const task = this._prepareTaskSubmission(source.task);
-    const preparedMission = this._coordinatorMission(source.mission);
-    return this.transaction(db => {
-      const now = this._now();
-      const submitted = this._submitPreparedTask(db, task, now);
-      const existing = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId);
-      if (existing) {
-        if (existing.task_id !== submitted.task.id || existing.owner_hash !== preparedMission.hash) {
-          throw stateError('COORDINATOR_MISSION_IDEMPOTENCY_CONFLICT', 'The durable run id already has different mission context.', { runId });
-        }
-        return { ...submitted, mission: this._coordinatorMissionRow(existing) };
-      }
-      // v10 adds mission state to pre-existing v9 coordinator tasks.  A replay can
-      // safely backfill it only after _submitPreparedTask has verified that
-      // the replayed task has the exact same idempotent input hash.  We never
-      // infer a mission from arbitrary legacy task text.
-      db.prepare(`INSERT INTO coordinator_missions(run_id, task_id, owner_revision, owner_json, owner_hash, created_at_ms, updated_at_ms)
-        VALUES(?, ?, 1, ?, ?, ?, ?)`).run(runId, submitted.task.id, preparedMission.json, preparedMission.hash, now, now);
-      return { ...submitted, mission: this._coordinatorMissionRow(db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId)) };
-    });
-  }
-
-  getCoordinatorMission(input) {
-    const source = assertPlainObject(input, 'coordinator mission selector');
-    const runId = assertString(source.runId, 'runId', { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ });
-    return this._read(db => this._coordinatorMissionRow(db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId)));
-  }
-
-  updateCoordinatorMission(input) {
-    const source = assertPlainObject(input, 'coordinator mission update');
-    assertOnlyKeys(source, new Set(['runId', 'expectedRevision', 'mission']), 'coordinator mission update', 'COORDINATOR_MISSION_INVALID');
-    const runId = assertString(source.runId, 'runId', { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ });
-    const expectedRevision = assertInteger(source.expectedRevision, 'expectedRevision', { min: 1, max: Number.MAX_SAFE_INTEGER });
-    const prepared = this._coordinatorMission(source.mission);
-    return this.transaction(db => {
-      const now = this._now();
-      const changed = db.prepare(`UPDATE coordinator_missions SET owner_revision = owner_revision + 1, owner_json = ?, owner_hash = ?, updated_at_ms = ?
-        WHERE run_id = ? AND owner_revision = ?`).run(prepared.json, prepared.hash, now, runId, expectedRevision);
-      if (changed.changes !== 1) {
-        const current = db.prepare('SELECT owner_revision FROM coordinator_missions WHERE run_id = ?').get(runId);
-        if (!current) throw stateError('COORDINATOR_MISSION_NOT_FOUND', 'The coordinator mission was not found.', { runId });
-        throw stateError('COORDINATOR_MISSION_REVISION_CONFLICT', 'The owner mission changed before this update.', { runId, expectedRevision, actualRevision: current.owner_revision });
-      }
-      return this._coordinatorMissionRow(db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId));
-    });
-  }
-
-  _coordinatorPhaseState(value) {
-    const source = assertPlainObject(value, 'coordinator phase state');
-    assertOnlyKeys(source, new Set(['runId', 'actor', 'taskId', 'attempt', 'fence', 'phase', 'phaseStatus', 'expectedSharedRevision', 'scratchSummary', 'resumeSummary', 'cursor', 'retryCount', 'nextAction']), 'coordinator phase state', 'COORDINATOR_PHASE_INVALID');
-    const phaseStatus = assertString(source.phaseStatus, 'phaseStatus', { min: 1, max: 20 });
-    if (!['idle', 'running', 'continuation', 'blocked', 'completed', 'cancelled', 'uncertain'].includes(phaseStatus)) {
-      throw stateError('COORDINATOR_PHASE_INVALID', 'phaseStatus is invalid.', { field: 'phaseStatus' });
-    }
-    return {
-      runId: assertString(source.runId, 'runId', { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ }),
-      actor: assertString(source.actor, 'actor', { min: 3, max: 16, pattern: /^(?:human|codex|claude|gemini|grok|coordinator)$/ }),
-      taskId: assertString(source.taskId, 'taskId', { min: 1, max: 500 }),
-      attempt: assertInteger(source.attempt, 'attempt', { min: 1, max: 10 }),
-      fence: assertInteger(source.fence, 'fence', { min: 1 }),
-      phase: assertInteger(source.phase, 'phase', { min: 0, max: 24 }),
-      phaseStatus,
-      expectedSharedRevision: assertInteger(source.expectedSharedRevision, 'expectedSharedRevision', { min: 1 }),
-      scratchSummary: this._coordinatorText(source.scratchSummary || '', 'scratchSummary', 2000),
-      resumeSummary: this._coordinatorText(source.resumeSummary || '', 'resumeSummary', 2000),
-      cursor: this._coordinatorText(source.cursor || '', 'cursor', 500),
-      retryCount: assertInteger(source.retryCount === undefined ? 0 : source.retryCount, 'retryCount', { min: 0, max: 5 }),
-      nextAction: this._coordinatorText(source.nextAction || '', 'nextAction', 240)
-    };
-  }
-
-  _coordinatorPhaseRow(row) {
-    if (!row) return null;
-    return {
-      runId: row.run_id, actor: row.actor, taskId: row.task_id, attempt: row.attempt, fence: row.fence,
-      phase: row.phase, phaseStatus: row.phase_status, sharedRevision: row.shared_revision,
-      scratchSummary: row.scratch_summary, resumeSummary: row.resume_summary, cursor: row.cursor,
-      retryCount: row.retry_count, nextAction: row.next_action, updatedAt: iso(row.updated_at_ms), updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  saveCoordinatorPhaseState(input) {
-    const phase = this._coordinatorPhaseState(input);
-    return this.transaction(db => {
-      const now = this._now();
-      const mission = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(phase.runId);
-      if (!mission || mission.task_id !== phase.taskId) throw stateError('COORDINATOR_MISSION_NOT_FOUND', 'The coordinator mission does not match this task.', { runId: phase.runId });
-      if (mission.owner_revision !== phase.expectedSharedRevision) {
-        throw stateError('COORDINATOR_MISSION_REVISION_CONFLICT', 'The owner mission changed; re-read it before continuing this phase.', { runId: phase.runId, expectedRevision: phase.expectedSharedRevision, actualRevision: mission.owner_revision });
-      }
-      const task = db.prepare('SELECT id, status, attempt, fence, lease_expires_at_ms FROM tasks WHERE id = ?').get(phase.taskId);
-      if (!task || task.status !== 'running' || task.attempt !== phase.attempt || task.fence !== phase.fence || task.lease_expires_at_ms <= now) {
-        throw stateError('COORDINATOR_PHASE_FENCE_LOST', 'The task fence is no longer active for this phase state.', { taskId: phase.taskId, fence: phase.fence });
-      }
-      const prior = db.prepare('SELECT * FROM coordinator_phase_states WHERE run_id = ? AND actor = ?').get(phase.runId, phase.actor);
-      if (prior && (prior.fence > phase.fence || (prior.fence === phase.fence && prior.phase > phase.phase))) {
-        throw stateError('COORDINATOR_PHASE_FENCE_LOST', 'A newer coordinator phase state already owns this actor/run.', { runId: phase.runId, actor: phase.actor, fence: phase.fence });
-      }
-      db.prepare(`INSERT INTO coordinator_phase_states(run_id, actor, task_id, attempt, fence, phase, phase_status, shared_revision,
-        scratch_summary, resume_summary, cursor, retry_count, next_action, updated_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(run_id, actor) DO UPDATE SET task_id = excluded.task_id, attempt = excluded.attempt, fence = excluded.fence,
-          phase = excluded.phase, phase_status = excluded.phase_status, shared_revision = excluded.shared_revision,
-          scratch_summary = excluded.scratch_summary, resume_summary = excluded.resume_summary, cursor = excluded.cursor,
-          retry_count = excluded.retry_count, next_action = excluded.next_action, updated_at_ms = excluded.updated_at_ms`).run(
-        phase.runId, phase.actor, phase.taskId, phase.attempt, phase.fence, phase.phase, phase.phaseStatus,
-        phase.expectedSharedRevision, phase.scratchSummary, phase.resumeSummary, phase.cursor, phase.retryCount, phase.nextAction, now
-      );
-      return this._coordinatorPhaseRow(db.prepare('SELECT * FROM coordinator_phase_states WHERE run_id = ? AND actor = ?').get(phase.runId, phase.actor));
-    });
-  }
-
-  getCoordinatorPhaseStates(input) {
-    const source = assertPlainObject(input, 'coordinator phase selector');
-    const runId = assertString(source.runId, 'runId', { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ });
-    return this._read(db => db.prepare('SELECT * FROM coordinator_phase_states WHERE run_id = ? ORDER BY updated_at_ms DESC, actor').all(runId).map(row => this._coordinatorPhaseRow(row)));
-  }
-
-  // The methods below are deliberately broker-internal.  They are not generic
-  // task metadata: their uniqueness and transaction boundaries are what keep a
-  // worker's prose-level `succeeded` result distinct from workflow ACCEPTED.
-  _workflowRunId(value, label = 'runId') {
-    return assertString(value, label, { min: 36, max: 36, pattern: /^run-[a-f0-9]{32}$/ });
-  }
-
-  _workflowIdentifier(value, label) {
-    return assertString(value, label, { min: 3, max: 160, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$/ });
-  }
-
-  _workflowHash(value, label) {
-    return assertString(value, label, { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ });
-  }
-
-  _workflowJson(value, label, maximumBytes) {
-    assertNoPlaintextTaskSecrets(value, label);
-    return boundedTaskJson(value, label, maximumBytes, 'COORDINATOR_WORKFLOW_RECORD_TOO_LARGE');
-  }
-
-  _workflowMissionRow(row) {
-    if (!row) return null;
-    return {
-      runId: row.run_id,
-      taskId: row.task_id,
-      missionId: row.mission_id,
-      missionHash: row.mission_hash,
-      contract: parseJson(row.contract_json, 'coordinator workflow mission contract'),
-      contractHash: row.contract_hash,
-      ownerRevision: row.owner_revision,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms,
-      updatedAt: iso(row.updated_at_ms),
-      updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  _workflowVerificationRow(row) {
-    if (!row) return null;
-    return {
-      runId: row.run_id,
-      executionRole: row.execution_role,
-      executionId: row.execution_id,
-      record: parseJson(row.record_json, 'coordinator broker verification'),
-      hash: row.record_hash,
-      ownerRevision: row.owner_revision,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms
-    };
-  }
-
-  _workflowOutboxRow(row) {
-    if (!row) return null;
-    return {
-      outboxId: row.outbox_id,
-      runId: row.run_id,
-      eventId: row.event_id,
-      eventHash: row.event_hash,
-      event: parseJson(row.event_json, 'coordinator workflow event'),
-      deliveryState: row.status,
-      fence: row.fence,
-      leaseExpiresAtMs: row.lease_expires_at_ms,
-      createdAt: iso(row.created_at_ms),
-      createdAtMs: row.created_at_ms,
-      updatedAt: iso(row.updated_at_ms),
-      updatedAtMs: row.updated_at_ms,
-      deliveredAt: row.delivered_at_ms === null ? null : iso(row.delivered_at_ms),
-      deliveredAtMs: row.delivered_at_ms
-    };
-  }
-
-  _workflowAcceptanceRow(row) {
-    if (!row) return null;
-    return {
-      runId: row.run_id,
-      taskId: row.task_id,
-      missionId: row.mission_id,
-      missionHash: row.mission_hash,
-      ownerRevision: row.owner_revision,
-      acceptance: parseJson(row.acceptance_json, 'coordinator workflow acceptance'),
-      acceptanceHash: row.acceptance_hash,
-      resultHash: row.result_hash,
-      eventId: row.event_id,
-      status: 'ACCEPTED',
-      acceptedAt: iso(row.accepted_at_ms),
-      acceptedAtMs: row.accepted_at_ms
-    };
-  }
-
-  // This is the one read-only source of truth for both authoritative replay
-  // and P04 historical-advisory eligibility. P04 may never trust a cached
-  // hash column or a partial duplicate of the Q11 terminal graph.
-  _validatedCommittedCoordinatorWorkflowAcceptance(db, { runId, claim = null, expected = null }) {
-    const prior = db.prepare('SELECT * FROM coordinator_workflow_acceptances WHERE run_id = ?').get(runId);
-    if (!prior) return null;
-    const workflow = db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId);
-    const ownerMission = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId);
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(prior.task_id);
-    const attempt = claim
-      ? this._taskAttempt(db, claim)
-      : task && db.prepare('SELECT * FROM task_attempts WHERE task_id = ? AND fence = ?').get(task.id, task.fence);
-    if (!workflow || !ownerMission || !task || !attempt || (claim && claim.taskId !== prior.task_id)
-        || workflow.task_id !== prior.task_id || ownerMission.task_id !== prior.task_id
-        || workflow.mission_id !== prior.mission_id || !equalHash(workflow.mission_hash, prior.mission_hash)) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The committed workflow acceptance has a missing or mismatched mission/task edge.', { runId });
-    }
-    if (workflow.owner_revision !== prior.owner_revision || ownerMission.owner_revision !== prior.owner_revision) {
-      throw stateError('COORDINATOR_WORKFLOW_ACCEPTANCE_STALE', 'The owner mission changed after this workflow acceptance was recorded.', { runId });
-    }
-    if ((claim && (task.fence !== claim.fence || task.attempt !== claim.attempt)) || task.status !== 'succeeded'
-        || task.cancel_requested_at_ms !== null || !equalHash(task.result_hash, prior.result_hash)
-        || attempt.status !== 'succeeded' || attempt.execution_attempt !== task.attempt) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The committed workflow acceptance no longer matches its terminal fenced task attempt.', { runId });
-    }
-    if (task.result_json === null || !equalHash(hashText(task.result_json), task.result_hash)) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The terminal workflow task result is missing or has an invalid durable hash.', { runId });
-    }
-    const taskResult = parseJson(task.result_json, 'coordinator workflow task result');
-    if (!equalHash(attempt.outcome_hash, hashInput({ disposition: 'succeeded', result: taskResult }))) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The terminal workflow task attempt outcome does not match its durable result.', { runId });
-    }
-    const baseline = db.prepare("SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = 'baseline'").get(runId);
-    const candidate = db.prepare("SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = 'candidate'").get(runId);
-    const event = db.prepare('SELECT * FROM coordinator_workflow_events WHERE event_id = ?').get(prior.event_id);
-    const outbox = event && db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE event_id = ?').get(event.event_id);
-    if (!baseline || !candidate || !event || !outbox || baseline.owner_revision !== prior.owner_revision
-        || candidate.owner_revision !== prior.owner_revision || event.run_id !== runId || event.mission_id !== prior.mission_id
-        || outbox.run_id !== runId || outbox.event_id !== event.event_id
-        || !equalHash(outbox.event_hash, event.event_hash) || outbox.event_json !== event.event_json) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The committed workflow acceptance has a missing or mismatched verification/event/outbox edge.', { runId });
-    }
-    if (!equalHash(hashText(baseline.record_json), baseline.record_hash) || !equalHash(hashText(candidate.record_json), candidate.record_hash)
-        || !equalHash(hashText(event.event_json), event.event_hash) || !equalHash(hashText(prior.acceptance_json), prior.acceptance_hash)) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'A committed workflow record no longer matches its durable canonical hash.', { runId });
-    }
-    const contract = parseJson(workflow.contract_json, 'coordinator workflow mission contract');
-    if (!equalHash(hashText(canonicalJson(contract)), workflow.contract_hash) || !equalHash(workflow.contract_hash, workflow.mission_hash)) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The persisted workflow contract no longer matches its mission hash.', { runId });
-    }
-    const storedAcceptance = parseJson(prior.acceptance_json, 'coordinator workflow acceptance');
-    const storedEvent = parseJson(event.event_json, 'coordinator workflow event');
-    let derived;
-    try {
-      derived = deriveAcceptedWorkflow({
-        mission: contract,
-        baseline: parseJson(baseline.record_json, 'coordinator baseline broker verification'),
-        candidate: parseJson(candidate.record_json, 'coordinator candidate broker verification'),
-        acceptedAt: storedEvent.occurredAt
-      });
-    } catch (error) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The persisted workflow evidence can no longer reconstruct its accepted terminal fact.', { runId, cause: error && error.code }, error);
-    }
-    const reconstructed = { ...derived, baselineRecordHash: baseline.record_hash, candidateRecordHash: candidate.record_hash };
-    if (canonicalJson(reconstructed) !== prior.acceptance_json || canonicalJson(derived.event) !== event.event_json
-        || derived.event.eventId !== prior.event_id || derived.outbox.outboxId !== outbox.outbox_id
-        || !equalHash(derived.outbox.eventHash, event.event_hash) || storedAcceptance.status !== 'ACCEPTED'
-        || storedEvent.eventId !== prior.event_id) {
-      throw stateError('COORDINATOR_WORKFLOW_STATE_CORRUPT', 'The committed workflow acceptance is not semantically bound to its reconstructed terminal event.', { runId });
-    }
-    if (expected && (expected.missionId !== prior.mission_id || !equalHash(expected.missionHash, prior.mission_hash)
-        || expected.ownerRevision !== prior.owner_revision || !equalHash(expected.baselineRecordHash, baseline.record_hash)
-        || !equalHash(expected.candidateRecordHash, candidate.record_hash) || !equalHash(expected.acceptanceHash, prior.acceptance_hash)
-        || !equalHash(expected.resultHash, prior.result_hash) || expected.eventId !== prior.event_id
-        || !equalHash(expected.eventHash, event.event_hash) || expected.outboxId !== outbox.outbox_id)) {
-      throw stateError('COORDINATOR_WORKFLOW_ACCEPTANCE_CONFLICT', 'The durable run already has a different terminal acceptance record.', { runId });
-    }
-    return { prior, task, attempt, workflow, ownerMission, baseline, candidate, event, outbox };
-  }
-
-  // A committed ACCEPTED terminal fact is replayed from the durable graph, not
-  // from its historical artifact workspace. This keeps a crash/retry safe
-  // after normal artifact retention/cleanup, while the pre-commit path still
-  // re-resolves every snapshot immediately before its transaction.
-  _replayCoordinatorWorkflowAcceptance(db, { runId, claim, expected = null }) {
-    const graph = this._validatedCommittedCoordinatorWorkflowAcceptance(db, { runId, claim, expected });
-    if (!graph) return null;
-    return {
-      replayed: true,
-      task: this._taskRow(graph.task),
-      acceptance: this._workflowAcceptanceRow(graph.prior),
-      outbox: this._workflowOutboxRow(graph.outbox)
-    };
-  }
-
-  recordCoordinatorWorkflowMission(input) {
-    const source = assertPlainObject(input, 'coordinator workflow mission');
-    assertOnlyKeys(source, new Set(['runId', 'missionId', 'missionHash', 'contract', 'ownerRevision']), 'coordinator workflow mission', 'COORDINATOR_WORKFLOW_INVALID');
-    const runId = this._workflowRunId(source.runId);
-    const missionId = this._workflowIdentifier(source.missionId, 'missionId');
-    const missionHash = this._workflowHash(source.missionHash, 'missionHash');
-    const ownerRevision = assertInteger(source.ownerRevision, 'ownerRevision', { min: 1 });
-    const contractJson = this._workflowJson(assertPlainObject(source.contract, 'contract'), 'contract', 64 * 1024);
-    const contractHash = hashText(contractJson);
-    if (!equalHash(missionHash, contractHash)) {
-      throw stateError('COORDINATOR_WORKFLOW_MISSION_HASH_MISMATCH', 'The workflow mission hash does not match its canonical contract.', { runId, missionId });
-    }
-    return this.transaction(db => {
-      const now = this._now();
-      const ownerMission = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId);
-      if (!ownerMission) throw stateError('COORDINATOR_WORKFLOW_RUN_NOT_FOUND', 'The durable run has no durable owner mission.', { runId });
-      if (ownerMission.owner_revision !== ownerRevision) {
-        throw stateError('COORDINATOR_WORKFLOW_OWNER_REVISION_CONFLICT', 'The owner mission revision changed before the workflow contract was recorded.', { runId, expectedOwnerRevision: ownerRevision, actualOwnerRevision: ownerMission.owner_revision });
-      }
-      const task = db.prepare('SELECT id, status FROM tasks WHERE id = ?').get(ownerMission.task_id);
-      if (!task || ['succeeded', 'failed', 'uncertain', 'cancelled'].includes(task.status)) {
-        throw stateError('COORDINATOR_WORKFLOW_TASK_NOT_ACTIVE', 'An authoritative workflow contract cannot be attached to a terminal coordinator task.', { runId, status: task && task.status });
-      }
-      const existing = db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId);
-      if (existing) {
-        if (existing.task_id !== ownerMission.task_id || existing.mission_id !== missionId || !equalHash(existing.mission_hash, missionHash) ||
-            !equalHash(existing.contract_hash, contractHash) || existing.owner_revision !== ownerRevision) {
-          throw stateError('COORDINATOR_WORKFLOW_MISSION_CONFLICT', 'The workflow mission identifier was already recorded with different canonical content.', { runId, missionId });
-        }
-        return { replayed: true, mission: this._workflowMissionRow(existing) };
-      }
-      db.prepare(`INSERT INTO coordinator_workflow_missions(run_id, task_id, mission_id, mission_hash, contract_json, contract_hash, owner_revision, created_at_ms, updated_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(runId, ownerMission.task_id, missionId, missionHash, contractJson, contractHash, ownerRevision, now, now);
-      return { replayed: false, mission: this._workflowMissionRow(db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId)) };
-    });
-  }
-
-  getCoordinatorWorkflowMission(input) {
-    const source = assertPlainObject(input, 'coordinator workflow mission selector');
-    const runId = this._workflowRunId(source.runId);
-    return this._read(db => this._workflowMissionRow(db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId)));
-  }
-
-  recordCoordinatorBrokerVerification(input) {
-    const source = assertPlainObject(input, 'coordinator broker verification');
-    assertOnlyKeys(source, new Set(['runId', 'executionRole', 'executionId', 'record', 'ownerRevision']), 'coordinator broker verification', 'COORDINATOR_WORKFLOW_INVALID');
-    const runId = this._workflowRunId(source.runId);
-    const executionRole = assertString(source.executionRole, 'executionRole', { min: 8, max: 9, pattern: /^(?:baseline|candidate)$/ });
-    const executionId = this._workflowIdentifier(source.executionId, 'executionId');
-    const ownerRevision = assertInteger(source.ownerRevision, 'ownerRevision', { min: 1 });
-    const record = assertPlainObject(source.record, 'record');
-    if (record.runId !== runId || record.executionRole !== executionRole || record.executionId !== executionId) {
-      throw stateError('COORDINATOR_BROKER_VERIFICATION_MISMATCH', 'The broker verification body does not match its durable run, role, and execution identifier.', { runId, executionRole, executionId });
-    }
-    const recordJson = this._workflowJson(record, 'record', 256 * 1024);
-    const recordHash = hashText(recordJson);
-    return this.transaction(db => {
-      const workflow = db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId);
-      const ownerMission = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId);
-      const task = workflow && db.prepare('SELECT id, status FROM tasks WHERE id = ?').get(workflow.task_id);
-      if (!workflow || !ownerMission || !task) throw stateError('COORDINATOR_WORKFLOW_MISSION_NOT_FOUND', 'The workflow mission was not found.', { runId });
-      if (record.missionId !== workflow.mission_id || !equalHash(record.missionHash, workflow.mission_hash)) {
-        throw stateError('COORDINATOR_BROKER_VERIFICATION_MISMATCH', 'The broker verification body is not bound to the persisted workflow mission.', { runId });
-      }
-      if (workflow.owner_revision !== ownerRevision || ownerMission.owner_revision !== ownerRevision) {
-        throw stateError('COORDINATOR_WORKFLOW_OWNER_REVISION_CONFLICT', 'The owner mission changed before broker verification could be recorded.', { runId, expectedOwnerRevision: ownerRevision, actualOwnerRevision: ownerMission.owner_revision });
-      }
-      const existing = db.prepare('SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = ?').get(runId, executionRole);
-      if (existing) {
-        if (existing.execution_id !== executionId || !equalHash(existing.record_hash, recordHash) || existing.owner_revision !== ownerRevision) {
-          throw stateError('COORDINATOR_BROKER_VERIFICATION_CONFLICT', 'The broker verification role was already recorded with different canonical content.', { runId, executionRole, executionId });
-        }
-        return { replayed: true, verification: this._workflowVerificationRow(existing) };
-      }
-      if (task.status !== 'running') throw stateError('COORDINATOR_WORKFLOW_TASK_NOT_RUNNING', 'Broker verification requires the current coordinator task to be running.', { runId, status: task.status });
-      const duplicateExecution = db.prepare('SELECT execution_role FROM coordinator_broker_verifications WHERE run_id = ? AND execution_id = ?').get(runId, executionId);
-      if (duplicateExecution) throw stateError('COORDINATOR_BROKER_EXECUTION_CONFLICT', 'A broker execution id may not serve more than one baseline/candidate role.', { runId, executionId });
-      const now = this._now();
-      db.prepare(`INSERT INTO coordinator_broker_verifications(run_id, execution_role, execution_id, record_json, record_hash, owner_revision, created_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?)`).run(runId, executionRole, executionId, recordJson, recordHash, ownerRevision, now);
-      return { replayed: false, verification: this._workflowVerificationRow(db.prepare('SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = ?').get(runId, executionRole)) };
-    });
-  }
-
-  getCoordinatorBrokerVerifications(input) {
-    const source = assertPlainObject(input, 'coordinator broker verification selector');
-    const runId = this._workflowRunId(source.runId);
-    return this._read(db => db.prepare(`SELECT * FROM coordinator_broker_verifications
-      WHERE run_id = ? ORDER BY CASE execution_role WHEN 'baseline' THEN 0 ELSE 1 END`).all(runId).map(row => this._workflowVerificationRow(row)));
-  }
-
-  completeCoordinatorWorkflowAcceptance(input) {
-    const source = assertPlainObject(input, 'coordinator workflow acceptance');
-    assertOnlyKeys(source, new Set(['runId', 'handle', 'missionId', 'missionHash', 'ownerRevision', 'acceptance', 'event', 'outbox', 'result']), 'coordinator workflow acceptance', 'COORDINATOR_WORKFLOW_INVALID');
-    const runId = this._workflowRunId(source.runId);
-    const claim = this._validateTaskHandle(source.handle);
-    const missionId = this._workflowIdentifier(source.missionId, 'missionId');
-    const missionHash = this._workflowHash(source.missionHash, 'missionHash');
-    const ownerRevision = assertInteger(source.ownerRevision, 'ownerRevision', { min: 1 });
-    const acceptance = assertPlainObject(source.acceptance, 'acceptance');
-    const baselineRecordHash = this._workflowHash(acceptance.baselineRecordHash, 'acceptance.baselineRecordHash');
-    const candidateRecordHash = this._workflowHash(acceptance.candidateRecordHash, 'acceptance.candidateRecordHash');
-    const acceptanceJson = this._workflowJson(acceptance, 'acceptance', 512 * 1024);
-    const acceptanceHash = hashText(acceptanceJson);
-    const event = assertPlainObject(source.event, 'event');
-    const eventId = this._workflowIdentifier(event.eventId, 'event.eventId');
-    const eventJson = this._workflowJson(event, 'event', 256 * 1024);
-    const eventHash = hashText(eventJson);
-    const outbox = assertPlainObject(source.outbox, 'outbox');
-    const outboxId = this._workflowIdentifier(outbox.outboxId, 'outbox.outboxId');
-    if (!outbox.event || outbox.event.eventId !== eventId || outbox.eventHash !== eventHash) {
-      throw stateError('COORDINATOR_WORKFLOW_OUTBOX_MISMATCH', 'The terminal outbox must bind exactly the terminal event identifier and hash.', { runId });
-    }
-    if (acceptance.status !== 'ACCEPTED' || acceptance.missionId !== missionId || !equalHash(acceptance.missionHash, missionHash) ||
-        !acceptance.event || acceptance.event.eventId !== eventId || !acceptance.manifest || !Array.isArray(acceptance.manifest.checks)) {
-      throw stateError('COORDINATOR_WORKFLOW_ACCEPTANCE_MISMATCH', 'The terminal acceptance body is not semantically bound to its mission, manifest, and terminal event.', { runId });
-    }
-    const result = this._taskResult(assertPlainObject(source.result, 'result'));
-    const resultJson = boundedTaskJson(result, 'result', MAX_JSON_BYTES, 'TASK_RESULT_TOO_LARGE');
-    const resultHash = hashText(resultJson);
-    const outcomeHash = hashInput({ disposition: 'succeeded', result });
-    return this.transaction(db => {
-      const now = this._now();
-      const workflow = db.prepare('SELECT * FROM coordinator_workflow_missions WHERE run_id = ?').get(runId);
-      const ownerMission = db.prepare('SELECT * FROM coordinator_missions WHERE run_id = ?').get(runId);
-      if (!workflow || !ownerMission || workflow.task_id !== claim.taskId || workflow.mission_id !== missionId ||
-          !equalHash(workflow.mission_hash, missionHash) || workflow.owner_revision !== ownerRevision || ownerMission.owner_revision !== ownerRevision) {
-        throw stateError('COORDINATOR_WORKFLOW_ACCEPTANCE_STALE', 'The workflow mission or owner revision changed before acceptance could commit.', { runId });
-      }
-      const baseline = db.prepare("SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = 'baseline'").get(runId);
-      const candidate = db.prepare("SELECT * FROM coordinator_broker_verifications WHERE run_id = ? AND execution_role = 'candidate'").get(runId);
-      if (!baseline || !candidate || !equalHash(baseline.record_hash, baselineRecordHash) || !equalHash(candidate.record_hash, candidateRecordHash) ||
-          baseline.owner_revision !== ownerRevision || candidate.owner_revision !== ownerRevision) {
-        throw stateError('COORDINATOR_WORKFLOW_VERIFICATION_STALE', 'Acceptance requires the exact persisted baseline and candidate broker records.', { runId });
-      }
-      const prior = db.prepare('SELECT * FROM coordinator_workflow_acceptances WHERE run_id = ?').get(runId);
-      if (prior) {
-        return this._replayCoordinatorWorkflowAcceptance(db, {
-          runId,
-          claim,
-          expected: {
-            missionId,
-            missionHash,
-            ownerRevision,
-            baselineRecordHash,
-            candidateRecordHash,
-            acceptanceHash,
-            resultHash,
-            eventId,
-            eventHash,
-            outboxId
-          }
-        });
-      }
-      const current = this._currentTaskClaim(db, claim, now, ['running']);
-      if (current.task.cancel_requested_at_ms !== null) {
-        throw stateError('TASK_CANCEL_REQUESTED', 'Cancellation was requested before workflow acceptance could be recorded.', { taskId: claim.taskId });
-      }
-      const eventCollision = db.prepare('SELECT * FROM coordinator_workflow_events WHERE event_id = ?').get(eventId);
-      if (eventCollision) throw stateError('COORDINATOR_WORKFLOW_EVENT_CONFLICT', 'The terminal event id is already bound to another event.', { eventId });
-      const outboxCollision = db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE outbox_id = ?').get(outboxId);
-      if (outboxCollision) throw stateError('COORDINATOR_WORKFLOW_OUTBOX_CONFLICT', 'The terminal outbox id is already bound to another event.', { outboxId });
-      const attemptChanged = db.prepare(`UPDATE task_attempts SET status = 'succeeded', updated_at_ms = ?, ended_at_ms = ?, outcome_hash = ?,
-        error_code = NULL, error_message = NULL WHERE task_id = ? AND fence = ? AND status = 'running'`).run(
-        now, now, outcomeHash, claim.taskId, claim.fence
-      );
-      if (attemptChanged.changes !== 1) throw stateError('TASK_FENCE_LOST', 'The task attempt changed before workflow acceptance could commit.', { taskId: claim.taskId, fence: claim.fence });
-      const taskChanged = db.prepare(`UPDATE tasks SET status = 'succeeded', result_json = ?, result_hash = ?, error_code = NULL,
-        error_message = NULL, lease_worker_label = NULL, lease_token_hash = NULL, lease_expires_at_ms = NULL,
-        completed_at_ms = ?, updated_at_ms = ? WHERE id = ? AND fence = ? AND status = 'running'`).run(
-        resultJson, resultHash, now, now, claim.taskId, claim.fence
-      );
-      if (taskChanged.changes !== 1) throw stateError('TASK_FENCE_LOST', 'The task changed before workflow acceptance could commit.', { taskId: claim.taskId, fence: claim.fence });
-      db.prepare(`INSERT INTO coordinator_workflow_events(event_id, run_id, mission_id, event_hash, event_json, occurred_at_ms, created_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?)`).run(eventId, runId, missionId, eventHash, eventJson, now, now);
-      db.prepare(`INSERT INTO coordinator_workflow_outbox(outbox_id, run_id, event_id, event_hash, event_json, status, fence,
-        lease_worker_label, lease_token_hash, lease_expires_at_ms, created_at_ms, updated_at_ms, delivered_at_ms)
-        VALUES(?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, NULL, ?, ?, NULL)`).run(outboxId, runId, eventId, eventHash, eventJson, now, now);
-      db.prepare(`INSERT INTO coordinator_workflow_acceptances(run_id, task_id, mission_id, mission_hash, owner_revision,
-        acceptance_json, acceptance_hash, result_hash, event_id, accepted_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        runId, claim.taskId, missionId, missionHash, ownerRevision, acceptanceJson, acceptanceHash, resultHash, eventId, now
-      );
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(claim.taskId);
-      const acceptanceRow = db.prepare('SELECT * FROM coordinator_workflow_acceptances WHERE run_id = ?').get(runId);
-      const eventRow = db.prepare('SELECT * FROM coordinator_workflow_events WHERE event_id = ?').get(eventId);
-      const outboxRow = db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE outbox_id = ?').get(outboxId);
-      return {
-        replayed: false,
-        task: this._taskRow(task),
-        acceptance: this._workflowAcceptanceRow(acceptanceRow),
-        outbox: this._workflowOutboxRow(outboxRow)
-      };
-    });
-  }
-
-  getCoordinatorWorkflowAcceptance(input) {
-    const source = assertPlainObject(input, 'coordinator workflow acceptance selector');
-    const runId = this._workflowRunId(source.runId);
-    return this._read(db => this._workflowAcceptanceRow(db.prepare('SELECT * FROM coordinator_workflow_acceptances WHERE run_id = ?').get(runId)));
-  }
-
-  replayCoordinatorWorkflowAcceptance(input) {
-    const source = assertPlainObject(input, 'coordinator workflow acceptance replay');
-    assertOnlyKeys(source, new Set(['runId', 'handle']), 'coordinator workflow acceptance replay', 'COORDINATOR_WORKFLOW_INVALID');
-    const runId = this._workflowRunId(source.runId);
-    const claim = this._validateTaskHandle(source.handle);
-    return this.transaction(db => this._replayCoordinatorWorkflowAcceptance(db, { runId, claim }));
-  }
-
-  leaseCoordinatorWorkflowOutbox(input) {
-    const source = assertPlainObject(input, 'coordinator workflow outbox lease');
-    assertOnlyKeys(source, new Set(['runId', 'workerLabel', 'leaseMs']), 'coordinator workflow outbox lease', 'COORDINATOR_WORKFLOW_INVALID');
-    const runId = this._workflowRunId(source.runId);
-    const workerLabel = assertString(source.workerLabel, 'workerLabel', { min: 3, max: 100, pattern: /^[A-Za-z0-9][A-Za-z0-9._:@-]{2,99}$/ });
-    const leaseMs = this._leaseMs(source.leaseMs === undefined ? DEFAULT_TASK_LEASE_MS : source.leaseMs, 'leaseMs');
-    return this.transaction(db => {
-      const now = this._now();
-      const row = db.prepare(`SELECT * FROM coordinator_workflow_outbox WHERE run_id = ?
-        AND (status = 'pending' OR (status = 'leased' AND lease_expires_at_ms <= ?))
-        ORDER BY created_at_ms, outbox_id LIMIT 1`).get(runId, now);
-      if (!row) return null;
-      const token = this._newId('workflow-outbox');
-      const fence = row.fence + 1;
-      const expiresAtMs = now + leaseMs;
-      const changed = db.prepare(`UPDATE coordinator_workflow_outbox SET status = 'leased', fence = ?, lease_worker_label = ?, lease_token_hash = ?,
-        lease_expires_at_ms = ?, updated_at_ms = ? WHERE outbox_id = ? AND fence = ?
-        AND (status = 'pending' OR (status = 'leased' AND lease_expires_at_ms <= ?))`).run(
-        fence, workerLabel, hashText(token), expiresAtMs, now, row.outbox_id, row.fence, now
-      );
-      if (changed.changes !== 1) throw stateError('COORDINATOR_OUTBOX_FENCE_LOST', 'The workflow outbox changed before it could be leased.', { outboxId: row.outbox_id });
-      const leased = db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE outbox_id = ?').get(row.outbox_id);
-      return { outbox: this._workflowOutboxRow(leased), handle: { outboxId: row.outbox_id, workerLabel, token, fence, expiresAtMs } };
-    });
-  }
-
-  deliverCoordinatorWorkflowOutbox(input) {
-    const source = assertPlainObject(input, 'coordinator workflow outbox delivery');
-    assertOnlyKeys(source, new Set(['handle']), 'coordinator workflow outbox delivery', 'COORDINATOR_WORKFLOW_INVALID');
-    const handle = assertPlainObject(source.handle, 'handle');
-    const outboxId = this._workflowIdentifier(handle.outboxId, 'handle.outboxId');
-    const workerLabel = assertString(handle.workerLabel, 'handle.workerLabel', { min: 3, max: 100, pattern: /^[A-Za-z0-9][A-Za-z0-9._:@-]{2,99}$/ });
-    const token = assertString(handle.token, 'handle.token', { min: 1, max: 500 });
-    const fence = assertInteger(handle.fence, 'handle.fence', { min: 1 });
-    return this.transaction(db => {
-      const now = this._now();
-      const row = db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE outbox_id = ?').get(outboxId);
-      if (!row) throw stateError('COORDINATOR_OUTBOX_NOT_FOUND', 'The workflow outbox item was not found.', { outboxId });
-      if (row.status === 'delivered' && row.fence === fence) return { replayed: true, outbox: this._workflowOutboxRow(row) };
-      if (row.status !== 'leased' || row.fence !== fence || row.lease_worker_label !== workerLabel ||
-          !equalHash(row.lease_token_hash, hashText(token)) || row.lease_expires_at_ms <= now) {
-        throw stateError('COORDINATOR_OUTBOX_FENCE_LOST', 'The workflow outbox lease is stale, expired, or does not own delivery.', { outboxId, fence });
-      }
-      const changed = db.prepare(`UPDATE coordinator_workflow_outbox SET status = 'delivered', lease_worker_label = NULL, lease_token_hash = NULL,
-        lease_expires_at_ms = NULL, delivered_at_ms = ?, updated_at_ms = ? WHERE outbox_id = ? AND status = 'leased'
-        AND fence = ? AND lease_worker_label = ? AND lease_token_hash = ? AND lease_expires_at_ms > ?`).run(
-        now, now, outboxId, fence, workerLabel, hashText(token), now
-      );
-      if (changed.changes !== 1) throw stateError('COORDINATOR_OUTBOX_FENCE_LOST', 'The workflow outbox changed before delivery could commit.', { outboxId, fence });
-      return { replayed: false, outbox: this._workflowOutboxRow(db.prepare('SELECT * FROM coordinator_workflow_outbox WHERE outbox_id = ?').get(outboxId)) };
-    });
-  }
-
   listTasks(options = {}) {
     const source = assertPlainObject(options, 'options');
     if (source.status !== undefined && source.statuses !== undefined) {
@@ -5608,1080 +4181,6 @@ class StateStore {
     values.push(limit);
     return this._read(db => db.prepare(`SELECT * FROM tasks ${where} ORDER BY updated_at_ms DESC, id DESC LIMIT ?`).all(...values)
       .map(row => this._taskRow(row, { includePayload: false, includeCheckpoint: false, includeResult: false, includeError: false, now })));
-  }
-
-  _schedulerInput(input) {
-    const source = assertPlainObject(input, 'scheduler job');
-    const name = assertString(source.name, 'name', { max: 80, pattern: /^[A-Za-z0-9_.-]{1,80}$/ });
-    const schedule = source.schedule;
-    if (!['daily', 'hourly', 'minutes'].includes(schedule)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'schedule must be daily, hourly, or minutes.', { field: 'schedule' });
-    }
-    const intervalMinutes = schedule === 'minutes'
-      ? assertInteger(source.intervalMinutes, 'intervalMinutes', { min: 1, max: 1439 }) : null;
-    if (schedule !== 'minutes' && source.intervalMinutes !== undefined && source.intervalMinutes !== null) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'intervalMinutes is valid only for a minutes schedule.', { field: 'intervalMinutes' });
-    }
-    const action = assertString(source.action, 'action', { max: 100 });
-    if (!SUPPORTED_SCHEDULED_ACTIONS.includes(action)) {
-      throw stateError('SCHEDULER_ACTION_UNSUPPORTED', `Scheduled action '${action}' is not supported.`, { action });
-    }
-    const args = source.args === undefined ? {} : assertPlainObject(source.args, 'args');
-    assertNoPlaintextSchedulerSecrets(args, 'args');
-    const argsJson = boundedTaskJson(args, 'scheduler args', 256 * 1024, 'SCHEDULER_ARGS_TOO_LARGE');
-    const runtime = assertPlainObject(source.runtime, 'runtime');
-    const nodePath = assertString(runtime.nodePath, 'runtime.nodePath', { max: 4096 });
-    const runnerPath = assertString(runtime.runnerPath, 'runtime.runnerPath', { max: 4096 });
-    const principalId = assertString(runtime.principalId, 'runtime.principalId', {
-      max: 256, pattern: /^S-\d-(?:\d+-){1,14}\d+$/i
-    });
-    if (!path.isAbsolute(nodePath) || !path.isAbsolute(runnerPath)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'Scheduler runtime paths must be absolute.', { field: 'runtime' });
-    }
-    const normalizedNodePath = path.resolve(nodePath);
-    const normalizedRunnerPath = path.resolve(runnerPath);
-    const maxScheduledJobs = assertInteger(source.maxScheduledJobs === undefined ? 50 : source.maxScheduledJobs,
-      'maxScheduledJobs', { min: 1, max: 10000 });
-    const spec = { schedule, intervalMinutes, action, args, nodePath: normalizedNodePath, runnerPath: normalizedRunnerPath, principalId };
-    return {
-      name, schedule, intervalMinutes, action, args, argsJson,
-      argsHash: hashText(argsJson), specHash: hashInput(spec), nodePath: normalizedNodePath, runnerPath: normalizedRunnerPath,
-      maxScheduledJobs, principalId
-    };
-  }
-
-  _schedulerOutboxId(jobId, generation, operation) {
-    return `scheduler-${operation}-${hashText(`${jobId}:${generation}`).slice(0, 48)}`;
-  }
-
-  _schedulerTaskSpec(installationId, jobId, generation, values) {
-    const taskName = `\\ToolsEnabled-v2-${installationId.slice(0, 12)}-${hashText(jobId).slice(0, 16)}-g${generation}`;
-    const ownershipMarker = hashInput({
-      domain: 'toolsenabled.scheduler.registration.v1', installationId, jobId, generation,
-      taskName, specHash: values.specHash, nodePath: values.nodePath, runnerPath: values.runnerPath, principalId: values.principalId
-    });
-    const spec = {
-      version: 1, installationId, jobId, generation, taskName, ownershipMarker,
-      nodePath: values.nodePath, runnerPath: values.runnerPath, principalId: values.principalId,
-      schedule: values.schedule, intervalMinutes: values.intervalMinutes,
-      action: values.action, args: values.args, desiredSpecHash: values.specHash
-    };
-    return { taskName, ownershipMarker, spec, specJson: canonicalJson(spec), specHash: hashInput(spec) };
-  }
-
-  _schedulerJobRow(row) {
-    if (!row) return null;
-    let args;
-    try {
-      args = parseJson(row.args_json, 'scheduler args');
-      assertPlainObject(args, 'scheduler args');
-      if (canonicalJson(args) !== row.args_json || !equalHash(hashText(row.args_json), row.args_hash)
-        || !SUPPORTED_SCHEDULED_ACTIONS.includes(row.action)) throw new Error('job definition mismatch');
-      assertNoPlaintextSchedulerSecrets(args, 'scheduler args');
-    } catch (error) {
-      throw stateError('SCHEDULER_JOB_CORRUPT', 'A scheduler job failed canonical integrity validation.', { jobId: row.id }, error);
-    }
-    return {
-      jobId: row.id, name: row.name, generation: row.generation, activeGeneration: row.active_generation,
-      schedule: row.schedule, intervalMinutes: row.interval_minutes,
-      action: row.action, args, specHash: row.spec_hash,
-      desiredState: row.desired_state, providerState: row.provider_state,
-      providerError: row.provider_error_code ? { code: row.provider_error_code, message: row.provider_error_message } : null,
-      createdAtMs: row.created_at_ms, createdAt: iso(row.created_at_ms),
-      updatedAtMs: row.updated_at_ms, updatedAt: iso(row.updated_at_ms),
-      removedAtMs: row.removed_at_ms, removedAt: row.removed_at_ms === null ? null : iso(row.removed_at_ms),
-      lastRunAtMs: row.last_run_at_ms, lastRunAt: row.last_run_at_ms === null ? null : iso(row.last_run_at_ms),
-      lastResult: row.last_result_json === null ? null : parseJson(row.last_result_json, 'scheduler last result')
-    };
-  }
-
-  _schedulerRegistrationRow(row, expectedInstallationId = null, expectedJob = null) {
-    if (!row) return null;
-    let spec;
-    try {
-      spec = parseJson(row.spec_json, 'scheduler registration spec');
-      assertPlainObject(spec, 'scheduler registration spec');
-      const canonical = canonicalJson(spec);
-      if (canonical !== row.spec_json || !equalHash(hashText(row.spec_json), row.spec_hash)) throw new Error('canonical hash mismatch');
-      if (spec.version !== 1 || (expectedInstallationId !== null && spec.installationId !== expectedInstallationId)
-        || spec.jobId !== row.job_id || spec.generation !== row.generation
-        || spec.taskName !== row.task_name || spec.ownershipMarker !== row.ownership_marker
-        || !/^[a-f0-9]{32}$/.test(spec.installationId || '') || !/^scheduler-job-[A-Za-z0-9-]{1,180}$/.test(spec.jobId || '')
-        || !/^[a-f0-9]{64}$/.test(spec.ownershipMarker || '')) {
-        throw new Error('row binding mismatch');
-      }
-      const expectedTaskName = `\\ToolsEnabled-v2-${spec.installationId.slice(0, 12)}-${hashText(row.job_id).slice(0, 16)}-g${row.generation}`;
-      if (row.task_name !== expectedTaskName || !path.isAbsolute(spec.nodePath || '') || !path.isAbsolute(spec.runnerPath || '')
-        || /["\0\r\n]/.test(spec.nodePath) || /["\0\r\n]/.test(spec.runnerPath)
-        || !['daily', 'hourly', 'minutes'].includes(spec.schedule)
-        || (spec.schedule === 'minutes' && (!Number.isSafeInteger(spec.intervalMinutes) || spec.intervalMinutes < 1 || spec.intervalMinutes > 1439))
-        || (spec.schedule !== 'minutes' && spec.intervalMinutes !== null && spec.intervalMinutes !== undefined)) {
-        throw new Error('runtime or schedule mismatch');
-      }
-      const principalBound = typeof spec.principalId === 'string' && /^S-\d-(?:\d+-){1,14}\d+$/i.test(spec.principalId);
-      const executable = spec.action !== undefined || spec.args !== undefined || spec.desiredSpecHash !== undefined;
-      const migrationDeletionOnly = ['principal-refresh', 'action-refresh'].includes(spec.migrationDeletionOnly);
-      if (spec.migrationDeletionOnly !== undefined && !migrationDeletionOnly) throw new Error('invalid migration deletion marker');
-      if (row.desired_state === 'present' && migrationDeletionOnly) throw new Error('executable registration has a deletion-only migration marker');
-      if (row.desired_state === 'present' || executable) {
-        if (!principalBound || !SUPPORTED_SCHEDULED_ACTIONS.includes(spec.action) || !spec.args
-          || typeof spec.args !== 'object' || Array.isArray(spec.args) || !/^[a-f0-9]{64}$/.test(spec.desiredSpecHash || '')) {
-          throw new Error('executable definition mismatch');
-        }
-        assertNoPlaintextSchedulerSecrets(spec.args, 'scheduler registration args');
-        const desiredHash = hashInput({
-          schedule: spec.schedule, intervalMinutes: spec.intervalMinutes, action: spec.action, args: spec.args,
-          nodePath: path.resolve(spec.nodePath), runnerPath: path.resolve(spec.runnerPath), principalId: spec.principalId
-        });
-        if (!equalHash(desiredHash, spec.desiredSpecHash)) throw new Error('desired definition hash mismatch');
-        const marker = hashInput({
-          domain: 'toolsenabled.scheduler.registration.v1', installationId: spec.installationId,
-          jobId: spec.jobId, generation: spec.generation, taskName: spec.taskName,
-          specHash: spec.desiredSpecHash, nodePath: path.resolve(spec.nodePath), runnerPath: path.resolve(spec.runnerPath),
-          principalId: spec.principalId
-        });
-        if (!equalHash(marker, spec.ownershipMarker)) throw new Error('ownership marker mismatch');
-      }
-      // The immutable registration is self-authenticating, but the current
-      // desired generation must also be bound to the mutable job pointer. A
-      // corrupt registration must not be able to select a different supported
-      // action merely by recomputing all of its own hashes. Historical
-      // generations intentionally remain self-contained because the job row
-      // advances before an older active generation is retired.
-      if (expectedJob !== null) {
-        if (expectedJob.jobId !== row.job_id) throw new Error('job identity mismatch');
-        const migrationRefreshRequired = row.generation === expectedJob.generation
-          && expectedJob.desiredState === 'present' && row.desired_state === 'absent'
-          && expectedJob.activeGeneration === null && migrationDeletionOnly && !executable;
-        if (row.generation === expectedJob.generation && row.desired_state !== expectedJob.desiredState && !migrationRefreshRequired) {
-          throw new Error('current registration desired state does not match job desired state');
-        }
-        if (row.generation !== expectedJob.generation && row.desired_state === 'present'
-          && row.generation !== expectedJob.activeGeneration) {
-          throw new Error('non-current registration is unexpectedly desired');
-        }
-        if (row.generation === expectedJob.generation && row.desired_state === 'present') {
-          if (!equalHash(spec.desiredSpecHash, expectedJob.specHash)
-            || spec.schedule !== expectedJob.schedule
-            || (spec.intervalMinutes ?? null) !== (expectedJob.intervalMinutes ?? null)
-            || spec.action !== expectedJob.action
-            || canonicalJson(spec.args) !== canonicalJson(expectedJob.args)) {
-            throw new Error('current desired registration does not match job definition');
-          }
-        }
-      }
-    } catch (error) {
-      throw stateError('SCHEDULER_REGISTRATION_CORRUPT', 'A scheduler registration failed canonical integrity or identity validation.', {
-        jobId: row.job_id, generation: row.generation
-      }, error);
-    }
-    return {
-      jobId: row.job_id, generation: row.generation, taskName: row.task_name,
-      ownershipMarker: row.ownership_marker, spec, specHash: row.spec_hash,
-      action: spec.action, args: spec.args,
-      desiredState: row.desired_state, observedState: row.observed_state,
-      error: row.error_code ? { code: row.error_code, message: row.error_message } : null,
-      observedAtMs: row.observed_at_ms, createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  _schedulerOutboxRow(row) {
-    if (!row) return null;
-    const expectedId = this._schedulerOutboxId(row.job_id, row.generation, row.operation);
-    if (row.id !== expectedId) {
-      throw stateError('SCHEDULER_OUTBOX_CORRUPT', 'A scheduler outbox row failed deterministic identity validation.', {
-        outboxId: row.id, jobId: row.job_id, generation: row.generation
-      });
-    }
-    return {
-      outboxId: row.id, jobId: row.job_id, generation: row.generation, operation: row.operation,
-      status: row.status, attempt: row.attempt, fence: row.fence,
-      availableAtMs: row.available_at_ms, leaseExpiresAtMs: row.lease_expires_at_ms,
-      error: row.error_code ? { code: row.error_code, message: row.error_message } : null,
-      createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms, completedAtMs: row.completed_at_ms
-    };
-  }
-
-  _validateSchedulerOutboxIntegrity(db, jobId = null) {
-    const missingCurrent = jobId === null
-      ? db.prepare(`SELECT j.id, j.generation FROM scheduler_jobs j
-          LEFT JOIN scheduler_registrations r ON r.job_id = j.id AND r.generation = j.generation
-          WHERE r.job_id IS NULL ORDER BY j.id LIMIT 1`).get()
-      : db.prepare(`SELECT j.id, j.generation FROM scheduler_jobs j
-          LEFT JOIN scheduler_registrations r ON r.job_id = j.id AND r.generation = j.generation
-          WHERE j.id = ? AND r.job_id IS NULL LIMIT 1`).get(jobId);
-    if (missingCurrent) {
-      throw stateError('SCHEDULER_REGISTRATION_CORRUPT', 'A scheduler job is missing its current desired registration.', {
-        jobId: missingCurrent.id, generation: missingCurrent.generation
-      });
-    }
-    const outboxRows = jobId === null
-      ? db.prepare(`SELECT o.*, r.desired_state AS registration_desired_state
-          FROM scheduler_outbox o JOIN scheduler_registrations r
-            ON r.job_id = o.job_id AND r.generation = o.generation
-          ORDER BY o.job_id, o.generation, o.operation`).all()
-      : db.prepare(`SELECT o.*, r.desired_state AS registration_desired_state
-          FROM scheduler_outbox o JOIN scheduler_registrations r
-            ON r.job_id = o.job_id AND r.generation = o.generation
-          WHERE o.job_id = ? ORDER BY o.generation, o.operation`).all(jobId);
-    for (const row of outboxRows) {
-      this._schedulerOutboxRow(row);
-      const desiredOperation = row.registration_desired_state === 'present' ? 'ensure' : 'delete';
-      if (['pending', 'retryable_failed', 'uncertain'].includes(row.status) && row.operation !== desiredOperation) {
-        throw stateError('SCHEDULER_OUTBOX_CORRUPT', 'An actionable scheduler outbox operation contradicts registration desired state.', {
-          outboxId: row.id, jobId: row.job_id, generation: row.generation
-        });
-      }
-    }
-    const missingDesired = jobId === null
-      ? db.prepare(`SELECT r.job_id, r.generation, r.desired_state FROM scheduler_registrations r
-          LEFT JOIN scheduler_outbox o ON o.job_id = r.job_id AND o.generation = r.generation
-            AND o.operation = CASE r.desired_state WHEN 'present' THEN 'ensure' ELSE 'delete' END
-          WHERE o.id IS NULL ORDER BY r.job_id, r.generation LIMIT 1`).get()
-      : db.prepare(`SELECT r.job_id, r.generation, r.desired_state FROM scheduler_registrations r
-          LEFT JOIN scheduler_outbox o ON o.job_id = r.job_id AND o.generation = r.generation
-            AND o.operation = CASE r.desired_state WHEN 'present' THEN 'ensure' ELSE 'delete' END
-          WHERE r.job_id = ? AND o.id IS NULL ORDER BY r.generation LIMIT 1`).get(jobId);
-    if (missingDesired) {
-      throw stateError('SCHEDULER_OUTBOX_CORRUPT', 'A scheduler registration is missing its desired operation outbox row.', {
-        jobId: missingDesired.job_id, generation: missingDesired.generation, desiredState: missingDesired.desired_state
-      });
-    }
-    return true;
-  }
-
-  _refreshSchedulerProviderState(db, jobId, now) {
-    const job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(jobId);
-    if (!job) return null;
-    const terminal = db.prepare(`SELECT o.error_code, o.error_message FROM scheduler_outbox o
-      JOIN scheduler_registrations r ON r.job_id = o.job_id AND r.generation = o.generation
-      WHERE o.job_id = ? AND o.status = 'error'
-        AND ((r.desired_state = 'present' AND o.operation = 'ensure')
-          OR (r.desired_state = 'absent' AND o.operation = 'delete'))
-      ORDER BY o.updated_at_ms DESC, o.id DESC LIMIT 1`).get(jobId);
-    if (terminal) {
-      db.prepare(`UPDATE scheduler_jobs SET provider_state = 'error', provider_error_code = ?, provider_error_message = ?,
-        updated_at_ms = ? WHERE id = ?`).run(terminal.error_code, terminal.error_message, now, jobId);
-      return 'error';
-    }
-    const migrationRefresh = job.desired_state === 'present' && job.active_generation === null
-      ? db.prepare(`SELECT json_extract(spec_json, '$.migrationDeletionOnly') AS reason
-          FROM scheduler_registrations WHERE job_id = ? AND generation = ? AND desired_state = 'absent'`).get(jobId, job.generation)
-      : null;
-    if (migrationRefresh && ['principal-refresh', 'action-refresh'].includes(migrationRefresh.reason)) {
-      const principal = migrationRefresh.reason === 'principal-refresh';
-      db.prepare(`UPDATE scheduler_jobs SET provider_state = 'error', provider_error_code = ?, provider_error_message = ?,
-        updated_at_ms = ? WHERE id = ?`).run(
-        principal ? 'SCHEDULER_PRINCIPAL_REFRESH_REQUIRED' : 'SCHEDULER_ACTION_REFRESH_REQUIRED',
-        principal
-          ? 'This migrated registration must be recreated with an exact Windows principal SID before execution.'
-          : 'This migrated registration must be recreated with its canonical scheduled action before execution.',
-        now, jobId
-      );
-      return 'error';
-    }
-    const uncertain = db.prepare("SELECT 1 AS found FROM scheduler_outbox WHERE job_id = ? AND status = 'uncertain' LIMIT 1").get(jobId);
-    if (uncertain) {
-      db.prepare(`UPDATE scheduler_jobs SET provider_state = 'uncertain', provider_error_code = 'SCHEDULER_OUTCOME_UNCERTAIN',
-        provider_error_message = 'At least one scheduler registration has an unresolved provider outcome.', updated_at_ms = ? WHERE id = ?`).run(now, jobId);
-      return 'uncertain';
-    }
-    if (job.desired_state === 'absent') {
-      const remaining = db.prepare("SELECT 1 AS found FROM scheduler_registrations WHERE job_id = ? AND observed_state <> 'absent' LIMIT 1").get(jobId);
-      const state = remaining ? 'removing' : 'absent';
-      db.prepare(`UPDATE scheduler_jobs SET provider_state = ?, provider_error_code = NULL, provider_error_message = NULL,
-        updated_at_ms = ? WHERE id = ?`).run(state, now, jobId);
-      return state;
-    }
-    const desired = db.prepare('SELECT observed_state FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(jobId, job.generation);
-    const state = job.active_generation === job.generation && desired && desired.observed_state === 'present' ? 'registered' : 'pending';
-    db.prepare(`UPDATE scheduler_jobs SET provider_state = ?, provider_error_code = NULL, provider_error_message = NULL,
-      updated_at_ms = ? WHERE id = ?`).run(state, now, jobId);
-    return state;
-  }
-
-  schedulerInstallation() {
-    return this._read(db => {
-      const row = db.prepare('SELECT * FROM scheduler_installation WHERE singleton = 1').get();
-      if (!row) throw stateError('STATE_SCHEMA_INVALID', 'Scheduler installation identity is missing.');
-      return { installationId: row.installation_id, createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms };
-    });
-  }
-
-  _insertSchedulerOutbox(db, jobId, generation, operation, availableAtMs, now) {
-    const id = this._schedulerOutboxId(jobId, generation, operation);
-    db.prepare(`INSERT INTO scheduler_outbox(id, job_id, generation, operation, status, available_at_ms, created_at_ms, updated_at_ms)
-      VALUES(?, ?, ?, ?, 'pending', ?, ?, ?)
-      ON CONFLICT(job_id, generation, operation) DO NOTHING`).run(id, jobId, generation, operation, availableAtMs, now, now);
-    return id;
-  }
-
-  _wakeSchedulerOutbox(db, jobId, generation, operation, availableAtMs, now, { force = false } = {}) {
-    const id = this._insertSchedulerOutbox(db, jobId, generation, operation, availableAtMs, now);
-    const row = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(id);
-    if (row.status === 'executing') return id;
-    if (!force && row.status === 'succeeded') {
-      const registration = db.prepare('SELECT observed_state FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(jobId, generation);
-      if ((operation === 'delete' && registration && registration.observed_state === 'absent')
-        || (operation === 'ensure' && registration && registration.observed_state === 'present')) return id;
-    }
-    db.prepare(`UPDATE scheduler_outbox SET status = 'pending', available_at_ms = ?, error_code = NULL, error_message = NULL,
-      updated_at_ms = ?, completed_at_ms = NULL WHERE id = ? AND status <> 'executing'`).run(availableAtMs, now, id);
-    return id;
-  }
-
-  _putSchedulerJob(db, values, now) {
-    const installation = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get();
-    if (!installation) throw stateError('STATE_SCHEMA_INVALID', 'Scheduler installation identity is missing.');
-    const prior = db.prepare('SELECT * FROM scheduler_jobs WHERE name = ?').get(values.name);
-    if (prior && prior.desired_state === 'present' && prior.spec_hash === values.specHash) {
-      const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(prior.id, prior.generation);
-      const mappedPrior = this._schedulerJobRow(prior);
-      // Validate the current registration before changing any retry state.
-      if (!registration) {
-        throw stateError('SCHEDULER_REGISTRATION_CORRUPT', 'A scheduler job is missing its current desired registration.', {
-          jobId: prior.id, generation: prior.generation
-        });
-      }
-      const mappedRegistration = this._schedulerRegistrationRow(registration, installation.installation_id, mappedPrior);
-      let outbox = db.prepare("SELECT * FROM scheduler_outbox WHERE job_id = ? AND generation = ? AND operation = 'ensure'").get(prior.id, prior.generation);
-      let requeued = false;
-      if (!outbox) {
-        const other = db.prepare('SELECT id FROM scheduler_outbox WHERE job_id = ? AND generation = ? LIMIT 1').get(prior.id, prior.generation);
-        if (other) {
-          throw stateError('SCHEDULER_OUTBOX_CORRUPT', 'The desired scheduler outbox row is missing while contradictory history remains.', {
-            jobId: prior.id, generation: prior.generation
-          });
-        }
-        const outboxId = this._wakeSchedulerOutbox(db, prior.id, prior.generation, 'ensure', now, now);
-        outbox = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId);
-        db.prepare(`UPDATE scheduler_jobs SET provider_state = 'pending', provider_error_code = NULL,
-          provider_error_message = NULL, updated_at_ms = ? WHERE id = ?`).run(now, prior.id);
-        requeued = true;
-      } else if (outbox.status === 'error') {
-        db.prepare(`UPDATE scheduler_outbox SET status = 'pending', available_at_ms = ?, error_code = NULL, error_message = NULL,
-          updated_at_ms = ?, completed_at_ms = NULL WHERE id = ? AND status = 'error'`).run(now, now, outbox.id);
-        db.prepare(`UPDATE scheduler_jobs SET provider_state = 'pending', provider_error_code = NULL, provider_error_message = NULL,
-          updated_at_ms = ? WHERE id = ?`).run(now, prior.id);
-        outbox = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outbox.id);
-        requeued = true;
-      }
-      return {
-        replayed: true, requeued,
-        job: this._schedulerJobRow(db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(prior.id)),
-        registration: mappedRegistration, outbox: this._schedulerOutboxRow(outbox)
-      };
-    }
-    if (!prior || prior.desired_state !== 'present') {
-      const active = db.prepare("SELECT COUNT(*) AS count FROM scheduler_jobs WHERE desired_state = 'present'").get().count;
-      if (active >= values.maxScheduledJobs) {
-        throw stateError('SCHEDULER_JOB_LIMIT_REACHED', 'The transactional scheduled-job limit has been reached.', {
-          activeJobs: active, maxScheduledJobs: values.maxScheduledJobs
-        });
-      }
-    }
-    const jobId = prior ? prior.id : this._newId('scheduler-job');
-    const generation = prior ? prior.generation + 1 : 1;
-    const registration = this._schedulerTaskSpec(installation.installation_id, jobId, generation, values);
-    if (prior) {
-      if (prior.active_generation === null) {
-        db.prepare(`UPDATE scheduler_registrations SET desired_state = 'absent', updated_at_ms = ?
-          WHERE job_id = ?`).run(now, jobId);
-      } else {
-        db.prepare(`UPDATE scheduler_registrations SET desired_state = CASE WHEN generation = ? THEN 'present' ELSE 'absent' END,
-          updated_at_ms = ? WHERE job_id = ?`).run(prior.active_generation, now, jobId);
-      }
-      db.prepare(`UPDATE scheduler_outbox SET status = 'superseded', completed_at_ms = ?, updated_at_ms = ?,
-        error_code = NULL, error_message = NULL WHERE job_id = ? AND generation <> COALESCE(?, -1) AND operation = 'ensure'
-        AND status IN ('pending','retryable_failed','uncertain','error')`).run(now, now, jobId, prior.active_generation);
-      const obsolete = db.prepare('SELECT generation FROM scheduler_registrations WHERE job_id = ? AND generation <> COALESCE(?, -1)').all(jobId, prior.active_generation);
-      for (const item of obsolete) this._wakeSchedulerOutbox(db, jobId, item.generation, 'delete', now, now);
-      db.prepare(`UPDATE scheduler_jobs SET generation = ?, schedule = ?, interval_minutes = ?, action = ?, args_json = ?,
-        args_hash = ?, spec_hash = ?, desired_state = 'present', provider_state = 'pending', provider_error_code = NULL,
-        provider_error_message = NULL, updated_at_ms = ?, removed_at_ms = NULL WHERE id = ?`).run(
-        generation, values.schedule, values.intervalMinutes, values.action, values.argsJson,
-        values.argsHash, values.specHash, now, jobId
-      );
-    } else {
-      db.prepare(`INSERT INTO scheduler_jobs(id, name, generation, active_generation, schedule, interval_minutes, action, args_json, args_hash,
-        spec_hash, desired_state, provider_state, created_at_ms, updated_at_ms)
-        VALUES(?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'present', 'pending', ?, ?)`).run(
-        jobId, values.name, generation, values.schedule, values.intervalMinutes, values.action,
-        values.argsJson, values.argsHash, values.specHash, now, now
-      );
-    }
-    db.prepare(`INSERT INTO scheduler_registrations(job_id, generation, task_name, ownership_marker, spec_json, spec_hash,
-      desired_state, observed_state, created_at_ms, updated_at_ms)
-      VALUES(?, ?, ?, ?, ?, ?, 'present', 'unknown', ?, ?)`).run(
-      jobId, generation, registration.taskName, registration.ownershipMarker, registration.specJson, registration.specHash, now, now
-    );
-    const outboxId = this._insertSchedulerOutbox(db, jobId, generation, 'ensure', now, now);
-    const mappedJob = this._schedulerJobRow(db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(jobId));
-    return {
-      replayed: false,
-      job: mappedJob,
-      registration: this._schedulerRegistrationRow(db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(jobId, generation), installation.installation_id, mappedJob),
-      outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId))
-    };
-  }
-
-  putSchedulerJob(input) {
-    const values = this._schedulerInput(input);
-    return this.transaction(db => this._putSchedulerJob(db, values, this._now()));
-  }
-
-  removeSchedulerJob(input) {
-    const source = assertPlainObject(input, 'scheduler removal');
-    const name = assertString(source.name, 'name', { max: 80, pattern: /^[A-Za-z0-9_.-]{1,80}$/ });
-    return this.transaction(db => {
-      const now = this._now();
-      let job = db.prepare('SELECT * FROM scheduler_jobs WHERE name = ?').get(name);
-      if (!job) return { removed: false, replayed: true, job: null, registration: null, outbox: null };
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      const mappedJobBeforeRemoval = this._schedulerJobRow(job);
-      const registrationsBeforeRemoval = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? ORDER BY generation').all(job.id);
-      for (const item of registrationsBeforeRemoval) {
-        this._schedulerRegistrationRow(item, installationId, mappedJobBeforeRemoval);
-      }
-      const replayed = job.desired_state === 'absent';
-      db.prepare(`UPDATE scheduler_jobs SET desired_state = 'absent', active_generation = NULL, provider_state = CASE
-          WHEN NOT EXISTS(SELECT 1 FROM scheduler_registrations WHERE job_id = ? AND observed_state <> 'absent') THEN 'absent'
-          ELSE 'removing' END,
-        provider_error_code = NULL, provider_error_message = NULL, removed_at_ms = COALESCE(removed_at_ms, ?), updated_at_ms = ? WHERE id = ?`).run(job.id, now, now, job.id);
-      db.prepare(`UPDATE scheduler_registrations SET desired_state = 'absent', updated_at_ms = ? WHERE job_id = ?`).run(now, job.id);
-      db.prepare(`UPDATE scheduler_outbox SET status = 'superseded', completed_at_ms = ?, updated_at_ms = ?, error_code = NULL,
-        error_message = NULL WHERE job_id = ? AND operation = 'ensure'
-        AND status IN ('pending','retryable_failed','uncertain','error')`).run(now, now, job.id);
-      const registrations = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? ORDER BY generation').all(job.id);
-      let currentOutboxId = null;
-      for (const item of registrations) {
-        const outboxId = this._insertSchedulerOutbox(db, job.id, item.generation, 'delete', now, now);
-        const outbox = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId);
-        if (outbox.status !== 'executing' && !(outbox.status === 'succeeded' && item.observed_state === 'absent')) {
-          db.prepare(`UPDATE scheduler_outbox SET status = 'pending', available_at_ms = ?, error_code = NULL, error_message = NULL,
-            updated_at_ms = ?, completed_at_ms = NULL WHERE id = ?`).run(now, now, outboxId);
-        }
-        if (item.generation === job.generation) currentOutboxId = outboxId;
-      }
-      job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(job.id);
-      const mappedJob = this._schedulerJobRow(job);
-      return {
-        removed: true, replayed, job: mappedJob,
-        registration: this._schedulerRegistrationRow(db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(job.id, job.generation), installationId, mappedJob),
-        outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(currentOutboxId))
-      };
-    });
-  }
-
-  requeueSchedulerOutbox(input) {
-    const source = assertPlainObject(input, 'scheduler requeue');
-    const outboxId = assertString(source.outboxId, 'outboxId', { max: 300 });
-    const delayMs = assertInteger(source.delayMs === undefined ? 0 : source.delayMs, 'delayMs', { min: 0, max: 60 * 60 * 1000 });
-    return this.transaction(db => {
-      const now = this._now();
-      const row = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId);
-      if (!row) throw stateError('SCHEDULER_OUTBOX_NOT_FOUND', 'The scheduler outbox item was not found.', { outboxId });
-      if (row.status !== 'error') {
-        return { replayed: true, outbox: this._schedulerOutboxRow(row) };
-      }
-      const registration = db.prepare('SELECT desired_state FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.job_id, row.generation);
-      const desiredOperation = registration && registration.desired_state === 'present' ? 'ensure' : 'delete';
-      if (!registration || row.operation !== desiredOperation) {
-        db.prepare(`UPDATE scheduler_outbox SET status = 'superseded', completed_at_ms = ?, updated_at_ms = ?,
-          error_code = NULL, error_message = NULL WHERE id = ? AND status = 'error'`).run(now, now, outboxId);
-        this._refreshSchedulerProviderState(db, row.job_id, now);
-        return {
-          replayed: false, superseded: true,
-          outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId))
-        };
-      }
-      db.prepare(`UPDATE scheduler_outbox SET status = 'pending', available_at_ms = ?, error_code = NULL, error_message = NULL,
-        updated_at_ms = ?, completed_at_ms = NULL WHERE id = ? AND status = 'error'`).run(now + delayMs, now, outboxId);
-      const job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(row.job_id);
-      if (job && job.generation === row.generation) {
-        db.prepare(`UPDATE scheduler_jobs SET provider_state = ?, provider_error_code = NULL, provider_error_message = NULL,
-          updated_at_ms = ? WHERE id = ?`).run(row.operation === 'ensure' ? 'pending' : 'removing', now, row.job_id);
-      }
-      this._refreshSchedulerProviderState(db, row.job_id, now);
-      return { replayed: false, outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(outboxId)) };
-    });
-  }
-
-  getSchedulerJob(input) {
-    const source = assertPlainObject(input, 'scheduler selector');
-    if (source.name === undefined && source.jobId === undefined) throw stateError('STATE_INVALID_ARGUMENT', 'Select a scheduler job by name or jobId.');
-    return this._read(db => {
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      const row = source.jobId !== undefined
-        ? db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(assertString(source.jobId, 'jobId', { max: 200 }))
-        : db.prepare('SELECT * FROM scheduler_jobs WHERE name = ?').get(assertString(source.name, 'name', { max: 80 }));
-      if (!row) return null;
-      const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.id, row.generation);
-      const registrations = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? ORDER BY generation').all(row.id);
-      const outbox = db.prepare('SELECT * FROM scheduler_outbox WHERE job_id = ? ORDER BY generation, created_at_ms, id').all(row.id);
-      const mappedJob = this._schedulerJobRow(row);
-      return {
-        ...mappedJob, registration: this._schedulerRegistrationRow(registration, installationId, mappedJob),
-        registrations: registrations.map(item => this._schedulerRegistrationRow(item, installationId, mappedJob)),
-        outbox: outbox.map(item => this._schedulerOutboxRow(item))
-      };
-    });
-  }
-
-  listSchedulerJobs(options = {}) {
-    const source = assertPlainObject(options, 'scheduler list options');
-    const includeRemoved = source.includeRemoved === true;
-    const limit = assertInteger(source.limit === undefined ? 100 : source.limit, 'limit', { min: 1, max: 500 });
-    return this._read(db => {
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      return db.prepare(`SELECT * FROM scheduler_jobs ${includeRemoved ? '' : "WHERE desired_state = 'present'"}
-      ORDER BY name LIMIT ?`).all(limit).map(row => {
-      const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.id, row.generation);
-      const mappedJob = this._schedulerJobRow(row);
-      return { ...mappedJob, registration: this._schedulerRegistrationRow(registration, installationId, mappedJob) };
-    });
-    });
-  }
-
-  listSchedulerOutbox(options = {}) {
-    const source = assertPlainObject(options, 'scheduler outbox list options');
-    const jobId = source.jobId === undefined ? null : assertString(source.jobId, 'jobId', { max: 200 });
-    const limit = assertInteger(source.limit === undefined ? 100 : source.limit, 'limit', { min: 1, max: 500 });
-    let statuses = null;
-    if (source.statuses !== undefined) {
-      if (!Array.isArray(source.statuses) || source.statuses.length < 1 || source.statuses.length > SCHEDULER_OUTBOX_STATES.size) {
-        throw stateError('STATE_INVALID_ARGUMENT', 'statuses must be a non-empty bounded array.', { field: 'statuses' });
-      }
-      statuses = Array.from(new Set(source.statuses.map((status, index) => {
-        if (typeof status !== 'string' || !SCHEDULER_OUTBOX_STATES.has(status)) {
-          throw stateError('STATE_INVALID_ARGUMENT', `statuses[${index}] is invalid.`, { field: `statuses[${index}]` });
-        }
-        return status;
-      })));
-    }
-    return this._read(db => {
-      const clauses = [];
-      const parameters = [];
-      if (jobId !== null) { clauses.push('o.job_id = ?'); parameters.push(jobId); }
-      if (statuses) {
-        clauses.push(`o.status IN (${statuses.map(() => '?').join(',')})`);
-        parameters.push(...statuses);
-      }
-      parameters.push(limit);
-      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-      return db.prepare(`SELECT o.*, r.task_name, r.ownership_marker, r.desired_state AS registration_desired_state,
-        r.observed_state, j.name AS job_name, j.desired_state AS job_desired_state, j.active_generation
-        FROM scheduler_outbox o
-        JOIN scheduler_registrations r ON r.job_id = o.job_id AND r.generation = o.generation
-        JOIN scheduler_jobs j ON j.id = o.job_id
-        ${where} ORDER BY o.updated_at_ms, o.id LIMIT ?`).all(...parameters).map(row => ({
-          ...this._schedulerOutboxRow(row), taskName: row.task_name, ownershipMarker: row.ownership_marker,
-          registrationDesiredState: row.registration_desired_state, observedState: row.observed_state,
-          jobName: row.job_name, jobDesiredState: row.job_desired_state, activeGeneration: row.active_generation
-        }));
-    });
-  }
-
-  _validateSchedulerHandle(handle) {
-    const source = assertPlainObject(handle, 'scheduler handle');
-    return {
-      outboxId: assertString(source.outboxId, 'outboxId', { max: 300 }),
-      fence: assertInteger(source.fence, 'fence', { min: 1 }),
-      attempt: assertInteger(source.attempt, 'attempt', { min: 1 }),
-      ownerId: assertString(source.ownerId, 'ownerId', { max: 200 }),
-      claimToken: assertString(source.claimToken, 'claimToken', { max: 500 })
-    };
-  }
-
-  claimSchedulerOutbox(options = {}) {
-    const source = assertPlainObject(options, 'scheduler claim options');
-    const ownerId = source.ownerId === undefined ? this.ownerId : assertString(source.ownerId, 'ownerId', { max: 200 });
-    const leaseMs = assertInteger(source.leaseMs === undefined ? 60_000 : source.leaseMs, 'leaseMs', { min: 1000, max: 15 * 60 * 1000 });
-    const jobId = source.jobId === undefined ? null : assertString(source.jobId, 'jobId', { max: 200 });
-    return this.transaction(db => {
-      const now = this._now();
-      this._validateSchedulerOutboxIntegrity(db, jobId);
-      const expired = db.prepare("SELECT * FROM scheduler_outbox WHERE status = 'executing' AND lease_expires_at_ms <= ? ORDER BY id").all(now);
-      for (const row of expired) {
-        this._schedulerOutboxRow(row);
-        const registration = db.prepare('SELECT desired_state FROM scheduler_registrations WHERE job_id = ? AND generation = ?')
-          .get(row.job_id, row.generation);
-        const desiredOperation = registration && registration.desired_state === 'present' ? 'ensure' : 'delete';
-        if (!registration || row.operation !== desiredOperation) {
-          db.prepare(`UPDATE scheduler_attempts SET status = 'superseded', ended_at_ms = ?, error_code = NULL, error_message = NULL
-            WHERE outbox_id = ? AND attempt = ? AND status = 'executing'`).run(now, row.id, row.attempt);
-          db.prepare(`UPDATE scheduler_outbox SET status = 'superseded', lease_owner = NULL, lease_token_hash = NULL,
-            lease_expires_at_ms = NULL, completed_at_ms = ?, error_code = NULL, error_message = NULL, updated_at_ms = ?
-            WHERE id = ? AND status = 'executing'`).run(now, now, row.id);
-          continue;
-        }
-        const code = 'SCHEDULER_ATTEMPT_EXPIRED';
-        const message = 'The scheduler adapter attempt expired with an unknown provider outcome.';
-        db.prepare(`UPDATE scheduler_attempts SET status = 'uncertain', ended_at_ms = ?, error_code = ?, error_message = ?
-          WHERE outbox_id = ? AND attempt = ? AND status = 'executing'`).run(now, code, message, row.id, row.attempt);
-        db.prepare(`UPDATE scheduler_outbox SET status = 'uncertain', lease_owner = NULL, lease_token_hash = NULL,
-          lease_expires_at_ms = NULL, available_at_ms = ?, error_code = ?, error_message = ?, updated_at_ms = ? WHERE id = ? AND status = 'executing'`).run(
-          now, code, message, now, row.id
-        );
-      }
-      // Provider operations for different jobs may proceed concurrently, but
-      // every generation and operation for one logical job is serialized. This
-      // prevents an old delete from racing a newer ensure at the OS boundary.
-      const row = jobId === null
-        ? db.prepare(`SELECT candidate.* FROM scheduler_outbox candidate
-          WHERE candidate.status IN ('pending','retryable_failed','uncertain') AND candidate.available_at_ms <= ?
-            AND NOT EXISTS(SELECT 1 FROM scheduler_outbox active
-              WHERE active.job_id = candidate.job_id AND active.status = 'executing')
-          ORDER BY CASE candidate.operation WHEN 'ensure' THEN 0 ELSE 1 END,
-            candidate.available_at_ms, candidate.created_at_ms, candidate.id LIMIT 1`).get(now)
-        : db.prepare(`SELECT candidate.* FROM scheduler_outbox candidate
-          WHERE candidate.job_id = ? AND candidate.status IN ('pending','retryable_failed','uncertain')
-            AND candidate.available_at_ms <= ?
-            AND NOT EXISTS(SELECT 1 FROM scheduler_outbox active
-              WHERE active.job_id = candidate.job_id AND active.status = 'executing')
-          ORDER BY CASE candidate.operation WHEN 'ensure' THEN 0 ELSE 1 END,
-            candidate.available_at_ms, candidate.created_at_ms, candidate.id LIMIT 1`).get(jobId, now);
-      if (!row) return { claimed: false };
-      const claimToken = crypto.randomBytes(32).toString('base64url');
-      const tokenHash = hashText(claimToken);
-      const fence = row.fence + 1;
-      const attempt = row.attempt + 1;
-      const leaseExpiresAtMs = now + leaseMs;
-      const changed = db.prepare(`UPDATE scheduler_outbox SET status = 'executing', attempt = ?, fence = ?, lease_owner = ?,
-        lease_token_hash = ?, lease_expires_at_ms = ?, error_code = NULL, error_message = NULL, updated_at_ms = ?
-        WHERE id = ? AND status IN ('pending','retryable_failed','uncertain')`).run(
-        attempt, fence, ownerId, tokenHash, leaseExpiresAtMs, now, row.id
-      );
-      if (changed.changes !== 1) throw stateError('SCHEDULER_OUTBOX_RACE', 'The scheduler outbox item changed before it could be claimed.', { outboxId: row.id });
-      db.prepare(`INSERT INTO scheduler_attempts(outbox_id, attempt, fence, owner_id, token_hash, operation, status, started_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, 'executing', ?)`).run(row.id, attempt, fence, ownerId, tokenHash, row.operation, now);
-      const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.job_id, row.generation);
-      const job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(row.job_id);
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      const mappedJob = this._schedulerJobRow(job);
-      const mappedRegistration = this._schedulerRegistrationRow(registration, installationId, mappedJob);
-      return {
-        claimed: true,
-        handle: { outboxId: row.id, fence, attempt, ownerId, claimToken },
-        leaseExpiresAtMs,
-        work: {
-          outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(row.id)),
-          job: mappedJob, registration: mappedRegistration
-        }
-      };
-    });
-  }
-
-  completeSchedulerOutbox(handle, options = {}) {
-    const claim = this._validateSchedulerHandle(handle);
-    const source = assertPlainObject(options, 'scheduler outcome');
-    const disposition = source.disposition;
-    if (!['succeeded', 'retry', 'uncertain', 'error', 'superseded'].includes(disposition)) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'Scheduler disposition is invalid.', { field: 'disposition' });
-    }
-    const observation = source.observation === undefined ? {} : assertPlainObject(source.observation, 'observation');
-    assertNoPlaintextSchedulerSecrets(observation, 'observation');
-    const observationJson = boundedTaskJson(observation, 'scheduler observation', 256 * 1024, 'SCHEDULER_OBSERVATION_TOO_LARGE');
-    const errorCode = disposition === 'succeeded' || disposition === 'superseded' ? null
-      : assertString(source.code, 'code', { max: 200, pattern: /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/ });
-    const errorMessage = disposition === 'succeeded' || disposition === 'superseded' ? null
-      : assertString(source.message === undefined ? '' : source.message, 'message', { min: 1, max: 1000 });
-    const retryDelayMs = source.retryDelayMs === undefined ? 1000 : assertInteger(source.retryDelayMs, 'retryDelayMs', { min: 0, max: 60 * 60 * 1000 });
-    return this.transaction(db => {
-      const now = this._now();
-      const row = db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(claim.outboxId);
-      if (!row || row.status !== 'executing' || row.fence !== claim.fence || row.attempt !== claim.attempt
-        || row.lease_owner !== claim.ownerId || !equalHash(row.lease_token_hash, hashText(claim.claimToken))) {
-        throw stateError('SCHEDULER_OUTBOX_FENCE_LOST', 'The scheduler outbox claim is no longer current.', { outboxId: claim.outboxId, fence: claim.fence });
-      }
-      const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.job_id, row.generation);
-      const desiredOperation = registration && registration.desired_state === 'present' ? 'ensure' : 'delete';
-      const staleOperation = !registration || row.operation !== desiredOperation;
-      const finalStatus = staleOperation ? 'superseded' : (disposition === 'retry' ? 'retryable_failed' : disposition);
-      const completedAtMs = ['succeeded', 'error', 'superseded'].includes(finalStatus) ? now : null;
-      const finalErrorCode = staleOperation ? null : errorCode;
-      const finalErrorMessage = staleOperation ? null : errorMessage;
-      db.prepare(`UPDATE scheduler_attempts SET status = ?, ended_at_ms = ?, observation_json = ?, observation_hash = ?,
-        error_code = ?, error_message = ? WHERE outbox_id = ? AND attempt = ? AND status = 'executing'`).run(
-        finalStatus, now, observationJson, hashText(observationJson), finalErrorCode, finalErrorMessage, row.id, row.attempt
-      );
-      db.prepare(`UPDATE scheduler_outbox SET status = ?, lease_owner = NULL, lease_token_hash = NULL, lease_expires_at_ms = NULL,
-        available_at_ms = ?, error_code = ?, error_message = ?, updated_at_ms = ?, completed_at_ms = ? WHERE id = ? AND fence = ?`).run(
-        finalStatus, now + retryDelayMs, finalErrorCode, finalErrorMessage, now, completedAtMs, row.id, row.fence
-      );
-      const job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(row.job_id);
-      const current = job && job.generation === row.generation;
-      if (!staleOperation && disposition === 'succeeded') {
-        if (row.operation === 'ensure') {
-          db.prepare(`UPDATE scheduler_registrations SET observed_state = 'present', error_code = NULL, error_message = NULL,
-            observed_at_ms = ?, updated_at_ms = ? WHERE job_id = ? AND generation = ?`).run(now, now, row.job_id, row.generation);
-          if (current && job.desired_state === 'present') {
-            db.prepare(`UPDATE scheduler_jobs SET active_generation = ?, provider_state = 'registered', provider_error_code = NULL,
-              provider_error_message = NULL, updated_at_ms = ? WHERE id = ?`).run(row.generation, now, row.job_id);
-            db.prepare(`UPDATE scheduler_registrations SET desired_state = CASE WHEN generation = ? THEN 'present' ELSE 'absent' END,
-              updated_at_ms = ? WHERE job_id = ?`).run(row.generation, now, row.job_id);
-            db.prepare(`UPDATE scheduler_outbox SET status = 'superseded', completed_at_ms = ?, updated_at_ms = ?,
-              error_code = NULL, error_message = NULL WHERE job_id = ? AND generation <> ? AND operation = 'ensure'
-              AND status IN ('pending','retryable_failed','uncertain','error')`).run(now, now, row.job_id, row.generation);
-            const retired = db.prepare('SELECT generation FROM scheduler_registrations WHERE job_id = ? AND generation <> ?').all(row.job_id, row.generation);
-            for (const item of retired) this._wakeSchedulerOutbox(db, row.job_id, item.generation, 'delete', now, now);
-          } else {
-            db.prepare(`UPDATE scheduler_registrations SET desired_state = 'absent', updated_at_ms = ? WHERE job_id = ? AND generation = ?`).run(now, row.job_id, row.generation);
-            this._wakeSchedulerOutbox(db, row.job_id, row.generation, 'delete', now, now, { force: true });
-          }
-        } else {
-          db.prepare(`UPDATE scheduler_registrations SET observed_state = 'absent', error_code = NULL, error_message = NULL,
-            observed_at_ms = ?, updated_at_ms = ? WHERE job_id = ? AND generation = ?`).run(now, now, row.job_id, row.generation);
-          if (job && job.desired_state === 'absent') {
-            const remaining = db.prepare(`SELECT COUNT(*) AS count FROM scheduler_registrations
-              WHERE job_id = ? AND observed_state <> 'absent'`).get(row.job_id).count;
-            db.prepare(`UPDATE scheduler_jobs SET provider_state = ?, provider_error_code = NULL,
-              provider_error_message = NULL, updated_at_ms = ? WHERE id = ?`).run(remaining === 0 ? 'absent' : 'removing', now, row.job_id);
-          }
-        }
-      } else if (!staleOperation && (disposition === 'retry' || disposition === 'uncertain' || disposition === 'error')) {
-        const observedState = disposition === 'uncertain' ? 'uncertain' : 'error';
-        db.prepare(`UPDATE scheduler_registrations SET observed_state = ?, error_code = ?, error_message = ?, observed_at_ms = ?,
-          updated_at_ms = ? WHERE job_id = ? AND generation = ?`).run(observedState, errorCode, errorMessage, now, now, row.job_id, row.generation);
-        if (current) db.prepare(`UPDATE scheduler_jobs SET provider_state = ?, provider_error_code = ?, provider_error_message = ?,
-          updated_at_ms = ? WHERE id = ?`).run(disposition === 'uncertain' ? 'uncertain' : 'error', errorCode, errorMessage, now, row.job_id);
-      }
-      this._refreshSchedulerProviderState(db, row.job_id, now);
-      const installationId = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get().installation_id;
-      const mappedJob = this._schedulerJobRow(db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(row.job_id));
-      return {
-        replayed: false,
-        outbox: this._schedulerOutboxRow(db.prepare('SELECT * FROM scheduler_outbox WHERE id = ?').get(row.id)),
-        job: mappedJob,
-        registration: this._schedulerRegistrationRow(
-          db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(row.job_id, row.generation),
-          installationId, mappedJob
-        )
-      };
-    });
-  }
-
-  _schedulerExecutionSelector(input) {
-    const source = assertPlainObject(input, 'scheduler execution selector');
-    return {
-      installationId: assertString(source.installationId, 'installationId', { max: 64, pattern: /^[a-f0-9]{32}$/ }),
-      jobId: assertString(source.jobId, 'jobId', { max: 200 }),
-      generation: assertInteger(source.generation, 'generation', { min: 1 }),
-      ownershipMarker: assertString(source.ownershipMarker, 'ownershipMarker', { min: 64, max: 64, pattern: /^[a-f0-9]{64}$/ })
-    };
-  }
-
-  _schedulerExecutionFromDb(db, selector) {
-    const installation = db.prepare('SELECT installation_id FROM scheduler_installation WHERE singleton = 1').get();
-    if (!installation || installation.installation_id !== selector.installationId) {
-      throw stateError('SCHEDULER_INSTALLATION_MISMATCH', 'The scheduled invocation belongs to another installation.');
-    }
-    const job = db.prepare('SELECT * FROM scheduler_jobs WHERE id = ?').get(selector.jobId);
-    const registration = db.prepare('SELECT * FROM scheduler_registrations WHERE job_id = ? AND generation = ?').get(selector.jobId, selector.generation);
-    if (!job || job.active_generation !== selector.generation || job.desired_state !== 'present'
-      || !registration || registration.ownership_marker !== selector.ownershipMarker
-      || registration.desired_state !== 'present' || registration.observed_state !== 'present') {
-      throw stateError('SCHEDULER_STALE_INVOCATION', 'The scheduled invocation is stale or inactive.', {
-        jobId: selector.jobId, generation: selector.generation
-      });
-    }
-    const mappedJob = this._schedulerJobRow(job);
-    const mappedRegistration = this._schedulerRegistrationRow(registration, selector.installationId, mappedJob);
-    return {
-      job: mappedJob, registration: mappedRegistration,
-      action: mappedRegistration.action, args: mappedRegistration.args
-    };
-  }
-
-  getSchedulerExecution(input) {
-    const selector = this._schedulerExecutionSelector(input);
-    return this._read(db => this._schedulerExecutionFromDb(db, selector));
-  }
-
-  startSchedulerRun(input) {
-    const selector = this._schedulerExecutionSelector(input);
-    return this.transaction(db => {
-      // Validate the exact active generation while holding the same IMMEDIATE
-      // transaction that creates the run, so remove/update cannot interleave.
-      const execution = this._schedulerExecutionFromDb(db, selector);
-      const now = this._now();
-      const activeRun = db.prepare("SELECT id, generation, started_at_ms FROM scheduler_runs WHERE job_id = ? AND status = 'running' LIMIT 1").get(selector.jobId);
-      if (activeRun) {
-        throw stateError('SCHEDULER_RUN_OVERLAP', 'Another generation of this scheduler job is already running.', {
-          jobId: selector.jobId, activeRunId: activeRun.id, activeGeneration: activeRun.generation, startedAtMs: activeRun.started_at_ms
-        });
-      }
-      const id = this._newId('scheduler-run');
-      db.prepare(`INSERT INTO scheduler_runs(id, job_id, generation, status, fence, started_at_ms, updated_at_ms)
-        VALUES(?, ?, ?, 'running', 1, ?, ?)`).run(id, execution.job.jobId, execution.registration.generation, now, now);
-      return {
-        runId: id, fence: 1, job: execution.job, registration: execution.registration,
-        action: execution.action, args: execution.args, startedAtMs: now
-      };
-    });
-  }
-
-  completeSchedulerRun(handle, options = {}) {
-    const sourceHandle = assertPlainObject(handle, 'scheduler run handle');
-    const runId = assertString(sourceHandle.runId, 'runId', { max: 300 });
-    const fence = assertInteger(sourceHandle.fence, 'fence', { min: 1 });
-    const source = assertPlainObject(options, 'scheduler run outcome');
-    const status = source.status;
-    if (!['succeeded', 'failed', 'uncertain', 'skipped'].includes(status)) throw stateError('STATE_INVALID_ARGUMENT', 'Scheduler run status is invalid.', { field: 'status' });
-    const result = source.result === undefined ? {} : assertPlainObject(source.result, 'result');
-    assertNoPlaintextSchedulerSecrets(result, 'result');
-    const resultJson = status === 'succeeded' ? boundedTaskJson(result, 'scheduler result', 256 * 1024, 'SCHEDULER_RESULT_TOO_LARGE') : null;
-    const code = status === 'succeeded' ? null : assertString(source.code, 'code', { max: 200 });
-    const message = status === 'succeeded' ? null : assertString(source.message === undefined ? '' : source.message, 'message', { min: 1, max: 1000 });
-    return this.transaction(db => {
-      const now = this._now();
-      const changed = db.prepare(`UPDATE scheduler_runs SET status = ?, updated_at_ms = ?, ended_at_ms = ?, result_json = ?,
-        result_hash = ?, error_code = ?, error_message = ? WHERE id = ? AND fence = ? AND status = 'running'`).run(
-        status, now, now, resultJson, resultJson === null ? null : hashText(resultJson), code, message, runId, fence
-      );
-      if (changed.changes !== 1) throw stateError('SCHEDULER_RUN_FENCE_LOST', 'The scheduler run is no longer active.', { runId, fence });
-      const run = db.prepare('SELECT * FROM scheduler_runs WHERE id = ?').get(runId);
-      const summary = status === 'succeeded' ? { success: true, completedAt: iso(now) } : { success: false, status, code, message, completedAt: iso(now) };
-      const summaryJson = boundedTaskJson(summary, 'scheduler run summary', 256 * 1024, 'SCHEDULER_RESULT_TOO_LARGE');
-      db.prepare(`UPDATE scheduler_jobs SET last_run_at_ms = ?, last_result_json = ?, last_result_hash = ?, updated_at_ms = ?
-        WHERE id = ? AND active_generation = ?`).run(now, summaryJson, hashText(summaryJson), now, run.job_id, run.generation);
-      return { runId, fence, status, endedAtMs: now };
-    });
-  }
-
-  reapExpiredSchedulerRuns(options = {}) {
-    const source = assertPlainObject(options, 'scheduler run recovery options');
-    const olderThanMs = assertInteger(source.olderThanMs === undefined ? SCHEDULER_RUN_RECOVERY_MS : source.olderThanMs,
-      'olderThanMs', { min: 60_000, max: 30 * 24 * 60 * 60 * 1000 });
-    const limit = assertInteger(source.limit === undefined ? 100 : source.limit, 'limit', { min: 1, max: 500 });
-    return this.transaction(db => {
-      const now = this._now();
-      const rows = db.prepare(`SELECT id, job_id, generation, fence, started_at_ms FROM scheduler_runs
-        WHERE status = 'running' AND started_at_ms <= ? ORDER BY started_at_ms, id LIMIT ?`).all(Math.max(0, now - olderThanMs), limit);
-      const code = 'SCHEDULER_RUN_EXPIRED';
-      const message = 'The scheduler run did not record a terminal outcome before its recovery deadline; provider outcome is unknown.';
-      const update = db.prepare(`UPDATE scheduler_runs SET status = 'uncertain', updated_at_ms = ?, ended_at_ms = ?,
-        error_code = ?, error_message = ? WHERE id = ? AND fence = ? AND status = 'running'`);
-      const reaped = [];
-      for (const row of rows) {
-        if (update.run(now, now, code, message, row.id, row.fence).changes === 1) {
-          reaped.push({ runId: row.id, jobId: row.job_id, generation: row.generation, startedAtMs: row.started_at_ms });
-        }
-      }
-      return { reaped: reaped.length, runs: reaped, code };
-    });
-  }
-
-  _schedulerLegacyArchivePath(sourcePath, digest) {
-    return `${sourcePath}.legacy-${digest.slice(0, 16)}`;
-  }
-
-  _schedulerLegacyDigest(file, { missing = false } = {}) {
-    let stat;
-    try {
-      stat = fs.statSync(file);
-    } catch (error) {
-      if (error && error.code === 'ENOENT') {
-        if (missing) return null;
-        throw stateError('SCHEDULER_LEGACY_ARCHIVE_MISSING', 'The imported scheduler source and its archive are both missing.', { path: file }, error);
-      }
-      throw stateError('SCHEDULER_LEGACY_UNAVAILABLE', 'The legacy scheduler state could not be inspected.', { path: file }, error);
-    }
-    if (!stat.isFile() || stat.size > MAX_LEGACY_BYTES) {
-      throw stateError('SCHEDULER_LEGACY_INVALID', 'Legacy scheduler state must be a regular file no larger than 10 MiB.', { path: file });
-    }
-    const bytes = fs.readFileSync(file);
-    return { bytes, text: bytes.toString('utf8'), digest: hashText(bytes) };
-  }
-
-  _archiveLegacyScheduler(sourcePath, digest) {
-    const archivePath = this._schedulerLegacyArchivePath(sourcePath, digest);
-    const source = this._schedulerLegacyDigest(sourcePath, { missing: true });
-    const archive = this._schedulerLegacyDigest(archivePath, { missing: true });
-    if (source && source.digest !== digest) {
-      throw stateError('SCHEDULER_LEGACY_CHANGED', 'Legacy scheduler state changed after its durable import.', {
-        path: sourcePath, importedDigest: digest, currentDigest: source.digest
-      });
-    }
-    if (archive && archive.digest !== digest) {
-      throw stateError('SCHEDULER_LEGACY_ARCHIVE_CONFLICT', 'The digest-named scheduler archive has unexpected content.', {
-        archivePath, expectedDigest: digest, currentDigest: archive.digest
-      });
-    }
-    try {
-      if (!archive && source) fs.renameSync(sourcePath, archivePath);
-      else if (archive && source) fs.unlinkSync(sourcePath);
-      else if (!archive) {
-        throw stateError('SCHEDULER_LEGACY_ARCHIVE_MISSING', 'The imported scheduler source and its archive are both missing.', {
-          path: sourcePath, archivePath
-        });
-      }
-    } catch (error) {
-      if (error instanceof StateStoreError) throw error;
-      throw stateError('SCHEDULER_LEGACY_ARCHIVE_PENDING', 'Scheduler state was imported, but its exact legacy archive is still pending.', {
-        path: sourcePath, archivePath, digest
-      }, error);
-    }
-    return { archivePath, digest, archived: true };
-  }
-
-  importLegacyScheduler(options = {}) {
-    const source = assertPlainObject(options, 'scheduler legacy import options');
-    assertOnlyKeys(source, new Set(['path', 'runtime', 'maxScheduledJobs', 'validateAction']), 'scheduler legacy import options');
-    const environmentPath = typeof process.env.TOOLSENABLED_SCHEDULER_LEGACY_PATH === 'string'
-      && process.env.TOOLSENABLED_SCHEDULER_LEGACY_PATH.trim()
-      ? process.env.TOOLSENABLED_SCHEDULER_LEGACY_PATH.trim() : null;
-    const selectedPath = source.path === undefined ? (environmentPath || rootPath('config', 'jobs.json')) : source.path;
-    const resolved = path.resolve(assertString(selectedPath, 'path', { max: 4096 }));
-    if (source.runtime === undefined) {
-      throw stateError('SCHEDULER_RUNTIME_REQUIRED', 'Legacy scheduler import requires an explicit runtime with a canonical Windows principal SID.', { field: 'runtime' });
-    }
-    const runtime = assertPlainObject(source.runtime, 'runtime');
-    const validateAction = source.validateAction;
-    if (validateAction !== undefined && typeof validateAction !== 'function') {
-      throw stateError('STATE_INVALID_ARGUMENT', 'validateAction must be a function.', { field: 'validateAction' });
-    }
-    const maxScheduledJobs = assertInteger(source.maxScheduledJobs === undefined ? 50 : source.maxScheduledJobs,
-      'maxScheduledJobs', { min: 1, max: 10000 });
-    const prior = this._read(db => db.prepare("SELECT * FROM scheduler_legacy_import WHERE source = 'jobs'").get());
-    if (prior && path.resolve(prior.source_path) !== resolved) {
-      throw stateError('SCHEDULER_LEGACY_SOURCE_CONFLICT', 'A different legacy scheduler source was already imported.', {
-        importedPath: prior.source_path, requestedPath: resolved
-      });
-    }
-    const file = this._schedulerLegacyDigest(resolved, { missing: true });
-    if (prior) {
-      if (file && file.digest !== prior.digest) {
-        // Older releases tracked an empty jobs.json. A checkout can restore
-        // that inert file after the real source was archived. It is not new
-        // authority and must not wedge scheduler startup, but any nonempty or
-        // otherwise changed source still fails closed.
-        if (isEmptyLegacySchedulerTombstone(file.text)) {
-          const archivePath = this._schedulerLegacyArchivePath(resolved, prior.digest);
-          const archive = this._schedulerLegacyDigest(archivePath, { missing: true });
-          if (!archive || archive.digest !== prior.digest) {
-            throw stateError('SCHEDULER_LEGACY_ARCHIVE_MISSING', 'The imported scheduler archive is missing or invalid.', {
-              path: resolved, archivePath, digest: prior.digest
-            });
-          }
-          return {
-            source: 'jobs', path: resolved, digest: prior.digest, status: 'already_imported', records: prior.records,
-            details: parseJson(prior.details_json, 'scheduler legacy import details'), archivePath,
-            restoredTombstoneIgnored: true,
-            legacyTasks: legacySchedulerCleanupCandidates(archive.text)
-          };
-        }
-        throw stateError('SCHEDULER_LEGACY_CHANGED', 'Legacy scheduler state changed after its durable import.', {
-          path: resolved, importedDigest: prior.digest, currentDigest: file.digest
-        });
-      }
-      const archived = this._archiveLegacyScheduler(resolved, prior.digest);
-      const archivedFile = this._schedulerLegacyDigest(archived.archivePath);
-      return {
-        source: 'jobs', path: resolved, digest: prior.digest, status: 'already_imported', records: prior.records,
-        details: parseJson(prior.details_json, 'scheduler legacy import details'), archivePath: archived.archivePath,
-        legacyTasks: legacySchedulerCleanupCandidates(archivedFile.text)
-      };
-    }
-    if (!file) return { source: 'jobs', path: resolved, status: 'missing', records: 0, legacyTasks: [] };
-
-    let parsed;
-    try { parsed = JSON.parse(file.text); }
-    catch (error) {
-      throw stateError('SCHEDULER_LEGACY_INVALID', 'Legacy scheduler state is not valid JSON.', { path: resolved }, error);
-    }
-    assertPlainObject(parsed, 'legacy scheduler state');
-    assertOnlyKeys(parsed, new Set(['version', 'jobs']), 'legacy scheduler state', 'SCHEDULER_LEGACY_INVALID');
-    if (parsed.version !== 1 || !Array.isArray(parsed.jobs) || parsed.jobs.length > 10000) {
-      throw stateError('SCHEDULER_LEGACY_INVALID', 'Legacy scheduler state must have version 1 and at most 10,000 jobs.', { path: resolved });
-    }
-    const names = new Set();
-    const validationNow = this._now();
-    const prepared = parsed.jobs.map((raw, index) => {
-      assertPlainObject(raw, `jobs[${index}]`);
-      assertOnlyKeys(raw, new Set(['name', 'schedule', 'action', 'args', 'enabled', 'createdAt', 'lastRunAt', 'lastResult']),
-        `jobs[${index}]`, 'SCHEDULER_LEGACY_INVALID');
-      const name = assertString(raw.name, `jobs[${index}].name`, { max: 80, pattern: /^[A-Za-z0-9_.-]{1,80}$/ });
-      if (names.has(name)) throw stateError('SCHEDULER_LEGACY_INVALID', 'Legacy scheduler jobs contain duplicate names.', { name });
-      names.add(name);
-      if (!['daily', 'hourly'].includes(raw.schedule)) {
-        throw stateError('SCHEDULER_LEGACY_INVALID', `jobs[${index}].schedule must be daily or hourly.`, { index });
-      }
-      if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') {
-        throw stateError('SCHEDULER_LEGACY_INVALID', `jobs[${index}].enabled must be a boolean.`, { index });
-      }
-      const timestamps = {};
-      for (const key of ['createdAt', 'lastRunAt']) {
-        if (raw[key] !== undefined && raw[key] !== null && (typeof raw[key] !== 'string' || !Number.isFinite(Date.parse(raw[key])))) {
-          throw stateError('SCHEDULER_LEGACY_INVALID', `jobs[${index}].${key} must be a valid timestamp or null.`, { index, field: key });
-        }
-        timestamps[key] = raw[key] === undefined || raw[key] === null ? null : Date.parse(raw[key]);
-      }
-      const createdAtMs = timestamps.createdAt === null ? validationNow : timestamps.createdAt;
-      if (createdAtMs > validationNow || (timestamps.lastRunAt !== null && (timestamps.lastRunAt < createdAtMs || timestamps.lastRunAt > validationNow))) {
-        throw stateError('SCHEDULER_LEGACY_INVALID', `jobs[${index}] has inconsistent or future timestamps.`, { index });
-      }
-      let lastResultJson = null;
-      if (raw.lastResult !== undefined && raw.lastResult !== null) {
-        assertPlainObject(raw.lastResult, `jobs[${index}].lastResult`);
-        assertNoPlaintextSchedulerSecrets(raw.lastResult, `jobs[${index}].lastResult`);
-        lastResultJson = boundedTaskJson(raw.lastResult, `jobs[${index}].lastResult`, 256 * 1024, 'SCHEDULER_LEGACY_INVALID');
-      }
-      const action = normalizeLegacySchedulerAction(raw.action, `jobs[${index}].action`);
-      const args = validateLegacySchedulerArgs(action, raw.args === undefined ? {} : raw.args, `jobs[${index}].args`);
-      if (validateAction) validateAction(action, args);
-      return {
-        enabled: raw.enabled !== false,
-        values: this._schedulerInput({ name, schedule: raw.schedule, action, args, runtime, maxScheduledJobs }),
-        history: { createdAtMs, lastRunAtMs: timestamps.lastRunAt, lastResultJson }
-      };
-    });
-
-    const imported = this.transaction(db => {
-      const now = this._now();
-      const raced = db.prepare("SELECT * FROM scheduler_legacy_import WHERE source = 'jobs'").get();
-      if (raced) {
-        if (raced.digest !== file.digest || path.resolve(raced.source_path) !== resolved) {
-          throw stateError('SCHEDULER_LEGACY_CHANGED', 'Legacy scheduler import raced with different source content.', { path: resolved });
-        }
-        return { status: 'already_imported', records: raced.records, details: parseJson(raced.details_json, 'scheduler legacy import details') };
-      }
-      const current = this._schedulerLegacyDigest(resolved);
-      if (current.digest !== file.digest) {
-        throw stateError('SCHEDULER_LEGACY_CHANGED', 'Legacy scheduler state changed during import.', {
-          path: resolved, expectedDigest: file.digest, currentDigest: current.digest
-        });
-      }
-      let created = 0; let replayed = 0; let disabled = 0;
-      for (const item of prepared) {
-        if (!item.enabled) { disabled += 1; continue; }
-        const existing = db.prepare('SELECT id, desired_state, spec_hash FROM scheduler_jobs WHERE name = ?').get(item.values.name);
-        if (existing && (existing.desired_state !== 'present' || existing.spec_hash !== item.values.specHash)) {
-          throw stateError('SCHEDULER_LEGACY_CONFLICT', 'A durable scheduler job conflicts with the legacy definition.', {
-            name: item.values.name, jobId: existing.id
-          });
-        }
-        const result = this._putSchedulerJob(db, item.values, now);
-        if (result.replayed) replayed += 1;
-        else {
-          created += 1;
-          db.prepare(`UPDATE scheduler_jobs SET created_at_ms = ?, last_run_at_ms = ?, last_result_json = ?, last_result_hash = ?
-            WHERE id = ?`).run(item.history.createdAtMs, item.history.lastRunAtMs, item.history.lastResultJson,
-            item.history.lastResultJson === null ? null : hashText(item.history.lastResultJson), result.job.jobId);
-        }
-      }
-      const details = { validated: prepared.length, created, replayed, disabled };
-      const detailsJson = canonicalJson(details);
-      db.prepare(`INSERT INTO scheduler_legacy_import(source, source_path, digest, imported_at_ms, records, details_json)
-        VALUES('jobs', ?, ?, ?, ?, ?)`).run(resolved, file.digest, now, prepared.length, detailsJson);
-      return { status: 'imported', records: prepared.length, details };
-    });
-    const archived = this._archiveLegacyScheduler(resolved, file.digest);
-    return {
-      source: 'jobs', path: resolved, digest: file.digest, status: imported.status, records: imported.records,
-      details: imported.details, archivePath: archived.archivePath,
-      legacyTasks: legacySchedulerCleanupCandidates(file.text)
-    };
   }
 
   checkIntegrity({ full = false } = {}) {
@@ -6739,1007 +4238,7 @@ class StateStore {
     });
   }
 
-  _readLegacy(source, file) {
-    assertString(file, `${source}Path`, { max: 4096 });
-    const resolved = path.resolve(file);
-    let stat;
-    try {
-      stat = fs.statSync(resolved);
-    } catch (error) {
-      if (error && error.code === 'ENOENT') return { source, path: resolved, status: 'missing' };
-      throw stateError('LEGACY_IMPORT_UNAVAILABLE', `Legacy ${source} state could not be inspected.`, { source, path: resolved }, error);
-    }
-    if (!stat.isFile() || stat.size > MAX_LEGACY_BYTES) {
-      throw stateError('LEGACY_IMPORT_INVALID', `Legacy ${source} state must be a regular file no larger than 10 MiB.`, { source, path: resolved });
-    }
-    const raw = fs.readFileSync(resolved, 'utf8');
-    const digest = hashText(raw);
-    const prior = this._read(db => db.prepare('SELECT * FROM legacy_imports WHERE source = ?').get(source));
-    if (prior) {
-      if (prior.digest !== digest) throw stateError('LEGACY_IMPORT_CHANGED', `Legacy ${source} state changed after its one-time import.`, { source, path: resolved, importedDigest: prior.digest, currentDigest: digest });
-      return { source, path: resolved, digest, status: 'already_imported', records: prior.records, details: parseJson(prior.details_json, 'legacy import details') };
-    }
-    let value;
-    try { value = JSON.parse(raw); }
-    catch (error) { throw stateError('LEGACY_IMPORT_INVALID', `Legacy ${source} state is not valid JSON.`, { source, path: resolved }, error); }
-    return { source, path: resolved, digest, status: 'ready', value };
-  }
 
-  _recordLegacyImport(db, source, file, digest, records, details, now) {
-    db.prepare(`INSERT INTO legacy_imports(source, source_path, digest, imported_at_ms, records, details_json)
-      VALUES(?, ?, ?, ?, ?, ?)`).run(source, file, digest, now, records, boundedJson(details, 'legacy import details'));
-  }
-
-  _legacyRace(db, item) {
-    const prior = db.prepare('SELECT * FROM legacy_imports WHERE source = ?').get(item.source);
-    if (!prior) return null;
-    if (prior.digest !== item.digest) throw stateError('LEGACY_IMPORT_CHANGED', `Legacy ${item.source} state changed during import.`, { source: item.source });
-    return { source: item.source, path: item.path, digest: item.digest, status: 'already_imported', records: prior.records, details: parseJson(prior.details_json, 'legacy import details') };
-  }
-
-  _assertLegacySourceUnchanged(item) {
-    let stat;
-    try {
-      stat = fs.statSync(item.path);
-    } catch (error) {
-      if (error && error.code === 'ENOENT') {
-        throw stateError('LEGACY_IMPORT_CHANGED', `Legacy ${item.source} state disappeared during import.`, { source: item.source, path: item.path }, error);
-      }
-      throw stateError('LEGACY_IMPORT_UNAVAILABLE', `Legacy ${item.source} state could not be inspected during import.`, {
-        source: item.source, path: item.path
-      }, error);
-    }
-    if (!stat.isFile() || stat.size > MAX_LEGACY_BYTES) {
-      throw stateError('LEGACY_IMPORT_CHANGED', `Legacy ${item.source} state changed type or size during import.`, { source: item.source, path: item.path });
-    }
-    const digest = hashText(fs.readFileSync(item.path, 'utf8'));
-    if (digest !== item.digest) {
-      throw stateError('LEGACY_IMPORT_CHANGED', `Legacy ${item.source} state changed during import.`, { source: item.source, path: item.path, expectedDigest: item.digest, currentDigest: digest });
-    }
-  }
-
-  importLegacySpend(file) {
-    const item = this._readLegacy('spend', file);
-    if (item.status !== 'ready') return item;
-    const value = assertPlainObject(item.value, 'legacy spend');
-    if (value.version !== 1 || !Array.isArray(value.entries)) throw stateError('LEGACY_IMPORT_INVALID', 'Legacy spend state must have version 1 and an entries array.', { source: 'spend' });
-    const seenIds = new Set();
-    const seenReferences = new Set();
-    const validationNow = this._now();
-    const entries = value.entries.map((raw, index) => {
-      assertPlainObject(raw, `entries[${index}]`);
-      const hasTimestamp = raw.timestamp !== undefined && raw.timestamp !== null && raw.timestamp !== '';
-      let timestampMs;
-      let date;
-      if (hasTimestamp) {
-        timestampMs = parseLegacyTimestamp(raw.timestamp, `entries[${index}].timestamp`, validationNow);
-        date = raw.date === undefined ? iso(timestampMs).slice(0, 10) : raw.date;
-      } else if (raw.date !== undefined) {
-        date = raw.date;
-        timestampMs = Date.parse(`${date}T00:00:00.000Z`);
-      } else {
-        timestampMs = validationNow;
-        date = iso(timestampMs).slice(0, 10);
-      }
-      if (!validUtcDate(date)) throw stateError('LEGACY_IMPORT_INVALID', `entries[${index}].date is invalid.`, { source: 'spend', index });
-      if (hasTimestamp && date !== iso(timestampMs).slice(0, 10)) {
-        throw stateError('LEGACY_IMPORT_INVALID', `entries[${index}].date does not match its UTC timestamp day.`, { source: 'spend', index });
-      }
-      const id = raw.id === undefined ? `legacy-spend-${item.digest.slice(0, 16)}-${index}` : assertString(raw.id, `entries[${index}].id`, { max: 500 });
-      if (seenIds.has(id)) throw stateError('LEGACY_IMPORT_INVALID', 'Legacy spend entries contain duplicate ids.', { source: 'spend', id });
-      seenIds.add(id);
-      const amountCents = legacyUsdToCents(raw.amountUsd, `entries[${index}].amountUsd`);
-      const purpose = raw.purpose === undefined ? '' : assertString(raw.purpose, `entries[${index}].purpose`, { min: 0, max: 1000 });
-      const provider = raw.provider === undefined ? 'manual' : assertString(raw.provider, `entries[${index}].provider`, { max: 100 });
-      const reference = raw.reference === undefined || raw.reference === '' ? null : assertString(raw.reference, `entries[${index}].reference`, { max: 500 });
-      if (reference) {
-        const key = `${provider}\0${reference}`;
-        if (seenReferences.has(key)) throw stateError('LEGACY_IMPORT_INVALID', 'Legacy spend entries reuse a provider reference.', { source: 'spend', provider, reference });
-        seenReferences.add(key);
-      }
-      return { id, date, timestampMs, amountCents, purpose, provider, reference };
-    });
-    return this.transaction(db => {
-      this._assertLegacySourceUnchanged(item);
-      const raced = this._legacyRace(db, item);
-      if (raced) return raced;
-      const importedAt = this._now();
-      const insert = db.prepare(`INSERT OR IGNORE INTO spend_entries(id, spend_date, timestamp_ms, amount_cents, purpose, provider, reference)
-        VALUES(?, ?, ?, ?, ?, ?, ?)`);
-      const byId = db.prepare('SELECT * FROM spend_entries WHERE id = ?');
-      const byReference = db.prepare('SELECT * FROM spend_entries WHERE provider = ? AND reference = ?');
-      let imported = 0;
-      for (const entry of entries) {
-        const changed = insert.run(entry.id, entry.date, entry.timestampMs, entry.amountCents, entry.purpose, entry.provider, entry.reference).changes;
-        if (changed) {
-          imported += 1;
-          continue;
-        }
-        const priorById = byId.get(entry.id);
-        const priorByReference = entry.reference ? byReference.get(entry.provider, entry.reference) : null;
-        const exact = priorById && priorById.id === entry.id && priorById.spend_date === entry.date
-          && priorById.timestamp_ms === entry.timestampMs && priorById.amount_cents === entry.amountCents
-          && priorById.purpose === entry.purpose && priorById.provider === entry.provider
-          && priorById.reference === entry.reference
-          && (!priorByReference || priorByReference.id === entry.id);
-        if (!exact) {
-          throw stateError('LEGACY_IMPORT_CONFLICT', 'A durable spend entry conflicts with the legacy record.', {
-            source: 'spend', id: entry.id, provider: entry.provider, reference: entry.reference
-          });
-        }
-      }
-      const details = { validated: entries.length, imported, skipped: entries.length - imported };
-      this._recordLegacyImport(db, 'spend', item.path, item.digest, entries.length, details, importedAt);
-      return { source: 'spend', path: item.path, digest: item.digest, status: 'imported', records: entries.length, details };
-    });
-  }
-
-  // importLegacyTelegram() WAS REMOVED 2026-08-23, WITH MIGRATION_V23.
-  //
-  // It imported a pre-SQLite logs/message-queue.json into telegram_updates and
-  // telegram_cursor. Both tables are dropped, so the method could only ever have
-  // raised "no such table" -- and there is nothing left in the product that could
-  // consume an imported Telegram update even if the import succeeded. The other
-  // two legacy importers (spend, instagram) are untouched; only this one had its
-  // destination removed. importLegacyState() below no longer offers a `telegram`
-  // key for the same reason.
-
-  importLegacyInstagram(file) {
-    const item = this._readLegacy('instagram', file);
-    if (item.status !== 'ready') return item;
-    const value = assertPlainObject(item.value, 'legacy Instagram');
-    if (value.version !== 1 || !value.entries || typeof value.entries !== 'object' || Array.isArray(value.entries)) {
-      throw stateError('LEGACY_IMPORT_INVALID', 'Legacy Instagram state must have version 1 and an entries object.', { source: 'instagram' });
-    }
-    const validationNow = this._now();
-    const entries = Object.entries(value.entries).map(([key, raw], index) => {
-      assertString(key, `entries key ${index}`, { max: 200, pattern: /^[A-Za-z0-9_.:-]+$/ });
-      assertPlainObject(raw, `entries.${key}`);
-      const allowed = new Set(['containerId', 'mediaId', 'status', 'completedAt']);
-      const unknown = Object.keys(raw).filter(field => !allowed.has(field));
-      if (unknown.length) throw stateError('LEGACY_IMPORT_INVALID', `entries.${key} contains unsupported fields.`, { source: 'instagram', key, fields: unknown });
-      const containerId = assertString(raw.containerId, `entries.${key}.containerId`, { max: 500 });
-      const mediaId = assertString(raw.mediaId, `entries.${key}.mediaId`, { max: 500 });
-      if (raw.status !== 'published') throw stateError('LEGACY_IMPORT_INVALID', `entries.${key}.status must be published.`, { source: 'instagram', key });
-      assertString(raw.completedAt, `entries.${key}.completedAt`, { max: 100 });
-      const completedAtMs = parseLegacyTimestamp(raw.completedAt, `entries.${key}.completedAt`, validationNow);
-      const normalized = { containerId, mediaId, status: 'published', completedAt: iso(completedAtMs) };
-      const resultJson = boundedJson(normalized, `entries.${key}`);
-      return { key, resultJson, completedAtMs, inputHash: hashInput({ legacyInstagramIdempotencyKey: key }), id: `legacy-instagram-${hashText(key).slice(0, 32)}` };
-    });
-    return this.transaction(db => {
-      this._assertLegacySourceUnchanged(item);
-      const raced = this._legacyRace(db, item);
-      if (raced) return raced;
-      const importedAt = this._now();
-      const existing = db.prepare("SELECT * FROM operations WHERE operation_type = 'instagram.publish_image' AND idempotency_key = ?");
-      const insert = db.prepare(`INSERT INTO operations(id, operation_type, idempotency_key, input_hash, input_verified, status, fence, attempt,
-        result_json, created_at_ms, updated_at_ms, completed_at_ms) VALUES(?, 'instagram.publish_image', ?, ?, 0, 'succeeded', 1, 1, ?, ?, ?, ?)`);
-      let imported = 0;
-      for (const entry of entries) {
-        const prior = existing.get(entry.key);
-        if (prior) {
-          if (prior.status !== 'succeeded' || prior.result_json !== entry.resultJson) {
-            throw stateError('LEGACY_IMPORT_CONFLICT', 'A durable Instagram operation conflicts with the legacy result.', { source: 'instagram', key: entry.key });
-          }
-          continue;
-        }
-        insert.run(entry.id, entry.key, entry.inputHash, entry.resultJson, entry.completedAtMs, entry.completedAtMs, entry.completedAtMs);
-        imported += 1;
-      }
-      const details = { validated: entries.length, imported, skipped: entries.length - imported };
-      this._recordLegacyImport(db, 'instagram', item.path, item.digest, entries.length, details, importedAt);
-      return { source: 'instagram', path: item.path, digest: item.digest, status: 'imported', records: entries.length, details };
-    });
-  }
-
-  importLegacyState(options = {}) {
-    assertPlainObject(options, 'options');
-    return {
-      spend: this.importLegacySpend(options.spendPath || rootPath('logs', 'spend-ledger.json')),
-      instagram: this.importLegacyInstagram(options.instagramPath || rootPath('logs', 'instagram-idempotency.json'))
-    };
-  }
-
-  // ---------------------------------------------------------------------
-  // Research domain (MIGRATION_V21). Mechanism only: enablement policy
-  // (settings gate, per-project enabled) is enforced by the provider and the
-  // worker, never here. Every run is a task on the reserved 'research-runs'
-  // queue; the run row is the domain projection and status is always read
-  // from the joined task (the coordinator mission/task split).
-  // ---------------------------------------------------------------------
-
-  _researchId(prefix) {
-    return `${prefix}-${crypto.randomBytes(18).toString('hex')}`;
-  }
-
-  _researchJson(value, field, maxBytes) {
-    const json = JSON.stringify(value === undefined ? null : value, (_key, item) => {
-      if (typeof item === 'number' && !Number.isFinite(item)) {
-        throw stateError('STATE_INVALID_ARGUMENT', `${field} contains a non-finite number.`, { field });
-      }
-      return item;
-    });
-    if (typeof json !== 'string' || json === 'null' && value !== null) {
-      throw stateError('STATE_INVALID_ARGUMENT', `${field} must be JSON-serializable.`, { field });
-    }
-    if (Buffer.byteLength(json, 'utf8') > maxBytes) {
-      throw stateError('STATE_INVALID_ARGUMENT', `${field} exceeds ${maxBytes} serialized bytes.`, { field, maxBytes });
-    }
-    return json;
-  }
-
-  _researchProjectRow(row) {
-    return {
-      projectId: row.project_id, name: row.name, description: row.description,
-      ownerScope: row.owner_scope, enabled: row.enabled === 1, status: row.status,
-      createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  _researchExperimentRow(row) {
-    return {
-      experimentId: row.experiment_id, projectId: row.project_id, name: row.name,
-      runnerKind: row.runner_kind, runnerConfig: JSON.parse(row.runner_config_json),
-      configHash: row.config_hash, resultSchema: JSON.parse(row.result_schema_json),
-      collector: JSON.parse(row.collector_json), maxParallel: row.max_parallel,
-      mutexKey: row.mutex_key, timeoutMs: row.timeout_ms, status: row.status,
-      createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms
-    };
-  }
-
-  _researchRunRow(row, taskRow) {
-    // The clock must be passed or _taskRow cannot decide leaseExpired, and a
-    // run whose worker died stays 'running' for ever with leaseExpired:false.
-    // A board showed exactly that for two and a half hours beside a stopped
-    // worker (installed build, 2026-08-15) — the reclaim was working, only the
-    // report was wrong. Every other reader of a task row already passes now.
-    return {
-      runId: row.run_id, experimentId: row.experiment_id, taskId: row.task_id,
-      params: JSON.parse(row.params_json), paramsHash: row.params_hash,
-      sessionRefKind: row.session_ref_kind, sessionRef: row.session_ref,
-      artifactDir: row.artifact_dir, createdAtMs: row.created_at_ms,
-      task: taskRow ? this._taskRow(taskRow, { now: this._now() }) : null
-    };
-  }
-
-  createResearchProject(input) {
-    const source = assertPlainObject(input, 'project');
-    const name = assertString(source.name, 'name', { max: 120 });
-    const description = source.description === undefined ? '' : assertString(source.description, 'description', { max: 2000, allowEmpty: true });
-    const ownerScope = source.ownerScope === undefined ? 'owner' : assertString(source.ownerScope, 'ownerScope', { max: 80 });
-    const enabled = source.enabled === true ? 1 : 0;
-    return this.transaction(db => {
-      const now = this._now();
-      const projectId = this._researchId('rp');
-      try {
-        db.prepare(`INSERT INTO research_projects(project_id, name, description, owner_scope, enabled, status, created_at_ms, updated_at_ms)
-          VALUES(?, ?, ?, ?, ?, 'active', ?, ?)`).run(projectId, name, description, ownerScope, enabled, now, now);
-      } catch (error) {
-        if (String(error && error.message).includes('UNIQUE')) {
-          throw stateError('RESEARCH_PROJECT_NAME_TAKEN', 'A research project with that name already exists.', { name });
-        }
-        throw error;
-      }
-      return this._researchProjectRow(db.prepare('SELECT * FROM research_projects WHERE project_id = ?').get(projectId));
-    });
-  }
-
-  updateResearchProject(input) {
-    const source = assertPlainObject(input, 'project');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM research_projects WHERE project_id = ?').get(projectId);
-      if (!row) throw stateError('RESEARCH_PROJECT_NOT_FOUND', 'No research project has that id.', { projectId });
-      const name = source.name === undefined ? row.name : assertString(source.name, 'name', { max: 120 });
-      const description = source.description === undefined ? row.description : assertString(source.description, 'description', { max: 2000, allowEmpty: true });
-      const enabled = source.enabled === undefined ? row.enabled : (source.enabled === true ? 1 : 0);
-      const status = source.status === undefined ? row.status : source.status;
-      if (!['active', 'archived'].includes(status)) {
-        throw stateError('STATE_INVALID_ARGUMENT', "status must be 'active' or 'archived'.", { field: 'status' });
-      }
-      db.prepare('UPDATE research_projects SET name = ?, description = ?, enabled = ?, status = ?, updated_at_ms = ? WHERE project_id = ?')
-        .run(name, description, enabled, status, this._now(), projectId);
-      return this._researchProjectRow(db.prepare('SELECT * FROM research_projects WHERE project_id = ?').get(projectId));
-    });
-  }
-
-  getResearchProject(input) {
-    const source = assertPlainObject(input, 'query');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM research_projects WHERE project_id = ?').get(projectId);
-      return row ? this._researchProjectRow(row) : null;
-    });
-  }
-
-  listResearchProjects(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const status = source.status === undefined ? null : source.status;
-    if (status !== null && !['active', 'archived'].includes(status)) {
-      throw stateError('STATE_INVALID_ARGUMENT', "status must be 'active' or 'archived'.", { field: 'status' });
-    }
-    return this.transaction(db => {
-      const rows = status
-        ? db.prepare('SELECT * FROM research_projects WHERE status = ? ORDER BY updated_at_ms DESC').all(status)
-        : db.prepare('SELECT * FROM research_projects ORDER BY updated_at_ms DESC').all();
-      return rows.map(row => this._researchProjectRow(row));
-    });
-  }
-
-  // Runner/collector/schema configs are IMMUTABLE after create: a config
-  // change is a new experiment (reproducibility discipline). config_hash
-  // covers everything reproducibility depends on, so create-or-match by hash
-  // is safe for the app's register-on-first-submit flow.
-  createResearchExperiment(input) {
-    const prepared = this._prepareResearchExperiment(input);
-    return this.transaction(db => this._createPreparedResearchExperiment(db, prepared));
-  }
-
-  _prepareResearchExperiment(input) {
-    const source = assertPlainObject(input, 'experiment');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    const name = assertString(source.name, 'name', { max: 120 });
-    const runnerKind = source.runnerKind;
-    if (!['agent', 'process', 'http'].includes(runnerKind)) {
-      throw stateError('STATE_INVALID_ARGUMENT', "runnerKind must be 'agent', 'process' or 'http'.", { field: 'runnerKind' });
-    }
-    const runnerConfigJson = this._researchJson(assertPlainObject(source.runnerConfig, 'runnerConfig'), 'runnerConfig', 65536);
-    validatePinnedFiles(runnerKind, source.runnerConfig);
-    validateStudyProtocol(runnerKind, source.runnerConfig);
-    const resultSchemaJson = this._researchJson(assertPlainObject(source.resultSchema, 'resultSchema'), 'resultSchema', 16384);
-    const collectorJson = this._researchJson(assertPlainObject(source.collector, 'collector'), 'collector', 16384);
-    const maxParallel = assertInteger(source.maxParallel === undefined ? 1 : source.maxParallel, 'maxParallel', { min: 1, max: 16 });
-    const mutexKey = source.mutexKey === undefined || source.mutexKey === null ? null : assertString(source.mutexKey, 'mutexKey', { max: 120 });
-    const timeoutMs = assertInteger(source.timeoutMs === undefined ? 600000 : source.timeoutMs, 'timeoutMs', { min: 1000, max: 3600000 });
-    const configHash = hashInput({ runnerKind, runnerConfigJson, resultSchemaJson, collectorJson, maxParallel, mutexKey, timeoutMs });
-    return { projectId, name, runnerKind, runnerConfigJson, resultSchemaJson, collectorJson, maxParallel, mutexKey, timeoutMs, configHash };
-  }
-
-  _createPreparedResearchExperiment(db, prepared, beforeCreate) {
-    const { projectId, name, runnerKind, runnerConfigJson, resultSchemaJson, collectorJson, maxParallel, mutexKey, timeoutMs, configHash } = prepared;
-    const project = db.prepare('SELECT * FROM research_projects WHERE project_id = ?').get(projectId);
-    if (!project) throw stateError('RESEARCH_PROJECT_NOT_FOUND', 'No research project has that id.', { projectId });
-    const existing = db.prepare('SELECT * FROM research_experiments WHERE project_id = ? AND config_hash = ?').get(projectId, configHash);
-    const experimentId = existing ? existing.experiment_id : this._researchId('rx');
-    // Inline submission must obtain its provider admission and durable audit
-    // before the first insert, while the project/config identity is locked.
-    if (beforeCreate) beforeCreate(Object.freeze({ experimentId, projectId, runnerKind }), this._researchProjectRow(project));
-    if (existing) return { disposition: 'replay', experiment: this._researchExperimentRow(existing) };
-    const now = this._now();
-    try {
-      db.prepare(`INSERT INTO research_experiments(experiment_id, project_id, name, runner_kind, runner_config_json, config_hash,
-        result_schema_json, collector_json, max_parallel, mutex_key, timeout_ms, status, created_at_ms, updated_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`).run(
-        experimentId, projectId, name, runnerKind, runnerConfigJson, configHash,
-        resultSchemaJson, collectorJson, maxParallel, mutexKey, timeoutMs, now, now);
-    } catch (error) {
-      if (String(error && error.message).includes('UNIQUE')) {
-        throw stateError('RESEARCH_EXPERIMENT_NAME_TAKEN', 'An experiment with that name already exists in the project (its configuration differs — rename or archive it first).', { projectId, name });
-      }
-      throw error;
-    }
-    return { disposition: 'created', experiment: this._researchExperimentRow(db.prepare('SELECT * FROM research_experiments WHERE experiment_id = ?').get(experimentId)) };
-  }
-
-  updateResearchExperiment(input) {
-    const source = assertPlainObject(input, 'experiment');
-    const experimentId = assertString(source.experimentId, 'experimentId', { max: 39 });
-    const forbidden = ['runnerKind', 'runnerConfig', 'resultSchema', 'collector', 'mutexKey', 'timeoutMs'].filter(field => source[field] !== undefined);
-    if (forbidden.length) {
-      throw stateError('RESEARCH_EXPERIMENT_IMMUTABLE', 'An experiment configuration cannot be changed after creation — create a new experiment instead.', { fields: forbidden });
-    }
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM research_experiments WHERE experiment_id = ?').get(experimentId);
-      if (!row) throw stateError('RESEARCH_EXPERIMENT_NOT_FOUND', 'No research experiment has that id.', { experimentId });
-      const name = source.name === undefined ? row.name : assertString(source.name, 'name', { max: 120 });
-      const status = source.status === undefined ? row.status : source.status;
-      if (!['active', 'archived'].includes(status)) {
-        throw stateError('STATE_INVALID_ARGUMENT', "status must be 'active' or 'archived'.", { field: 'status' });
-      }
-      const maxParallel = source.maxParallel === undefined ? row.max_parallel : assertInteger(source.maxParallel, 'maxParallel', { min: 1, max: 16 });
-      db.prepare('UPDATE research_experiments SET name = ?, status = ?, max_parallel = ?, updated_at_ms = ? WHERE experiment_id = ?')
-        .run(name, status, maxParallel, this._now(), experimentId);
-      return this._researchExperimentRow(db.prepare('SELECT * FROM research_experiments WHERE experiment_id = ?').get(experimentId));
-    });
-  }
-
-  getResearchExperiment(input) {
-    const source = assertPlainObject(input, 'query');
-    const experimentId = assertString(source.experimentId, 'experimentId', { max: 39 });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM research_experiments WHERE experiment_id = ?').get(experimentId);
-      return row ? this._researchExperimentRow(row) : null;
-    });
-  }
-
-  listResearchExperiments(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    return this.transaction(db => db
-      .prepare('SELECT * FROM research_experiments WHERE project_id = ? ORDER BY updated_at_ms DESC').all(projectId)
-      .map(row => this._researchExperimentRow(row)));
-  }
-
-  // One transaction: task insert on the reserved queue + run projection (+
-  // optional submitting-session attribution). Idempotency key derives from
-  // (experimentId, paramsHash), so replicate runs must carry a distinguishing
-  // field (e.g. a replicate index) inside params — a deliberate contract, not
-  // an accident. Replay returns the existing run.
-  submitResearchRun(input) {
-    const source = assertPlainObject(input, 'run');
-    const experimentId = assertString(source.experimentId, 'experimentId', { max: 39 });
-    const prepared = this._prepareResearchRun(source);
-    return this.transaction(db => this._submitPreparedResearchRun(db, experimentId, prepared));
-  }
-
-  // Register-on-first-submit is one operation: a refusal cannot leave an
-  // unaudited experiment or a partial task/run behind. The callback is a
-  // synchronous provider admission hook, not an asynchronous transaction.
-  registerAndSubmitResearchRun(input, beforeSubmit) {
-    const source = assertPlainObject(input, 'inline run');
-    if (typeof beforeSubmit !== 'function' || beforeSubmit.constructor?.name === 'AsyncFunction') {
-      throw stateError('STATE_INVALID_ARGUMENT', 'Inline run admission must be a synchronous function.');
-    }
-    const experiment = this._prepareResearchExperiment(source.experiment);
-    const run = this._prepareResearchRun(source);
-    return this.transaction(db => {
-      const registered = this._createPreparedResearchExperiment(db, experiment, (identity, project) => {
-        const admitted = beforeSubmit(identity, project);
-        if (admitted && typeof admitted.then === 'function') {
-          if (typeof admitted.catch === 'function') admitted.catch(() => {});
-          throw stateError('STATE_TRANSACTION_ASYNC', 'Inline run admission may not return a Promise.');
-        }
-      });
-      const submitted = this._submitPreparedResearchRun(db, registered.experiment.experimentId, run);
-      return { ...submitted, experiment: registered.experiment };
-    });
-  }
-
-  _prepareResearchRun(source) {
-    const params = assertPlainObject(source.params, 'params');
-    const paramsJson = this._researchJson(params, 'params', 65536);
-    const paramsHash = hashText(paramsJson);
-    const priority = source.priority === undefined ? 0 : assertInteger(source.priority, 'priority', { min: -100, max: 100 });
-    const availableAtMs = source.availableAtMs === undefined ? undefined : assertInteger(source.availableAtMs, 'availableAtMs');
-    let sessionRefKind = null;
-    let sessionRef = null;
-    if (source.sessionRefKind !== undefined || source.sessionRef !== undefined) {
-      if (!['launch', 'presence', 'observed'].includes(source.sessionRefKind)) {
-        throw stateError('STATE_INVALID_ARGUMENT', "sessionRefKind must be 'launch', 'presence' or 'observed'.", { field: 'sessionRefKind' });
-      }
-      sessionRefKind = source.sessionRefKind;
-      sessionRef = assertString(source.sessionRef, 'sessionRef', { max: 200 });
-    }
-    const runId = this._researchId('rr');
-    return { paramsJson, paramsHash, priority, availableAtMs, sessionRefKind, sessionRef, runId, maxAttempts: source.maxAttempts };
-  }
-
-  _submitPreparedResearchRun(db, experimentId, prepared) {
-    const { paramsJson, paramsHash, priority, availableAtMs, sessionRefKind, sessionRef, runId, maxAttempts } = prepared;
-    // The task payload contract is a closed {title, objective, context?} string
-    // shape (_taskPayload), and it must be DETERMINISTIC for identical
-    // submissions or the idempotency input-hash can never replay — so the
-    // payload carries only (experimentId, paramsHash). The worker resolves the
-    // run row through research_runs.task_id (UNIQUE) after claiming.
-    const experiment = db.prepare('SELECT * FROM research_experiments WHERE experiment_id = ?').get(experimentId);
-    if (!experiment) throw stateError('RESEARCH_EXPERIMENT_NOT_FOUND', 'No research experiment has that id.', { experimentId });
-    if (experiment.status !== 'active') throw stateError('RESEARCH_EXPERIMENT_ARCHIVED', 'The experiment is archived; runs cannot be submitted to it.', { experimentId });
-    const definition = this._prepareTaskSubmission({
-      queue: 'research-runs', type: 'research-run',
-      idempotencyKey: `run:${experimentId}:${paramsHash.slice(0, 32)}`,
-      // Mint only after the row lookup, inside the transaction that binds
-      // the task to its run. paramsHash was computed from paramsJson above;
-      // no caller-provided hash or objective reaches this constructor.
-      payload: researchReferencePayload(experiment, paramsHash),
-      // 6, not 3: a pause consumes a claim, and the overnight queue already
-      // learned that bounded pauses need headroom (its MAX_ATTEMPTS is 6).
-      priority, maxAttempts: maxAttempts === undefined ? 6 : maxAttempts,
-      expiryPolicy: 'retry', availableAtMs
-    });
-    const now = this._now();
-    const submission = this._submitPreparedTask(db, definition, now, { maxActiveTasks: 128 });
-    if (submission.disposition === 'replay') {
-      const existing = db.prepare('SELECT * FROM research_runs WHERE task_id = ?').get(submission.task.id);
-      if (!existing) throw stateError('RESEARCH_RUN_ORPHAN_TASK', 'A task exists for this submission but its run row is missing.', { taskId: submission.task.id });
-      return { disposition: 'replay', run: this._researchRunRow(existing, null) };
-    }
-    db.prepare(`INSERT INTO research_runs(run_id, experiment_id, task_id, params_json, params_hash, session_ref_kind, session_ref, artifact_dir, created_at_ms)
-      VALUES(?, ?, ?, ?, ?, ?, ?, NULL, ?)`).run(runId, experimentId, submission.task.id, paramsJson, paramsHash, sessionRefKind, sessionRef, now);
-    const row = db.prepare('SELECT * FROM research_runs WHERE run_id = ?').get(runId);
-    return { disposition: 'submitted', run: this._researchRunRow(row, null) };
-  }
-
-  // Attempt-neutral pause: push the availability of queued research-run tasks
-  // whose project is disabled/archived, whose experiment is archived, or whose
-  // runner kind is currently withheld, so the worker never claims them. A
-  // pause that works by claim-then-retry burns a task attempt per cycle and
-  // the closed retry taxonomy caps local-write retries at two, which would
-  // make "jobs already waiting stay waiting instead of failing" (the settings
-  // row's own sentence) false on the second cycle. Deferring availability
-  // consumes nothing and reverses the moment the flag comes back.
-  deferResearchRuns(input) {
-    const source = assertPlainObject(input, 'options');
-    const delayMs = assertInteger(source.delayMs, 'delayMs', { min: 1000, max: 3600000 });
-    const withheldKinds = source.withheldKinds === undefined ? [] : source.withheldKinds;
-    if (!Array.isArray(withheldKinds) || withheldKinds.some(kind => !['agent', 'process', 'http'].includes(kind))) {
-      throw stateError('STATE_INVALID_ARGUMENT', "withheldKinds may contain only 'agent', 'process' or 'http'.", { field: 'withheldKinds' });
-    }
-    return this.transaction(db => {
-      const now = this._now();
-      const notBefore = now + delayMs;
-      const kindClause = withheldKinds.length ? ` OR e.runner_kind IN (${withheldKinds.map(() => '?').join(',')})` : '';
-      const result = db.prepare(`UPDATE tasks SET available_at_ms = ?, updated_at_ms = ?
-        WHERE status IN ('queued', 'retry_wait') AND available_at_ms < ? AND id IN (
-          SELECT r.task_id FROM research_runs r
-          JOIN research_experiments e ON e.experiment_id = r.experiment_id
-          JOIN research_projects p ON p.project_id = e.project_id
-          WHERE p.enabled = 0 OR p.status <> 'active' OR e.status <> 'active'${kindClause}
-        )`).run(notBefore, now, notBefore, ...withheldKinds);
-      // Capacity is the same attempt math with a shorter horizon: a run
-      // claimed beyond max_parallel or into a held mutex could only be
-      // retry-failed, and a burst larger than the ceiling would die on it.
-      // Defer over-capacity runs briefly instead; capacity clears fast.
-      const capacityDelayMs = source.capacityDelayMs === undefined ? Math.min(delayMs, 15000)
-        : assertInteger(source.capacityDelayMs, 'capacityDelayMs', { min: 1000, max: 3600000 });
-      const capacityNotBefore = now + capacityDelayMs;
-      const capacity = db.prepare(`UPDATE tasks SET available_at_ms = ?, updated_at_ms = ?
-        WHERE status IN ('queued', 'retry_wait') AND available_at_ms < ? AND id IN (
-          SELECT r.task_id FROM research_runs r
-          JOIN research_experiments e ON e.experiment_id = r.experiment_id
-          WHERE (SELECT COUNT(*) FROM research_runs r2 JOIN tasks t2 ON t2.id = r2.task_id
-                 WHERE r2.experiment_id = e.experiment_id AND t2.status IN ('leased', 'running')) >= e.max_parallel
-             OR (e.mutex_key IS NOT NULL AND EXISTS(
-                 SELECT 1 FROM research_runs r3
-                 JOIN research_experiments e3 ON e3.experiment_id = r3.experiment_id
-                 JOIN tasks t3 ON t3.id = r3.task_id
-                 WHERE e3.mutex_key = e.mutex_key AND t3.status IN ('leased', 'running')))
-        )`).run(capacityNotBefore, now, capacityNotBefore);
-      return { deferred: result.changes, deferredForCapacity: capacity.changes };
-    });
-  }
-
-  getResearchRunByTask(input) {
-    const source = assertPlainObject(input, 'query');
-    const taskId = assertString(source.taskId, 'taskId', { max: 500 });
-    return this.transaction(db => {
-      const row = db.prepare('SELECT * FROM research_runs WHERE task_id = ?').get(taskId);
-      if (!row) return null;
-      const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(row.task_id);
-      return this._researchRunRow(row, task || null);
-    });
-  }
-
-  listResearchRuns(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const experimentId = source.experimentId === undefined ? null : assertString(source.experimentId, 'experimentId', { max: 39 });
-    const runId = source.runId === undefined ? null : assertString(source.runId, 'runId', { max: 39 });
-    if (!experimentId && !runId) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'listResearchRuns needs an experimentId or a runId.', { field: 'experimentId' });
-    }
-    const limit = assertInteger(source.limit === undefined ? 200 : source.limit, 'limit', { min: 1, max: 1000 });
-    return this.transaction(db => {
-      const rows = runId
-        ? db.prepare('SELECT * FROM research_runs WHERE run_id = ?').all(runId)
-        : db.prepare('SELECT * FROM research_runs WHERE experiment_id = ? ORDER BY created_at_ms DESC LIMIT ?').all(experimentId, limit);
-      return rows.map(row => {
-        const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(row.task_id);
-        return this._researchRunRow(row, task || null);
-      });
-    });
-  }
-
-  // A research history page freezes membership at an insertion ceiling. A
-  // later append waits for the next traversal; deletion/replacement refuses
-  // this traversal instead of passing an incomplete history to an export.
-  listResearchRunsPage(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const experimentId = assertString(source.experimentId, 'experimentId', { max: 39 });
-    const limit = assertInteger(source.limit === undefined ? 200 : source.limit, 'limit', { min: 1, max: 1000 });
-    let cursor = null;
-    if (source.cursor !== undefined) {
-      try {
-        const token = source.cursor;
-        if (typeof token !== 'string' || !token || token.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(token)) throw Error();
-        cursor = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
-        if (!cursor || typeof cursor !== 'object' || Array.isArray(cursor)
-            || Object.keys(cursor).sort().join(',') !== 'before,beforeRunId,ceiling,ceilingRunId,experimentId,offset,total,version'
-            || cursor.version !== 1 || cursor.experimentId !== experimentId
-            || ![cursor.ceiling, cursor.before, cursor.total, cursor.offset].every(value => Number.isSafeInteger(value) && value > 0)
-            || cursor.before > cursor.ceiling || cursor.offset >= cursor.total
-            || ![cursor.ceilingRunId, cursor.beforeRunId].every(value => typeof value === 'string' && /^rr-[0-9a-f]{36}$/.test(value))) throw Error();
-      } catch { throw stateError('STATE_INVALID_ARGUMENT', 'The research run cursor is invalid or belongs to another experiment.'); }
-    }
-    return this.transaction(db => {
-      const latest = db.prepare('SELECT rowid AS sequence, run_id FROM research_runs WHERE experiment_id = ? ORDER BY rowid DESC LIMIT 1').get(experimentId);
-      const ceiling = cursor?.ceiling ?? latest?.sequence ?? 0;
-      const total = db.prepare('SELECT COUNT(*) AS total FROM research_runs WHERE experiment_id = ? AND rowid <= ?').get(experimentId, ceiling).total;
-      const snapshot = cursor?.ceilingRunId ?? latest?.run_id ?? null;
-      if (cursor) {
-        const ceilingRow = db.prepare('SELECT run_id FROM research_runs WHERE experiment_id = ? AND rowid = ?').get(experimentId, ceiling);
-        const beforeRow = db.prepare('SELECT run_id FROM research_runs WHERE experiment_id = ? AND rowid = ?').get(experimentId, cursor.before);
-        const offset = db.prepare('SELECT COUNT(*) AS total FROM research_runs WHERE experiment_id = ? AND rowid <= ? AND rowid >= ?').get(experimentId, ceiling, cursor.before).total;
-        if (total !== cursor.total || ceilingRow?.run_id !== snapshot || beforeRow?.run_id !== cursor.beforeRunId || offset !== cursor.offset) {
-          throw stateError('RESEARCH_RUNS_CHANGED', 'The research history changed while it was being read. Refresh it before using or exporting the run list.');
-        }
-      }
-      const rows = db.prepare(`SELECT rowid AS sequence, * FROM research_runs
-        WHERE experiment_id = ? AND rowid <= ? AND (? IS NULL OR rowid < ?) ORDER BY rowid DESC LIMIT ?`)
-        .all(experimentId, ceiling, cursor?.before ?? null, cursor?.before ?? null, limit);
-      const offset = cursor?.offset ?? 0;
-      const nextOffset = offset + rows.length;
-      if (rows.length !== Math.min(limit, total - offset)) throw stateError('RESEARCH_RUNS_CHANGED', 'The complete research history page could not be read. Refresh it before exporting.');
-      const last = rows.at(-1);
-      const nextCursor = nextOffset < total ? Buffer.from(JSON.stringify({ version: 1, experimentId,
-        ceiling, ceilingRunId: snapshot, before: last.sequence, beforeRunId: last.run_id, total, offset: nextOffset })).toString('base64url') : null;
-      return {
-        runs: rows.map(row => this._researchRunRow(row, db.prepare('SELECT * FROM tasks WHERE id = ?').get(row.task_id) || null)),
-        pagination: { version: 1, experimentId, snapshot, total, offset, nextCursor }
-      };
-    });
-  }
-
-  setResearchRunArtifactDir(input) {
-    const source = assertPlainObject(input, 'run');
-    const runId = assertString(source.runId, 'runId', { max: 39 });
-    const artifactDir = assertString(source.artifactDir, 'artifactDir', { max: 1024 });
-    return this.transaction(db => {
-      if (source.handle !== undefined) this._assertResearchRunClaim(db, runId, source.handle);
-      const changed = db.prepare('UPDATE research_runs SET artifact_dir = ? WHERE run_id = ?').run(artifactDir, runId);
-      if (changed.changes !== 1) throw stateError('RESEARCH_RUN_NOT_FOUND', 'No research run has that id.', { runId });
-      return true;
-    });
-  }
-
-  setResearchRunSession(input) {
-    const source = assertPlainObject(input, 'run');
-    const runId = assertString(source.runId, 'runId', { max: 39 });
-    if (!['launch', 'presence', 'observed'].includes(source.sessionRefKind)) {
-      throw stateError('STATE_INVALID_ARGUMENT', "sessionRefKind must be 'launch', 'presence' or 'observed'.", { field: 'sessionRefKind' });
-    }
-    const sessionRef = assertString(source.sessionRef, 'sessionRef', { max: 200 });
-    return this.transaction(db => {
-      if (source.handle !== undefined) this._assertResearchRunClaim(db, runId, source.handle);
-      const changed = db.prepare('UPDATE research_runs SET session_ref_kind = ?, session_ref = ? WHERE run_id = ?')
-        .run(source.sessionRefKind, sessionRef, runId);
-      if (changed.changes !== 1) throw stateError('RESEARCH_RUN_NOT_FOUND', 'No research run has that id.', { runId });
-      return true;
-    });
-  }
-
-  _assertResearchRunClaim(db, runId, handle) {
-    const claim = this._validateTaskHandle(handle);
-    const run = db.prepare('SELECT task_id FROM research_runs WHERE run_id = ?').get(runId);
-    if (!run) throw stateError('RESEARCH_RUN_NOT_FOUND', 'No research run has that id.', { runId });
-    if (run.task_id !== claim.taskId) throw stateError('TASK_FENCE_LOST', 'The claim does not own this research run.', { runId });
-    this._currentTaskClaim(db, claim, this._now(), ['running']);
-  }
-
-  _prepareResearchResults(records, { allowEmpty = false } = {}) {
-    if (!Array.isArray(records) || records.length < (allowEmpty ? 0 : 1) || records.length > 500) {
-      throw stateError('STATE_INVALID_ARGUMENT', `records must contain from ${allowEmpty ? 0 : 1} through 500 entries.`, { field: 'records' });
-    }
-    return records.map((entry, index) => {
-      const record = assertPlainObject(entry, `records[${index}]`);
-      const recordKind = assertString(record.recordKind, `records[${index}].recordKind`, { max: 64 });
-      const recordJson = this._researchJson(record.record, `records[${index}].record`, 262144);
-      const artifactPath = record.artifactPath === undefined || record.artifactPath === null
-        ? null : assertString(record.artifactPath, `records[${index}].artifactPath`, { max: 1024 });
-      return { recordKind, recordJson, recordHash: hashText(recordJson), artifactPath };
-    });
-  }
-
-  _recordResearchResults(db, runId, prepared) {
-    const run = db.prepare('SELECT run_id FROM research_runs WHERE run_id = ?').get(runId);
-    if (!run) throw stateError('RESEARCH_RUN_NOT_FOUND', 'No research run has that id.', { runId });
-    const now = this._now();
-    const insert = db.prepare(`INSERT OR IGNORE INTO research_results(result_id, run_id, record_kind, record_json, record_hash, artifact_path, created_at_ms)
-      VALUES(?, ?, ?, ?, ?, ?, ?)`);
-    let recorded = 0;
-    for (const entry of prepared) {
-      const changes = insert.run(this._researchId('rres'), runId, entry.recordKind, entry.recordJson, entry.recordHash, entry.artifactPath, now).changes;
-      if (changes) recorded += 1;
-    }
-    return { recorded, deduplicated: prepared.length - recorded };
-  }
-
-  recordResearchResults(input) {
-    const source = assertPlainObject(input, 'results');
-    const runId = assertString(source.runId, 'runId', { max: 39 });
-    const prepared = this._prepareResearchResults(source.records);
-    return this.transaction(db => this._recordResearchResults(db, runId, prepared));
-  }
-
-  completeResearchRun(handle, options = {}) {
-    const claim = this._validateTaskHandle(handle);
-    const source = assertPlainObject(options, 'options');
-    const runId = assertString(source.runId, 'runId', { max: 39 });
-    const prepared = this._prepareResearchResults(source.records, { allowEmpty: true });
-    const completion = assertPlainObject(source.result, 'result');
-    const expectedEvidence = prepared.length ? 'collected' : 'execution-only';
-    if (completion.evidenceStatus !== expectedEvidence) {
-      throw stateError('RESEARCH_RESULTS_EVIDENCE_MISMATCH', 'Collected evidence requires nonempty results; execution-only completion requires no results.', { runId });
-    }
-    // Keep the legacy writer compatible, but the fenced collector boundary
-    // accepts only object records and never converts non-finite metadata to null.
-    source.records.forEach((entry, index) => assertPlainObject(entry.record, `records[${index}].record`));
-    this._researchJson(completion, 'result', MAX_JSON_BYTES);
-    // The legacy result table deduplicates equal payloads. Treat an ambiguous
-    // repeated observation as a refusal, never silently reduce the sample size.
-    if (new Set(prepared.map(entry => entry.recordHash)).size !== prepared.length) {
-      throw stateError('RESEARCH_RESULTS_DUPLICATE_IDENTITY', 'Repeated result payloads need distinct observation IDs; no observations were discarded or accepted.', { runId });
-    }
-    const result = Object.freeze({
-      ...completion,
-      recorded: prepared.length, deduplicated: 0,
-      collectionHash: hashInput({ runId, records: prepared }),
-      attempt: claim.attempt, fence: claim.fence
-    });
-    RESEARCH_COMPLETION_DIGESTS.set(result, Object.freeze({ digest: result.collectionHash, json: JSON.stringify(result) }));
-    return this.transaction(db => {
-      const run = db.prepare(`SELECT r.task_id, r.artifact_dir, r.experiment_id, r.params_hash, e.config_hash, e.runner_kind, e.runner_config_json, e.collector_json FROM research_runs r
-        JOIN research_experiments e ON e.experiment_id = r.experiment_id WHERE r.run_id = ?`).get(runId);
-      if (!run) throw stateError('RESEARCH_RUN_NOT_FOUND', 'No research run has that id.', { runId });
-      if (run.task_id !== claim.taskId) throw stateError('TASK_FENCE_LOST', 'The claim does not own this research run.', { runId });
-      const runnerConfig = JSON.parse(run.runner_config_json);
-      const pins = validatePinnedFiles(run.runner_kind, runnerConfig);
-      if (pins) assertProcessReceipt(completion.provenance, { pins, runId, artifactDir: run.artifact_dir });
-      const manifest = validateStudyProtocol(run.runner_kind, runnerConfig);
-      assertStudyProtocolDeclaration(completion.studyProtocol, { manifest, binding: {
-        runId, experimentId: run.experiment_id, experimentConfigHash: run.config_hash,
-        paramsHash: run.params_hash, attempt: claim.attempt, fence: claim.fence
-      } });
-      const collector = JSON.parse(run.collector_json);
-      if (!['process', 'http'].includes(run.runner_kind) || completion.runnerKind !== run.runner_kind
-          || !['none', 'stdout-json', 'artifact-glob'].includes(collector.kind)
-          || (collector.kind === 'none' ? 'execution-only' : 'collected') !== completion.evidenceStatus) {
-        throw stateError('RESEARCH_RESULTS_EVIDENCE_MISMATCH', 'The evidence status and runner must match this run\'s declared collector and execution kind.', { runId });
-      }
-      const completed = this._completeTask(db, claim, result);
-      if (!completed.replayed) {
-        if (db.prepare('SELECT 1 FROM research_results WHERE run_id = ? LIMIT 1').get(runId)) {
-          throw stateError('RESEARCH_RESULTS_PRIOR_UNVERIFIED', 'This run has prior results without this atomic completion. They were preserved; submit a new run to avoid mixing attempts.', { runId });
-        }
-        const saved = this._recordResearchResults(db, runId, prepared);
-        if (saved.recorded !== prepared.length || saved.deduplicated !== 0) {
-          throw stateError('RESEARCH_RUN_RESULTS_INCOMPLETE', 'The complete result set could not be saved. Completion and all new records were rolled back.', { runId });
-        }
-      }
-      // A terminal task hash alone does not establish that its current records
-      // still match. Also check replays, including later legacy appends, deleted
-      // rows, or a stored payload changed without updating its record hash.
-      const rows = db.prepare(`SELECT record_kind, record_json, record_hash, artifact_path
-        FROM research_results WHERE run_id = ? LIMIT 501`).all(runId);
-      const expected = new Map(prepared.map(entry => [entry.recordHash, entry]));
-      if (rows.length !== prepared.length || rows.some(row => {
-        const entry = expected.get(row.record_hash);
-        return !entry || row.record_kind !== entry.recordKind || row.record_json !== entry.recordJson
-          || row.artifact_path !== entry.artifactPath;
-      })) {
-        throw stateError('RESEARCH_RESULTS_INTEGRITY_CONFLICT', 'The saved result set does not match this fenced completion. No records were repaired or accepted.', { runId });
-      }
-      return completed;
-    });
-  }
-
-  listResearchResults(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const runId = source.runId === undefined ? null : assertString(source.runId, 'runId', { max: 39 });
-    const experimentId = source.experimentId === undefined ? null : assertString(source.experimentId, 'experimentId', { max: 39 });
-    if (!runId && !experimentId) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'listResearchResults needs a runId or an experimentId.', { field: 'runId' });
-    }
-    const limit = assertInteger(source.limit === undefined ? 500 : source.limit, 'limit', { min: 1, max: 2000 });
-    return this.transaction(db => {
-      const rows = runId
-        ? db.prepare('SELECT * FROM research_results WHERE run_id = ? ORDER BY created_at_ms LIMIT ?').all(runId, limit)
-        : db.prepare(`SELECT rr.* FROM research_results rr JOIN research_runs r ON r.run_id = rr.run_id
-            WHERE r.experiment_id = ? ORDER BY rr.created_at_ms LIMIT ?`).all(experimentId, limit);
-      return rows.map(row => ({
-        resultId: row.result_id, runId: row.run_id, recordKind: row.record_kind,
-        record: JSON.parse(row.record_json), recordHash: row.record_hash,
-        artifactPath: row.artifact_path, createdAtMs: row.created_at_ms
-      }));
-    });
-  }
-
-  countActiveResearchRuns(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const experimentId = source.experimentId === undefined ? null : assertString(source.experimentId, 'experimentId', { max: 39 });
-    const mutexKey = source.mutexKey === undefined ? null : assertString(source.mutexKey, 'mutexKey', { max: 120 });
-    const excludeTaskId = source.excludeTaskId === undefined ? null : assertString(source.excludeTaskId, 'excludeTaskId', { max: 500 });
-    if (!experimentId && !mutexKey) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'countActiveResearchRuns needs an experimentId or a mutexKey.', { field: 'experimentId' });
-    }
-    return this.transaction(db => {
-      const clauses = ["t.status IN ('leased','running')"];
-      const values = [];
-      if (experimentId) { clauses.push('r.experiment_id = ?'); values.push(experimentId); }
-      if (mutexKey) { clauses.push('e.mutex_key = ?'); values.push(mutexKey); }
-      if (excludeTaskId) { clauses.push('r.task_id <> ?'); values.push(excludeTaskId); }
-      return db.prepare(`SELECT COUNT(*) AS count FROM research_runs r
-        JOIN tasks t ON t.id = r.task_id
-        JOIN research_experiments e ON e.experiment_id = r.experiment_id
-        WHERE ${clauses.join(' AND ')}`).get(...values).count;
-    });
-  }
-
-  assignResearchSessions(input) {
-    const source = assertPlainObject(input, 'assignment');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    const assignedBy = assertString(source.assignedBy, 'assignedBy', { max: 100 });
-    if (!Array.isArray(source.sessions) || source.sessions.length < 1 || source.sessions.length > 100) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'sessions must contain from 1 through 100 entries.', { field: 'sessions' });
-    }
-    const sessions = source.sessions.map((entry, index) => {
-      const record = assertPlainObject(entry, `sessions[${index}]`);
-      if (!['launch', 'presence', 'observed', 'all'].includes(record.kind)) {
-        throw stateError('STATE_INVALID_ARGUMENT', `sessions[${index}].kind must be 'launch', 'presence', 'observed' or 'all'.`, { field: 'sessions' });
-      }
-      const ref = record.kind === 'all' ? '*' : assertString(record.ref, `sessions[${index}].ref`, { max: 200 });
-      return { kind: record.kind, ref };
-    });
-    return this.transaction(db => {
-      const project = db.prepare('SELECT project_id FROM research_projects WHERE project_id = ?').get(projectId);
-      if (!project) throw stateError('RESEARCH_PROJECT_NOT_FOUND', 'No research project has that id.', { projectId });
-      const now = this._now();
-      const results = sessions.map(session => {
-        const existing = db.prepare(`SELECT * FROM research_project_sessions
-          WHERE project_id = ? AND session_ref_kind = ? AND session_ref = ? AND active = 1`).get(projectId, session.kind, session.ref);
-        if (existing) return { disposition: 'replay', assignmentId: existing.assignment_id, kind: session.kind, ref: session.ref };
-        const assignmentId = this._researchId('ra');
-        db.prepare(`INSERT INTO research_project_sessions(assignment_id, project_id, session_ref_kind, session_ref, assigned_by, active, assigned_at_ms, unassigned_at_ms)
-          VALUES(?, ?, ?, ?, ?, 1, ?, NULL)`).run(assignmentId, projectId, session.kind, session.ref, assignedBy, now);
-        return { disposition: 'assigned', assignmentId, kind: session.kind, ref: session.ref };
-      });
-      return { projectId, assignments: results };
-    });
-  }
-
-  unassignResearchSession(input) {
-    const source = assertPlainObject(input, 'assignment');
-    const assignmentId = source.assignmentId === undefined ? null : assertString(source.assignmentId, 'assignmentId', { max: 39 });
-    // Keep ID-only callers valid; a supplied project scopes either selector.
-    const projectId = assignmentId && source.projectId === undefined
-      ? null : assertString(source.projectId, 'projectId', { max: 39 });
-    return this.transaction(db => {
-      let row;
-      if (assignmentId) {
-        row = db.prepare('SELECT * FROM research_project_sessions WHERE assignment_id = ? AND active = 1').get(assignmentId);
-      } else {
-        if (!['launch', 'presence', 'observed', 'all'].includes(source.kind)) {
-          throw stateError('STATE_INVALID_ARGUMENT', "kind must be 'launch', 'presence', 'observed' or 'all'.", { field: 'kind' });
-        }
-        const ref = source.kind === 'all' ? '*' : assertString(source.ref, 'ref', { max: 200 });
-        row = db.prepare(`SELECT * FROM research_project_sessions
-          WHERE project_id = ? AND session_ref_kind = ? AND session_ref = ? AND active = 1`).get(projectId, source.kind, ref);
-      }
-      if (!row || (projectId !== null && row.project_id !== projectId)) {
-        throw stateError('RESEARCH_ASSIGNMENT_NOT_FOUND', 'No active assignment matches.', {});
-      }
-      db.prepare('UPDATE research_project_sessions SET active = 0, unassigned_at_ms = ? WHERE assignment_id = ?').run(this._now(), row.assignment_id);
-      return { assignmentId: row.assignment_id, projectId: row.project_id, kind: row.session_ref_kind, ref: row.session_ref };
-    });
-  }
-
-  listResearchSessionAssignments(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const projectId = source.projectId === undefined ? null : assertString(source.projectId, 'projectId', { max: 39 });
-    const activeOnly = source.activeOnly !== false;
-    return this.transaction(db => {
-      const clauses = [];
-      const values = [];
-      if (projectId) { clauses.push('project_id = ?'); values.push(projectId); }
-      if (activeOnly) clauses.push('active = 1');
-      const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
-      return db.prepare(`SELECT * FROM research_project_sessions${where} ORDER BY assigned_at_ms DESC`).all(...values).map(row => ({
-        assignmentId: row.assignment_id, projectId: row.project_id, kind: row.session_ref_kind,
-        ref: row.session_ref, assignedBy: row.assigned_by, active: row.active === 1,
-        assignedAtMs: row.assigned_at_ms, unassignedAtMs: row.unassigned_at_ms
-      }));
-    });
-  }
-
-  resolveSessionResearchProjects(input) {
-    const source = assertPlainObject(input, 'query');
-    if (!Array.isArray(source.refs) || source.refs.length < 1 || source.refs.length > 10) {
-      throw stateError('STATE_INVALID_ARGUMENT', 'refs must contain from 1 through 10 entries.', { field: 'refs' });
-    }
-    const refs = source.refs.map((entry, index) => {
-      const record = assertPlainObject(entry, `refs[${index}]`);
-      if (!['launch', 'presence', 'observed'].includes(record.kind)) {
-        throw stateError('STATE_INVALID_ARGUMENT', `refs[${index}].kind must be 'launch', 'presence' or 'observed'.`, { field: 'refs' });
-      }
-      return { kind: record.kind, ref: assertString(record.ref, `refs[${index}].ref`, { max: 200 }) };
-    });
-    return this.transaction(db => {
-      const matches = new Map();
-      const record = row => {
-        if (!matches.has(row.project_id)) {
-          matches.set(row.project_id, {
-            projectId: row.project_id, name: row.name, enabled: row.enabled === 1,
-            status: row.status, via: []
-          });
-        }
-        matches.get(row.project_id).via.push({ kind: row.session_ref_kind, ref: row.session_ref });
-      };
-      for (const ref of refs) {
-        db.prepare(`SELECT p.project_id, p.name, p.enabled, p.status, s.session_ref_kind, s.session_ref
-          FROM research_project_sessions s JOIN research_projects p ON p.project_id = s.project_id
-          WHERE s.active = 1 AND s.session_ref_kind = ? AND s.session_ref = ?`).all(ref.kind, ref.ref).forEach(record);
-      }
-      db.prepare(`SELECT p.project_id, p.name, p.enabled, p.status, s.session_ref_kind, s.session_ref
-        FROM research_project_sessions s JOIN research_projects p ON p.project_id = s.project_id
-        WHERE s.active = 1 AND s.session_ref_kind = 'all'`).all().forEach(record);
-      return [...matches.values()];
-    });
-  }
-
-  saveResearchFinding(input) {
-    const source = assertPlainObject(input, 'finding');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    const claim = assertString(source.claim, 'claim', { max: 500 });
-    const status = source.status === undefined ? 'open' : source.status;
-    if (!['open', 'confirmed', 'refuted', 'superseded'].includes(status)) {
-      throw stateError('STATE_INVALID_ARGUMENT', "status must be 'open', 'confirmed', 'refuted' or 'superseded'.", { field: 'status' });
-    }
-    const evidenceJson = source.evidence === undefined || source.evidence === null ? null : this._researchJson(source.evidence, 'evidence', 65536);
-    const method = source.method === undefined || source.method === null ? null : assertString(source.method, 'method', { max: 2000 });
-    const confidence = source.confidence === undefined || source.confidence === null ? null : assertString(source.confidence, 'confidence', { max: 500 });
-    const falsifier = source.falsifier === undefined || source.falsifier === null ? null : assertString(source.falsifier, 'falsifier', { max: 1000 });
-    const dissentsJson = source.dissents === undefined ? '[]' : this._researchJson(source.dissents, 'dissents', 65536);
-    const supersedes = source.supersedes === undefined || source.supersedes === null ? null : assertString(source.supersedes, 'supersedes', { max: 20 });
-    const findingId = source.findingId === undefined ? null : assertString(source.findingId, 'findingId', { max: 20 });
-    if (status === 'confirmed' && (evidenceJson === null || falsifier === null)) {
-      throw stateError('RESEARCH_FINDING_UNDISCIPLINED', 'A confirmed finding must carry evidence and a falsifier.', { status });
-    }
-    return this.transaction(db => {
-      const project = db.prepare('SELECT project_id FROM research_projects WHERE project_id = ?').get(projectId);
-      if (!project) throw stateError('RESEARCH_PROJECT_NOT_FOUND', 'No research project has that id.', { projectId });
-      const now = this._now();
-      if (findingId) {
-        const row = db.prepare('SELECT * FROM research_findings WHERE finding_id = ?').get(findingId);
-        if (!row) throw stateError('RESEARCH_FINDING_NOT_FOUND', 'No finding has that id.', { findingId });
-        db.prepare(`UPDATE research_findings SET claim = ?, status = ?, evidence_json = ?, method = ?, confidence = ?,
-          falsifier = ?, dissents_json = ?, supersedes = ?, updated_at_ms = ? WHERE finding_id = ?`).run(
-          claim, status, evidenceJson, method, confidence, falsifier, dissentsJson, supersedes, now, findingId);
-        return db.prepare('SELECT finding_id FROM research_findings WHERE finding_id = ?').get(findingId).finding_id;
-      }
-      const stamp = new Date(now);
-      const datePart = `${stamp.getUTCFullYear()}-${String(stamp.getUTCMonth() + 1).padStart(2, '0')}${String(stamp.getUTCDate()).padStart(2, '0')}`;
-      const prefix = `F-${datePart}-`;
-      const last = db.prepare("SELECT finding_id FROM research_findings WHERE finding_id GLOB ? ORDER BY finding_id DESC LIMIT 1").get(`${prefix}[0-9][0-9][0-9]`);
-      const next = last ? Number(last.finding_id.slice(-3)) + 1 : 1;
-      if (next > 999) throw stateError('RESEARCH_FINDING_SEQUENCE_EXHAUSTED', 'The daily finding sequence is exhausted.', { prefix });
-      const newId = `${prefix}${String(next).padStart(3, '0')}`;
-      db.prepare(`INSERT INTO research_findings(finding_id, project_id, claim, status, evidence_json, method, confidence,
-        falsifier, dissents_json, supersedes, created_at_ms, updated_at_ms)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        newId, projectId, claim, status, evidenceJson, method, confidence, falsifier, dissentsJson, supersedes, now, now);
-      return newId;
-    });
-  }
-
-  listResearchFindings(options = {}) {
-    const source = assertPlainObject(options, 'options');
-    const projectId = assertString(source.projectId, 'projectId', { max: 39 });
-    const status = source.status === undefined ? null : source.status;
-    if (status !== null && !['open', 'confirmed', 'refuted', 'superseded'].includes(status)) {
-      throw stateError('STATE_INVALID_ARGUMENT', "status must be 'open', 'confirmed', 'refuted' or 'superseded'.", { field: 'status' });
-    }
-    return this.transaction(db => {
-      const rows = status
-        ? db.prepare('SELECT * FROM research_findings WHERE project_id = ? AND status = ? ORDER BY finding_id DESC').all(projectId, status)
-        : db.prepare('SELECT * FROM research_findings WHERE project_id = ? ORDER BY finding_id DESC').all(projectId);
-      return rows.map(row => ({
-        findingId: row.finding_id, projectId: row.project_id, claim: row.claim, status: row.status,
-        evidence: row.evidence_json === null ? null : JSON.parse(row.evidence_json),
-        method: row.method, confidence: row.confidence, falsifier: row.falsifier,
-        dissents: JSON.parse(row.dissents_json), supersedes: row.supersedes,
-        createdAtMs: row.created_at_ms, updatedAtMs: row.updated_at_ms
-      }));
-    });
-  }
 }
 
 function createStateStore(options = {}) {
@@ -7748,20 +4247,8 @@ function createStateStore(options = {}) {
 
 let singleton;
 let singletonSealed = false;
-// THE PROCESS-WIDE DOOR, AND THEREFORE THE PLACE A BROKEN SCHEMA MUST STOP.
-//
-// Every process that wants durable state comes through here once. Before
-// 2026-08-11 this returned a handle without touching the database at all --
-// importLegacyState() short-circuits when no legacy file is present, so on a
-// normal install nothing here opened anything. A database missing a required
-// STRICT table therefore produced a clean start followed by a scattering of
-// unrelated-looking failures at whichever tool reached the database first.
-//
-// ensureOpen() moves that to the first line of the first process that wants
-// durable state, as one STATE_SCHEMA_INVALID that names the table. It runs
-// BEFORE importLegacyState() on purpose: a legacy import writes, and writing
-// into a database whose shape has not been checked is how a partial schema
-// becomes a corrupt one.
+// Open and validate the durable database before sharing its process-wide
+// handle. A missing or altered required table fails at startup.
 function getStateStore() {
   if (singletonSealed) {
     throw stateError('STATE_STORE_CLOSED', 'The durable state store was closed for local-data removal. Restart before using it again.');
@@ -7770,7 +4257,6 @@ function getStateStore() {
     const candidate = createStateStore();
     try {
       candidate.ensureOpen();
-      candidate.importLegacyState();
       singleton = candidate;
     } catch (error) {
       candidate.close();

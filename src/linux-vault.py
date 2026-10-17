@@ -7,7 +7,6 @@ application file contains individually authenticated encrypted records.
 """
 
 import base64
-import datetime
 import fcntl
 import hashlib
 import errno
@@ -29,9 +28,11 @@ BACKEND = "gnome-libsecret-aes-256-gcm"
 COLLECTION = "/org/freedesktop/secrets/collection/login"
 KEYRING_HEADER = b"GnomeKeyring\n\r\0\n"
 DENIED = frozenset(("payment_card_default", "owner_legal_identity_v1"))
-DEVICE_CREDENTIAL_KEY = "custom.online_fra_device_credential_v1"
-ADMIN_OPERATION_KEY = "custom.online_fra_admin_operation_v1"
-DEVICE_IDENTITY_KEY = "custom.online_fra_device_identity_v1"
+RETIRED_REMOTE_KEYS = frozenset((
+    "custom.online_fra_device_credential_v1",
+    "custom.online_fra_admin_operation_v1",
+    "custom.online_fra_device_identity_v1",
+))
 KEY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 MUTATIONS = frozenset(("set-many", "get-or-create", "set-monotonic"))
 AUDIT_ACTIONS = frozenset(("audit-pair-inspect", "audit-pair-replace"))
@@ -82,20 +83,8 @@ def validate_request(request):
     if not isinstance(request, dict):
         refuse("SECRET_INPUT_INVALID")
     action = request.get("action")
-    if action not in MUTATIONS | AUDIT_ACTIONS | {"get", "get-many", "list", "present", "status", "check-payment-card-hygiene", "clear-device-credential", "remove", "admin-device-operation"}:
+    if action not in MUTATIONS | AUDIT_ACTIONS | {"get", "get-many", "list", "present", "status", "remove"}:
         refuse("SECRET_INPUT_INVALID")
-    if action == "admin-device-operation":
-        if set(request) != {"action", "file", "operationId", "publicKey", "transition", "expectedHash", "record", "credential"}:
-            refuse("SECRET_INPUT_INVALID")
-        if not re.fullmatch(r"[a-f0-9]{48}", str(request["operationId"])) or not isinstance(request["publicKey"], str):
-            refuse("SECRET_INPUT_INVALID")
-        if request["transition"] not in {"inspect", "inspect-cancel", "prepare", "store", "finalize", "cancel"}:
-            refuse("SECRET_INPUT_INVALID")
-        if request["expectedHash"] is not None and not re.fullmatch(r"[a-f0-9]{64}", str(request["expectedHash"])):
-            refuse("SECRET_INPUT_INVALID")
-        for name in ("record", "credential"):
-            if request[name] is not None:
-                valid_value(request[name])
     if action in AUDIT_ACTIONS:
         expected = {"action", "file"} if action == "audit-pair-inspect" else {"action", "file", "expectedDigest", "privateKey", "anchor"}
         if set(request) != expected:
@@ -105,8 +94,6 @@ def validate_request(request):
                 refuse("SECRET_INPUT_INVALID")
             valid_value(request["privateKey"])
             valid_value(request["anchor"])
-    if action in {"check-payment-card-hygiene", "clear-device-credential"} and set(request) != {"action", "file"}:
-        refuse("SECRET_INPUT_INVALID")
     if action == "remove" and set(request) != {"action", "file", "key"}:
         refuse("SECRET_INPUT_INVALID")
     keys = []
@@ -129,6 +116,8 @@ def validate_request(request):
             refuse("SECRET_INPUT_INVALID")
     for key in keys:
         valid_key(key)
+    if any(key.lower() in RETIRED_REMOTE_KEYS for key in keys):
+        refuse("SECRET_ACCESS_DENIED")
     # Reject before lookup, for absent and present records alike. Protected
     # owner records are never read or written through the generic agent API.
     if action != "present" and any(key.lower() in DENIED for key in keys):
@@ -487,7 +476,7 @@ def read_vault(directory, name, allow_broken_audit=False):
         os.close(fd)
 
 
-def write_vault(directory, name, data, mutation=None):
+def write_vault(directory, name, data):
     raw = encoded(data) + b"\n"
     if len(raw) > MAX_BYTES:
         refuse("SECRET_VAULT_WRITE_FAILED")
@@ -505,8 +494,6 @@ def write_vault(directory, name, data, mutation=None):
         # Even an error returned by the replacement attempt is not evidence
         # that the old directory entry survived. Keep that boundary explicit.
         replacement_attempted = True
-        if mutation is not None:
-            mutation["replacementAttempted"] = True
         os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
         os.fsync(directory)
     except OSError:
@@ -631,20 +618,14 @@ def embedded_sequence(value):
     refuse("SECRET_INPUT_INVALID")
 
 
-def operate(request, service, directory, name, data, mutation=None):
+def operate(request, service, directory, name, data):
     action, key = request["action"], request.get("key")
-    if action == "admin-device-operation" and data is None:
-        refuse("SECRET_VAULT_UNREADABLE")
     if action in AUDIT_ACTIONS and data is None:
         # A missing whole vault is not authority to create another custody
         # identity beside an existing ledger during repair.
         refuse("SECRET_VAULT_UNREADABLE")
-    if action == "clear-device-credential":
-        key = DEVICE_CREDENTIAL_KEY
     if data is None:
         if action not in MUTATIONS:
-            if action == "clear-device-credential":
-                return {"key": key, "status": "absent", "mutationOutcome": "NOT_ATTEMPTED"}
             if action == "get":
                 refuse("SECRET_NOT_CONFIGURED")
             if action == "get-many":
@@ -658,7 +639,7 @@ def operate(request, service, directory, name, data, mutation=None):
     if action == "present":
         return "present" if key in records else "absent"
     if action == "list":
-        return sorted(entry for entry in records if entry.lower() not in DENIED)
+        return sorted(entry for entry in records if entry.lower() not in DENIED | RETIRED_REMOTE_KEYS)
     _, AESGCM, _, _, _, _ = service
     cipher = AESGCM(master)
 
@@ -675,98 +656,6 @@ def operate(request, service, directory, name, data, mutation=None):
     def encrypt(entry, value):
         nonce = secrets.token_bytes(12)
         records[entry] = base64.b64encode(nonce + cipher.encrypt(nonce, value.encode("utf-8"), aad(entry))).decode("ascii")
-
-    if action == "admin-device-operation":
-        # All identity comparison, no-clobber checks and record transitions run
-        # inside the SAME existing kernel lock and encrypted-vault replacement.
-        # Neither an absent store nor absent identity authorizes provisioning one.
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        if DEVICE_IDENTITY_KEY not in records:
-            refuse("ADMIN_IDENTITY_ABSENT")
-        try:
-            identity = serialization.load_pem_private_key(decrypt(DEVICE_IDENTITY_KEY).encode(), password=None)
-            if not isinstance(identity, Ed25519PrivateKey):
-                refuse("ADMIN_IDENTITY_MISMATCH")
-            public = base64.urlsafe_b64encode(identity.public_key().public_bytes(
-                serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)).decode().rstrip("=")
-        except Refusal:
-            raise
-        except Exception:
-            refuse("ADMIN_IDENTITY_MISMATCH")
-        if public != request["publicKey"]:
-            refuse("ADMIN_IDENTITY_MISMATCH")
-        raw = decrypt(ADMIN_OPERATION_KEY) if ADMIN_OPERATION_KEY in records else None
-        current = decode_json(raw) if raw is not None else None
-        if current is not None and (not isinstance(current, dict)
-                or current.get("operationId") != request["operationId"]
-                or current.get("context", {}).get("publicKey") != public):
-            refuse("ADMIN_OPERATION_CONFLICT")
-        stored = decrypt(DEVICE_CREDENTIAL_KEY) if DEVICE_CREDENTIAL_KEY in records else None
-        transition = request["transition"]
-        if transition in {"inspect-cancel", "cancel"}:
-            if stored is not None:
-                refuse("ADMIN_CREDENTIAL_CONFLICT")
-        elif current and current.get("state") in {"stored", "finalized"}:
-            if stored is None or hashlib.sha256(stored.encode()).hexdigest() != current.get("credentialHash"):
-                refuse("ADMIN_CREDENTIAL_CHANGED")
-        elif stored is not None:
-            refuse("ADMIN_CREDENTIAL_CONFLICT")
-        if transition in {"inspect", "inspect-cancel"}:
-            if any(request[field] is not None for field in ("expectedHash", "record", "credential")):
-                refuse("SECRET_INPUT_INVALID")
-            if current:
-                # Reconcile a lost reply or uncertain prior directory flush:
-                # authenticate the stored grant above, then freshly sync both.
-                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
-                try:
-                    private_file(fd)
-                    os.fsync(fd)
-                finally:
-                    os.close(fd)
-                os.fsync(directory)
-            return {"record": raw, "mutationOutcome": "NOT_ATTEMPTED"}
-        actual_hash = hashlib.sha256(raw.encode()).hexdigest() if raw is not None else None
-        if actual_hash != request["expectedHash"]:
-            refuse("ADMIN_OPERATION_CONFLICT")
-        if transition == "cancel":
-            if stored is not None or request["record"] is not None or request["credential"] is not None:
-                refuse("ADMIN_CREDENTIAL_CONFLICT")
-            if raw is None:
-                return {"record": None, "mutationOutcome": "NOT_ATTEMPTED"}
-            del records[ADMIN_OPERATION_KEY]
-            write_vault(directory, name, data, mutation=mutation)
-            return {"record": None, "mutationOutcome": "STORED_SYNCED"}
-        proposed = decode_json(request["record"])
-        if not isinstance(proposed, dict) or proposed.get("version") != 1 or proposed.get("operationId") != request["operationId"]:
-            refuse("SECRET_INPUT_INVALID")
-        if proposed.get("context", {}).get("publicKey") != public:
-            refuse("ADMIN_IDENTITY_MISMATCH")
-        if transition == "prepare":
-            if current is not None or proposed.get("state") != "prepared" or request["credential"] is not None:
-                refuse("ADMIN_OPERATION_CONFLICT")
-        elif transition == "store":
-            if not current or current.get("state") != "prepared" or proposed.get("state") != "stored":
-                refuse("ADMIN_OPERATION_CONFLICT")
-            if proposed.get("context") != current.get("context") or proposed.get("enrollmentRequest") != current.get("enrollmentRequest"):
-                refuse("ADMIN_OPERATION_CONFLICT")
-            if not isinstance(request["credential"], str) or hashlib.sha256(request["credential"].encode()).hexdigest() != proposed.get("credentialHash"):
-                refuse("SECRET_INPUT_INVALID")
-            if stored is not None:
-                refuse("ADMIN_CREDENTIAL_CONFLICT")
-            encrypt(DEVICE_CREDENTIAL_KEY, request["credential"])
-        elif transition == "finalize":
-            if not current or current.get("state") not in {"stored", "finalized"} or proposed.get("state") != "finalized" or request["credential"] is not None:
-                refuse("ADMIN_OPERATION_CONFLICT")
-            if any(proposed.get(field) != current.get(field) for field in current if field not in {"state", "collectionReply", "finalizedAtMs"}):
-                refuse("ADMIN_OPERATION_CONFLICT")
-        encrypt(ADMIN_OPERATION_KEY, request["record"])
-        write_vault(directory, name, data, mutation=mutation)
-        # Verify the actual replaced encrypted file while retaining the lock.
-        committed = read_vault(directory, name)
-        if committed != data:
-            refuse("SECRET_VAULT_WRITE_UNCERTAIN")
-        return {"record": request["record"], "mutationOutcome": "STORED_SYNCED"}
 
     if action in AUDIT_ACTIONS:
         def pair_state():
@@ -793,30 +682,13 @@ def operate(request, service, directory, name, data, mutation=None):
         write_vault(directory, name, data)
         return pair_state()
 
-    if action == "clear-device-credential":
-        if key not in records:
-            return {"key": key, "status": "absent", "mutationOutcome": "NOT_ATTEMPTED"}
-        # Authenticate the fixed record inside this helper, then commit its
-        # removal under the existing kernel lock. No credential is returned,
-        # no master key is created, and all other encrypted records survive.
-        decrypt(key)
-        del records[key]
-        write_vault(directory, name, data, mutation=mutation)
-        return {"key": key, "status": "cleared", "mutationOutcome": "REMOVED_SYNCED"}
     if action == "remove":
-        # The generic counterpart of clear-device-credential, for any key the
-        # denylist permits. Linux had no way to delete a stored credential at
-        # all: system.credential_remove is advertised to every agent and threw
-        # SECRET_VAULT_PLATFORM_UNSUPPORTED here, so a customer who pasted the
-        # wrong API key, or whose token leaked and had to be revoked, had no
-        # supported route. Same shape as the clear above: authenticate the
-        # record first, commit under the existing kernel lock, leave every
-        # other encrypted record intact, and return no credential material.
+        # Authenticate the record before deleting it under the kernel lock.
         if key not in records:
             return {"key": key, "status": "absent", "mutationOutcome": "NOT_ATTEMPTED"}
         decrypt(key)
         del records[key]
-        write_vault(directory, name, data, mutation=mutation)
+        write_vault(directory, name, data)
         return {"key": key, "status": "removed", "mutationOutcome": "REMOVED_SYNCED"}
     if action == "get":
         if key not in records:
@@ -841,170 +713,7 @@ def operate(request, service, directory, name, data, mutation=None):
     return request["value"] if action == "get-or-create" else None
 
 
-def validate_payment_card(record, require_current=False, today=None):
-    # Same version3 record as the Windows owner form. This validator is also
-    # used for hygiene; expiration is a capture constraint, not stored secrecy.
-    fields = {"version", "cardholder", "cardholderName", "cardNumber", "expMonth", "expYear", "postalCode"}
-    if not isinstance(record, dict) or set(record) != fields or type(record["version"]) is not int or record["version"] != 3:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    holder = record["cardholder"]
-    if not isinstance(holder, dict) or set(holder) != {"givenName", "familyName"}:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    for value, limit in [(holder["givenName"], 160), (holder["familyName"], 160), (record["postalCode"], 32)]:
-        if not isinstance(value, str) or not value.strip() or "\0" in value or len(value) > limit:
-            refuse("SECRET_PAYMENT_CARD_INVALID")
-    if record["cardholderName"] != holder["givenName"] + " " + holder["familyName"]:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    number = record["cardNumber"]
-    if not isinstance(number, str) or not re.fullmatch(r"[0-9]{12,19}", number):
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    total = 0
-    for index, digit in enumerate(reversed(number)):
-        value = int(digit) * (2 if index % 2 else 1)
-        total += value - 9 if value > 9 else value
-    month, year = record["expMonth"], record["expYear"]
-    if total % 10 or type(month) is not int or type(year) is not int or not 1 <= month <= 12 or not 2000 <= year <= 9999:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    current = today or datetime.date.today()
-    if require_current and (year, month) < (current.year, current.month):
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    return record
-
-
-def normalize_payment_card(fields, today=None):
-    if not isinstance(fields, dict) or set(fields) != {"given_name", "family_name", "card_number", "expiration", "postal_code"}:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    if any(not isinstance(value, str) or "\0" in value or len(value) > 1024 for value in fields.values()):
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    expiry = re.fullmatch(r"\s*(0[1-9]|1[0-2])\s*/\s*([0-9]{2}|[0-9]{4})\s*", fields["expiration"])
-    if not expiry:
-        refuse("SECRET_PAYMENT_CARD_INVALID")
-    names = [re.sub(r"\s+", " ", fields[key]).strip() for key in ("given_name", "family_name")]
-    year = int(expiry[2]) + (2000 if len(expiry[2]) == 2 else 0)
-    return validate_payment_card({"version": 3, "cardholder": {"givenName": names[0], "familyName": names[1]},
-        "cardholderName": " ".join(names), "cardNumber": re.sub(r"[^0-9]", "", fields["card_number"]),
-        "expMonth": int(expiry[1]), "expYear": year, "postalCode": fields["postal_code"].strip()}, require_current=True, today=today)
-
-
-def save_payment_card(file, record):
-    # Private same-process native-input API, deliberately absent from the
-    # generic JSON request dispatcher. Plaintext never enters a Node process.
-    validate_payment_card(record, require_current=True)
-    key = "payment_card_default"
-    service = secure_service()
-    with vault_directory(file, True) as directory:
-        name = os.path.basename(file)
-        with vault_lock(directory, name):
-            data = read_vault(directory, name)
-            records = data["records"] if data is not None else {}
-            if any(entry.lower() == key and entry != key for entry in records):
-                refuse("SECRET_PAYMENT_CARD_REVIEW_REQUIRED")
-            prior = key in records
-            access_log(directory, name, "prompt-payment-card", [key], replaced=prior)
-            # Reuse exactly the normal encryption, atomic replacement and
-            # kernel lock; only this validated owner input bypasses the oracle.
-            operate({"action": "set-many", "file": file, "entries": [{"key": key, "value": encoded(record).decode("utf-8")}]},
-                    service, directory, name, data)
-            return {"key": key, "status": "updated" if prior else "created"}
-
-
-@contextmanager
-def native_prompt_lock(file):
-    # Match the Windows vault-wide interactive prompt handle: one capture
-    # across direct calls and all queue runners, without holding the save lock.
-    # The empty rendezvous file contains no input; only the live flock owns it.
-    with vault_directory(file, True) as directory:
-        fd = os.open(os.path.basename(file) + ".prompt.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
-                     0o600, dir_fd=directory)
-        try:
-            private_file(fd)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                yield False
-                return
-            yield True
-        finally:
-            os.close(fd)
-
-
-def owner_identity_for_payment_prompt(file):
-    # Optional fixed-record prefill, private to the native process. Missing,
-    # unreadable or invalid identity never prevents manually entering a name.
-    plain = record = None
-    try:
-        with vault_directory(file, False) as directory:
-            if directory is None:
-                return None
-            name = os.path.basename(file)
-            with vault_lock(directory, name):
-                data = read_vault(directory, name)
-                if data is None or "owner_legal_identity_v1" not in data["records"]:
-                    return None
-                plain = operate({"action": "get", "key": "owner_legal_identity_v1", "file": file},
-                                secure_service(), directory, name, data)
-                record = decode_json(plain)
-                if (not isinstance(record, dict) or type(record.get("schemaVersion")) is not int
-                        or record["schemaVersion"] != 1 or record.get("purpose") != "owner_legal_identity"
-                        or not isinstance(record.get("fields"), dict)):
-                    return None
-                names = {}
-                for key in ("givenName", "familyName"):
-                    value = record["fields"].get(key)
-                    if not isinstance(value, str) or "\0" in value:
-                        return None
-                    value = re.sub(r"\s+", " ", value).strip()
-                    if not 2 <= len(value) <= 160:
-                        return None
-                    names[key] = value
-                return names
-    except Exception:
-        return None
-    finally:
-        plain = record = None
-
-
-def payment_card_hygiene(request):
-    # This is a fixed startup hygiene question, not a generic credential
-    # presence shortcut. A missing store is provable from the trusted path
-    # alone and must not require a keyring for a fresh installation. Once a
-    # native store exists, require its normal backend and key metadata before
-    # answering. Validate a canonical version3 record only inside this helper;
-    # malformed, tampered or old records still require review. No value leaves.
-    key = "payment_card_default"
-    absent = {"key": key, "status": "absent"}
-    file = request["file"]
-    with vault_directory(file, False) as directory:
-        if directory is None:
-            return absent
-        name = os.path.basename(file)
-        with vault_lock(directory, name):
-            access_log(directory, name, request["action"], [key])
-            try:
-                data = read_vault(directory, name)
-                if data is None:
-                    return absent
-                service = secure_service()
-                master_key(service, file, data["identity"], metadata_only=True)
-                protected = [entry for entry in data["records"] if entry.lower() == key]
-                if not protected:
-                    return absent
-                if protected != [key]:
-                    refuse("SECRET_PAYMENT_CARD_REVIEW_REQUIRED")
-                try:
-                    plain = operate({"action": "get", "key": key, "file": file}, service, directory, name, data)
-                    validate_payment_card(decode_json(plain))
-                except Exception:
-                    refuse("SECRET_PAYMENT_CARD_REVIEW_REQUIRED")
-                finally:
-                    plain = None
-                return {"key": key, "status": "clean"}
-            except Refusal as error:
-                access_log(directory, name, request["action"], [key], denied=True, code=error.code)
-                raise
-
-
-def process_request(request, mutation=None):
+def process_request(request):
     try:
         validate_request(request)
     except Refusal as error:
@@ -1018,8 +727,6 @@ def process_request(request, mutation=None):
             except Exception:
                 pass
         raise
-    if request["action"] == "check-payment-card-hygiene":
-        return payment_card_hygiene(request)
     service = secure_service()
     if request["action"] == "status":
         return {"available": True, "backend": "gnome_libsecret", "persistent": True}
@@ -1027,35 +734,17 @@ def process_request(request, mutation=None):
     with vault_directory(file, request["action"] in MUTATIONS) as directory:
         name = os.path.basename(file)
         if directory is None:
-            return operate(request, service, None, name, None, mutation=mutation)
+            return operate(request, service, None, name, None)
         with vault_lock(directory, name):
             keys = request.get("keys", [request["key"]] if "key" in request else [])
-            if request["action"] == "clear-device-credential":
-                keys = [DEVICE_CREDENTIAL_KEY]
-            if request["action"] == "admin-device-operation":
-                keys = [DEVICE_IDENTITY_KEY, ADMIN_OPERATION_KEY, DEVICE_CREDENTIAL_KEY]
             if request["action"] == "set-many":
                 keys = [entry["key"] for entry in request["entries"]]
             access_log(directory, name, request["action"], keys)
             try:
-                return operate(request, service, directory, name, read_vault(directory, name, allow_broken_audit=request["action"] in AUDIT_ACTIONS), mutation=mutation)
+                return operate(request, service, directory, name, read_vault(directory, name, allow_broken_audit=request["action"] in AUDIT_ACTIONS))
             except Refusal as error:
                 access_log(directory, name, request["action"], keys, denied=True, code=error.code)
                 raise
-
-
-def request_result(request):
-    mutation = {"replacementAttempted": False} if isinstance(request, dict) and request.get("action") in {"clear-device-credential", "admin-device-operation"} else None
-    try:
-        return process_request(request, mutation=mutation)
-    except Exception as error:
-        if mutation is None:
-            raise
-        outcome = "UNCERTAIN" if mutation["replacementAttempted"] else "NOT_ATTEMPTED"
-        if not isinstance(error, Refusal):
-            error = Refusal("SECRET_VAULT_WRITE_UNCERTAIN" if outcome == "UNCERTAIN" else "SECRET_VAULT_UNREADABLE")
-        error.mutation_outcome = outcome
-        raise error
 
 
 def close_inherited(contract=(0, 1, 2)):
@@ -1115,7 +804,7 @@ def main():
     if len(raw) > MAX_BYTES:
         refuse("SECRET_INPUT_INVALID")
     request = decode_json(raw)
-    return request_result(request)
+    return process_request(request)
 
 
 def serve():
@@ -1144,12 +833,10 @@ def serve():
                     or type(frame["id"]) is not int or not 1 <= frame["id"] <= MAX_SEQUENCE):
                 return
             request_id = frame["id"]
-            response = {"ok": True, "result": request_result(frame["request"])}
+            response = {"ok": True, "result": process_request(frame["request"])}
             status = 0
         except Refusal as error:
             response = {"ok": False, "code": error.code}
-            if getattr(error, "mutation_outcome", None) in {"NOT_ATTEMPTED", "UNCERTAIN"}:
-                response["mutationOutcome"] = error.mutation_outcome
         except Exception:
             response = {"ok": False, "code": "SECRET_VAULT_UNREADABLE"}
         if request_id is None:
@@ -1170,8 +857,6 @@ if __name__ == "__main__":
             print(json.dumps({"ok": True, "result": main()}, separators=(",", ":")))
     except Refusal as error:
         response = {"ok": False, "code": error.code}
-        if getattr(error, "mutation_outcome", None) in {"NOT_ATTEMPTED", "UNCERTAIN"}:
-            response["mutationOutcome"] = error.mutation_outcome
         print(json.dumps(response, separators=(",", ":")))
         sys.exit(1)
     except Exception:

@@ -28,7 +28,12 @@ const KEY_RE = /^[A-Za-z0-9_.-]{1,120}$/;
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]{0,119}$/;
 const MAX_VALUE_BYTES = 2 * 1024 * 1024;
 const MAX_SEQUENCE = Number.MAX_SAFE_INTEGER;
-const DENIED = new Set(['payment_card_default', 'owner_legal_identity_v1']);
+const DENIED = new Set([
+  'payment_card_default', 'owner_legal_identity_v1',
+  'custom.online_fra_device_credential_v1',
+  'custom.online_fra_admin_operation_v1',
+  'custom.online_fra_device_identity_v1'
+]);
 const LOCK_WAIT_MS = 5000;
 
 const MESSAGES = Object.freeze({
@@ -36,7 +41,7 @@ const MESSAGES = Object.freeze({
   SECRET_NOT_CONFIGURED: 'The requested secret is not configured.',
   SECRET_INPUT_INVALID: 'The vault request is invalid.',
   SECRET_MONOTONIC_CONFLICT: 'The protected vault checkpoint cannot move backward or change at the same sequence.',
-  SECRET_BACKEND_UNAVAILABLE: 'This vault operation needs the desktop app and is not available inside an OpenShell sandbox.',
+  SECRET_BACKEND_UNAVAILABLE: 'This vault operation is unavailable inside an OpenShell sandbox.',
   SECRET_VAULT_UNREADABLE: 'The sandbox vault file could not be read.'
 });
 
@@ -224,14 +229,8 @@ function createVault({ env = process.env } = {}) {
 
   return Object.freeze({
     get, getMany, getOrCreate, setMany, setMonotonic, list, presence, remove, status,
-    nativePrompt: desktopOnly,
-    capturePaymentCard: desktopOnly,
-    checkPaymentCardHygiene: desktopOnly,
-    clearDeviceCredential: desktopOnly,
-    adminDeviceOperation: desktopOnly,
     auditPair: desktopOnly,
-    createReader: desktopOnly,
-    clearFailureDetails: () => null
+    createReader: desktopOnly
   });
 }
 

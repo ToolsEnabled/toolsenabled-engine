@@ -10,13 +10,12 @@ const {
 const { randomUUID } = require('node:crypto');
 const { createEventBackpressure } = require('./event-backpressure');
 
-// ACP is negotiated at runtime. The official agent subprocess owns authentication;
-// this adapter only selects an auth method advertised by the agent.
+// ACP is negotiated at runtime. The agent owns its sign-in; Fleet never
+// sends authenticate or starts a login flow.
 const ACP_PROTOCOL_VERSION = 1;
 
 const METHOD = Object.freeze({
   initialize: 'initialize',
-  authenticate: 'authenticate',
   sessionNew: 'session/new',
   sessionLoad: 'session/load',
   sessionFork: 'session/fork',
@@ -31,10 +30,10 @@ const METHOD = Object.freeze({
 const TERMINAL_TOOL_STATUSES = Object.freeze(['completed', 'failed', 'cancelled']);
 const MAX_LINE_BYTES = 8_000_000;
 const MAX_IMAGE_BYTES = 3_000_000;
-
-// Gemini individual accounts moved to Antigravity; Enterprise/API access remains
-// supported by Gemini CLI: github.com/google-gemini/gemini-cli/discussions/28017.
-const GEMINI_INDIVIDUAL_RETIREMENT_MESSAGE = 'Gemini CLI no longer supports this Google account. In Accounts, add Antigravity and select that connection.';
+/* A CLI lists every model of every provider it can sign in to, and one provider alone can offer several
+   hundred (389 measured), so a model list or a select option is bounded well above that; each line is
+   bounded anyway. */
+const MAX_CHOICES = 4096;
 
 class AcpAdapterError extends Error {
   constructor(code, message, details = {}) {
@@ -48,6 +47,13 @@ class AcpAdapterError extends Error {
 }
 
 const EXIT_DETAIL_LIMIT = 2_000;
+
+// What the agent said about a failed request, to tell the person why: one line,
+// bounded, with anything shaped like a key or token replaced. The full text can
+// carry provider output of any length, so it never crosses whole.
+function shortProviderText(text) {
+  return String(text).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/[A-Za-z0-9_-]{24,}/g, '...').replace(/\s+/g, ' ').trim().slice(0, 240);
+}
 
 // Preserve the exit information supplied by the transport. Previously this
 // boundary discarded it and left callers with only ACP_PROCESS_EXITED. The
@@ -289,7 +295,7 @@ function normalizeSessionConfigOptions(value, label) {
     if (currentValue !== null) normalized.currentValue = currentValue;
     if (Object.hasOwn(fields, 'options')) {
       if (!Array.isArray(fields.options.value) || fields.options.value.length === 0 ||
-        fields.options.value.length > 256) {
+        fields.options.value.length > MAX_CHOICES) {
         fail('ACP_PROTOCOL_INVALID', `${optionLabel}.options must be a bounded non-empty array`);
       }
       const values = new Set();
@@ -337,7 +343,7 @@ function sessionModels(value) {
   const fields = ownRecord(value, 'session models');
   const currentModelId = requiredString(fields, 'currentModelId', 'session models', { max: 512 });
   const choices = fields.availableModels?.value;
-  if (!Array.isArray(choices) || choices.length > 256) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be bounded.');
+  if (!Array.isArray(choices) || choices.length > MAX_CHOICES) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be bounded.');
   const ids = new Set();
   const availableModels = choices.map(choice => {
     const model = ownRecord(choice, 'session model');
@@ -349,25 +355,22 @@ function sessionModels(value) {
   return deepFreeze({ currentModelId, availableModels });
 }
 
+// The protocol requires the input, output and total counts. The cached and
+// thought counts are optional: left out when absent, validated when supplied.
 function normalizePromptUsage(value) {
   const label = 'session/prompt result.usage';
   const fields = ownRecord(value, label, {
-    allowed: ['inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedWriteTokens', 'totalTokens']
+    allowed: ['inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedWriteTokens', 'thoughtTokens', 'totalTokens']
   });
+  const count = key => requiredNumber(fields, key, label, { integer: true, min: 0, max: Number.MAX_SAFE_INTEGER });
+  const optional = key => (Object.hasOwn(fields, key) ? { [key]: count(key) } : {});
   return Object.freeze({
-    inputTokens: requiredNumber(fields, 'inputTokens', label, { integer: true, min: 0, max: Number.MAX_SAFE_INTEGER }),
-    outputTokens: requiredNumber(fields, 'outputTokens', label, { integer: true, min: 0, max: Number.MAX_SAFE_INTEGER }),
-    cachedReadTokens: requiredNumber(fields, 'cachedReadTokens', label, {
-      integer: true,
-      min: 0,
-      max: Number.MAX_SAFE_INTEGER
-    }),
-    cachedWriteTokens: requiredNumber(fields, 'cachedWriteTokens', label, {
-      integer: true,
-      min: 0,
-      max: Number.MAX_SAFE_INTEGER
-    }),
-    totalTokens: requiredNumber(fields, 'totalTokens', label, { integer: true, min: 0, max: Number.MAX_SAFE_INTEGER })
+    inputTokens: count('inputTokens'),
+    outputTokens: count('outputTokens'),
+    ...optional('cachedReadTokens'),
+    ...optional('cachedWriteTokens'),
+    ...optional('thoughtTokens'),
+    totalTokens: count('totalTokens')
   });
 }
 
@@ -562,7 +565,6 @@ class AcpAdapter {
     this.closed = null;
     this.initialized = null;
     this.initializing = null;
-    this.authenticatedMethodId = null;
     const unsubscribe = this.transport.onData((chunk, exitInfo) => this._receive(chunk, exitInfo));
     if (unsubscribe !== undefined && typeof unsubscribe !== 'function') {
       fail('ACP_TRANSPORT_INVALID', 'ACP transport onData must return a function when it returns a value');
@@ -606,19 +608,6 @@ class AcpAdapter {
     return this.initialized ? this.initialized.authMethods : null;
   }
 
-  async authenticate(methodId, meta = null) {
-    this._assertInitialized();
-    if (typeof methodId !== 'string' || methodId.length === 0 || methodId.length > 512) {
-      fail('ACP_AUTH_METHOD_INVALID', 'authenticate requires a bounded auth method id');
-    }
-    if (!this.initialized.authMethods.some(method => method.id === methodId)) {
-      fail('ACP_AUTH_METHOD_INVALID', 'authenticate requires an auth method advertised by the agent');
-    }
-    await this._request(METHOD.authenticate, { methodId, ...(meta === null ? {} : { _meta: jsonData(meta, 'authenticate._meta') }) });
-    this.authenticatedMethodId = methodId;
-    return Object.freeze({ methodId });
-  }
-
   async startThread(options = {}) {
     this._assertInitialized();
     return this._storeSessionResult(parseSessionResult(
@@ -639,11 +628,13 @@ class AcpAdapter {
     const params = { sessionId, ...sessionParams(options, this.defaultCwd) };
     this.loadingSessions.add(sessionId);
     try {
-      return this._storeSessionResult(parseSessionResult(
+      const loaded = parseSessionResult(
         await this._request(METHOD.sessionLoad, params),
         METHOD.sessionLoad,
         sessionId
-      ));
+      );
+      if (loaded.threadId !== sessionId) fail('ACP_SESSION_MISMATCH', 'The agent loaded a different conversation, so this worker was stopped.');
+      return this._storeSessionResult(loaded);
     } finally { this.loadingSessions.delete(sessionId); }
   }
 
@@ -683,6 +674,9 @@ class AcpAdapter {
       nextThinkingId: 0,
       toolCalls: new Map()
     };
+    // Settles when the agent answers this prompt, so a cancel can wait for the
+    // agent to wrap up (and save its session) before the process is closed.
+    active.settledPromise = new Promise(resolve => { active.resolveSettled = resolve; });
     this.activeTurns.set(normalized.threadId, active);
     try {
       const result = await this._request(METHOD.sessionPrompt, { sessionId: normalized.threadId, prompt });
@@ -699,12 +693,20 @@ class AcpAdapter {
           itemId: active.assistantItemId, text: active.assistantParts.join('')
         });
       }
-      this._emit({ type: 'turn_completed', threadId: normalized.threadId, turnId, status: stopReason });
+      this._emit({ type: 'turn_completed', threadId: normalized.threadId, turnId, status: stopReason, ...this._unsupportedPayload(active) });
       return Object.freeze({ turnId, stopReason });
+    } catch (error) {
+      // Failed prompts still have a report boundary, including any permissions
+      // denied before the agent failed. The rejection also lets the tree end
+      // a session whose transport or protocol has closed.
+      this._emit({ type: 'turn_completed', threadId: normalized.threadId, turnId,
+        status: 'failed', text: error.message, ...this._unsupportedPayload(active) });
+      throw error;
     } finally {
       active.settled = true;
       if (!this.closed) this._cancelApprovals(active);
       this.activeTurns.delete(normalized.threadId);
+      active.resolveSettled();
     }
   }
 
@@ -724,6 +726,10 @@ class AcpAdapter {
     active.cancelled = true;
     this._write({ jsonrpc: '2.0', method: METHOD.sessionCancel, params: { sessionId } });
     this._cancelApprovals(active);
+    // ACP agents answer a cancelled prompt with stopReason "cancelled" once they
+    // have wrapped up. Wait for that answer (the caller bounds the wait), so the
+    // agent can finish and save its session before Fleet closes it.
+    await active.settledPromise.catch(() => {});
     return Object.freeze({ cancelled: true });
   }
 
@@ -773,6 +779,15 @@ class AcpAdapter {
       fail('ACP_MODE_UNAVAILABLE', 'The requested mode must be a bounded advertised mode id.');
     }
     return this._withSessionSelection(id, async validate => {
+      const option = this.sessionConfigOptions.get(id)?.find(item => item.category === 'mode' || item.id === 'mode');
+      if (option) {
+        if (!option.options?.some(choice => choice.value === modeId)) {
+          fail('ACP_MODE_UNAVAILABLE', 'This session does not advertise the requested mode.');
+        }
+        await this._selectConfig(id, option, modeId, 'MODE', validate);
+        validate();
+        return deepFreeze({ currentModeId: modeId, availableModes: option.options.map(choice => ({ id: choice.value, name: choice.name })) });
+      }
       const modes = this.sessionModes.get(id);
       if (!modes?.availableModes?.some(mode => mode.id === modeId)) {
         fail('ACP_MODE_UNAVAILABLE', 'This session does not advertise the requested mode.');
@@ -854,7 +869,7 @@ class AcpAdapter {
     const fields = ownRecord(response, 'session/set_config_option result', { allowed: ['configOptions', '_meta'] });
     const options = normalizeSessionConfigOptions(fields.configOptions?.value, 'session/set_config_option result.configOptions');
     if (options.find(item => item.id === option.id)?.currentValue !== value) {
-      fail(`ACP_${kind}_SELECTION_UNCONFIRMED`, 'The assistant did not confirm the requested model setting.');
+      fail(`ACP_${kind}_SELECTION_UNCONFIRMED`, 'The assistant did not confirm the requested session setting.');
     }
     // THE RE-CHECK BELOW READS A STORE THAT MAY NOT HAVE CAUGHT UP YET.
     //
@@ -1105,21 +1120,14 @@ class AcpAdapter {
       if (Object.hasOwn(error, 'data')) jsonData(error.data.value, 'ACP response error.data');
       this._retirePrompt(pending);
       this.pending.delete(id);
-      if (/UNSUPPORTED_CLIENT|client is no longer supported.*Gemini Code Assist/i.test(providerMessage)) {
-        const message = this.modelProvider === 'gemini' ? GEMINI_INDIVIDUAL_RETIREMENT_MESSAGE
-          : 'The provider refused this assistant client. Check which clients your account supports before retrying.';
-        pending.reject(new AcpAdapterError('ACP_CLIENT_UNSUPPORTED', message, { rpcCode: error.code.value }));
-      } else if (error.code.value === -32000 && /project.?id|GOOGLE_CLOUD_PROJECT/i.test(providerMessage)) {
-        pending.reject(new AcpAdapterError('ACP_PROJECT_REQUIRED', 'Gemini requires a Google Cloud project for this account. Complete its official setup before starting Research.', { rpcCode: error.code.value }));
-      } else if (/quota|rate.limit|usage.limit|429/i.test(providerMessage)) {
-        pending.reject(new AcpAdapterError('ACP_RATE_LIMITED', 'The assistant account has reached a provider usage limit.', { rpcCode: error.code.value }));
-      } else if ([METHOD.sessionNew, METHOD.authenticate].includes(pending.method) && error.code.value === -32000) {
-        pending.reject(new AcpAdapterError('ACP_AUTH_REQUIRED', 'ACP agent requires authentication', {
-          rpcCode: error.code.value,
-          authMethods: this.getAuthMethods()
-        }));
+      if (error.code.value === -32000 && [METHOD.sessionNew, METHOD.sessionLoad].includes(pending.method)) {
+        pending.reject(new AcpAdapterError('ACP_AUTH_REQUIRED',
+          'The agent refused the session. Check its sign-in and setup in your own terminal; Fleet cannot sign in for you.',
+          { rpcCode: error.code.value }));
       } else {
-        pending.reject(new AcpAdapterError('ACP_REQUEST_FAILED', `ACP ${pending.method} failed`, { rpcCode: error.code.value }));
+        const detail = shortProviderText(providerMessage);
+        pending.reject(new AcpAdapterError('ACP_REQUEST_FAILED', `ACP ${pending.method} failed${detail ? `: ${detail}` : ''}`,
+          { rpcCode: error.code.value }));
       }
       return;
     }
@@ -1130,9 +1138,7 @@ class AcpAdapter {
 
   _handleAgentRequest(fields) {
     const method = requiredString(fields, 'method', 'ACP agent request', { max: 512 });
-    if (method !== METHOD.sessionRequestPermission) {
-      fail('ACP_PROTOCOL_UNSUPPORTED_REQUEST', `ACP agent requested unsupported host action ${method}`);
-    }
+    if (method !== METHOD.sessionRequestPermission) return this._answerUnsupportedRequest(method, fields);
     const rpcId = fields.id.value;
     if (!((typeof rpcId === 'number' && Number.isSafeInteger(rpcId)) ||
       (typeof rpcId === 'string' && rpcId.length > 0 && rpcId.length <= 512))) {
@@ -1166,6 +1172,37 @@ class AcpAdapter {
         availableDecisions: parsed.options
       }
     });
+  }
+
+  /* A REQUEST THIS CLIENT DOES NOT OFFER. Fleet advertises no client
+     capabilities, so a conforming agent asks only for permission. Any other
+     request (an extension, a question, a file or terminal request) used to fail
+     the whole protocol, which ended the worker. It is answered as JSON-RPC
+     "method not found" instead, grants nothing, and is counted on the active
+     turn so its report can say so (method names only, bounded). */
+  _answerUnsupportedRequest(method, fields) {
+    const rpcId = fields.id.value;
+    if (!((typeof rpcId === 'number' && Number.isSafeInteger(rpcId)) ||
+      (typeof rpcId === 'string' && rpcId.length > 0 && rpcId.length <= 512))) {
+      fail('ACP_PROTOCOL_INVALID', 'ACP agent request id is invalid');
+    }
+    if (this.pendingApprovalRequests.has(rpcId)) fail('ACP_PROTOCOL_INVALID', 'ACP reused a pending request id');
+    this._write({ jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: 'Method not found' } });
+    let sessionId = null;
+    try {
+      const params = Object.hasOwn(fields, 'params') ? fields.params.value : undefined;
+      if (params && typeof params === 'object' && !Array.isArray(params) && typeof params.sessionId === 'string') sessionId = params.sessionId;
+    } catch { sessionId = null; }
+    const active = sessionId === null ? null : this.activeTurns.get(sessionId);
+    if (!active || active.settled) return;
+    const record = active.unsupportedRequests || (active.unsupportedRequests = { count: 0, methods: new Set() });
+    record.count += 1;
+    if (record.methods.size < 8) record.methods.add(/^[A-Za-z0-9_][A-Za-z0-9_./-]{0,63}$/.test(method) ? method : 'an unnamed method');
+  }
+
+  _unsupportedPayload(active) {
+    const record = active.unsupportedRequests;
+    return record ? { payload: { unsupportedRequests: { count: record.count, methods: [...record.methods] } } } : {};
   }
 
   _handleNotification(fields) {
@@ -1392,11 +1429,10 @@ function createAcpAdapter(options) {
   return new AcpAdapter(options);
 }
 
-module.exports = {
+module.exports = Object.freeze({
   ACP_PROTOCOL_VERSION,
   METHOD,
-  GEMINI_INDIVIDUAL_RETIREMENT_MESSAGE,
   AcpAdapter,
   AcpAdapterError,
   createAcpAdapter
-};
+});

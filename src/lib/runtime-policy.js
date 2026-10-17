@@ -3,7 +3,7 @@
 // Only explicit feature switches activate optional infrastructure. Old working
 // presets stamped audit.activity=Full exactly like individual choices, so that
 // retained preference is never evidence that audit itself was enabled.
-const IDS = Object.freeze(['audit.enabled', 'ledger.verify_history', 'audit.activity', 'agent.persistent_continuation', 'metrics.local_history']);
+const IDS = Object.freeze(['audit.enabled', 'ledger.verify_history', 'audit.activity', 'agent.persistent_continuation']);
 const CHOSEN = new Set(['user', 'installer']);
 function resolveRuntimePolicy(settings = {}) {
   const values = settings.values || {};
@@ -16,14 +16,8 @@ function resolveRuntimePolicy(settings = {}) {
     ? values['audit.activity'] : 'Off';
   const continuationEnabled = !invalid('agent.persistent_continuation')
     && (chosen('agent.persistent_continuation') ? values['agent.persistent_continuation'] === true : true);
-  // The desktop app's own Metrics history (product decision): on by
-  // default and independent of audit.enabled. It never enables the signed
-  // ledger. An unreadable or rejected choice keeps nothing new, because it may
-  // have been the person's Off.
-  const metricsLocalHistory = !invalid('metrics.local_history')
-    && (chosen('metrics.local_history') ? values['metrics.local_history'] === true : true);
   return Object.freeze({ auditEnabled, verifyHistory, activity: auditEnabled ? activity : 'Off',
-    retainedActivity: activity, continuationEnabled, metricsLocalHistory,
+    retainedActivity: activity, continuationEnabled,
     configurationAvailable: !rejected.some(row => row.id === '*'),
     rejected: Object.freeze(rejected.filter(row => row.id === '*' || IDS.includes(row.id)).map(row => row.id)) });
 }

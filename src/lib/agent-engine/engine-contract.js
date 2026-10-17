@@ -22,6 +22,8 @@ const EVENT_TYPES = Object.freeze([
   'tool_call',
   'tool_result',
   'approval_request',
+  // Optional input capability; adapters may cancel when the host has no UI.
+  'input_resolved',
   'usage',
   'turn_completed',
   /* THE TWO ADDED 2026-09-03, product rule: more event types are fine, and the
@@ -103,11 +105,17 @@ function jsonValue(value, label, depth = 0) {
 function validateThreadOptions(value = {}) {
   const own = record(value, 'thread options', [
     'cwd', 'model', 'serviceTier', 'approvalPolicy', 'sandbox', 'baseInstructions',
-    'developerInstructions', 'personality', 'ephemeral', 'lastTurnId', 'effort'
+    'developerInstructions', 'personality', 'ephemeral', 'lastTurnId', 'effort', 'speed'
   ]);
   const output = {};
   for (const key of ['cwd', 'model', 'serviceTier', 'baseInstructions', 'developerInstructions', 'lastTurnId']) {
     if (Object.hasOwn(own, key)) output[key] = optionalString(own[key].value, `thread options.${key}`);
+  }
+  if (Object.hasOwn(own, 'speed')) {
+    const value = own.speed.value;
+    if (!['standard', 'fast'].includes(value)) invalid('thread options.speed is unsupported');
+    if (Object.hasOwn(own, 'serviceTier')) invalid('speed and serviceTier cannot both be supplied');
+    output.speed = value;
   }
   if (Object.hasOwn(own, 'effort')) {
     const effort = string(own.effort.value, 'thread options.effort');

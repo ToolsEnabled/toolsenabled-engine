@@ -266,7 +266,7 @@ def inherited():
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['run', 'check', 'mark'])
+    parser.add_argument('action', choices=['run', 'check', 'mark', 'settle'])
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.action == 'run':
@@ -289,6 +289,11 @@ def main(argv=None):
             raise LockError('SCOPE_UNSAFE: unexpected handle-check arguments')
         if args.action == 'mark' and lock.pending is None:
             lock.write_pending({'nonce': lock.nonce, 'kind': 'manual', 'phase': 'MUTATING', 'home': os.environ.get('HOME')})
+        # The command finished its mutation and reported every outcome, even if
+        # it will exit nonzero for a refusal it left untouched. Only this
+        # operation's own record (matching nonce) is cleared.
+        if args.action == 'settle':
+            lock.clear_pending(lock.nonce)
         print(json.dumps({'nonce': lock.nonce, 'protectedRoot': lock.protected_root}))
         return 0
     finally:

@@ -1,6 +1,6 @@
 'use strict';
 
-// P13 deterministic policy kernel. This intentionally has no provider,
+// Policy deterministic policy kernel. This intentionally has no provider,
 // browser, vault, state-store, clock, environment, or prompt dependency. A
 // caller supplies only bounded facts; decisions are stable under replay.
 
@@ -95,7 +95,7 @@ function deepFreeze(value) {
 function cloneProvenance(value) {
   if (value === null) return null;
   try { provenance.validateEnvelope(value); }
-  catch (error) { fail('POLICY_REQUEST_INVALID', 'provenance must be a canonical P08 provenance envelope.', { field: 'provenance', cause: error.code }); }
+  catch (error) { fail('POLICY_REQUEST_INVALID', 'provenance must be a canonical broker provenance envelope.', { field: 'provenance', cause: error.code }); }
   return deepFreeze({
     schemaVersion: value.schemaVersion,
     labels: [...value.labels],
@@ -137,7 +137,7 @@ function cloneApproval(value) {
 }
 
 function validateRequest(value) {
-  exactKeys(value, ['schemaVersion', 'action', 'provenance', 'capability', 'task', 'target', 'user', 'approval'], 'policy request', [
+  exactKeys(value, ['schemaVersion', 'action', 'provenance', 'capability', 'task', 'target', 'user', 'approval'], 'Policy request', [
     'schemaVersion', 'action', 'provenance', 'capability', 'task', 'target', 'user', 'approval'
   ]);
   if (value.schemaVersion !== SCHEMA_VERSION) fail('POLICY_REQUEST_INVALID', `policy request schemaVersion must be ${SCHEMA_VERSION}.`, { field: 'schemaVersion' });
@@ -266,7 +266,7 @@ const POLICY_RULES = deepFreeze([
 
 function validateRules(...argumentsValue) {
   if (argumentsValue.length !== 0) {
-    fail('POLICY_RULE_RUNTIME_FORBIDDEN', 'Runtime callers cannot supply, subset, or replace P13 rules.');
+    fail('POLICY_RULE_RUNTIME_FORBIDDEN', 'Runtime callers cannot supply, subset, or replace policy rules.');
   }
   const rules = POLICY_RULES;
   if (!Array.isArray(rules) || !rules.length) fail('POLICY_RULE_INVALID', 'Policy rules must be a non-empty array.');
@@ -279,7 +279,7 @@ function validateRules(...argumentsValue) {
       || typeof rule.predicate !== 'string' || !Object.hasOwn(PREDICATES, rule.predicate)
       || !['automatic', 'confirmation-required', 'user-performed', 'blocked'].includes(rule.classification)
       || typeof rule.reasonCode !== 'string' || !/^[A-Z][A-Z0-9_]{2,79}$/.test(rule.reasonCode) || ids.has(rule.id)) {
-      fail('POLICY_RULE_INVALID', 'Policy rules must match the closed P13 rule schema.');
+      fail('POLICY_RULE_INVALID', 'Policy rules must match the closed policy rule schema.');
     }
     ids.add(rule.id);
   }
@@ -340,7 +340,7 @@ function evaluate(input) {
 }
 
 function validateDecision(value) {
-  exactKeys(value, ['schemaVersion', 'policyVersion', 'policyHash', 'requestHash', 'decisionHash', 'actionId', 'classification', 'allowed', 'reasonCodes', 'matchedRuleIds', 'blockingLabels'], 'policy decision', [
+  exactKeys(value, ['schemaVersion', 'policyVersion', 'policyHash', 'requestHash', 'decisionHash', 'actionId', 'classification', 'allowed', 'reasonCodes', 'matchedRuleIds', 'blockingLabels'], 'Policy decision', [
     'schemaVersion', 'policyVersion', 'policyHash', 'requestHash', 'decisionHash', 'actionId', 'classification', 'allowed', 'reasonCodes', 'matchedRuleIds', 'blockingLabels'
   ]);
   if (value.schemaVersion !== SCHEMA_VERSION || value.policyVersion !== POLICY_VERSION || value.policyHash !== policyHash()

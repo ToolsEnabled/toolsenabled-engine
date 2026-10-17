@@ -53,10 +53,7 @@ const NO_ROLE_CAPABILITIES = Object.freeze({
   singleSeat: false,
   mayClaimWork: false,
   mayWakeReports: false,
-  requiresMutationContext: false,
-  mayUseMissionBridge: false,
-  mayReportMissionBridge: false,
-  mayMutateMissionBridge: false
+  requiresMutationContext: false
 });
 
 // Delivery starts a turn; sustaining delegated work is a role duty, not a
@@ -75,7 +72,8 @@ const DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries({
   'worker': require('./roles/worker.json'),
   'observer': require('./roles/observer.json')
 }).map(([id, definition]) => [id, Object.freeze({
-  ...definition, rules: Object.freeze(definition.rules)
+  ...definition, rules: Object.freeze(definition.rules),
+  removeNativeTools: require('./agents/permission-level').nativeToolRemovals(definition.removeNativeTools)
 })])));
 
 const missing = ROLES.filter(id => !Object.hasOwn(DEFINITIONS, id));
@@ -148,11 +146,7 @@ function storedRoleDefinition(definition) {
   try {
     capabilities = definition.capabilities === undefined
       ? (base?.capabilities || NO_ROLE_CAPABILITIES)
-      : normalizeRoleCapabilities(definition.capabilities, 'stored role capabilities', {
-        legacyMayUseMissionBridge: (base?.capabilities || NO_ROLE_CAPABILITIES).mayUseMissionBridge,
-        legacyMayReportMissionBridge: (base?.capabilities || NO_ROLE_CAPABILITIES).mayReportMissionBridge,
-        legacyMayMutateMissionBridge: (base?.capabilities || NO_ROLE_CAPABILITIES).mayMutateMissionBridge
-      });
+      : normalizeRoleCapabilities(definition.capabilities, 'stored role capabilities');
   } catch {
     return null;
   }
@@ -166,7 +160,8 @@ function storedRoleDefinition(definition) {
     mustNot,
     handoff,
     rules: base ? base.rules : Object.freeze([]),
-    capabilities
+    capabilities,
+    removeNativeTools: require('./agents/permission-level').nativeToolRemovals(base?.removeNativeTools, definition.removeNativeTools)
   });
 }
 

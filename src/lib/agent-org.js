@@ -22,8 +22,8 @@ const { resolveSettingsValuesPath } = require('./durable-memory-file');
 
 const SCHEMA_VERSION = 1;
 
-// 'planner' exists because R1186 seats a planner alongside the controller and
-// shadow manager. R1039's lesson applies literally here: when the schema cannot
+// 'planner' exists because the organization seats a planner alongside the
+// controller and shadow manager. When the schema cannot
 // express the owner's current org, the declared file goes stale and the
 // staleness looks like a decision. Adding the role is the fix, not annotating
 // a nearby one.
@@ -34,32 +34,33 @@ const ROLES = Object.freeze(['controller', 'shadow-manager', 'planner', 'manager
 // declared work protocol a role may participate in.
 const ROLE_CAPABILITY_FIELDS = Object.freeze([
   'orgRoot', 'singleSeat', 'mayClaimWork', 'mayWakeReports',
-  'requiresMutationContext', 'mayUseMissionBridge',
-  'mayReportMissionBridge', 'mayMutateMissionBridge'
+  'requiresMutationContext'
+]);
+// Older saved role records may contain these retired fields. They are accepted
+// only while reading a complete old record and are never returned or enforced.
+const RETIRED_ROLE_CAPABILITY_FIELDS = Object.freeze([
+  'mayUseMissionBridge', 'mayReportMissionBridge', 'mayMutateMissionBridge'
 ]);
 const frozenCapabilities = values => Object.freeze({
   orgRoot: values.orgRoot === true,
   singleSeat: values.singleSeat === true,
   mayClaimWork: values.mayClaimWork === true,
   mayWakeReports: values.mayWakeReports === true,
-  requiresMutationContext: values.requiresMutationContext === true,
-  mayUseMissionBridge: values.mayUseMissionBridge === true,
-  mayReportMissionBridge: values.mayReportMissionBridge === true,
-  mayMutateMissionBridge: values.mayMutateMissionBridge === true
+  requiresMutationContext: values.requiresMutationContext === true
 });
 const DEFAULT_ROLE_CAPABILITIES = Object.freeze({
-  controller: frozenCapabilities({ orgRoot: true, singleSeat: true, mayClaimWork: true, mayWakeReports: true, mayUseMissionBridge: true, mayReportMissionBridge: true, mayMutateMissionBridge: true }),
+  controller: frozenCapabilities({ orgRoot: true, singleSeat: true, mayClaimWork: true, mayWakeReports: true }),
   // These are generic action-class grants, not role-name mechanics. Shipped
   // values follow each directions sheet; a custom role can receive or lose the
   // same fields regardless of its id or place in the graph.
-  'shadow-manager': frozenCapabilities({ mayUseMissionBridge: true, mayReportMissionBridge: true }),
-  planner: frozenCapabilities({ mayUseMissionBridge: true, mayReportMissionBridge: true }),
-  manager: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true, mayUseMissionBridge: true, mayReportMissionBridge: true, mayMutateMissionBridge: true }),
-  'coordinator-assistant': frozenCapabilities({ mayUseMissionBridge: true, mayReportMissionBridge: true }),
-  builder: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true, requiresMutationContext: true, mayUseMissionBridge: true, mayReportMissionBridge: true, mayMutateMissionBridge: true }),
-  reviewer: frozenCapabilities({ mayUseMissionBridge: true, mayReportMissionBridge: true }),
-  worker: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true, requiresMutationContext: true, mayUseMissionBridge: true, mayReportMissionBridge: true, mayMutateMissionBridge: true }),
-  observer: frozenCapabilities({ mayUseMissionBridge: true, mayReportMissionBridge: true })
+  'shadow-manager': frozenCapabilities({}),
+  planner: frozenCapabilities({}),
+  manager: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true }),
+  'coordinator-assistant': frozenCapabilities({}),
+  builder: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true, requiresMutationContext: true }),
+  reviewer: frozenCapabilities({}),
+  worker: frozenCapabilities({ mayClaimWork: true, mayWakeReports: true, requiresMutationContext: true }),
+  observer: frozenCapabilities({})
 });
 // Classifiers are orthogonal to an agent's functional role.  In particular,
 // supervision is derived from the declared management graph so an agent can
@@ -68,7 +69,9 @@ const CLASSIFIERS = Object.freeze(['supervisor']);
 // Reuses the edge vocabulary already generated for the activity contracts
 // rather than inventing a second one that would drift.
 const RELATION_TYPES = Object.freeze(['manages', 'reviews', 'delegates_to', 'escalates_to']);
-const PROVIDERS = Object.freeze(['codex', 'claude', 'gemini', 'grok', 'local', 'none']);
+// Which agent a role or organisation entry may run on: each described agent
+// (config/agents/*.json), the local runtime, or none.
+const PROVIDERS = Object.freeze([...require('./agents/registry').activeRegistry().ids, 'local', 'none']);
 
 const AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 // Deliberately the same shape as ROLE_ID in src/lib/custom-role-store.js, which
@@ -91,7 +94,7 @@ const TIERS = Object.freeze(['cheap', 'standard', 'premium']);
  * It is none of those things. It bounds how many rows this DOCUMENT may carry,
  * so a malformed or runaway overlay cannot be parsed without limit. The real
  * concurrency limits live elsewhere and are unaffected by this value:
- *   - provider seat pools      src/lib/mission-bridge/actions.js  (BRIDGE_ALL_SEATS_BUSY)
+ *   - provider seat pools      the host dispatch  (BRIDGE_ALL_SEATS_BUSY)
  *   - simultaneous starts      src/lib/agent-resource-admission.js (maxConcurrentStarts)
  *   - per-parent fan-out       src/lib/controller-launch-record.js (MAX_FAN_OUT)
  * Raising this bound does NOT raise any of those, and must not be described as
@@ -197,40 +200,19 @@ function hasExactRoleCapabilities(input) {
     && ROLE_CAPABILITY_FIELDS.every(field => Object.hasOwn(input, field) && typeof input[field] === 'boolean');
 }
 
-function normalizeRoleCapabilities(input, label = 'role capabilities', {
-  legacyMayUseMissionBridge = false,
-  legacyMayReportMissionBridge = legacyMayUseMissionBridge,
-  legacyMayMutateMissionBridge = false
-} = {}) {
-  // Schema-v1 installations may still carry the original five-field record.
-  // Treat the new workflow authority as absent on those stored records rather
-  // than corrupting the role or silently granting it.  Every normalized value
-  // returned from here has the current exact shape.
-  const previousFields = ROLE_CAPABILITY_FIELDS.filter(field => !['mayReportMissionBridge', 'mayMutateMissionBridge'].includes(field));
-  const originalFields = previousFields.filter(field => field !== 'mayUseMissionBridge');
-  const previous = plain(input)
-    && Object.keys(input).length === previousFields.length
-    && previousFields.every(field => Object.hasOwn(input, field) && typeof input[field] === 'boolean');
-  const original = plain(input)
-    && Object.keys(input).length === originalFields.length
-    && originalFields.every(field => Object.hasOwn(input, field) && typeof input[field] === 'boolean');
-  if (!hasExactRoleCapabilities(input) && !previous && !original) {
+function normalizeRoleCapabilities(input, label = 'role capabilities') {
+  const acceptedShapes = [
+    ROLE_CAPABILITY_FIELDS,
+    [...ROLE_CAPABILITY_FIELDS, RETIRED_ROLE_CAPABILITY_FIELDS[0]],
+    [...ROLE_CAPABILITY_FIELDS, ...RETIRED_ROLE_CAPABILITY_FIELDS]
+  ];
+  const valid = plain(input) && acceptedShapes.some(fields =>
+    Object.keys(input).length === fields.length
+    && fields.every(field => Object.hasOwn(input, field) && typeof input[field] === 'boolean'));
+  if (!valid) {
     fail('AGENT_ORG_INVALID', `${label} must contain exactly ${ROLE_CAPABILITY_FIELDS.join(', ')}.`, { field: label });
   }
-  return frozenCapabilities(original
-    ? {
-      ...input,
-      mayUseMissionBridge: legacyMayUseMissionBridge === true,
-      mayReportMissionBridge: legacyMayReportMissionBridge === true,
-      mayMutateMissionBridge: legacyMayMutateMissionBridge === true
-    }
-    : previous
-      ? {
-        ...input,
-        mayReportMissionBridge: legacyMayReportMissionBridge === true,
-        mayMutateMissionBridge: legacyMayMutateMissionBridge === true
-      }
-      : input);
+  return frozenCapabilities(input);
 }
 
 function normalizeScopeActivation(input) {
@@ -318,11 +300,7 @@ function normalizeKnownRoles(knownRoles) {
       : (base ? DEFAULT_ROLE_CAPABILITIES[base] : frozenCapabilities({}));
     const capabilities = entry.capabilities === undefined
       ? inherited
-      : normalizeRoleCapabilities(entry.capabilities, `knownRoles.${roleId}.capabilities`, {
-        legacyMayUseMissionBridge: inherited.mayUseMissionBridge,
-        legacyMayReportMissionBridge: inherited.mayReportMissionBridge,
-        legacyMayMutateMissionBridge: inherited.mayMutateMissionBridge
-      });
+      : normalizeRoleCapabilities(entry.capabilities, `knownRoles.${roleId}.capabilities`);
     declared.set(roleId, Object.freeze({ baseDefaultRole: base, capabilities }));
   }
   return declared;

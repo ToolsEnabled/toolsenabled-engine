@@ -11,7 +11,8 @@ set -euo pipefail
 tag="${1:-toolsenabled-openshell:dev}"
 cd "$(git rev-parse --show-toplevel)"
 
-git archive --format=tar HEAD \
-    | docker build --file adapters/openshell/image/Dockerfile --tag "${tag}" -
+commit=$(git rev-parse HEAD)
+git archive --format=tar "$commit" \
+    | docker build --file adapters/openshell/image/Dockerfile --tag "${tag}" --label "org.opencontainers.image.revision=$commit" -
 
-echo "built ${tag} from $(git rev-parse --short HEAD)"
+echo "built ${tag} from $commit"

@@ -1,46 +1,13 @@
 'use strict';
 
-// Broad, revocable, fully-logged host control for the remote agent running on
-// the paired second machine (R117).
+// Host control provides logged access to allowed profile files and processes.
+// Path containment, credential exclusions, policy and audit checks still apply.
+// The host administrator grants this capability outside the agent transport;
+// an agent message alone is never authority.
 //
-// AUTHORIZATION. This exists because the machine's owner asked for it
-// directly: bring the agent on the paired machine as close to full control of
-// this one as an audited system can support -- system, files, processes,
-// desktop, and repository as available -- while keeping credential
-// protections and the existing policy, audit, and kill-switch controls
-// intact. Both machines belong to the same owner, which is the only reason a
-// grant this broad is coherent at all. The request first arrived relayed over
-// the agent chat bus and was deliberately NOT acted on until the owner
-// confirmed it directly, at this machine's own console: the bus carries data,
-// never authority.
-//
-// WHAT THIS IS. A genuinely broad capability: read/write anywhere under the
-// owner's own profile tree, list processes, and run real commands. This is
-// intentionally far wider than repo-files.js (which is scoped to the
-// ToolsEnabled repo). It is the "full control" half of the grant.
-//
-// WHAT IT DELIBERATELY IS NOT, and why each line stays:
-//
-//   * NOT elevated. Every command runs at the same privilege level as the
-//     process hosting it -- an ordinary, non-elevated user session. Nothing
-//     here escalates, requests UAC, or routes through the elevated
-//     uac-delegation helper. That helper stays what it is: a fixed,
-//     per-operation allowlist with no caller-supplied argv. Full control of
-//     the owner's machine is satisfied at the owner's own privilege level; an
-//     arbitrary-argv elevated exec is a different and much larger thing that
-//     was not asked for and that no audit trail can undo.
-//   * NOT a credential reader. vault/ and the DPAPI store stay excluded from
-//     the file surface: keeping credential protections intact was a condition
-//     of the grant itself, not a limit bolted on afterwards. Secrets remain
-//     reachable only through the purpose-built tools that never return their
-//     values.
-//   * NOT outside the kill switch. Every entry point calls assertActive(),
-//     so `system.kill_switch_activate` (or touching the KILLSWITCH file)
-//     instantly revokes all of it. That is the revocation lever a grant
-//     described as revocable actually requires.
-//   * NOT unlogged. Every call audits before it acts, including the exact
-//     command line, so the signed ledger is a complete record of what the
-//     remote agent did.
+// Commands run at this process's ordinary privilege level. Credential stores
+// are excluded from file access. The active policy can revoke every entry
+// point, and each call records audit intent before it acts.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -51,10 +18,11 @@ const audit = require('../audit');
 const auditAdmission = require('../operation-audit');
 const { canonicalizeForContainment } = require('../canonical-path');
 const { withSharedWrite } = require('../shared-write-guard');
-const { safeLaunchEnvironment } = require('./subscription-launch-env');
+const { safeLaunchEnvironment } = require('../supervision/launch-environment');
 const windowsJob = require('../windows-job-control');
 const { spawnLinuxOwned } = require('../linux-process-control');
 const { deleteEnvNames } = require('../env-scrub');
+const { assertTextInput } = require('../host-input-content');
 
 // Lazy on purpose: runtime.js pulls in most of the engine and this provider is
 // required while that load is still in progress, so a top-level require here
@@ -99,6 +67,11 @@ const EXCLUDED_PATH_PATTERNS = [
   /[\\/]\.kube([\\/]|$)/i,
   /[\\/]\.netrc$/i,
   /[\\/]\.git-credentials$/i,
+  /[\\/](?:\.pgpass|\.my\.cnf|\.claude\.json|\.vault-token|\.Xauthority|key4\.db|Login Data|login\.keyring)$/i,
+  /[\\/]kaggle\.json$/i,
+  /[\\/]\.m2[\\/]settings\.xml$/i,
+  /[\\/]\.(?:cargo|gem)[\\/]credentials(?:\.toml)?$/i,
+  /[\\/][^\\/]*_history$/i,
   // Package-manager and infrastructure CLI credential files. Keep these
   // exact/bounded: an ordinary profile file must remain usable even when it
   // lives beside one of these stores.
@@ -113,6 +86,9 @@ const EXCLUDED_PATH_PATTERNS = [
   /[\\/]PowerShell[\\/]PSReadLine[\\/]ConsoleHost_history\.txt$/i,
   /[\\/]ConsoleHost_history\.txt$/i,
   /[\\/]\.(?:bash_history|zsh_history|fish_history|python_history)$/i,
+  // Shell and login files commonly export provider keys. They are also
+  // executable inputs, so neither reads nor writes belong to a model tool.
+  /[\\/]\.(?:bashrc|bash_profile|bash_login|profile|zshrc|zshenv|zprofile|zlogin|kshrc|cshrc|tcshrc|inputrc|xprofile|xinitrc|pam_environment|envrc)$/i,
   /[\\/]profiles[\\/]chrome([\\/]|$)/i,
   /[\\/]AppData[\\/]Local[\\/]Google[\\/]Chrome([\\/]|$)/i,
   /[\\/]AppData[\\/]Local[\\/]Microsoft[\\/]Credentials([\\/]|$)/i,
@@ -123,6 +99,11 @@ const EXCLUDED_PATH_PATTERNS = [
   // API key.
   /[\\/]\.codex([\\/]|$)/i,
   /[\\/]\.claude([\\/]|$)/i,
+  // Claude Code's config file beside that folder. Outside macOS, an API key
+  // that Claude Code's /login creates is saved in it (primaryApiKey), and
+  // Claude Code itself calls it a file that "can hold secrets". Inside an
+  // OpenShell sandbox it is /sandbox/.claude.json. Its backups share the name.
+  /[\\/]\.claude\.json(?:\.[^\\/]*)?$/i,
   /[\\/]\.gemini([\\/]|$)/i,
   /[\\/]\.config([\\/]|$)/i,
   /[\\/]AppData[\\/]Roaming[\\/]gcloud([\\/]|$)/i,
@@ -224,6 +205,22 @@ function isCredentialProtectedPath(candidatePath) {
 // diff driver or textconv in ~/.gitconfig runs on the next `git diff`/`git
 // log -p`/`git show` ANY local process makes, not just a purpose-built lane).
 const WRITE_EXCLUDED_PATH_PATTERNS = [
+  // A normal project can execute these on the next shell, Git, editor, CI or
+  // task-runner action. Protect them even when the project is not Fleet's own.
+  /[\\/]\.(?:git|hg|svn|bzr|pijul|fossil-settings)([\\/]|$)/i,
+  /[\\/]\.(?:vscode|idea|zed|cursor|windsurf|devcontainer)([\\/]|$)/i,
+  /[\\/]\.github[\\/]workflows([\\/]|$)/i,
+  /[\\/]\.github[\\/]actions([\\/]|$)/i,
+  /[\\/](?:\.husky|\.githooks|\.circleci)([\\/]|$)/i,
+  /[\\/][^\\/]+\.git[\\/](?:hooks|config)([\\/]|$)/i,
+  /[\\/](?:\.gitlab-ci\.ya?ml|lefthook[^\\/]*\.ya?ml|mise\.toml|\.yarnrc[^\\/]*|\.cargo[\\/]config[^\\/]*)$/i,
+  /[\\/]node_modules[\\/]\.bin([\\/]|$)/i,
+  /[\\/]\.venv[\\/]bin([\\/]|$)/i,
+  /[\\/](?:venv|env)[\\/]bin([\\/]|$)/i,
+  /[\\/]site-packages[\\/][^\\/]+\.pth$/i,
+  /[\\/](?:\.mcp\.json|\.mise\.toml|\.pnpmfile\.cjs|sitecustomize\.py|conftest\.py)$/i,
+  /[\\/](?:package\.json|GNUmakefile|Makefile|[Jj]ustfile|Taskfile(?:\.ya?ml)?|Gruntfile\.[cm]?js|gulpfile\.[cm]?js|tox\.ini|noxfile\.py|pyproject\.toml|Procfile|Dockerfile|compose\.ya?ml|\.pre-commit-config\.ya?ml)$/i,
+  /[\\/]\.local[\\/]bin([\\/]|$)/i,
   /[\\/]ToolsEnabled[^\\/]*[\\/]state([\\/]|$)/i,
   /[\\/]ToolsEnabled[^\\/]*[\\/]config[\\/][^\\/]*\.policy\.json$/i,
   // Generic host writes must not stage replacement code or runtime artifacts
@@ -237,9 +234,9 @@ const WRITE_EXCLUDED_PATH_PATTERNS = [
   //   engine/package.json  bin  -> bin/fallback.js, bin/localcode.js
   //                               (also config/invocation-registry.json and
   //                                config/payload-boundary.json)
-  //   app/package.json     main -> shell/main.cjs, the Electron main process
+  //   app/package.json     main -> the host entry point
   // Both were WRITE-ALLOWED through this surface until this line; `shell` is
-  // the whole desktop application's startup code.
+  // the whole host application's startup code.
   //
   // THE CODE-FOLDER RULE ITSELF NOW LIVES IN WRITE_EXCLUDED_CODE_PATTERNS,
   // directly below: it is the one rule the owner may lift for their own
@@ -329,21 +326,21 @@ const PRODUCT_TREE_CODE_PATTERNS = [
   /^(?:src|bin|shell|tools|scripts|sidecars|packages|captures|scratch|tmp)(\/|$)/i
 ];
 
-// THE LIFTABLE ANCHORS. A checkout's config/ and its package manifest and
-// lockfiles are part of the product's source too: a lane that changes a
-// setting's registry row or a dependency has to write them. They stay refused
+// THE LIFTABLE ANCHORS. A checkout's config/ and lockfiles are part of the
+// product's source too: a lane that changes a setting's registry row or a
+// dependency has to write them. package.json stays an executable control path
+// under the unconditional write exclusion above. The others stay refused
 // unless the owner lifted the code-folder rule (the same switch), and never in
 // the running product. Product note: lanes were still refused on
-// config/*.json and package.json after the switch ("protected-config",
-// "protected package edits").
+// config/*.json after the switch ("protected-config").
 const WRITE_EXCLUDED_LIFTABLE_PATTERNS = [
   /[\\/]ToolsEnabled[^\\/]*[\\/]config([\\/]|$)/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]package(-lock)?\.json$/i,
+  /[\\/]ToolsEnabled[^\\/]*[\\/]package-lock\.json$/i,
   /[\\/]ToolsEnabled[^\\/]*[\\/](?:npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb)$/i
 ];
 const PRODUCT_TREE_LIFTABLE_PATTERNS = [
   /^config(\/|$)/i,
-  /^package(-lock)?\.json$/i,
+  /^package-lock\.json$/i,
   /^(?:npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb)$/i
 ];
 
@@ -427,7 +424,7 @@ function productTreeRootFor(candidatePath) {
 // person or the installer chose counts, exactly like outside control). It lifts
 // ONLY the code-folder rule, and NEVER for the running product: a candidate
 // inside this process's own root, or inside the product tree that contains it
-// (the desktop app's own src/ and shell/ around the packed capability layer),
+// (the host application's own src/ and shell/ around the packed capability layer),
 // stays refused whatever the switch says. state/, config/, KILLSWITCH, .git,
 // node_modules, the package manifests and the policy documents are anchors,
 // not code folders, and stay refused in every checkout.
@@ -486,6 +483,93 @@ function failCouldNotCheck(subject) {
   fail('HOST_PATH_CHECK_FAILED', `${subject} could not be checked; this does NOT claim that the path or entry is absent.`);
 }
 
+// Runtime state/control locations are integrity anchors regardless of their
+// directory names. Resolve BOTH the selected roots and each candidate, so
+// a custom host container, junction, or directory alias cannot grant writes.
+// Called again by the byte adapter at staging/publication, not only admission.
+function checkRuntimeWriteRoots(candidatePath) {
+  let roots, canonical;
+  try {
+    const runtime = require('../runtime-state-root');
+    const state = runtime.resolveStateRoot();
+    roots = state.redirected ? [state.root]
+      : [...runtime.RUNTIME_STATE_DIRECTORIES, ...runtime.RUNTIME_STATE_FILES].map(name => path.join(state.root, name));
+    if (process.env.TOOLSENABLED_RUNTIME_MODE === 'host') {
+      if (path.basename(state.root) !== 'capability' || path.dirname(state.root) === path.parse(state.root).root) {
+        failCouldNotCheck('host control root');
+      }
+      roots.push(path.dirname(state.root));
+    } else if (process.env.TOOLSENABLED_STATE_ROOT) {
+      roots.push(require('../durable-memory-file').resolveServicesRoot());
+      // This marker chooses the service/control store; it is an anchor too.
+      roots.push(path.join(path.dirname(state.root), '.toolsenabled-local-profile.json'));
+    }
+    canonical = canonicalizeForContainment(candidatePath);
+    roots = roots.flatMap(root => [path.resolve(root), canonicalizeForContainment(path.resolve(root))]);
+  } catch { failCouldNotCheck('runtime state and control roots'); }
+  if (roots.some(root => containsOrEquals(root, candidatePath) || containsOrEquals(root, canonical))) {
+    fail('HOST_PATH_WRITE_PROTECTED', 'Fleet runtime state and control roots are never writable through the host file tools. Use the operator command for configuration changes.');
+  }
+}
+
+// Host mode has no OS sandbox. The sealed setup record, not a caller path or
+// ambient cwd, is its write boundary. A missing/untrusted record fails closed.
+// OpenShell keeps its existing profile boundary; the sandbox itself confines
+// that mode. The check runs again at every mediated publication step.
+function checkHostWorkspaceBoundary(candidatePath) {
+  if (process.env.TOOLSENABLED_RUNTIME_MODE !== 'host') return;
+  let roots;
+  try {
+    const records = require('../setup/machine-record');
+    const record = records.readMachineRecord({ servicesRoot: records.resolveServicesRoot({}), adopt: false });
+    if (!record || !Array.isArray(record.workspaceRoots) || !record.workspaceRoots.length) failCouldNotCheck('host workspace');
+    roots = record.workspaceRoots.map(root => {
+      const resolved = path.resolve(root);
+      if (fs.lstatSync(resolved).isSymbolicLink()) failCouldNotCheck('host workspace');
+      const canonical = canonicalizeForContainment(resolved);
+      if (canonical !== resolved) failCouldNotCheck('host workspace');
+      return canonical;
+    });
+  } catch { failCouldNotCheck('host workspace'); }
+  // A global (account home) workspace never includes the home's hidden entries.
+  const hidden = require('../workspace-boundary').hiddenUnderHome;
+  if (!roots.some(root => containsOrEquals(root, candidatePath) && !hidden(root, candidatePath, canonicalizeForContainment(HOME)))) {
+    fail('HOST_PATH_OUTSIDE_WORKSPACE', 'Host file access must stay inside the saved Fleet workspace.');
+  }
+}
+
+function defaultHostListDirectory() {
+  if (process.env.TOOLSENABLED_RUNTIME_MODE !== 'host') return HOME;
+  try {
+    const records = require('../setup/machine-record');
+    const record = records.readMachineRecord({ servicesRoot: records.resolveServicesRoot({}), adopt: false });
+    if (record?.workspaceRoots?.length === 1) return record.workspaceRoots[0];
+  } catch { /* The workspace check below gives the same fail-closed answer. */ }
+  failCouldNotCheck('host workspace');
+}
+
+function checkExecutablePathDirectory(candidatePath) {
+  if (process.env.TOOLSENABLED_RUNTIME_MODE !== 'host' || typeof process.env.PATH !== 'string') return;
+  let directories;
+  try {
+    directories = process.env.PATH.split(path.delimiter)
+      .flatMap(directory => [path.resolve(directory || process.cwd()),
+        canonicalizeForContainment(path.resolve(directory || process.cwd()))]);
+  } catch { failCouldNotCheck('executable search path'); }
+  if (directories.some(directory => containsOrEquals(directory, candidatePath))) {
+    fail('HOST_PATH_WRITE_PROTECTED', 'Executable search-path directories are not writable through the host file tools.');
+  }
+}
+
+// The file system refused this user (EACCES, EPERM): a plain refusal, not an
+// internal error. Inside a sandbox every file is the agents' own user's, so
+// this is a file or folder someone locked (chmod), and the agent can say so.
+function failIfAccessDenied(error) {
+  if (error && (error.code === 'EACCES' || error.code === 'EPERM')) {
+    fail('HOST_PATH_ACCESS_DENIED', 'path cannot be opened: the file system does not let this user read it (permission denied).');
+  }
+}
+
 // Runs the containment + exclusion checks against ONE candidate path string.
 // Called twice by resolveHostPath below: once on the lexical (path.resolve)
 // form, once on the canonical (reparse-point-resolved) form. A security
@@ -503,7 +587,11 @@ function checkContainmentAndExclusions(candidatePath, { forWrite }) {
   if (isCredentialProtectedPath(candidatePath)) {
     fail('HOST_PATH_FORBIDDEN', 'path is a bounded credential, session, or environment-secret store and is never exposed.');
   }
+  if (forWrite) checkRuntimeWriteRoots(candidatePath);
+  checkHostWorkspaceBoundary(candidatePath);
+  checkStateRoot(candidatePath, { forWrite });
   if (forWrite) {
+    checkExecutablePathDirectory(candidatePath);
     for (const pattern of WRITE_EXCLUDED_PATH_PATTERNS) {
       if (pattern.test(candidatePath)) {
         fail('HOST_PATH_WRITE_PROTECTED', 'path is an integrity anchor and is never writable through this surface.');
@@ -542,9 +630,29 @@ function checkContainmentAndExclusions(candidatePath, { forWrite }) {
   }
 }
 
+// Keep runtime databases and signing state out of reads even when the person
+// chose a custom state root. The newer write-root guard above already protects
+// every write; compare both root names here so a directory alias cannot expose
+// the same state through its canonical path.
+function checkStateRoot(candidatePath, { forWrite }) {
+  if (forWrite) return;
+  let roots;
+  try {
+    const root = path.resolve(require('../runtime-state-root').stateRoot());
+    roots = [root, canonicalizeForContainment(root)];
+  } catch { failCouldNotCheck('path against the engine\'s state root'); }
+  for (const root of roots) {
+    const relative = path.relative(root, candidatePath);
+    if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue;
+    const first = relative.split(path.sep)[0].toLowerCase();
+    if (first === 'state' || first === 'vault') {
+      fail('HOST_PATH_FORBIDDEN', 'path is ToolsEnabled\'s own state and is never exposed through this surface; use the task, memory, search and ledger tools.');
+    }
+  }
+}
+
 // Resolves a caller path and confirms it is inside the owner's profile tree
-// and not in an excluded location. Absolute paths ARE allowed here (unlike
-// repo-files.js) -- that breadth is the point of this module -- but the
+// and not in an excluded location. Absolute paths are allowed, but the
 // containment and exclusion checks are not optional.
 function resolveHostPath(value, { mustExist = false, forWrite = false } = {}) {
   if (typeof value !== 'string' || !value.trim()) fail('HOST_PATH_INVALID', 'path must be a non-empty string.');
@@ -578,7 +686,10 @@ function resolveHostPath(value, { mustExist = false, forWrite = false } = {}) {
   // produce one outside it. It also removes an ambient dependency in the
   // Windows drive-relative spelling: "C:foo" now resolves under the profile
   // root rather than against the process's per-drive current directory.
-  const resolved = path.isAbsolute(value) ? path.resolve(value) : path.resolve(HOME, value);
+  // Host mode's boundary is the saved workspace, so there a relative path is
+  // relative to the workspace root rather than the profile root.
+  const resolved = path.isAbsolute(value) ? path.resolve(value)
+    : path.resolve(process.env.TOOLSENABLED_RUNTIME_MODE === 'host' ? defaultHostListDirectory() : HOME, value);
   checkContainmentAndExclusions(resolved, { forWrite });
   // Canonicalize through the real filesystem (resolving any reparse point
   // anywhere in the ancestor chain -- a legacy Windows alias or one created
@@ -624,19 +735,19 @@ function mediatedCall(dependencies) {
     && hostByteMediationEnabled();
 }
 
-function researchFileGuard(dependencies, toolName, target, requireMediation = false) {
+function childScopeFileGuard(dependencies, toolName, target, requireMediation = false) {
   if (!dependencies?.researchAccess) return () => {};
   if (requireMediation && !mediatedCall(dependencies)) {
     fail('RESEARCH_ACCESS_REFUSED', 'Research file access requires active transport-bound byte mediation.');
   }
   const scope = dependencies.researchAccess;
-  const assertResearch = () => require('../research-access').enforceResearchAccess(toolName, { path: target }, scope);
-  assertResearch();
-  return assertResearch;
+  const assertScope = () => require('../fleet-child-scope').enforceChildScope(toolName, { path: target }, scope);
+  assertScope();
+  return assertScope;
 }
 
 function readFile(args = {}, dependencies = {}) {
-  researchFileGuard(dependencies, 'host.read_file', args.path, true);
+  childScopeFileGuard(dependencies, 'host.read_file', args.path, true);
   if (mediatedCall(dependencies)) return readFileMediated(args, dependencies);
   if (args && (args.startByte !== undefined || args.endByte !== undefined)) {
     assertActive('host.read_file');
@@ -647,9 +758,35 @@ function readFile(args = {}, dependencies = {}) {
 }
 
 function writeFile(args = {}, dependencies = {}) {
-  researchFileGuard(dependencies, 'host.write_file', args.path, true);
+  childScopeFileGuard(dependencies, 'host.write_file', args.path, true);
   if (mediatedCall(dependencies)) return writeFileMediated(args, dependencies);
   return writeFileLegacy(args, dependencies);
+}
+
+/* THE FILE MUST STILL HAVE A NAME WHEN ITS BYTES ARE TAKEN.
+ *
+ * Checked on the OPEN DESCRIPTOR, so the answer describes the bytes actually
+ * being read rather than whatever the path meant a moment ago. A descriptor
+ * survives unlinking: without this, a file deleted between the check and the
+ * read would still be served out of the open handle, disclosing content the
+ * workspace no longer contains.
+ *
+ * MORE THAN ONE NAME IS ALLOWED, DELIBERATELY. An earlier version refused any
+ * hard link, reasoning that the second name might sit outside the workspace
+ * where no path check can see it. That is true, but it bought little and cost a
+ * lot. `fs.protected_hardlinks` is 1 by default, so another account cannot link
+ * a file it neither owns nor can write; producing a useful outside-to-inside
+ * link needs code already running as the person, which can read the target
+ * directly anyway. Git cannot carry a hard link, so a pull request cannot plant
+ * one. Meanwhile pnpm stores node_modules as hard links into a shared store, so
+ * refusing them refused ordinary dependency reads. Fleet promises PATH-level
+ * workspace confinement, not inode-level; see SECURITY-SCOPE.md. */
+function assertStillNamed(stat, what) {
+  const links = typeof stat.nlink === 'bigint' ? stat.nlink : BigInt(stat.nlink);
+  if (links < 1n) {
+    fail('HOST_FILE_CHANGED_DURING_READ',
+      `${what} was deleted while its bytes were being taken; read it again.`);
+  }
 }
 
 function readFileLegacy({ path: target } = {}, dependencies = {}) {
@@ -663,9 +800,49 @@ function readFileLegacy({ path: target } = {}, dependencies = {}) {
   // before the read so an unavailable/corrupt audit ledger fails closed.
   // Same pattern as host.exec: validation above still throws
   // synchronously; admission is awaited off this thread before the read.
+  //
+  // THE DESCRIPTOR IS OPENED BEFORE ADMISSION AND READ AFTER IT. Re-opening by
+  // pathname once admission resolved left a window in which the checked name
+  // could come to mean a different file; holding the descriptor closes it, and
+  // the link count is asserted on that descriptor rather than on the name.
+  const descriptor = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  let opened;
+  try {
+    opened = fs.fstatSync(descriptor);
+    if (!opened.isFile()) fail('HOST_PATH_INVALID', 'path is not a regular file.');
+    assertStillNamed(opened, 'this file');
+    if (opened.size > MAX_FILE_BYTES) fail('HOST_FILE_TOO_LARGE', `file exceeds the ${MAX_FILE_BYTES}-byte limit.`);
+  } catch (error) { fs.closeSync(descriptor); throw error; }
   const requireRecordAsync = dependencies.requireRecordAsync || auditAdmission.requireRecordAsync;
-  const admitted = requireRecordAsync('host.read_file.intent', resolved, { bytes: stat.size });
-  return admitted.then(() => ({ path: resolved, content: fs.readFileSync(resolved, 'utf8'), bytes: stat.size }));
+  const admitted = requireRecordAsync('host.read_file.intent', resolved, { bytes: opened.size });
+  return admitted.then(
+    () => {
+      try {
+        const again = fs.fstatSync(descriptor);
+        if (again.ino !== opened.ino || again.dev !== opened.dev) {
+          fail('HOST_FILE_CHANGED_DURING_READ', 'The file changed while it was being admitted; read it again.');
+        }
+        assertStillNamed(again, 'this file');
+        if (again.size > MAX_FILE_BYTES) fail('HOST_FILE_TOO_LARGE', `file exceeds the ${MAX_FILE_BYTES}-byte limit.`);
+        const bytes = Buffer.alloc(again.size + 1);
+        let count = 0;
+        while (count < bytes.length) {
+          const read = fs.readSync(descriptor, bytes, count, bytes.length - count, null);
+          if (!read) break;
+          count += read;
+        }
+        const after = fs.fstatSync(descriptor);
+        assertStillNamed(after, 'this file');
+        if (count !== again.size || after.size !== again.size || after.mtimeMs !== again.mtimeMs || after.ctimeMs !== again.ctimeMs) {
+          fail('HOST_FILE_CHANGED_DURING_READ', 'The file changed while its bytes were being taken; read it again.');
+        }
+        const content = bytes.subarray(0, count);
+        assertTextInput(content, resolved);
+        return { path: resolved, content: content.toString('utf8'), bytes: content.length };
+      } finally { fs.closeSync(descriptor); }
+    },
+    error => { fs.closeSync(descriptor); throw error; }
+  );
 }
 
 function writeFileLegacy({ path: target, content } = {}, dependencies = {}) {
@@ -691,6 +868,8 @@ function writeFileLegacy({ path: target, content } = {}, dependencies = {}) {
   const requireRecordAsync = dependencies.requireRecordAsync || auditAdmission.requireRecordAsync;
   const admitted = requireRecordAsync('host.write_file.intent', resolved, { bytes: Buffer.byteLength(content, 'utf8') });
   return admitted.then(() => withSharedWrite(canonicalTarget, () => {
+    // Audit admission yielded: recheck aliases and roots before publishing.
+    resolveHostPath(resolved, { forWrite: true });
     fs.mkdirSync(path.dirname(resolved), { recursive: true });
     const temp = `${resolved}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, content, 'utf8');
@@ -754,8 +933,10 @@ function materializeHost(resource) {
     if (before.isSymbolicLink()) fail('HOST_PATH_FORBIDDEN', 'symbolic links are not readable through this tool.');
     if (!before.isFile()) fail('HOST_PATH_INVALID', 'path is not a regular file.');
     if (before.size > BigInt(MAX_FILE_BYTES)) fail('HOST_FILE_TOO_LARGE', `file exceeds the ${MAX_FILE_BYTES}-byte limit.`);
-    descriptor = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    if (!same(before, fs.fstatSync(descriptor, { bigint: true }))) fail('HOST_FILE_CHANGED_DURING_READ', 'The file changed while opening it; read it again.');
+    descriptor = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
+    const opened = fs.fstatSync(descriptor, { bigint: true });
+    if (!same(before, opened)) fail('HOST_FILE_CHANGED_DURING_READ', 'The file changed while opening it; read it again.');
+    assertStillNamed(opened, 'this file');
     // One byte beyond the stat size detects a file that grows during the read.
     const buffer = Buffer.allocUnsafe(Number(before.size) + 1);
     let length = 0;
@@ -773,6 +954,7 @@ function materializeHost(resource) {
   } catch (error) {
     if ((error?.code === 'ENOENT' || error?.code === 'ENOTDIR') && !openedSnapshot) return { present: false };
     if (error?.code === 'ENOENT') fail('HOST_FILE_CHANGED_DURING_READ', 'The file disappeared while its bytes were being observed; read it again.');
+    failIfAccessDenied(error);
     throw error;
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
@@ -959,9 +1141,33 @@ function hostByteAuthority(scope) {
   return hostAuthorityInstance;
 }
 
-function decodeHostWindow(bytes) {
-  try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
-  catch { fail('HOST_FILE_UTF8_BOUNDARY_INVALID', 'The requested byte window is not complete UTF-8 text; use character-aligned startByte/endByte offsets or read the whole file.'); }
+// Whether an edge between `left` and `right` (up to three bytes each) cuts one
+// UTF-8 character in two. Bytes that form no character (Latin-1 text, binary
+// data) are never "cut": there is no character to split.
+function cutsCharacter(left, right) {
+  for (let back = 1; back <= left.length; back += 1) {
+    const lead = left[left.length - back];
+    if ((lead & 0xC0) === 0x80) continue;
+    const length = lead >= 0xC2 && lead <= 0xDF ? 2 : lead >= 0xE0 && lead <= 0xEF ? 3 : lead >= 0xF0 && lead <= 0xF4 ? 4 : 0;
+    if (length <= back) return false;
+    const sequence = Buffer.concat([left.subarray(left.length - back), right.subarray(0, length - back)]);
+    if (sequence.length < length) return false;
+    try { return [...new TextDecoder('utf-8', { fatal: true }).decode(sequence)].length === 1; } catch { return false; }
+  }
+  return false;
+}
+
+// The full snapshot is validated as UTF-8 text before a receipt is created.
+// Window boundaries must additionally preserve whole characters.
+function decodeHostWindow(bytes, { preceding = Buffer.alloc(0), following = Buffer.alloc(0) } = {}) {
+  const around = Buffer.concat([preceding, bytes, following]);
+  const start = preceding.length;
+  const end = start + bytes.length;
+  if (cutsCharacter(around.subarray(Math.max(0, start - 3), start), around.subarray(start, start + 3))
+      || cutsCharacter(around.subarray(Math.max(0, end - 3), end), around.subarray(end, end + 3))) {
+    fail('HOST_FILE_UTF8_BOUNDARY_INVALID', 'The requested byte window starts or ends inside a character; move startByte or endByte to the start of a character, or read from startByte 0.');
+  }
+  return bytes.toString('utf8');
 }
 
 function describeRepairs(repairs) {
@@ -1015,7 +1221,7 @@ function committedAfterRevocation(applied, resource, what, error) {
 }
 
 function beginMediated(dependencies, toolName, target) {
-  const assertResearch = researchFileGuard(dependencies, toolName, target, true);
+  const assertScope = childScopeFileGuard(dependencies, toolName, target, true);
   const contexts = fileToolContexts();
   const scope = dependencies.fileToolContext;
   const binding = contexts.requireFileToolContext(scope);
@@ -1023,7 +1229,7 @@ function beginMediated(dependencies, toolName, target) {
   const currentToolInvocation = contexts.consumeFileToolInvocation(invocation, scope, toolName);
   const assertCurrent = () => {
     assertActive(toolName);
-    assertResearch();
+    assertScope();
     return contexts.assertFileToolInvocationCurrent(invocation, scope, toolName);
   };
   return { scope, binding, currentToolInvocation, assertCurrent };
@@ -1050,12 +1256,15 @@ function sandboxReadWindowBytes() {
 function sandboxWindowEnd(resolved, start, askedEnd, cap) {
   const span = Math.min(askedEnd - start, cap + 3);
   const bytes = Buffer.alloc(Math.max(span, 0));
-  const handle = fs.openSync(resolved, 'r');
+  let handle;
+  try { handle = fs.openSync(resolved, 'r'); } catch (error) { failIfAccessDenied(error); throw error; }
   let read;
   try { read = fs.readSync(handle, bytes, 0, bytes.length, start); } finally { fs.closeSync(handle); }
+  // Moved back only while the end would cut a character (see cutsCharacter).
   const onBoundary = (end) => {
     let at = end;
-    while (at > start && at - start < read && (bytes[at - start] & 0xC0) === 0x80) at -= 1;
+    while (at > start && at - start < read
+      && cutsCharacter(bytes.subarray(Math.max(0, at - start - 3), at - start), bytes.subarray(at - start, Math.min(read, at - start + 3)))) at -= 1;
     return at;
   };
   let end = start + Math.min(read, askedEnd - start, cap);
@@ -1128,16 +1337,19 @@ function readFileMediated({ path: target, startByte, endByte } = {}, dependencie
     }
     return hostByteAuthority(scope).observeRead({
       binding, resource, startByte, endByte, assertCurrent,
-      // A window must be character-aligned UTF-8; a whole file decodes as the
-      // legacy reader did (invalid sequences become U+FFFD), never refused.
-      validateRead: windowed ? ({ bytes }) => decodeHostWindow(bytes) : undefined
+      materializeRead: candidate => {
+        const snapshot = materializeHost(candidate);
+        if (snapshot.present !== false) assertTextInput(snapshot.bytes, resolved);
+        return snapshot;
+      },
+      validateRead: windowed ? ({ bytes, preceding, following }) => decodeHostWindow(bytes, { preceding, following }) : undefined
       });
   }).then(observed => {
     assertCurrent();
     const receipt = observed.receipt;
     return {
       path: resolved,
-      content: windowed ? decodeHostWindow(observed.bytes) : observed.bytes.toString('utf8'),
+      content: observed.bytes.toString('utf8'),
       bytes: observed.bytes.length,
       ...(windowed ? { startByte: receipt.startByte, endByte: receipt.endByte, totalBytes: receipt.totalBytes } : {}),
       ...(capped && receipt.endByte < askedEnd ? {
@@ -1187,7 +1399,7 @@ function writeFileMediated({ path: target, content } = {}, dependencies = {}) {
 
 function patchFile({ path: target, oldText, newText } = {}, dependencies = {}) {
   assertActive('host.patch_file');
-  researchFileGuard(dependencies, 'host.patch_file', target, true);
+  childScopeFileGuard(dependencies, 'host.patch_file', target, true);
   if (!hostByteMediationEnabled()) {
     fail('HOST_BYTE_MEDIATION_OFF', `host.patch_file requires host byte mediation, which is turned off on this machine (${HOST_BYTE_MEDIATION_ENV}=off). Use host.read_file and host.write_file instead.`);
   }
@@ -1229,15 +1441,15 @@ function patchFile({ path: target, oldText, newText } = {}, dependencies = {}) {
   }, error => hostRefusal(error, resolved, 'patched'));
 }
 
-// Research listings retain and check the real directory identity across audit
+// Scoped listings retain and check the real directory identity across audit
 // admission and use a bounded directory handle for the synchronous snapshot.
-function researchDirectorySnapshot(resolved, assertResearch) {
+function childScopeDirectorySnapshot(resolved, assertScope) {
   const before = fs.lstatSync(resolved, { bigint: true });
   // Windows security maintenance can update directory ctime during audit.
   // Stable identity and entry modification time describe this listing.
   const same = value => ['dev', 'ino', 'mtimeNs'].every(key => value[key] === before[key]);
   const assertDirectory = () => {
-    assertResearch();
+    assertScope();
     const current = fs.lstatSync(resolved, { bigint: true });
     if (!current.isDirectory() || current.isSymbolicLink() || !same(current)) {
       fail('RESEARCH_ACCESS_REFUSED', 'The research directory changed while it was being listed.');
@@ -1271,18 +1483,21 @@ function researchDirectorySnapshot(resolved, assertResearch) {
   } };
 }
 
-function listDir({ path: target = HOME } = {}, dependencies = {}) {
+function listDir({ path: target = defaultHostListDirectory() } = {}, dependencies = {}) {
   assertActive('host.list_dir');
   const resolved = resolveHostPath(target, { mustExist: true });
   if (!fs.lstatSync(resolved).isDirectory()) fail('HOST_PATH_INVALID', 'path is not a directory.');
-  const assertResearch = researchFileGuard(dependencies, 'host.list_dir', resolved);
-  const researchListing = dependencies.researchAccess ? researchDirectorySnapshot(resolved, assertResearch) : null;
+  const assertScope = childScopeFileGuard(dependencies, 'host.list_dir', resolved);
+  const scopedListing = dependencies.researchAccess ? childScopeDirectorySnapshot(resolved, assertScope) : null;
   // Admission precedes readdirSync and the per-entry metadata reads below.
   const requireRecordAsync = dependencies.requireRecordAsync || auditAdmission.requireRecordAsync;
   const recordAsync = dependencies.recordAsync || auditAdmission.recordAsync;
   const admitted = requireRecordAsync('host.list_dir.intent', resolved, {});
   return admitted.then(() => {
-    const entries = researchListing ? researchListing.read() : listDirEntries(resolved);
+    let entries;
+    const counted = {};
+    try { entries = scopedListing ? scopedListing.read() : listDirEntries(resolved, undefined, counted); }
+    catch (error) { failIfAccessDenied(error); throw error; }
     // The result record rides the same off-thread admission as the intent,
     // same shape as host.exec's result record: a failed record
     // write is reported on stderr, redacted, and never turns a completed
@@ -1293,14 +1508,40 @@ function listDir({ path: target = HOME } = {}, dependencies = {}) {
         process.stderr.write(`ToolsEnabled host.list_dir audit write failed: ${audit.redact(auditError && auditError.message || String(auditError))}\n`);
       })
       .then(() => {
-        researchListing?.assertDirectory();
-        return { path: resolved, entries };
+        scopedListing?.assertDirectory();
+        return boundedListing(resolved, entries, counted.total ?? entries.length);
       });
   });
 }
 
-function listDirEntries(resolved, snapshot) {
-  return (snapshot || fs.readdirSync(resolved, { withFileTypes: true }))
+/* A listing an agent can use whole. Entries come in name order; when they are
+   more than one listing returns (MAX_LIST_ENTRIES, and inside an OpenShell
+   sandbox what fits in SANDBOX_READ_WINDOW_BYTES of JSON text, like a read
+   window), the result says so and how many there are. Measured 2026-09-29: a
+   folder of 6,000 files came back as 350 KB, silently cut at 5,000 entries,
+   and the agent CLIs keep about 10,000 tokens of a result, cutting the
+   middle out. */
+function boundedListing(resolved, rows, total) {
+  const cap = sandboxReadWindowBytes();
+  const note = shown => `Showing ${shown} of ${total} entries, in name order${cap !== null ? `; one listing returns at most ${cap} bytes here` : ''}. List a subfolder, or read or search for the file you need.`;
+  let shown = rows.length;
+  if (cap !== null) {
+    let size = Buffer.byteLength(JSON.stringify({ path: resolved, entries: [], truncated: true, totalEntries: total, note: note(total) }));
+    shown = 0;
+    for (const row of rows) {
+      size += Buffer.byteLength(JSON.stringify(row)) + 1;
+      if (size > cap) break;
+      shown += 1;
+    }
+  }
+  if (shown === total) return { path: resolved, entries: rows };
+  return { path: resolved, entries: rows.slice(0, shown), truncated: true, totalEntries: total, note: note(shown) };
+}
+
+const byName = (left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+
+function listDirEntries(resolved, snapshot, counted = {}) {
+  const visible = (snapshot || fs.readdirSync(resolved, { withFileTypes: true }))
     // Listing a parent must not disclose the names of protected stores (or a
     // harmlessly-named reparse point whose target is one). Fail closed for a
     // child that disappears while the directory is being inspected.
@@ -1315,6 +1556,9 @@ function listDirEntries(resolved, snapshot) {
         failCouldNotCheck('directory entry');
       }
     })
+    .sort(byName);
+  counted.total = visible.length;
+  return visible
     .slice(0, MAX_LIST_ENTRIES)
     .map(entry => {
       const row = { name: entry.name, type: entry.isDirectory() ? 'directory' : entry.isSymbolicLink() ? 'symlink' : 'file' };
@@ -1467,7 +1711,7 @@ function exec({ command, cwd, timeoutMs, shell } = {}, dependencies = {}) {
   // be a synchronous audit.requireRecord(), and a required record forces the
   // vault anchor write, which is two PowerShell starts (secrets.ps1 get, then
   // set-monotonic-stdin): 1.2 s idle on this machine and 2 to 4 s under load.
-  // The owner host runs inside the desktop app's main process, so every
+  // The owner host runs inside the host application's main process, so every
   // agent's shell command parked the thread the person's window is drawn on
   // for that long. MEASURED 2026-09-04 on a live process with four
   // circles: 46 of 53 main-thread stalls in fifteen minutes contained this
@@ -1741,6 +1985,7 @@ module.exports = {
   SANDBOX_READ_WINDOW_BYTES, sandboxWindowEndForTests: sandboxWindowEnd,
   HostControlError, HOME, MAX_FILE_BYTES, MAX_OUTPUT_BYTES, MAX_TIMEOUT_MS, EXCLUDED_PATH_PATTERNS,
   HOST_BYTE_MEDIATION_ENV, HOST_BYTE_STORE, hostByteMediationEnabled,
+  isCredentialProtectedPath,
   resolveHostPath, readFile, writeFile, patchFile, listDir, listProcesses, killExecTree, appendBoundedOutput, exec,
   // Test seam for the owner's product-source switch; never a registered tool.
   setProductSourceWritesPolicyForTests,

@@ -228,21 +228,37 @@ CONTEXT_KEYS = {"schemaVersion", "uid", "prefix", "home", "accountHome", "stateR
 
 
 def validate_context(context, prefix=None):
-    if (not isinstance(context, dict) or set(context) != CONTEXT_KEYS or context["schemaVersion"] != 1
+    if (not isinstance(context, dict) or set(context) != (CONTEXT_KEYS | ({"agentProfiles"} if context.get("schemaVersion") == 2 else set())) or context["schemaVersion"] not in (1, 2)
             or type(context["uid"]) is not int or context["uid"] != os.getuid()
             or context["codexProfileMode"] not in ("default", "explicit")
             or context["claudeProfileMode"] not in ("default", "explicit")
             or context["tier"] not in ("unrestricted", "standard", "guided")
-            or context["providers"] not in ("codex,claude", "codex", "claude")):
+            or not isinstance(context["providers"], str) or not all(re.fullmatch(r"[a-z][a-z0-9-]{0,30}", item) for item in context["providers"].split(","))):
         fail("INTEGRITY", "Unknown or foreign nonsecret lifecycle context")
     for key in ("prefix", "home", "accountHome", "stateRoot", "servicesRoot", "codexProfile", "claudeProfile", "workspace"):
         absolute(context[key])
+    if context['schemaVersion'] == 2:
+        agents = context['agentProfiles']
+        if (not isinstance(agents, dict) or not 1 <= len(agents) <= 64
+                or any(not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', key) for key in agents)):
+            fail('INTEGRITY', 'Invalid agent profile history')
+        for selected in agents.values():
+            if (not isinstance(selected, dict) or set(selected) != {'root', 'mode', 'file'}
+                    or selected['mode'] not in ('default', 'explicit')):
+                fail('INTEGRITY', 'Invalid agent profile context')
+            absolute(selected['root'])
+            if selected['file'] is not None:
+                absolute(selected['file'])
+            if selected['root'] not in context['protectedPaths'] or selected['file'] is not None and selected['file'] not in context['protectedPaths']:
+                fail('INTEGRITY', 'Agent profile is not protected')
+        if any(key not in agents for key in context['availableProviders']):
+            fail('INTEGRITY', 'Available agent has no profile context')
     if prefix is not None and context["prefix"] != str(prefix):
         fail("INTEGRITY", "Lifecycle context identifies a different runtime prefix")
     available, protected = context["availableProviders"], context["protectedPaths"]
-    if (not isinstance(available, list) or len(available) > 2 or len(set(available)) != len(available)
-            or any(item not in ("codex", "claude") for item in available)
-            or not isinstance(protected, list) or len(protected) > 128
+    if (not isinstance(available, list) or len(available) > 64 or len(set(available)) != len(available)
+            or any(not isinstance(item, str) or not re.fullmatch(r"[a-z][a-z0-9-]{0,30}", item) for item in available)
+            or not isinstance(protected, list) or len(protected) > 512
             or any(not isinstance(item, str) for item in protected)
             or len(set(protected)) != len(protected)):
         fail("INTEGRITY", "Lifecycle context has invalid provider or protected path metadata")
@@ -250,7 +266,7 @@ def validate_context(context, prefix=None):
         absolute(item)
     if not {context[key] for key in ("home", "accountHome", "stateRoot", "servicesRoot", "codexProfile", "claudeProfile")} <= set(protected):
         fail("INTEGRITY", "Lifecycle context omits a selected protected root")
-    if len(json_bytes(context)) > 8192:
+    if len(json_bytes(context)) > 65536:
         fail("INTEGRITY", "Lifecycle context exceeds its private receipt bound")
     return context
 
@@ -301,7 +317,7 @@ def state_scope(context, *, create=False):
 
 def expected_state_record(receipt, data):
     schema = receipt["schema"]
-    install_id = receipt["installId"] if schema == 2 else hashlib.sha256(b"c10-state:" + data).hexdigest()[:32]
+    install_id = receipt["installId"] if schema == 2 else hashlib.sha256(b"c" b"10-state:" + data).hexdigest()[:32]
     if not isinstance(install_id, str) or not re.fullmatch(r"[a-f0-9]{32}", install_id):
         fail("INTEGRITY", "Fleet install ID is invalid")
     marker = (receipt["generation"] + "\n").encode() if schema == 2 else None
@@ -312,14 +328,14 @@ def expected_state_record(receipt, data):
             "receiptSha256": hashlib.sha256(data).hexdigest()}
 
 
-def require_state_record(receipt, data, *, seed_c10=False):
+def require_state_record(receipt, data, *, seed_schema1=False):
     expected = expected_state_record(receipt, data)
     name = expected["installId"] + ".json"
-    with state_scope(receipt["context"], create=seed_c10) as scope:
+    with state_scope(receipt["context"], create=seed_schema1) as scope:
         try:
             observed, _ = read_at(scope, name)
         except FileNotFoundError:
-            if not seed_c10:
+            if not seed_schema1:
                 fail("INTEGRITY", "Fleet state record is missing; runtime ownership was not accepted")
             write_at(scope, name, json_bytes(expected), exclusive=True)
             observed, _ = read_at(scope, name)
@@ -330,15 +346,19 @@ def require_state_record(receipt, data, *, seed_c10=False):
 
 def read_receipt(directory, archive, context=None, *, with_anchors=False, allow_missing=False):
     manifest = parse_manifest(archive)
-    from fleet_fs import C10_RELEASES, LEGACY_ARCHIVES
+    from fleet_fs import SCHEMA1_RELEASES, LEGACY_ARCHIVES, RECEIPTLESS_LEGACY
     release = (manifest["source_commit"], manifest["version"])
     if archive.archive_sha256 in LEGACY_ARCHIVES:
         if release != LEGACY_ARCHIVES[archive.archive_sha256]:
             fail("INTEGRITY", "Pinned legacy release identity differs")
-        required_schema = None
-    elif archive.archive_sha256 in C10_RELEASES:
-        if release != C10_RELEASES[archive.archive_sha256]:
-            fail("INTEGRITY", "Pinned c10 release identity differs")
+        # The published 1.4.2 beta 3 installer wrote a schema 2 receipt and
+        # state record. Only the earlier 1.4.0/1.4.1 manual releases had no
+        # receipt; the pinned release identity above makes this distinction
+        # independent of any runtime-controlled manifest claim.
+        required_schema = None if archive.archive_sha256 in RECEIPTLESS_LEGACY else 2
+    elif archive.archive_sha256 in SCHEMA1_RELEASES:
+        if release != SCHEMA1_RELEASES[archive.archive_sha256]:
+            fail("INTEGRITY", "Pinned release identity differs")
         required_schema = 1
     else:
         required_schema = 2
@@ -558,7 +578,7 @@ class Lifecycle:
         self.command([self.node, "-e", "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||a===22&&b>=19?0:1)"], phase="INSTALL")
         helper = self.package / "payload/engine/src/lib/openshell-lifecycle-context.js"
         context = strict_json(self.command([self.node, str(helper), "--fresh", "--prefix", str(options.prefix),
-                                            "--tier", options.tier, "--providers", options.providers], phase="INSTALL"))
+                                            "--tier", options.tier, *provider_args(options.providers)], phase="INSTALL"))
         if not isinstance(context, dict) or not isinstance(context.get("protectedPaths"), list):
             fail("INTEGRITY", "Fresh-scope inspection did not return a bounded context")
         return context
@@ -573,7 +593,7 @@ class Lifecycle:
     def setup(self, options, context):
         entry = options.prefix / "runtime/engine/bin/toolsenabled-openshell.js"
         output = self.command([self.node, str(entry), "setup", "--agents", "--add", "--tier", options.tier,
-                               "--providers", options.providers], context=context)
+                               *provider_args(options.providers)], context=context)
         sys.stdout.write(output.decode("utf8", "replace"))
 
     def status(self, options):
@@ -591,8 +611,18 @@ class Options:
     previous_archive: Path | None = None
     previous_sha256: str | None = None
     tier: str = "unrestricted"
-    providers: str = "codex,claude"
+    # Empty means every agent the engine's descriptors describe as a worker.
+    providers: str = ""
     journal: Path | None = None
+
+
+# Worker agent ids are descriptor ids (engine config/agents); the engine
+# itself refuses an id it does not describe.
+PROVIDERS_PATTERN = r"[a-z][a-z0-9-]{0,63}(?:,[a-z][a-z0-9-]{0,63}){0,15}"
+
+
+def provider_args(providers):
+    return ["--providers", providers] if providers else []
 
 
 def parse_args(argv):
@@ -609,12 +639,14 @@ def parse_args(argv):
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--previous-archive")
     parser.add_argument("--previous-sha256")
-    parser.add_argument("--tier", choices=("unrestricted", "standard", "guided"))
-    parser.add_argument("--providers", choices=("codex,claude", "codex", "claude"))
+    parser.add_argument("--tier", choices=("unrestricted", "standard", "guided"), help="Optional: narrow Fleet tools further; unrestricted adds no cap.")
+    parser.add_argument("--providers")
     args = parser.parse_args(argv)
     mode = "recover" if args.recover is not None else "upgrade" if args.upgrade is not None else "setup"
     if mode != "setup" and (args.tier is not None or args.providers is not None):
         fail("INSTALL", "Tier and provider choices apply only to fresh installation")
+    if args.providers is not None and not re.fullmatch(PROVIDERS_PATTERN, args.providers):
+        fail("INSTALL", "--providers takes a comma-separated list of described agent ids")
     if bool(args.previous_archive) != bool(args.previous_sha256):
         fail("INTEGRITY", "A previous archive and its independent digest must be supplied together")
     if mode != "upgrade" and args.previous_archive:
@@ -624,7 +656,7 @@ def parse_args(argv):
     return Options(mode, prefix, absolute(args.archive), digest(args.sha256),
                    absolute(args.previous_archive) if args.previous_archive else None,
                    digest(args.previous_sha256) if args.previous_sha256 else None,
-                   args.tier or "unrestricted", args.providers or "codex,claude",
+                   args.tier or "unrestricted", args.providers or "",
                    absolute(args.recover) if args.recover else None)
 
 
@@ -650,7 +682,8 @@ def validate_journal(value, journal_path):
             or value["intent"] not in (None, "BUILD_NEW", "MOVE_OLD", "ACTIVATE_NEW", "SETUP", "STATUS",
                                        "COMMIT", "CLEAN_OLD", "ROLLBACK_NEW", "RESTORE_OLD", "CLEAN_NEW")
             or value["tier"] not in ("unrestricted", "standard", "guided")
-            or value["providers"] not in ("codex,claude", "codex", "claude")):
+            or not isinstance(value["providers"], str)
+            or value["providers"] and not re.fullmatch(PROVIDERS_PATTERN, value["providers"])):
         fail("INTEGRITY", "Transaction has an invalid phase or operation")
     for key in ("parentIdentity", "transactionIdentity", "newIdentity", "oldIdentity"):
         item = value[key]
@@ -801,9 +834,9 @@ class Transaction:
         # Only the independently pinned published 1.4.0/1.4.1 generations
         # lacked an ownership receipt and inherited extraction mode losses.
         # Every beta-3 generation remains subject to exact installed modes.
-        return ((legacy and receipt is None and archive.archive_sha256 in self.fs.LEGACY_ARCHIVES)
+        return ((legacy and receipt is None and archive.archive_sha256 in self.fs.RECEIPTLESS_LEGACY)
                 or (receipt is not None and strict_json(receipt)["schema"] == 1
-                    and archive.archive_sha256 in self.fs.C10_RELEASES))
+                    and archive.archive_sha256 in self.fs.SCHEMA1_RELEASES))
 
     def verify(self, parent, name, expected, archive, receipt, *, legacy=False, allow_missing=False):
         if not same_identity(entry_identity(parent, name), expected):
@@ -833,9 +866,8 @@ class Transaction:
 
     def stage_identity(self):
         member = self.archive.read_bytes("toolsenabled-installer/fleet_install.py", max_bytes=1024 * 1024)
-        # Official archives preserve some group-writable package/engine modes.
-        # They are safe only beneath this owned private extraction boundary;
-        # do not weaken the general ancestor rules to reopen an inner path.
+        # A private extraction parent is required even when archive modes were
+        # attenuated; package verification separately refuses writable entries.
         with self.fs.SafeDirectory.open(str(self.package.parent)) as outer, outer.child(self.package.name) as stage:
             private = os.fstat(outer.fd)
             if private.st_uid != os.getuid() or stat.S_IMODE(private.st_mode) != 0o700:
@@ -862,13 +894,14 @@ class Transaction:
         prefix = self.options.prefix
         validate_context(context, prefix)
         protected = context.get("protectedPaths")
-        if not isinstance(protected, list) or len(protected) > 128:
+        if not isinstance(protected, list) or len(protected) > 512:
             fail("INTEGRITY", "Bounded protected path context is required")
         for item in [self.package, self.options.archive, self.options.previous_archive, Path(self.lock.protected_root)]:
             if item is not None and (item == prefix or prefix in item.parents or item in prefix.parents):
                 fail("INTEGRITY", "Prefix overlaps its independent driver, archive or lock namespace")
         homes = {context["home"], context["accountHome"], os.path.realpath(pwd.getpwuid(os.getuid()).pw_dir)}
         roles = {context[key] for key in ("stateRoot", "servicesRoot", "codexProfile", "claudeProfile", "workspace")}
+        roles.update(row['root'] for row in context.get('agentProfiles', {}).values())
         for home in homes:
             if home and (prefix == Path(home) or prefix in Path(home).parents):
                 fail("INTEGRITY", "Prefix contains a protected home")
@@ -924,7 +957,7 @@ class Transaction:
                                                                                 old_style == "legacy"))
                 if old_receipt is not None:
                     if strict_json(old_receipt)["schema"] == 1:
-                        require_state_record(strict_json(old_receipt), old_receipt, seed_c10=True)
+                        require_state_record(strict_json(old_receipt), old_receipt, seed_schema1=True)
                     context = strict_json(old_receipt)["context"]
         previous_archive = ({"path": str(options.previous_archive) if options.previous_archive else None,
                              "sha256": self.previous.archive_sha256} if self.previous else None)

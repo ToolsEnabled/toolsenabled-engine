@@ -142,9 +142,29 @@ const { spawn: nodeSpawn } = require('node:child_process');
 const {
   BILLING_TRIPWIRE,
   safeLaunchEnvironment,
-} = require('../providers/subscription-launch-env');
+} = require('../supervision/launch-environment');
 const { spawnInJob } = require('../windows-job-control');
 const { spawnLinuxOwned } = require('../linux-process-control');
+
+/* AN AGENT CLI THE PERSON RUNS GETS THE PERSON'S ENVIRONMENT, AS GIVEN.
+ *
+ * Fleet starts workers with the person's own agent CLIs (Claude Code, Codex,
+ * any ACP agent). How that CLI signs in is the person's choice: an account
+ * login, an API key, a cloud provider, a key helper. Removing a sign-in
+ * variable would restrict that choice, and Anthropic's terms for running
+ * Claude Code in a product forbid removing, disabling or restricting any of
+ * its authentication methods. So a caller that marks a child `agentCli: true`
+ * gets the environment it supplied, unscrubbed. Fleet still never reads,
+ * copies or stores a sign-in; it only stops deleting the person's own.
+ *
+ * Every other child (vault, locks, probes, helpers) keeps the scrub below. */
+function agentCliEnvironment(environment) {
+  if (environment === null || environment === undefined || typeof environment !== 'object') {
+    throw new HiddenSpawnError('HIDDEN_SPAWN_AGENT_ENVIRONMENT_INVALID',
+      'An agent CLI launch needs an explicit environment object');
+  }
+  return { ...environment };
+}
 
 const PROVIDER_SPAWN_REFUSAL_VARIABLE = 'TOOLSENABLED_REFUSE_PROVIDER_SPAWN';
 
@@ -368,6 +388,9 @@ function spawnHidden(command, args = [], options = {}) {
   if (Object.hasOwn(options, 'processGroup') && typeof options.processGroup !== 'boolean') {
     throw new HiddenSpawnError('HIDDEN_SPAWN_PROCESS_GROUP_INVALID', 'spawnHidden processGroup must be true or false');
   }
+  if (Object.hasOwn(options, 'agentCli') && typeof options.agentCli !== 'boolean') {
+    throw new HiddenSpawnError('HIDDEN_SPAWN_AGENT_CLI_INVALID', 'spawnHidden agentCli must be true or false');
+  }
   if (options.processGroup === true && (options.containProcessTree === true || options.rootLaunch !== undefined
       || process.platform !== 'linux')) {
     throw new HiddenSpawnError('HIDDEN_SPAWN_PROCESS_GROUP_INVALID',
@@ -445,8 +468,10 @@ function spawnHidden(command, args = [], options = {}) {
     containProcessTree = false,
     processGroup = false,
     rootLaunch: privateRootLaunch,
+    agentCli = false,
     ...rest
   } = options;
+  const launchEnvironment = agentCli ? agentCliEnvironment : safeLaunchEnvironment;
 
   /* A PROVIDER SESSION IS A PROCESS TREE, NOT ONE PID.
    *
@@ -479,11 +504,11 @@ function spawnHidden(command, args = [], options = {}) {
     const child = spawnContained(invocation.command, invocation.args, {
       ...rest,
       cwd: containedCwd,
-      env: safeLaunchEnvironment(childEnv, { context: 'hidden child process' }),
+      env: launchEnvironment(childEnv, { context: 'hidden child process' }),
       shell: false,
       windowsHide: true,
       terminateDescendantsOnRootExit: true,
-    }, { safeLaunchEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
+    }, { safeLaunchEnvironment: launchEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
     rootLaunch?.spawned(child);
     return child;
   }
@@ -493,7 +518,7 @@ function spawnHidden(command, args = [], options = {}) {
   // Keep the scrub and the explicitly validated credential overlay together;
   // ordinary caller env is never evidence of an intended credential.
   const directEnvironment = Object.assign(
-    safeLaunchEnvironment(childEnv, { context: 'hidden child process' }),
+    launchEnvironment(childEnv, { context: 'hidden child process' }),
     credentialEnvironment,
   );
   beforeRootSpawn?.();

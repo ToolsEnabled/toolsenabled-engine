@@ -1,57 +1,34 @@
 'use strict';
 
-// THE ONE PLACE THE PERSON'S REQUESTS ARE FILED, EDITED, REMOVED AND DECIDED.
-//
-// Before this module there were two stores for the same fact: the canonical
-// JSON ledger (reports/OWNER-REQUEST-LEDGER.json, written by the owner-capture
-// CLI and read by every gate, digest and projection) and four markdown files
-// behind /Request (src/lib/r-ledger.js). Product rule: one
-// canonical ledger with scope tiers, filed by /Request*, managed on /ledger.
-// This module is that ledger's single write API and its tier reader;
-// src/lib/r-ledger.js is now a thin adapter over it so every existing caller
-// keeps its names.
+// The durable request ledger's write API and scope-aware reader.
+// src/lib/r-ledger.js is a compatibility adapter over this store.
 //
 // WHAT IS WRITTEN, AND WHERE.
 //   reports/OWNER-REQUEST-LEDGER.json          the record (one JSON document)
 //   state/owner-request-record-events.jsonl    the history chain (append-only)
-// Both resolve LAZILY through runtime-state-root.statePath at call time, never
-// as module-load constants: the shell sets the state root before any payload
-// require, the isolated test runner sets it per run, and one suite flips it in
-// process. `options.rootPath` (a function, the shape r-ledger.js always took)
-// overrides both.
+// Both resolve lazily through runtime-state-root.statePath at call time.
+// `options.rootPath` overrides both for isolated callers.
 //
 // READS NEVER CREATE FILES. An absent ledger answers exists:false and empty
 // lists. ensureLedger runs on the write paths only.
 //
-// NO AUDIT CALL HERE. audit.record() runs prepare() synchronously, which on this
-// machine has blocked the shell's main thread for seconds; the person's own
-// /Request must never wait on that. The hash chain below is the tamper-evident
-// record. The agent tool path keeps its audit intent in r-ledger-agent-gate.js.
+// Audit admission is handled by the agent tool path. The hash chain below is
+// the store's tamper-evident record.
 //
-// THE FOUR DURABLE PRIMITIVES ARE LOCAL. tools/owner-capture.js exports them,
-// but requiring it pulls owner-directive-notification -> agent-comms and its
-// lock (src/lib/agent-digest/lock.js) probes the process identity with a
-// powershell.exe launch on Windows -- 5 s cold, on the main thread, on the first
-// /Request. So this file carries its own atomic write (temp + fsync +
+// The durable primitives stay local, avoiding a synchronous process probe on
+// the first request. This file carries its own atomic write (temp + fsync +
 // read-back + .bak + rename), its own shape check, its own finalize and its own
-// lock. THE LOCK IS THE SAME FILE THE CLI FAMILY TAKES: `<ledger>.lock`, in the
-// record shape the digest lock classifies, so a /Request typed in the app and
-// an owner-capture reconcile exclude each other instead of racing one
-// read-modify-write. The protocol is spelled out above acquireLock.
+// lock. Every ledger writer shares `<ledger>.lock`, preventing concurrent
+// read-modify-write operations. The protocol is described above acquireLock.
 //
 // DELETE IS A TOMBSTONE. Nothing is ever spliced out of requests[]: a removed
 // record keeps its number (never reissued), its words and its history, with
 // status 'removed'. Edit rewrites the words in place and keeps the words before
 // in the record's history. Both, and decide, refuse any actor but 'owner'.
 //
-// `actor: 'owner'` IS A CONVENTION, NOT A CREDENTIAL. This module cannot tell
-// who is calling it; it trusts the actor word it is handed. The product's
-// person-only doors are what make that word true: the shell's personOnly
-// handlers (a /Request typed in the app), the bridge's owner-ui channel, and
-// the MCP transport binding that hands every agent tool call to the agent gate
-// (src/lib/r-ledger-agent-gate.js), which never passes 'owner' through. The
-// CLI tools/r-ledger.js edit and remove verbs run as the person by design: a
-// terminal on this machine is the person's own hand, the same as the app.
+// `actor: 'owner'` IS A CONVENTION, NOT A CREDENTIAL. This store trusts the
+// actor supplied by its caller. MCP agent calls pass through
+// src/lib/r-ledger-agent-gate.js, which cannot supply the owner actor.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -62,7 +39,10 @@ const { normalizeProvenance } = require('./owner-request-provenance');
 const { readWaitingFor, assertTaskDependencies } = require('./task-waiting');
 const { THREAD_ID_RE } = require('./owner-request-scope');
 const { TASK_DIFFICULTY_SETTING_ID, newTaskDifficultyFields, planTaskDifficultyReview, resolveTaskAssignment } = require('./task-difficulty');
-const killSwitch = require('./kill-switch');
+// Ledger reads must not import the policy/runtime boot graph: runtime.js
+// establishes a redirected state root as a module-load side effect. Only the
+// writer paths below consult the kill switch, so load it at those call sites.
+function killSwitch() { return require('./kill-switch'); }
 
 const LEDGER_FILE = 'reports/OWNER-REQUEST-LEDGER.json';
 const HISTORY_FILE = 'state/owner-request-record-events.jsonl';
@@ -195,8 +175,6 @@ const TASK_COMPLETABLE_STATUSES = Object.freeze(new Set(['open', 'in-progress', 
 const TASK_SUPERSEDE_BLOCKED_STATUSES = Object.freeze(new Set(['done', 'removed', 'superseded']));
 const ASK_ANSWERABLE_STATUSES = Object.freeze(new Set(['open']));
 const ASK_DECLINABLE_STATUSES = Object.freeze(new Set(['open']));
-const PURCHASE_DECIDABLE_STATUSES = Object.freeze(new Set(['proposed']));
-const PURCHASE_RECORDABLE_STATUSES = Object.freeze(new Set(['approved']));
 
 /** The kind (R, T, A or P) a ledger id belongs to, read from its own spelling. Null for anything else. */
 function idKind(id) {
@@ -389,29 +367,7 @@ function normalizeReason(reason) {
 }
 
 function assertPerson(actor) {
-  if (actor !== PERSON) fail('R_LEDGER_PERSON_REQUIRED', 'Only the person edits, deletes, approves or declines a request. Ask them to do it on the Ledger page.');
-}
-
-// src/lib/providers/pay.js journals this EXACT string as approvedBy for the
-// direct auto-approved spend path: a purchase that falls within the owner's
-// own standing outward.reserved_from_agents setting, decided by that setting,
-// never by a person clicking. decidePurchase journals whichever actor
-// actually decided -- so a setting-approved purchase is never misrecorded as
-// an owner click, and (product rule: asks and purchases are
-// agent-closable) an agent-decided purchase is never misrecorded as this setting
-// either. R's edit/remove/decide/resolve and A/P's own remove stay
-// assertPerson-only; A's answer/decline and P's decide do not, as of that
-// ruling -- this is a scoped widening of those three writers, not a general
-// widening of who "the person" is.
-const OUTWARD_RESERVED_SETTING_ACTOR = 'setting:outward.reserved_from_agents';
-// UNCALLED since a later product rule widened decidePurchase to any
-// actor: kept, not deleted, as the definition of what the OLD gate was, for
-// anyone tracing OUTWARD_RESERVED_SETTING_ACTOR's history. Nothing in this
-// file calls it any more.
-function assertPurchaseDecider(actor) {
-  if (actor !== PERSON && actor !== OUTWARD_RESERVED_SETTING_ACTOR) {
-    fail('R_LEDGER_PERSON_REQUIRED', 'Only the person, or the owner\'s own standing outward-spend setting, decides a purchase.');
-  }
+  if (actor !== PERSON) fail('R_LEDGER_PERSON_REQUIRED', `Only the person edits, deletes, approves or declines a request. Ask them to do it ${require('./ledger-place').ledgerPlace()}.`);
 }
 
 function assertId(id) {
@@ -540,7 +496,7 @@ function backupUsable(ledgerFile) {
   try { return fs.statSync(`${ledgerFile}.bak`).size > 0; } catch { return false; }
 }
 
-/* A LEDGER THAT HAS NOT CHANGED IS NOT PARSED AGAIN (T1763).
+/* A LEDGER THAT HAS NOT CHANGED IS NOT PARSED AGAIN.
  *
  * Every agent Ledger lookup (ledger.read, a one-id find, a boot stack) went
  * through readAll(), which read and parsed the WHOLE document every time. The
@@ -633,7 +589,7 @@ function readSharedDocument(ledgerFile) {
   return document;
 }
 
-/* A LEDGER WRITE PARSES THE LEDGER ONCE, NOT THREE TIMES (T1801).
+/* A LEDGER WRITE PARSES THE LEDGER ONCE, NOT THREE TIMES.
  *
  * Every Ledger write (an agent's t_ledger.progress, a filing, a decision) ran
  * on the app's main thread and parsed the whole document three times: to read
@@ -1170,9 +1126,7 @@ function nextRootNumber(options = {}) {
 // ---------------------------------------------------------------------------
 //
 // ONE LOCK FILE FOR EVERY WRITER OF THE LEDGER: `<ledger>.lock`, the file
-// tools/owner-capture.js acquireLedgerLock takes through
-// src/lib/agent-digest/lock.js -- and ledger-archive and
-// the migrations through it. That module's authoritative mutex is a
+// the ledger archive and migrations share. The authoritative mutex is a
 // nonce-claim directory beside the file, but every holder also publishes this
 // fixed JSON status file with an exclusive create, refuses to start while the
 // file names a live process, and never treats an unreadable record as
@@ -1728,6 +1682,9 @@ function transact(options, now, mutate, forceVerification = false, adopting = fa
   const lock = acquireLock(ledgerFile);
   try {
     const document = readDocumentForWrite(ledgerFile);
+    if (options.expectedRevision !== undefined && document.data.revision !== options.expectedRevision) {
+      fail('LEDGER_PAGE_CHANGED', 'The ledger changed. Reload and confirm the action again.');
+    }
     const chain = readTransactionHistory(historyFile, document, options, forceVerification, adopting, handoffHistory);
     const expected = lastCoreByRequest(chain.events);
     const onDisk = new Map();
@@ -2494,7 +2451,7 @@ function taskLedgerWriterStatus(config) {
   if (config.revoked === true) return Object.freeze({ revoked: true, reason: config.revokeReason || 'LIFECYCLE' });
   let kill;
   try {
-    kill = killSwitch.status();
+    kill = killSwitch().status();
   } catch (error) {
     config.revoked = true;
     config.revokeReason = 'KILLSWITCH_STATE_UNAVAILABLE';
@@ -2559,7 +2516,7 @@ function registerTaskLedgerWriter({
     policyDenied('The native task Ledger writer needs a host-derived coordinator identity. No task was changed.');
   }
   let kill;
-  try { kill = killSwitch.status(); } catch (error) {
+  try { kill = killSwitch().status(); } catch (error) {
     policyDenied(`The task Ledger kill-switch state is unavailable: ${error?.message || 'unknown state'}. No task was changed.`);
   }
   if (kill?.active === true) {
@@ -2585,8 +2542,8 @@ function registerTaskLedgerWriter({
     revokeReason: null,
     killSwitchUnsubscribe: null,
   };
-  if (typeof killSwitch.onActivate === 'function') {
-    config.killSwitchUnsubscribe = killSwitch.onActivate(() => {
+  if (typeof killSwitch().onActivate === 'function') {
+    config.killSwitchUnsubscribe = killSwitch().onActivate(() => {
       config.revoked = true;
       config.revokeReason = 'KILLSWITCH_ACTIVE';
     });
@@ -3884,25 +3841,16 @@ function resolve({ id, status, reason, actor, now } = {}, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// T, A, P writes -- flat families that agents may write, within the limits
-// set out below (see "Kinds" near the top of this file for what each family
-// holds). Every one of them runs through the SAME transact() the
-// R writes use, so it gets the same lock, the same atomic write, and the
-// same hash-chained history for free, unmodified. Scope works exactly like
-// R's own (assertScope/assertKey, the same four tiers): T, A and P
-// records carry scope exactly as R records do. File/complete/remove are
-// agent-usable for T; answer/decline (A) and decide (P) are ALSO
-// agent-usable, per the product rule that asks and purchases are
-// agent-closable -- but removeAsk and removePurchase stay owner-only
-// (assertPerson below, same gate R's own edit/remove/decide/resolve use):
-// the rule makes asks and purchases closable, not removable, and agent
-// removal applies only to T.
+// T and A writes share the same lock, atomic write and hash-chained history
+// as R records. Scope uses the same four tiers. Agents may file tasks and
+// asks, complete tasks, and answer or decline asks. Removing an ask remains
+// restricted to the person.
 // ---------------------------------------------------------------------------
 
-/* One filed record, T/A/P alike: a per-kind flat id (never a dotted
+/* One filed record, T/A alike: a per-kind flat id (never a dotted
    refinement, unlike R), the same scope handling fileRequest gives R, the
    kind's own starting status and whatever kind-specific fields the caller
-   seeds (recurrence for T, answer:null for A, the purchase field for P). */
+   seeds (recurrence for T, answer:null for A). */
 function fileMinor(kind, startStatus, extra, { scope, key, words, filedBy, scopeLabel = null, why = null, now } = {}, options = {}) {
   assertScope(scope);
   const layerKey = assertKey(scope, key, { strict: true });
@@ -4076,18 +4024,6 @@ function fileAsk({ scope, key, words, filedBy, scopeLabel, why, now } = {}, opti
   return fileMinor('A', 'open', { answer: null }, { scope, key, words, filedBy, scopeLabel, why, now }, options);
 }
 
-/** File one purchase. Any actor may; it lands 'proposed', waiting for the owner's decision. */
-function filePurchase({ scope, key, words, filedBy, scopeLabel, why, now, purchase } = {}, options = {}) {
-  const seed = plain(purchase) ? purchase : {};
-  const purchaseField = {
-    requestId: typeof seed.requestId === 'string' && seed.requestId ? seed.requestId : null,
-    lines: Array.isArray(seed.lines) ? seed.lines : [],
-    decision: null,
-    recordedCharge: null
-  };
-  return fileMinor('P', 'proposed', { purchase: purchaseField }, { scope, key, words, filedBy, scopeLabel, why, now }, options);
-}
-
 /** Record a task checkpoint without completing or reviving terminal work. */
 function progressTask(args = {}, options = {}) {
   const { id, status, reason, actor, now } = args;
@@ -4233,8 +4169,7 @@ function removeTask({ id, actor, now } = {}, options = {}) {
 }
 
 /** The owner answers one ask: open -> answered, carrying the owner's own words. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may answer an ask; removeAsk stays owner-only
+// Any actor may answer an ask; removeAsk stays owner-only
 // (closable, not removable -- removal is the person's, as for R; agent
 // removal applies only to T). `actor` is validated and
 // normalized the same way filedBy already is, never assumed to be 'owner'.
@@ -4268,8 +4203,7 @@ function answerAsk({ id, answer, actor, now } = {}, options = {}) {
 }
 
 /** The owner declines to answer one ask: open -> declined. */
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decline an ask; removeAsk stays owner-only.
+// Any actor may decline an ask; removeAsk stays owner-only.
 function declineAsk({ id, reason, actor, now } = {}, options = {}) {
   assertKindId('A', id);
   const who = normalizeFiledBy(actor);
@@ -4305,100 +4239,12 @@ function removeAsk({ id, actor, now } = {}, options = {}) {
   return removeMinor('A', { id, actor, now }, options);
 }
 
-// PRODUCT RULE: asks and purchases are
-// agent-closable. Any actor may decide a purchase; removePurchase stays
-// owner-only. A P DECISION HERE IS A LEDGER MIRROR, NOT A SPEND AUTHORITY:
-// approving or declining a P record only updates this ledger's own status
-// and history for the record; it never moves money and never touches spend
-// caps. Actual spend authority stays entirely with src/lib/providers/pay.js
-// and the owner prompt path, neither of which reads this ledger to decide
-// whether to spend -- decidePurchase and the ledger it writes are downstream
-// of that decision, not upstream of it. assertPurchaseDecider (below) is no
-// longer called here for exactly that reason: gating who may write the
-// MIRROR never gated who may authorize the SPEND, so removing it here widens
-// no financial authority. Journalled with the real actor, never hard-coded
-// PERSON: OUTWARD_RESERVED_SETTING_ACTOR is still a valid actor value and is
-// still journalled verbatim when the owner's own standing setting decided
-// it, exactly as before -- it is simply no longer the ONLY non-owner value
-// accepted, since every actor now is.
-function decidePurchase({ id, decision, reason, actor, now } = {}, options = {}) {
-  assertKindId('P', id);
-  const who = normalizeFiledBy(actor);
-  if (decision !== 'approve' && decision !== 'decline') fail('R_LEDGER_DECISION_INVALID', 'the decision must be approve or decline.');
-  const text = normalizeReason(reason);
-  const result = transact(options, now, (document, at) => {
-    const { index, entry, record } = locateForRewrite(document, id);
-    if (!PURCHASE_DECIDABLE_STATUSES.has(record.status)) {
-      fail('R_LEDGER_STATUS_INVALID', `${id} is ${record.status || 'without a status'}; only a proposed purchase can be ${decision === 'approve' ? 'approved' : 'declined'}.`);
-    }
-    const statusAfter = decision === 'approve' ? 'approved' : 'declined';
-    // Journalled verbatim: `who` is the real actor -- an agent's name, PERSON,
-    // or the exact standing-setting string -- never silently rewritten.
-    const historyRow = { seq: 0, kind: decision, at, actor: who, statusBefore: record.status, eventSha256: '' };
-    const nextPurchase = { ...(record.purchase || {}), decision: { decision, reason: text, at, actor: who } };
-    const next = {
-      ...entry,
-      kind: record.kind || 'P',
-      scope: record.scope,
-      scopeKey: record.scopeKey,
-      parentId: record.parentId,
-      filedBy: record.filedBy || PERSON,
-      status: statusAfter,
-      purchase: nextPurchase,
-      decisions: [...record.decisions, { at, actor: who, decision, reason: text }],
-      history: [...record.history, historyRow]
-    };
-    const requests = [...document.data.requests];
-    requests[index] = next;
-    return { requests, events: [{ kind: decision, actor: who, record: next, historyRow }], record: next };
-  });
-  const record = result.outcome.record;
-  return Object.freeze({ id, status: record.status, revision: result.revision, recordedAt: result.at });
-}
-
-/** Record the settled charge for one approved purchase: approved -> recorded. Written by pay.record, not owner-gated. */
-function recordPurchase({ id, charge, actor, now } = {}, options = {}) {
-  assertKindId('P', id);
-  const who = normalizeFiledBy(actor);
-  if (!plain(charge)) fail('R_LEDGER_PURCHASE_CHARGE_INVALID', 'the recorded charge must be an object.');
-  const result = transact(options, now, (document, at) => {
-    const { index, entry, record } = locateForRewrite(document, id);
-    if (!PURCHASE_RECORDABLE_STATUSES.has(record.status)) {
-      fail('R_LEDGER_STATUS_INVALID', `${id} is ${record.status || 'without a status'}; only an approved purchase can be recorded.`);
-    }
-    const historyRow = { seq: 0, kind: 'record', at, actor: who, statusBefore: record.status, eventSha256: '' };
-    const nextPurchase = { ...(record.purchase || {}), recordedCharge: { ...charge, at } };
-    const next = {
-      ...entry,
-      kind: record.kind || 'P',
-      scope: record.scope,
-      scopeKey: record.scopeKey,
-      parentId: record.parentId,
-      filedBy: record.filedBy || who,
-      status: 'recorded',
-      purchase: nextPurchase,
-      history: [...record.history, historyRow]
-    };
-    const requests = [...document.data.requests];
-    requests[index] = next;
-    return { requests, events: [{ kind: 'record', actor: who, record: next, historyRow }], record: next };
-  });
-  const record = result.outcome.record;
-  return Object.freeze({ id, status: record.status, revision: result.revision, recordedAt: result.at });
-}
-
-/** The owner removes one purchase: a tombstone, owner-only like R's remove. */
-function removePurchase({ id, actor, now } = {}, options = {}) {
-  assertPerson(actor);
-  return removeMinor('P', { id, actor, now }, options);
-}
-
-/* Shared tombstone for T/A/P: any status but 'removed' -> 'removed'. The
+/* Shared tombstone for T/A: any status but 'removed' -> 'removed'. The
    caller has already applied whatever actor gate its kind requires (T: none;
-   A and P: assertPerson) before reaching here. A kind may name one further
+   A: assertPerson) before reaching here. A kind may name one further
    status that is ALSO terminal to it (T's own 'superseded': terminal, like
    done or removed, refused by its own typed code) without widening this for
-   A or P, whose callers never pass it. */
+   A, whose callers never pass it. */
 function removeMinor(kind, { id, actor, now } = {}, options = {}, { terminalStatus = null, terminalCode = null, terminalMessage = null } = {}) {
   assertKindId(kind, id);
   const who = normalizeFiledBy(actor);
@@ -4662,16 +4508,7 @@ function adoptUnconfirmedHistory({ actor, now, revision, token } = {}, options =
   });
 }
 
-// ---------------------------------------------------------------------------
-// ADDITIVE, 2026-09-07: purchase-specific store lookups only.
-// Neither function below changes an existing function, the record shape or a
-// vocabulary; both are read-only compositions of readAll/idKind, which this
-// module already exports with the {kinds} widening this file's own header comment
-// describes. Needed so the purchase tools (tool-registry.js) and the
-// mission-bridge decision pipeline can find the ONE P record a promptId
-// belongs to, and so any tool can read one T/A/P record by id without
-// reaching for readAll's whole-ledger shape.
-// ---------------------------------------------------------------------------
+// One-record lookup retains the ability to read archived P records.
 
 /** Read one record of any kind (R, T, A or P) by id. Refuses an id whose
  * shape names no kind at all; answers R_LEDGER_ENTRY_UNKNOWN for a
@@ -4684,91 +4521,6 @@ function findRecord(id, options = {}) {
   if (!record && resetRecordById(id, options)) fail('R_LEDGER_ENTRY_RESET', `${id} was cleared from this Ledger category.`);
   if (!record) fail('R_LEDGER_ENTRY_UNKNOWN', `${id} is not in the ledger (deleted, or never filed).`);
   return record;
-}
-
-/** Which P record, if any, purchase.request filed for this promptId
- * (carried as `purchase.requestId` on the record). Null when no purchase was
- * ever filed under that id, or the ledger cannot be read right now -- the
- * caller decides what null means; this never creates or infers a record. */
-function findPurchaseByRequestId(requestId, options = {}) {
-  if (typeof requestId !== 'string' || !requestId) return null;
-  const all = readAll({ kinds: ['P'], includeRemoved: true, includeProposed: true, ...options });
-  const record = all.records.find(candidate => plain(candidate.purchase) && candidate.purchase.requestId === requestId);
-  return record ? record.id : null;
-}
-
-function assertResetKind(kind) {
-  if (!Object.prototype.hasOwnProperty.call(KIND_LABEL, kind)) fail('R_LEDGER_KIND_INVALID', 'kind must be R, T, A or P.');
-  return kind;
-}
-
-function resetToken(kind, revision) { return sha256(canonical({ action: 'ledger-category-reset', kind, revision })); }
-
-function previewResetKind({ kind, actor } = {}, options = {}) {
-  assertPerson(actor); assertResetKind(kind);
-  const { ledgerFile } = filesFor(options); const lock = acquireLock(ledgerFile);
-  try {
-    const document = readDocument(ledgerFile);
-    const revision = Number.isInteger(document.data.revision) ? document.data.revision : 0;
-    const count = document.data.requests.filter(entry => plain(entry) && recordKindOf(entry) === kind).map(normalizeRecord).filter(record => !isReset(record)).length;
-    return Object.freeze({ kind, count, revision, token: resetToken(kind, revision) });
-  } finally { lock.release(); }
-}
-
-function resetBatchResult(kind, batchId, options = {}) {
-  assertResetKind(kind); if (typeof batchId !== 'string') return null;
-  const { ledgerFile } = filesFor(options); const document = readDocument(ledgerFile);
-  const records = document.data.requests.filter(entry => plain(entry) && recordKindOf(entry) === kind && plain(entry.reset) && entry.reset.batchId === batchId);
-  if (!records.length) return null;
-  if (verifyHistory(options).ok !== true) fail('R_LEDGER_CHAIN_BROKEN', 'The saved reset history could not be verified. Its purchase prompts remain held.');
-  return Object.freeze({ count: records.length, revision: records[0].reset.revision + 1 });
-}
-
-function resetKind({ kind, actor, revision, token, batchId: requestedBatchId, now } = {}, options = {}) {
-  assertPerson(actor); assertResetKind(kind);
-  if (!Number.isInteger(revision) || revision < 0 || token !== resetToken(kind, revision)) fail('R_LEDGER_RESET_STALE', 'This reset confirmation is stale. Review the current count and try again.');
-  const result = transact(options, now, (document, at) => {
-    const currentRevision = Number.isInteger(document.data.revision) ? document.data.revision : 0;
-    if (currentRevision !== revision) fail('R_LEDGER_RESET_STALE', 'This reset confirmation is stale. Review the current count and try again.');
-    const batchId = requestedBatchId || crypto.randomUUID();
-    if (typeof batchId !== 'string' || !/^[0-9a-f-]{36}$/i.test(batchId)) fail('R_LEDGER_RESET_BATCH_INVALID', 'reset batchId must be a UUID.');
-    const events = [];
-    const requests = document.data.requests.map(entry => {
-      if (!plain(entry) || recordKindOf(entry) !== kind) return entry;
-      const record = normalizeRecord(entry); if (isReset(record)) return entry;
-      const historyRow = { seq: 0, kind: 'reset', at, actor: PERSON, statusBefore: record.status, eventSha256: '' };
-      const reset = { batchId, kind, at, actor: PERSON, revision: currentRevision };
-      const next = record.status === 'removed' ? { ...entry, reset, history: [...record.history, historyRow] } : { ...entry, scope: record.scope, scopeKey: record.scopeKey, parentId: record.parentId, filedBy: record.filedBy || PERSON, status: 'removed', removedAt: at, removedBy: PERSON, reset, history: [...record.history, historyRow] };
-      events.push({ kind: 'reset', actor: PERSON, record: next, historyRow }); return next;
-    });
-    if (!events.length) fail('R_LEDGER_RESET_EMPTY', `No ${KIND_LABEL[kind]} records remain to clear.`);
-    return { requests, events, batchId };
-  });
-  return Object.freeze({ kind, count: result.outcome.events.length, batchId: result.outcome.batchId, revision: result.revision });
-}
-
-/** The DIRECT pay.record path (LEDGER-KINDS-INTERFACE-20260907.md, TOOLS
- * ruling): an agent calling pay.record with no cart/prompt only
- * reaches providers/pay.js's spend layer when `approval.autoApproved` is
- * true, which is itself an owner decision -- made once, in Settings
- * (outward.reserved_from_agents), rather than per purchase. This composes
- * the three existing, unmodified primitives (filePurchase, decidePurchase,
- * recordPurchase) exactly as a person would on the Ledger page, one
- * transaction each, so the SAME hash-chained history and status gates apply;
- * it adds no new status and no new field. The decision is journalled under
- * OUTWARD_RESERVED_SETTING_ACTOR, not PERSON (FINDING 2 ruling,
- * once assertPurchaseDecider/decidePurchase accepted it): a
- * setting-authorized spend must never read back as an owner click on this
- * exact purchase. `reason` still names the setting in full for a reader who
- * has not seen that constant before. */
-function recordDirectPurchase({ words, filedBy, why, line, now } = {}, options = {}) {
-  const filed = filePurchase({ scope: 'global', words, filedBy, why, purchase: { lines: [line] } }, options);
-  decidePurchase({
-    id: filed.id, decision: 'approve', actor: OUTWARD_RESERVED_SETTING_ACTOR,
-    reason: 'auto-approved: the owner\'s "outward.reserved_from_agents" setting authorizes this spend without a per-purchase decision.',
-    now
-  }, options);
-  return recordPurchase({ id: filed.id, charge: line, actor: 'pay-provider', now }, options);
 }
 
 module.exports = Object.freeze({
@@ -4789,7 +4541,6 @@ module.exports = Object.freeze({
   TASK_STATUS_VOCABULARY,
   ASK_STATUS_VOCABULARY,
   PURCHASE_STATUS_VOCABULARY,
-  OUTWARD_RESERVED_SETTING_ACTOR,
   OwnerRequestStoreError,
   canonical,
   chainHash,
@@ -4812,9 +4563,6 @@ module.exports = Object.freeze({
   nestEntries,
   findEntry,
   nextRootNumber,
-  previewResetKind,
-  resetBatchResult,
-  resetKind,
   fileRequest,
   editRequest,
   removeRequest,
@@ -4829,13 +4577,7 @@ module.exports = Object.freeze({
   answerAsk,
   declineAsk,
   removeAsk,
-  filePurchase,
-  decidePurchase,
-  recordPurchase,
-  removePurchase,
   findRecord,
-  findPurchaseByRequestId,
-  recordDirectPurchase,
   resolve,
   verifyHistory,
   recoverHistory,

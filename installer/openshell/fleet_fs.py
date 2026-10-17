@@ -321,7 +321,11 @@ def default_protected_paths(env=None):
     return homes, protected
 
 
-def _guard_tree(handle, protected_paths=()):
+def _guard_tree(handle, protected_paths=(), *, allow_shared_ancestors=False):
+    # Only an explicit host caller may relax strict ancestor propagation.
+    # A mount at the target itself or anywhere inside it is always refused.
+    _require(type(allow_shared_ancestors) is bool, 'MOUNT_POLICY',
+             'Shared ancestor policy must be an explicit boolean')
     handle.revalidate()
     homes, protected = default_protected_paths()
     protected.update(_absolute(value) for value in protected_paths)
@@ -338,11 +342,12 @@ def _guard_tree(handle, protected_paths=()):
     except (OSError, UnicodeError) as error:
         raise FleetFSError('MOUNT_UNKNOWN', 'Mount inventory could not be read') from error
     for mounted, shared in mounts:
-        _require(not _within(mounted, root) and not (shared and _within(root, mounted)),
+        _require(not _within(mounted, root)
+                 and not (shared and _within(root, mounted) and not allow_shared_ancestors),
                  'MOUNTED_TREE', 'Tree contains a mount or is beneath a shared mount')
 
 
-def assert_target_safe(path, *, protected_paths=()):
+def assert_target_safe(path, *, protected_paths=(), allow_shared_ancestors=False):
     """Preflight an absent or existing target without creating any ancestor."""
     path = _absolute(path)
     ancestor = path
@@ -361,7 +366,7 @@ def assert_target_safe(path, *, protected_paths=()):
                 held.revalidate()
         prospective = Target()
         prospective.path = path
-        _guard_tree(prospective, protected_paths)
+        _guard_tree(prospective, protected_paths, allow_shared_ancestors=allow_shared_ancestors)
 
 
 def _assert_not_nested_install(handle, *, include_self):
@@ -577,7 +582,7 @@ def _runtime_inventory(package_inventory, manifest, prefix, generated_files):
         if name == base or name.startswith(base + '/'):
             installed = entry
             if (package_inventory.archive_sha256 not in LEGACY_ARCHIVES
-                    and package_inventory.archive_sha256 not in C10_RELEASES
+                    and package_inventory.archive_sha256 not in SCHEMA1_RELEASES
                     and entry.kind in ('file', 'dir')):
                 installed = Entry(entry.kind, entry.mode & ~0o022, entry.size, entry.sha256, entry.target)
             entries['runtime/engine' + name[len(base):]] = installed
@@ -604,8 +609,8 @@ def _runtime_inventory(package_inventory, manifest, prefix, generated_files):
     return Inventory(entries, package_inventory.archive_sha256, _authority=_PROVENANCE, runtime=True)
 
 
-def _materialize(handle, inventory, content):
-    _guard_tree(handle)
+def _materialize(handle, inventory, content, *, allow_shared_ancestors=False):
+    _guard_tree(handle, allow_shared_ancestors=allow_shared_ancestors)
     _require(handle.exclusive_created and not os.listdir(handle.fd) and _same(os.fstat(handle.fd), {'uid': os.geteuid(), 'mode': 0o700}),
              'STAGE_NOT_EMPTY', 'Destination must be an empty exclusively-created private directory')
     fds = {'': os.dup(handle.fd)}
@@ -650,13 +655,14 @@ def _materialize(handle, inventory, content):
     finally:
         for fd in fds.values():
             os.close(fd)
-    verify_tree(handle, inventory)
+    verify_tree(handle, inventory, allow_shared_ancestors=allow_shared_ancestors)
     return inventory
 
 
-def extract_archive(archive, handle):
+def extract_archive(archive, handle, *, allow_shared_ancestors=False):
     return _materialize(handle, archive.package_inventory,
-                        lambda name: archive.read_bytes(name, max_bytes=archive.limits.file_bytes))
+                        lambda name: archive.read_bytes(name, max_bytes=archive.limits.file_bytes),
+                        allow_shared_ancestors=allow_shared_ancestors)
 
 
 def materialize_runtime(archive, handle, generated_files):
@@ -670,15 +676,15 @@ def materialize_runtime(archive, handle, generated_files):
 
 
 def _verify_open_tree(handle, inventory, protected_paths, allow_missing=False, *,
-                      _package_staging=False, _legacy_runtime=False):
+                      _package_staging=False, _legacy_runtime=False, allow_shared_ancestors=False):
     _require(isinstance(inventory, Inventory) and inventory._authority is _PROVENANCE, 'INVENTORY_UNTRUSTED', 'Inventory does not have pinned archive provenance')
     _require(type(allow_missing) is bool, 'INVENTORY_UNTRUSTED', 'Cleanup resumption must be an explicit boolean')
-    _require(type(_legacy_runtime) is bool and (not _legacy_runtime or inventory.archive_sha256 in LEGACY_ARCHIVES
-             or inventory.archive_sha256 in C10_RELEASES),
+    _require(type(_legacy_runtime) is bool and (not _legacy_runtime or inventory.archive_sha256 in RECEIPTLESS_LEGACY
+             or inventory.archive_sha256 in SCHEMA1_RELEASES),
              'INVENTORY_UNTRUSTED', 'Runtime mode reduction requires an independently pinned older archive')
     _require(not (_legacy_runtime and _package_staging), 'INVENTORY_UNTRUSTED',
              'Runtime and package staging mode policies cannot be combined')
-    _guard_tree(handle, protected_paths)
+    _guard_tree(handle, protected_paths, allow_shared_ancestors=allow_shared_ancestors)
     directories, snapshots, seen = {'': os.dup(handle.fd)}, {}, set()
     try:
         def check(name, value):
@@ -692,13 +698,15 @@ def _verify_open_tree(handle, inventory, protected_paths, allow_missing=False, *
                 # published 1.4.0/1.4.1 runtime only, the old installer could
                 # leave those same reduced modes. New runtimes stay exact.
                 mode_matches = (actual_mode & 0o700) == (entry.mode & 0o700) and actual_mode & ~entry.mode == 0
+            if kind == entry.kind and value.st_uid == expected_uid and (_package_staging or inventory.runtime) and kind in ('file', 'dir'):
+                scope, target = ('Package staging', '<package>') if _package_staging else ('Runtime', '<runtime>')
+                _require(not actual_mode & 0o022, 'TREE_WRITABLE',
+                         f'{scope} has group/other-writable files or directories; '
+                         f'run chmod -R go-w {target} yourself and retry', name)
             _require(kind == entry.kind and value.st_uid == expected_uid and mode_matches,
                      'TREE_CHANGED', f'Entry {(name or ".")!r} differs from the pinned inventory: '
                      f'expected type={entry.kind} uid={expected_uid} mode={entry.mode:04o}; '
                      f'actual type={kind} uid={value.st_uid} mode={actual_mode:04o}', name)
-            if inventory.runtime and kind in ('file', 'dir'):
-                _require(not actual_mode & 0o022, 'TREE_WRITABLE',
-                         'Runtime has group/other-writable files or directories; run chmod -R go-w <runtime> yourself and retry', name)
             _require(kind != 'file' or value.st_nlink == 1, 'TREE_CHANGED', 'Regular file has unowned hardlink aliases', name)
             seen.add(name)
             snapshots[name] = _fingerprint(value)
@@ -750,7 +758,7 @@ def _verify_open_tree(handle, inventory, protected_paths, allow_missing=False, *
         raise
 
 
-def verify_extracted_package(private_parent, archive):
+def verify_extracted_package(private_parent, archive, *, allow_shared_ancestors=False):
     """Verify only a pinned package beneath an owned, private direct parent.
 
     Ordinary extraction may remove group/other permissions; it may not change
@@ -768,7 +776,8 @@ def verify_extracted_package(private_parent, archive):
              'Package staging requires an owned 0700 direct parent')
     inventory = archive.package_inventory.subtree('toolsenabled-installer')
     with private_parent.child('toolsenabled-installer') as package:
-        directories, snapshots = _verify_open_tree(package, inventory, (), _package_staging=True)
+        directories, snapshots = _verify_open_tree(package, inventory, (), _package_staging=True,
+                                                     allow_shared_ancestors=allow_shared_ancestors)
         try:
             private_parent.revalidate()
             return {'rootIdentity': dict(package.identity), 'entries': len(snapshots),
@@ -778,7 +787,8 @@ def verify_extracted_package(private_parent, archive):
                 os.close(fd)
 
 
-def verify_tree(handle, inventory, *, protected_paths=(), allow_missing=False, legacy_runtime=False):
+def verify_tree(handle, inventory, *, protected_paths=(), allow_missing=False, legacy_runtime=False,
+                allow_shared_ancestors=False):
     """Full proof by default; allow_missing is only for a journaled cleanup.
 
     The transaction caller must already have persisted the full initial proof,
@@ -787,7 +797,8 @@ def verify_tree(handle, inventory, *, protected_paths=(), allow_missing=False, l
     that still exists is always checked; unknown entries are never allowed.
     """
     directories, snapshots = _verify_open_tree(handle, inventory, protected_paths, allow_missing,
-                                                _legacy_runtime=legacy_runtime)
+                                                _legacy_runtime=legacy_runtime,
+                                                allow_shared_ancestors=allow_shared_ancestors)
     try:
         return {'rootIdentity': dict(handle.identity), 'entries': len(snapshots), 'archiveSha256': inventory.archive_sha256}
     finally:
@@ -811,10 +822,11 @@ class RetainedTree:
     the parent and closes this session even on an uncertain external outcome.
     """
     def __init__(self, parent, name, inventory, expected_identity, *, protected_paths=(), expected_snapshots=None,
-                 legacy_runtime=False):
+                 legacy_runtime=False, allow_shared_ancestors=False):
         _require_root_identity(expected_identity)
         self.parent, self.name, self.inventory = parent, name, inventory
         self.expected_identity, self.protected_paths = dict(expected_identity), tuple(protected_paths)
+        self.allow_shared_ancestors = allow_shared_ancestors
         self.handle, self.directories, self.snapshots = None, {}, {}
         self.closed = False
         try:
@@ -822,7 +834,8 @@ class RetainedTree:
             self.handle = parent.child(name)
             _require(_same(os.fstat(self.handle.fd), expected_identity), 'ROOT_CHANGED', 'Retained root identity differs')
             self.directories, self.snapshots = _verify_open_tree(self.handle, inventory, self.protected_paths,
-                                                                 _legacy_runtime=legacy_runtime)
+                                                                 _legacy_runtime=legacy_runtime,
+                                                                 allow_shared_ancestors=self.allow_shared_ancestors)
             for relative, fingerprint in (expected_snapshots or {}).items():
                 _require(relative in self.snapshots and self.snapshots[relative] == fingerprint,
                          'TREE_CHANGED', 'Validated generation identity changed before retention', relative)
@@ -833,7 +846,7 @@ class RetainedTree:
     def revalidate(self):
         _require(not self.closed, 'DIRECTORY_CLOSED', 'Retained tree session is closed')
         self.parent.revalidate()
-        _guard_tree(self.handle, self.protected_paths)
+        _guard_tree(self.handle, self.protected_paths, allow_shared_ancestors=self.allow_shared_ancestors)
         expected_children = {name: set() for name in self.directories}
         for name in self.snapshots:
             if name:
@@ -887,7 +900,8 @@ class RetainedTree:
             return _cleanup_refusal(error, 0)
         return _remove_retained(self.parent, self.name, self.inventory, self.expected_identity,
                                 self.handle, self.directories, self.snapshots,
-                                self.protected_paths, _before_remove)
+                                self.protected_paths, _before_remove,
+                                allow_shared_ancestors=self.allow_shared_ancestors)
 
     def close(self):
         if not self.closed:
@@ -938,7 +952,7 @@ def remove_tree(parent, name, inventory, expected_identity, *, protected_paths=(
 
 
 def _remove_retained(parent, name, inventory, expected_identity, handle, directories,
-                     snapshots, protected_paths, _before_remove):
+                     snapshots, protected_paths, _before_remove, *, allow_shared_ancestors=False):
     removed = 0
     try:
         for relative in sorted(snapshots, key=lambda value: (value.count('/'), value), reverse=True):
@@ -946,7 +960,7 @@ def _remove_retained(parent, name, inventory, expected_identity, handle, directo
                 continue
             if _before_remove:
                 _before_remove(relative)
-            _guard_tree(handle, protected_paths)
+            _guard_tree(handle, protected_paths, allow_shared_ancestors=allow_shared_ancestors)
             directory, leaf = posixpath.split(relative)
             # Every retained directory must still be reachable by the same
             # no-follow chain before a mutation beneath it.
@@ -969,7 +983,7 @@ def _remove_retained(parent, name, inventory, expected_identity, handle, directo
                 _require(_fingerprint(current) == snapshots[relative], 'TREE_CHANGED', 'Entry changed before removal', relative)
                 os.unlink(leaf, dir_fd=directories[directory])
             removed += 1
-        _guard_tree(handle, protected_paths)
+        _guard_tree(handle, protected_paths, allow_shared_ancestors=allow_shared_ancestors)
         _require(not os.listdir(handle.fd), 'TREE_UNKNOWN', 'Root acquired unknown entries')
         parent.revalidate()
         _require(_same(os.stat(name, dir_fd=parent.fd, follow_symlinks=False), expected_identity),
@@ -984,12 +998,15 @@ def _remove_retained(parent, name, inventory, expected_identity, handle, directo
 # These are independent immutable release pins, not values learned from the
 # runtime being replaced or from its ownership receipt. The catalog's own hash
 # binds every entry and exact manifest byte to the reviewed generated source.
-LEGACY_CATALOG_SHA256 = 'f261de89bfb730927d55fd143685500f549b52d177db09701f71b7859df76634'
+LEGACY_CATALOG_SHA256 = '98dabad221c01c57afab5be2ed4b3501016731df73d549c7d0dfee3b7e3dae60'
 LEGACY_ARCHIVES = {
     'edc9e4bc76a738b56f037587ed9438458a4a0e7f06a08ab305aa5de57e356eed': ('2d77e45e70b37b2911a2da342dda8ff23b583030', '1.4.0'),
     '0fff72445daa33613702a76ee7c2d01b0cac0188329728e8a7301883b87f42b3': ('3b7f5b1fe753a085d50c63e06ee115a2bcfb7212', '1.4.1'),
+    'ef1fe25cd4d251859e1c773e11c94b57839a4108b01602979c723c2e041801cd': ('8cc22f708194e6128c99785b72c722605264aac4', '1.4.2'),
 }
-C10_RELEASES = {
+RECEIPTLESS_LEGACY = frozenset(pin for pin, (_, version) in LEGACY_ARCHIVES.items()
+                               if version in ('1.4.0', '1.4.1'))
+SCHEMA1_RELEASES = {
     '04071944a67ae4f4dddbc06d6e1d529d287aa5eba1848aea0443455ee5d622b5':
         ('38ef40d96301028427bea4916ada04672c4b1581', '1.4.2'),
 }
@@ -1025,10 +1042,10 @@ def _legacy_catalogs():
     fd = os.open(location, os.O_RDONLY | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
-        _require(stat.S_ISREG(info.st_mode) and info.st_size <= 2 * 1024 * 1024,
+        _require(stat.S_ISREG(info.st_mode) and info.st_size <= 4 * 1024 * 1024,
                  'INTEGRITY', 'Legacy catalog is not a bounded regular file')
         with os.fdopen(os.dup(fd), 'rb') as stream:
-            data = stream.read(2 * 1024 * 1024 + 1)
+            data = stream.read(4 * 1024 * 1024 + 1)
         _require(hashlib.sha256(data).hexdigest() == LEGACY_CATALOG_SHA256,
                  'INTEGRITY', 'Legacy catalog differs from its independently pinned bytes')
     finally:

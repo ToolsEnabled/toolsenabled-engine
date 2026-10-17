@@ -115,46 +115,43 @@ function nativeToolCensus(observedNames) {
 // census or Enabled-all. MCP configuration and provider permissions remain
 // independent: --tools controls native availability, not permission grants.
 //
-// DECISION (release-candidate review): Optimized is Claude-only in this release. Claude
-// takes an exact native allowlist (--tools). The installed Codex 0.155.1 has no
-// native allowlist: its enabled_tools/disabled_tools filter MCP servers, and its
-// feature switches cannot keep a small read-only set without also dropping or
-// admitting the shell and apply_patch. Gemini and Grok run
-// over ACP with no native surface. Every non-Claude start therefore refuses with
-// AGENT_OPTIMIZED_TOOLS_UNSUPPORTED instead of silently widening or narrowing,
-// and every row below says so in plain words.
-const OPTIMIZED_ONLY_CLAUDE = 'Optimized works with Claude only.';
-const PROVIDER_NAMES = Object.freeze({ codex: 'Codex', gemini: 'Gemini', grok: 'Grok', local: 'Local' });
-const OPTIMIZED_CLAUDE_TOOLS = Object.freeze(['Glob', 'Grep', 'Skill', 'TodoWrite', 'ToolSearch']);
+// Optimized needs an exact native-tool allowlist, which only agents speaking
+// the stream-json protocol take (the --tools flag). App-server agents have no
+// native allowlist (their switches cannot keep a small read-only set without
+// also dropping or admitting the shell), and ACP agents have no native surface
+// Fleet can narrow. Every other start therefore refuses with
+// AGENT_OPTIMIZED_TOOLS_UNSUPPORTED instead of silently widening or narrowing.
+// The tool names below belong to the stream-json driver (see BUILT_IN_CENSUS).
+const OPTIMIZED_ONLY = 'Optimized works with stream-json agents only.';
+const OPTIMIZED_STREAM_JSON_TOOLS = Object.freeze(['Glob', 'Grep', 'Skill', 'TodoWrite', 'ToolSearch']);
 const NO_NATIVE_TOOLS = Object.freeze([]);
 function optimizedToolSupport({ provider = null, client = null, roleFunctionsOnly = false } = {}) {
   const selectedProvider = typeof provider === 'string' && provider.length ? provider : null;
+  const agent = selectedProvider ? require('./agents/registry').activeRegistry().get(selectedProvider) : null;
   let status = 'unknown';
   let reason = selectedProvider === null
-    ? `${OPTIMIZED_ONLY_CLAUDE} Each new session checks its provider when it starts.`
-    : `${OPTIMIZED_ONLY_CLAUDE} Sessions on this provider do not start while it is selected.`;
+    ? `${OPTIMIZED_ONLY} Each new session checks its agent when it starts.`
+    : `${OPTIMIZED_ONLY} Sessions on this agent do not start while it is selected.`;
   let nativeTools = NO_NATIVE_TOOLS;
-  if (selectedProvider === 'claude' && (client === null || client === 'claude')) {
+  if (agent && agent.worker.driver === 'stream-json' && (client === null || client === selectedProvider)) {
     status = 'supported';
     reason = roleFunctionsOnly
       ? 'This role permits ToolsEnabled functions only; native tools remain unavailable.'
-      : 'Claude sessions add file search, skills, planning and tool search, within the existing role and permission limits.';
-    nativeTools = roleFunctionsOnly ? NO_NATIVE_TOOLS : OPTIMIZED_CLAUDE_TOOLS;
-  } else if (Object.hasOwn(PROVIDER_NAMES, selectedProvider)) {
+      : `${agent.name} sessions add file search, skills, planning and tool search, within the existing role and permission limits.`;
+    nativeTools = roleFunctionsOnly ? NO_NATIVE_TOOLS : OPTIMIZED_STREAM_JSON_TOOLS;
+  } else if (agent || selectedProvider === 'local') {
     status = 'unsupported';
-    reason = `${OPTIMIZED_ONLY_CLAUDE} ${PROVIDER_NAMES[selectedProvider]} sessions do not start while it is selected.`;
-  } else if (selectedProvider === 'claude') {
-    status = 'unsupported';
-    reason = `${OPTIMIZED_ONLY_CLAUDE} This older Claude route cannot apply the selection, so the session does not start.`;
+    reason = `${OPTIMIZED_ONLY} ${agent ? agent.name : 'Local'} sessions do not start while it is selected.`;
   }
   return Object.freeze({ provider: selectedProvider, status, reason, nativeTools });
 }
 
 function optimizedApiSupport() {
+  const registry = require('./agents/registry');
   return Object.freeze({
     scope: 'installation',
     appliesTo: 'new-sessions',
-    providers: Object.freeze(['claude', 'codex', 'gemini', 'grok', 'local']
+    providers: Object.freeze([...registry.workerAgentIds(registry.activeRegistry()), 'local']
       .map(provider => optimizedToolSupport({ provider })))
   });
 }
@@ -184,7 +181,8 @@ function agentApiArgs({ enabled = null, mode = null, valuesPath, env } = {}) {
     : enabled !== null ? normalizeAgentApiMode(enabled) : agentApiMode({ valuesPath, env });
   if (!selected) throw new Error('Unknown agent API mode.');
   if (selected === 'Only') return ['--tools', '', '--setting-sources', '', '--disable-slash-commands'];
-  if (selected === 'Optimized') return ['--tools', optimizedToolSupport({ provider: 'claude' }).nativeTools.join(',')];
+  // Only the stream-json driver calls this (claude-cli-adapter.js).
+  if (selected === 'Optimized') return ['--tools', OPTIMIZED_STREAM_JSON_TOOLS.join(',')];
   return [];
 }
 

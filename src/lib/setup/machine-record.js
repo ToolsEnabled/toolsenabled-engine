@@ -2,7 +2,7 @@
 
 // THE MACHINE RECORD -- what first-run setup decides, written down once.
 //
-// Task T6 of docs/design/INSTALLER-EXPERIENCE.md section 7. Before this module
+// The installation record described in docs/design/INSTALLER-EXPERIENCE.md section 7. Before this module
 // existed, the answers to "which Node runs the servers", "where does this
 // installation keep its state", "which ports may it use", and "which folders may
 // an assistant touch" were not recorded anywhere a program could read. They were
@@ -50,7 +50,7 @@ const TIERS = permissionTierPolicy.INSTALL_TIERS;
 
 // Section 3 step 5. The shell (application window) and the bridge get separate
 // ranges, and the shell range is bounded by the origin allowlist the bridge
-// enforces -- see src/lib/mission-bridge/server.js, which refuses an application
+// enforces -- see the host server, which refuses an application
 // origin outside 4600-4609 rather than clamping it silently.
 const SHELL_PORT_RANGE = Object.freeze({ first: 4601, last: 4609 });
 const BRIDGE_PORT_RANGE = Object.freeze({ first: 4610, last: 4619 });
@@ -61,7 +61,6 @@ const BRIDGE_PORT_RANGE = Object.freeze({ first: 4610, last: 4619 });
 const LOOPBACK_HOST = '127.0.0.1';
 
 const MACHINE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const OPENSHELL_REGISTRATION_PROVIDERS = Object.freeze(['codex', 'claude']);
 const OPENSHELL_REGISTRATION_STATES = Object.freeze(['never', 'configured', 'unknown']);
 
 class SetupRefusal extends Error {
@@ -90,7 +89,7 @@ function machineRecordPath(servicesRoot) {
  * The Node that will run the servers.
  *
  * `process.execPath` -- the interpreter actually executing this code -- and NOT a
- * pinned absolute path. This is the whole of P3.4 in the shipment plan reduced to
+ * pinned absolute path. This is the whole of machine-record plan in the shipment plan reduced to
  * one line: a value that is true by construction on every machine cannot go stale
  * on any of them. An explicit override is accepted for the Unrestricted tier's
  * `/node=` argument, and is verified to exist rather than trusted.
@@ -174,12 +173,14 @@ function canonicalRegistrationPath(value) {
 }
 
 function openShellRegistrationContext(provider, { installRoot, env = process.env } = {}) {
-  if (!OPENSHELL_REGISTRATION_PROVIDERS.includes(provider)) {
-    throw new SetupRefusal('SETUP_REGISTRATION_CONTEXT_INVALID', 'Unknown registration provider.');
-  }
-  const home = canonicalRegistrationPath(env.HOME === undefined ? os.homedir() : env.HOME);
-  const selectedProfile = provider === 'codex' ? env.CODEX_HOME : env.CLAUDE_CONFIG_DIR;
-  const profile = selectedProfile === undefined ? path.join(home, provider === 'codex' ? '.codex' : '.claude') : selectedProfile;
+  const descriptor = require('../agents/registry').activeRegistry().get(provider);
+  if (!descriptor) throw new SetupRefusal('SETUP_REGISTRATION_CONTEXT_INVALID', 'Unknown registration provider.');
+  let selected;
+  try { selected = require('../agents/registration').profile(descriptor, env); }
+  catch { throw new SetupRefusal('SETUP_REGISTRATION_CONTEXT_INVALID', 'The selected registration profile must be an absolute folder without dot components.'); }
+  const home = canonicalRegistrationPath(selected.home);
+  const profile = selected.root;
+  const selectedProfile = selected.mode === 'explicit' ? profile : undefined;
   return Object.freeze({ installRoot: canonicalRegistrationPath(installRoot), homeRoot: home, profileRoot: canonicalRegistrationPath(profile),
     // An explicit directory may select a different registration store even
     // when it spells the CLI's default profile directory (notably Claude).
@@ -190,10 +191,15 @@ function validateOpenShellRegistrations(value) {
   const exactKeys = (entry, keys) => entry && typeof entry === 'object' && !Array.isArray(entry)
     && Object.keys(entry).sort().join(',') === [...keys].sort().join(',');
   return exactKeys(value, ['version', 'providers']) && value.version === 1
-    && exactKeys(value.providers, OPENSHELL_REGISTRATION_PROVIDERS)
-    && OPENSHELL_REGISTRATION_PROVIDERS.every((provider) => {
+    && value.providers && typeof value.providers === 'object' && !Array.isArray(value.providers)
+    && Object.keys(value.providers).length > 0 && Object.keys(value.providers).length <= 64
+    && Object.keys(value.providers).every((provider) => /^[a-z][a-z0-9-]{0,30}$/.test(provider))
+    && Object.keys(value.providers).every((provider) => {
       const entry = value.providers[provider];
-      return exactKeys(entry, ['installRoot', 'homeRoot', 'profileRoot', 'profileMode', 'status'])
+      return (exactKeys(entry, ['installRoot', 'homeRoot', 'profileRoot', 'profileMode', 'status'])
+          || exactKeys(entry, ['installRoot', 'homeRoot', 'profileRoot', 'profileMode', 'status', 'entry']) && (() => {
+            try { require('../agents/registration').serverEntry(entry.entry); return true; } catch { return false; }
+          })())
         && registrationPath(entry.installRoot) && registrationPath(entry.homeRoot) && registrationPath(entry.profileRoot)
         && ['default', 'explicit'].includes(entry.profileMode)
         && OPENSHELL_REGISTRATION_STATES.includes(entry.status);
@@ -212,6 +218,9 @@ function openShellRegistrationState(record, provider, {
     if (canonicalRegistrationPath(record.installRoot) !== context.installRoot
       || canonicalRegistrationPath(record.servicesRoot) !== canonicalRegistrationPath(servicesRoot)) return 'unknown';
     const entry = record.openShellRegistrations.providers[provider];
+    // Setup records every agent it knew about; an agent missing from a valid
+    // record in this scope was described after setup, so setup never registered it.
+    if (entry === undefined) return 'never';
     return entry.installRoot === context.installRoot && entry.profileRoot === context.profileRoot
       && entry.profileMode === context.profileMode && entry.homeRoot === context.homeRoot ? entry.status : 'unknown';
   } catch { return 'unknown'; }
@@ -243,7 +252,10 @@ function buildMachineRecord(input = {}) {
     bridgePortRange = BRIDGE_PORT_RANGE,
     loopbackHost = LOOPBACK_HOST,
     createdAtMs = Date.now(),
-    openShellRegistrations
+    openShellRegistrations,
+    hostRegistrations,
+    passEnv,
+    openShellAuthority
   } = input;
 
   const record = {
@@ -260,7 +272,10 @@ function buildMachineRecord(input = {}) {
     shellPortRange: { first: shellPortRange.first, last: shellPortRange.last },
     bridgePortRange: { first: bridgePortRange.first, last: bridgePortRange.last },
     createdAtMs,
-    ...(openShellRegistrations === undefined ? {} : { openShellRegistrations })
+    ...(passEnv === undefined ? {} : { passEnv: require('../agents/registration').passEnvNames(passEnv) }),
+    ...(hostRegistrations === undefined ? {} : { hostRegistrations }),
+    ...(openShellRegistrations === undefined ? {} : { openShellRegistrations }),
+    ...(openShellAuthority === undefined ? {} : { openShellAuthority: require('../openshell-authority').registrations(openShellAuthority) })
   };
 
   const validation = validateMachineRecord(record);
@@ -277,10 +292,15 @@ function buildMachineRecord(input = {}) {
     workspaceRoots: Object.freeze(record.workspaceRoots.slice()),
     shellPortRange: Object.freeze(record.shellPortRange),
     bridgePortRange: Object.freeze(record.bridgePortRange),
+    ...(hostRegistrations === undefined ? {} : {
+      hostRegistrations: Object.freeze({ version: 1,
+        providers: Object.freeze(Object.fromEntries(Object.entries(hostRegistrations.providers)
+          .map(([provider, entry]) => [provider, Object.freeze({ ...entry })]))) })
+    }),
     ...(openShellRegistrations === undefined ? {} : {
       openShellRegistrations: Object.freeze({
         version: 1,
-        providers: Object.freeze(Object.fromEntries(OPENSHELL_REGISTRATION_PROVIDERS.map((provider) => [
+        providers: Object.freeze(Object.fromEntries(Object.keys(openShellRegistrations.providers).map((provider) => [
           provider, Object.freeze({ ...openShellRegistrations.providers[provider] })
         ])))
       })
@@ -315,7 +335,7 @@ function validateMachineRecord(record) {
   } else if (record.workspaceRoots.some(entry => typeof entry !== 'string' || !path.isAbsolute(entry))) {
     errors.push('every workspace root must be an absolute path');
   }
-  // Not a preference. src/lib/mission-bridge/server.js refuses any other bind
+  // The host server refuses any other bind
   // with BRIDGE_BIND_REFUSED, so a record claiming otherwise would describe a
   // configuration that cannot start.
   if (record.loopbackHost !== LOOPBACK_HOST) errors.push(`loopbackHost must be ${LOOPBACK_HOST}`);
@@ -330,10 +350,23 @@ function validateMachineRecord(record) {
     }
   }
   if (!Number.isFinite(record.createdAtMs)) errors.push('createdAtMs must be a number');
+  if (record.passEnv !== undefined) {
+    try {
+      if (!Array.isArray(record.passEnv)) throw new Error();
+      require('../agents/registration').passEnvNames(record.passEnv);
+    } catch { errors.push('passEnv must contain environment variable names only'); }
+  }
+  if (record.hostRegistrations !== undefined && !validateOpenShellRegistrations(record.hostRegistrations)) {
+    errors.push('hostRegistrations must contain bounded version-1 setup history keyed by agent id');
+  }
   if (record.openShellRegistrations !== undefined && !validateOpenShellRegistrations(record.openShellRegistrations)) {
-    errors.push('openShellRegistrations must contain bounded version-1 setup history for codex and claude');
+    errors.push('openShellRegistrations must contain bounded version-1 setup history keyed by agent id');
   }
 
+  if (record.openShellAuthority !== undefined) {
+    try { require('../openshell-authority').registrations(record.openShellAuthority); }
+    catch { errors.push('openShellAuthority must contain distinct grant URLs and environment variable names'); }
+  }
   return { ok: errors.length === 0, errors };
 }
 
@@ -372,7 +405,7 @@ function validateMachineRecord(record) {
 //   - The failure is LOUD AND FAILS CLOSED. Every caller of readMachineRecord
 //     already wraps it in try/catch and falls back to the most restrictive
 //     level (dispatch-permission-session.js, mcp-server.js,
-//     mission-bridge/actions.js, agent-session-confinement.js), and the two
+//     the host dispatch, agent-session-confinement.js), and the two
 //     shell paths surface `code` and `reason` to the user. So a broken seal
 //     produces a narrow surface plus a visible named refusal instead of a
 //     silent full-surface grant.
@@ -596,75 +629,8 @@ function writeMachineRecord(record, { servicesRoot = record.servicesRoot } = {})
 
 // --- generated .mcp.json ----------------------------------------------------
 
-// Which servers a tier may configure, AND how wide each one is. This is a real
-// difference in what the install can reach, not a difference in what it
-// displays: Guided generates a read-only surface and no remote lane at all,
-// which is what docs/design/INSTALLER-EXPERIENCE.md section 2.2 means by
-// "refuses ... arbitrary MCP servers, since Guided generates its own .mcp.json
-// rather than inheriting one".
-//
-// `allowlisted` says whether the server narrows itself from
-// TOOLSENABLED_TOOL_ALLOWLIST. Only the two src/mcp-server.js entries do;
-// src/playwright-gateway.js never reads that variable and enforces its own
-// reviewed positive allowlist instead (BROWSER_TOOL_NOT_ALLOWED, gateway :251),
-// so writing the variable there would be decoration that a reader could mistake
-// for a limit.
-//
-// WHAT THIS STILL DOES NOT DO. Enforcement of the SPAWN flags -- the OS-level
-// sandbox that bounds the agent process's own file access -- is the other half
-// of T5 and lives in src/lib/mission-bridge/actions.js, which this module does
-// not touch. What is enforced from here is the TOOL SURFACE: the server refuses
-// a tool outside the generated allowlist on every call.
-// THE TWO REMOTE LANES ARE DELIBERATELY ABSENT. They need
-// `REMOTE_AGENT_EXPECTED_ROOT` -- the path the OTHER computer is installed at --
-// and setup cannot know that until two computers have been paired and have told
-// each other. Emitting them with a guessed root is precisely the failure this
-// repository has already had once: a hardcoded address for the other machine
-// produced a listener that answered every probe while being the wrong one (see
-// the incident recorded at the top of config/service-registry.json). Pairing
-// owns those entries; setup does not invent them.
-// The script that reads TOOLSENABLED_TOOL_ALLOWLIST. Named so the check below
-// can bind to it rather than to a server's name.
+// Setup configures only the two Fleet MCP servers. Both read the tool allowlist.
 const ALLOWLIST_READING_SCRIPT = 'src/mcp-server.js';
-
-/* THE ARGUMENT WITHOUT WHICH THE BROWSER SERVER CANNOT START, AND DID NOT.
- *
- * src/playwright-gateway.js refuses to run unless its own process.argv[2] is a
- * PINNED package spec -- it tests exactly PLAYWRIGHT_PACKAGE_SPEC_RE below and,
- * failing it, writes "A pinned @playwright/mcp version is required." and exits 2.
- * The catalogue entry below emitted `args: [scriptPath]` and nothing else, so
- * argv[2] was undefined on every configuration this function has ever generated
- * -- which is every installed build and every lane whose surface comes from here.
- * The browser server was advertised in the document and dead on arrival.
- *
- * MEASURED 2026-08-16 against a machine record the product itself wrote: at both
- * `standard` and `unrestricted` the generated args were ["...playwright-gateway.js"],
- * argv[2] undefined, guard false. The CONTROL is the checked-in .mcp.json in this
- * repository, which passes "@playwright/mcp@0.0.78" and passes the guard -- as do
- * install.ps1, tools/playwright-mcp.cmd, tools/playwright-call.js, the codex config
- * example and providers/workstation.js:446. Every writer of this argument got it
- * right except the one that writes the shipped configuration.
- *
- * WHY THE SPEC IS MIRRORED HERE rather than imported. The canonical constant is
- * providers/workstation.js PLAYWRIGHT_PACKAGE, which is exported -- but that module
- * pulls in the elevation-refusal chain and the whole workstation provider, and this
- * is a setup module that other setup code requires at load.
- * tests/install-tier-enforcement.test.js asserts the two are EQUAL, so drift is a
- * red test rather than a browser server that dies at spawn on a customer's machine.
- *
- * The regex is the gateway's own, copied deliberately: generation now refuses to
- * emit an entry whose spec would fail at spawn, which is the check that was missing.
- */
-/* WHAT THE VERSION NUMBER MEANS NOW (2026-09-22). It is the version fetched
- * when ToolsEnabled has no copy of @playwright/mcp yet, not a pin that decides
- * whether the browser tools may run: src/playwright-gateway.js accepts a copy
- * by what its own tools/list offers (checkPlaywrightTools). The default moves
- * only to a version whose recorded tools/list is in tests/fixtures and checks
- * 'ready'; tests/desktop.browser/playwright-gateway.js holds every writer of
- * this argument to the same version. 0.0.82 was proven against the gateway
- * with a real browser before it replaced 0.0.78. */
-const PLAYWRIGHT_PACKAGE_SPEC = '@playwright/mcp@0.0.82';
-const PLAYWRIGHT_PACKAGE_SPEC_RE = /^@playwright\/mcp@\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
 /* THE V8 FLAG THAT REMOVES THE TASK BOTH MCP SERVERS DIED INSIDE.
  *
@@ -703,7 +669,7 @@ const PLAYWRIGHT_PACKAGE_SPEC_RE = /^@playwright\/mcp@\d+\.\d+\.\d+(?:[-+][A-Za-
  *
  * ONLY WHEN THE RUNTIME ACCEPTS IT. MEASURED: `electron.exe` 43.3.0 under
  * ELECTRON_RUN_AS_NODE accepts the flag and still reports `process.argv[1]` as
- * the script (so playwright-gateway's argv[2] package spec is unaffected), while
+ * the script, while
  * `node.exe` v22.14.0 rejects it outright -- "bad option: --no-memory-pool",
  * exit 9. An unrecognised flag does not degrade the server, it prevents the
  * process from starting at all, which would take the whole tool surface down.
@@ -790,8 +756,7 @@ const SERVER_CATALOGUE = Object.freeze([
     tiers: Object.freeze(['guided', 'standard', 'unrestricted']),
     readOnly: true,
     allowlisted: true,
-    heapCapMB: 256,
-    browser: false
+    heapCapMB: 256
   },
   {
     name: 'toolsenabled',
@@ -799,22 +764,9 @@ const SERVER_CATALOGUE = Object.freeze([
     tiers: Object.freeze(['standard', 'unrestricted']),
     readOnly: false,
     allowlisted: true,
-    heapCapMB: 512,
-    browser: false
+    heapCapMB: 512
   },
-  {
-    name: 'playwright',
-    script: 'src/playwright-gateway.js',
-    tiers: Object.freeze(['standard', 'unrestricted']),
-    readOnly: false,
-    allowlisted: false,
-    heapCapMB: 512,
-    // The one entry that exists to drive a browser, and the only one an
-    // assistant with no browser work has no use for. See `browserTools`.
-    browser: true,
-    // Without this the gateway exits 2 before doing anything. See the note above.
-    packageSpec: PLAYWRIGHT_PACKAGE_SPEC
-  }
+
 ]);
 
 /* The V8 flag, spelled once. NODE_OPTIONS rather than argv because the argv of
@@ -881,13 +833,7 @@ function assertServerCatalogue(catalogue) {
         { server: server.name, heapCapMB: server.heapCapMB }
       );
     }
-    if (typeof server.browser !== 'boolean') {
-      throw new SetupRefusal(
-        'SETUP_SERVER_CATALOGUE_INVALID',
-        `The server "${server.name}" does not say whether it is the browser server, and setup will not guess that it is not.`,
-        { server: server.name }
-      );
-    }
+
   }
   return catalogue;
 }
@@ -936,19 +882,21 @@ function readOnlyToolAllowlist() {
  * src/lib/permission-tier-policy.js enforces at call time, so what is written
  * into the configuration and what the server refuses cannot disagree.
  *
- * RETURNS null FOR THE LEVEL THAT GRANTS THE WHOLE MACHINE, and that is
+ * RETURNS null WHEN THE CONFIGURATION ADDS NO CAP, and that is
  * deliberate rather than an oversight: writing a snapshot of every registered
  * name would be a list that silently goes stale the first time a tool is added,
  * and omitting the variable is exactly how the server already reads "no limit".
- * Unrestricted's contract (section 2.4) is that it decides nothing on the user's
- * behalf, so it gets no allowlist and no pretence of one.
+ * A generated lead configuration does not know the future session's level. The
+ * server always detects that at startup, even when this optional cap is null.
  *
  * An unreadable or unrecognised level raises. It never degrades to null, because
  * null here means the whole machine.
  */
-function tierToolAllowlist(tier, { beforeRoleNarrowing = false } = {}) {
+function tierToolAllowlist(tier, { beforeRoleNarrowing = false, level = 4 } = {}) {
   const { registeredTools, TOOL_REGISTRY } = require('../tool-registry');
-  const session = permissionTierPolicy.installTierSession(tier);
+  // Setup writes the optional cap for future sessions. At startup the server
+  // detects the actual lead; a known worker level can narrow this file too.
+  const session = permissionTierPolicy.effectiveSession(level, tier);
   if (session.tier === 'full') return null;
   // beforeRoleNarrowing: the level's list before the role-less default drops
   // the explicit role grants (see tierServerAllowlist). A registry that cannot
@@ -973,12 +921,11 @@ function tierToolAllowlist(tier, { beforeRoleNarrowing = false } = {}) {
  * (tool-registry registeredTools({ agentRole })), so the level's allowlist it
  * is handed must be taken BEFORE any role narrowing. tierToolAllowlist() is
  * the role-less default surface -- what a session with no role is offered, and
- * what the tool note describes -- and it withholds the explicit role grants,
- * such as task hand-out (t_ledger.assign, T1736). Handing the server that list
- * would withhold them from every role at the level, whatever its saved
- * function list says; before T1736 the Standard server carried hand-out. */
-function tierServerAllowlist(tier) {
-  return tierToolAllowlist(tier, { beforeRoleNarrowing: true });
+ * what the tool note describes -- and it withholds any explicit role grants.
+ * Handing the server that list would withhold those tools from every role
+ * at the level, regardless of its saved function list. */
+function tierServerAllowlist(tier, { level = 4 } = {}) {
+  return tierToolAllowlist(tier, { beforeRoleNarrowing: true, level });
 }
 
 /* IS THE RECORDED RUNTIME A PLAIN NODE, OR THIS PRODUCT'S OWN BINARY?
@@ -1030,19 +977,19 @@ function runtimeNeedsNodeMode(nodePath) {
  *
  * Local inference starts its generated tool servers through the shared local
  * runtime, so it needs its own actor stamp as well. This list must remain a
- * SUBSET of AGENT_ACTORS in src/owner-host.js. The old heading equated these
+ * SUBSET of AGENT_ACTORS in the host transport. The old heading equated these
  * names with what the server accepts; that was not true
  * on 2026-09-11, when "grok" was writable here and unreadable there and every
  * Grok start refused. tests/owner-host-agent-actors.test.js now asserts the
  * containment in that direction instead of leaving it to a comment. */
-const AGENT_ACTORS = Object.freeze(['codex', 'claude', 'gemini', 'grok', 'local']);
+const AGENT_ACTORS = require('../agents/registry').actorNames(require('../agents/registry').activeRegistry());
 const DECLARED_AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const AGENT_SESSION_CREDENTIAL = /^[A-Za-z0-9_-]{43}$/;
 
 /**
  * Generate the `.mcp.json` document from a record.
  *
- * The acceptance property from T6, enforced here rather than hoped for: the
+ * The acceptance property from machine-record rule, enforced here rather than hoped for: the
  * generated document contains no path that does not exist. A server whose script
  * is missing from this installation is OMITTED and reported in `skipped`, because
  * a client that fails to launch a server it was told about looks broken to the
@@ -1064,6 +1011,7 @@ function generateMcpConfig(record, {
   exists = fs.existsSync,
   readOnlyTools = readOnlyToolAllowlist,
   tierTools = tierServerAllowlist,
+  level,
   agentActor = null,
   agentId = null,
   anonymousAgentTransport = false,
@@ -1072,34 +1020,8 @@ function generateMcpConfig(record, {
   stateRoot = null,
   // Injectable so a test can assert both arms of the probe without spawning a
   // runtime. See RUNTIME_GUARD_FLAGS above for what is being probed and why.
-  runtimeProbe = childProcess.spawnSync,
-  /* WHETHER THIS DOCUMENT'S OWNER GETS A BROWSER.
-   *
-   * `true` is the default because that is what every existing caller has always
-   * been written as: an installed machine's `.mcp.json` still carries the
-   * browser server and nothing about setup changes. The option exists for the
-   * OTHER caller -- prepareClaudeToolSurface(), which generates one document per
-   * ASSISTANT and therefore starts a THIRD electron process for every assistant
-   * on the computer, whether or not that assistant will ever open a page.
-   *
-   * MEASURED 2026-09-03 (the crash investigation evidence): the browser gateway
-   * costs a whole process of its own on top of the two tool servers, and nine
-   * assistants were running at once on this computer when it died. Omitting it
-   * where it is not wanted is one entire process per assistant that is never
-   * started -- not a process started smaller.
-   */
-  browserTools = true
+  runtimeProbe = childProcess.spawnSync
 } = {}) {
-  /* Stated, not guessed. A caller that passes nothing keeps today's document;
-   * a caller that passes something unreadable is told, rather than silently
-   * getting the expensive answer. */
-  if (typeof browserTools !== 'boolean') {
-    throw new SetupRefusal(
-      'SETUP_BROWSER_TOOLS_INVALID',
-      'Whether this assistant gets browser tools has to be stated as true or false, so setup does not guess which way to spend this computer\'s memory.',
-      { browserTools: typeof browserTools }
-    );
-  }
   /* AN ABSOLUTE PATH OR NOTHING. src/lib/runtime-state-root.js refuses a
    * relative TOOLSENABLED_STATE_ROOT when it READS it, so generating one would
    * produce a server that dies at startup inside a grandchild process nobody is
@@ -1211,41 +1133,20 @@ function generateMcpConfig(record, {
       skipped.push({ name: server.name, reason: `not part of the ${record.tier} tier` });
       continue;
     }
-    /* NOT STARTED AT ALL, and it is recorded in `skipped` for the same reason
-     * every other omission is: a server that is missing from the document
-     * because somebody chose that is a different fact from one that is missing
-     * because its file is gone, and the caller can tell them apart. */
-    if (server.browser === true && browserTools !== true) {
-      skipped.push({ name: server.name, reason: 'this assistant was started without browser tools' });
-      continue;
-    }
     const scriptPath = path.join(record.installRoot, server.script);
     if (!exists(scriptPath)) {
       skipped.push({ name: server.name, reason: `${scriptPath} is not present in this installation` });
       continue;
     }
-    /* A server that declares a package pin gets it, and a pin that would fail the
-     * gateway's own guard refuses generation instead of producing a document whose
-     * server dies at spawn with a message nobody is watching for. */
-    if (server.packageSpec !== undefined && !PLAYWRIGHT_PACKAGE_SPEC_RE.test(server.packageSpec)) {
-      throw new SetupRefusal(
-        'SETUP_MACHINE_RECORD_INVALID',
-        `The ${server.name} server declares a package version its gateway would refuse, so no configuration can be generated from this record.`,
-        { server: server.name, packageSpec: server.packageSpec }
-      );
-    }
     /* THE GUARD FLAGS GO BEFORE THE SCRIPT, and nothing else moves.
      *
      * MEASURED: under ELECTRON_RUN_AS_NODE the runtime consumes its own flags
-     * and `process.argv[1]` is still the script, so playwright-gateway.js still
-     * reads its pinned package spec from `process.argv[2]`. `guardFlags` is []
+     * and `process.argv[1]` is still the script. `guardFlags` is []
      * whenever the probe did not cleanly succeed, and then this line produces
      * exactly the array this function has always produced. */
     const entry = {
       command: record.nodePath,
-      args: server.packageSpec === undefined
-        ? [...guardFlags, scriptPath]
-        : [...guardFlags, scriptPath, server.packageSpec],
+      args: [...guardFlags, scriptPath],
       cwd: record.installRoot
     };
     /* FIRST, so the allowlist branches below merge onto it rather than replacing
@@ -1261,7 +1162,8 @@ function generateMcpConfig(record, {
      * there is no install shape where the servers this document starts are
      * unbounded. See the note above SERVER_CATALOGUE for the measurement. */
     entry.env = { ...(entry.env || {}), ...heapCapEnvironment(server.heapCapMB),
-      TOOLSENABLED_AGENT_TOOL_MODE: modePolicy.TOOL_MODES[selectedApiMode] };
+      TOOLSENABLED_AGENT_TOOL_MODE: modePolicy.TOOL_MODES[selectedApiMode],
+      ...(level === undefined ? {} : { TOOLSENABLED_LEVEL_CAP: String(require('../agents/permission-level').isLevel(level) ? level : 2) }) };
     // The level narrows every allowlisted server, INCLUDING the read-only one.
     // Guided generates that server and nothing else, so leaving it at the
     // generic read-only profile left Guided carrying `host.read_file` and
@@ -1269,7 +1171,7 @@ function generateMcpConfig(record, {
     // computer, under the level that says it cannot reach one. At Unrestricted
     // this narrows nothing (tierAllowed is null) and the read-only profile is
     // written exactly as before.
-    const tierAllowed = server.allowlisted === true ? tierTools(record.tier) : null;
+    const tierAllowed = server.allowlisted === true ? tierTools(record.tier, { level }) : null;
     const tierAllowedSet = tierAllowed === null ? null : new Set(tierAllowed);
     if (server.readOnly === true) {
       // The one environment variable the server actually reads
@@ -1346,15 +1248,6 @@ function generateMcpConfig(record, {
     if (stateRoot !== null) {
       entry.env = { ...(entry.env || {}), TOOLSENABLED_STATE_ROOT: stateRoot };
     }
-    const isolation = require('../provider-session-isolation');
-    const isolatedContext = isolation.isolationContext();
-    if (isolatedContext) {
-      if (stateRoot !== null && path.resolve(stateRoot) !== isolatedContext.stateRoot) {
-        throw new SetupRefusal('AGENT_PROVIDER_ISOLATION_PATH', 'Generated agent tools must use this isolated application state.', {});
-      }
-      entry.env = { ...(entry.env || {}), ...isolation.profileEnvironment(isolatedContext),
-        TOOLSENABLED_STATE_ROOT: isolatedContext.stateRoot };
-    }
     mcpServers[server.name] = entry;
   }
 
@@ -1385,13 +1278,14 @@ function writeMcpConfig(record, {
   exists = fs.existsSync,
   readOnlyTools = readOnlyToolAllowlist,
   tierTools = tierServerAllowlist,
+  level,
   agentActor = null,
   agentId = null,
   anonymousAgentTransport = false,
   sessionCredential = null,
   stateRoot = null
 } = {}) {
-  const { document, skipped } = generateMcpConfig(record, { exists, readOnlyTools, tierTools, agentActor, agentId, anonymousAgentTransport, sessionCredential, stateRoot });
+  const { document, skipped } = generateMcpConfig(record, { exists, readOnlyTools, tierTools, level, agentActor, agentId, anonymousAgentTransport, sessionCredential, stateRoot });
   const file = path.join(targetDirectory, '.mcp.json');
   writeJsonAtomic(file, document);
   return { file, document, skipped };

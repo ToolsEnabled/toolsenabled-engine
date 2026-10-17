@@ -6,16 +6,17 @@ ToolsEnabled is not affiliated with or endorsed by DeepSeek. "DeepSeek Harness" 
 
 ## What you need
 
-- Fleet beta 3 (1.4.2) or later, installed and set up in an OpenShell sandbox with the [two-command install](https://github.com/ToolsEnabled/toolsenabled-engine/releases/tag/openshell-beta3-20261001). Setup registers Fleet with Codex and/or Claude Code; the helper below copies that registration.
+- Fleet beta 3 (1.4.2) or later, installed and set up in an OpenShell sandbox with the two-command install in the [installer guide](../../../installer/openshell/README.md). Setup registers Fleet with Codex and/or Claude Code; the helper below copies that registration.
 - DeepSeek Harness in the **same sandbox**, for example `pip install deepseek-harness-sdk` (Python 3.10+) or `npx @deepseek-ai/dsh web` (Node.js). Your sandbox policy must let the installer reach PyPI or npm, and let the DSH binary reach your model provider. See the example policy below.
 - A model provider for DSH: DeepSeek's API, or any OpenAI-compatible endpoint configured in DSH.
 
 ## 1. Create the DSH overlay
 
-On your host, download the helper and copy it into the sandbox:
+The helper is `adapters/openshell/deepseek-harness/fleet-dsh-overlay.py` in Fleet's
+public source archive (from [toolsenabled.ai/fleet-mcp](https://toolsenabled.ai/fleet-mcp/)).
+On your host, copy it into the sandbox:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/ToolsEnabled/toolsenabled-engine/openshell-beta-source-20260930/adapters/openshell/deepseek-harness/fleet-dsh-overlay.py
 openshell sandbox upload SANDBOX_NAME fleet-dsh-overlay.py /sandbox/
 ```
 

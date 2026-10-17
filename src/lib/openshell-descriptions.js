@@ -1,7 +1,7 @@
 'use strict';
 
 // What agents are told about each tool inside a person's own NVIDIA OpenShell
-// sandbox. The registry's descriptions are written for the desktop app: its
+// sandbox. The registry's descriptions are written for the host application: its
 // Settings and Ledger pages, the owner's profile folder, Windows credential
 // stores, tools the sandbox does not offer, and a coordination-board key only
 // the desktop installer writes. Inside a sandbox those words send an agent
@@ -45,7 +45,7 @@ function phraseChanges(home = sandboxHome()) {
       to: '; the person removes a record in their terminal with `toolsenabled ledger remove`.', unless: 't_ledger.remove' },
     { tool: 'a_ledger.file', from: 'they answer it on the Ledger page whenever they get to it',
       to: 'they answer it in their terminal with `toolsenabled ledger` whenever they get to it' },
-    { tool: 'a_ledger.file', from: ' For a live yes/no the person answers immediately, use system.ask instead.',
+    { tool: 'a_ledger.file', from: ' For a yes/no question with a terminal reply channel, use system.ask; it may return pending.',
       to: '', unless: 'system.ask' },
     { tool: 'r_ledger.file', from: 'when "Who adds standing rules" in Settings is "Agents too"',
       to: 'when the setting rules.filing_from is "Agents too" (the person sets it in their terminal with `toolsenabled settings`)' },
@@ -113,13 +113,26 @@ function applyChange(tool, change) {
  * (name, description, inputSchema, annotations); the offered names decide the
  * `unless` changes. A phrase that does not match leaves the text as it is.
  */
-function sandboxWording(tools, { home } = {}) {
+function pluginCommandWording(value) {
+  return value
+    .replaceAll('the person sets it in their terminal with `toolsenabled settings`',
+      'the person controls it outside this plugin')
+    .replaceAll('the person removes a record in their terminal with `toolsenabled ledger remove`',
+      'the person removes a record outside this plugin')
+    .replaceAll('they answer it in their terminal with `toolsenabled ledger` whenever they get to it',
+      'they answer it outside this plugin whenever they get to it');
+}
+
+function sandboxWording(tools, { home, plugin = false } = {}) {
   const offered = new Set(tools.map((tool) => tool.name));
   const changes = phraseChanges(home);
-  return tools.map((tool) => changes
+  return tools.map((tool) => {
+    const worded = changes
     .filter((change) => change.tool === tool.name && !(change.unless && offered.has(change.unless))
       && !(change.when && !offered.has(change.when)))
-    .reduce((current, change) => applyChange(current, change) || current, tool));
+      .reduce((current, change) => applyChange(current, change) || current, tool);
+    return plugin ? { ...worded, description: pluginCommandWording(worded.description) } : worded;
+  });
 }
 
 // capability.find answers from a generated index whose one-line summaries
@@ -138,7 +151,7 @@ function firstSentence(text, max) {
  * A rewrite for capability.find's documents: `offered` is the session's
  * offered tool names, `descriptionOf(id)` the registry description.
  */
-function recallRewrite(offered, descriptionOf, { home } = {}) {
+function recallRewrite(offered, descriptionOf, { home, plugin = false } = {}) {
   const changes = phraseChanges(home);
   return (document) => {
     const original = descriptionOf(document.id);
@@ -150,9 +163,11 @@ function recallRewrite(offered, descriptionOf, { home } = {}) {
         const changed = applyChange({ description: text, inputSchema: {} }, change);
         return changed ? changed.description : text;
       }, original);
-    if (worded === original) return document;
-    return { ...document, clause: firstSentence(worded, 120), summary: firstSentence(worded, 300) };
+    const finalWorded = plugin ? pluginCommandWording(worded) : worded;
+    if (finalWorded === original) return document;
+    return { ...document, clause: firstSentence(finalWorded, 120), summary: firstSentence(finalWorded, 300) };
   };
 }
 
-module.exports = Object.freeze({ phraseChanges, sandboxWording, applyChange, sandboxHome, recallRewrite });
+module.exports = Object.freeze({ phraseChanges, sandboxWording, applyChange, sandboxHome,
+  recallRewrite, pluginCommandWording });

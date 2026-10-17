@@ -1,4 +1,4 @@
-# ToolsEnabled for OpenShell: compatibility
+# ToolsEnabled Fleet for OpenShell: compatibility
 
 This report covers the image recipe tested on 2026-09-29. Its platform table
 is historical evidence for that recipe, not a compatibility claim for a later

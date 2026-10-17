@@ -10,8 +10,8 @@
 //
 //   1. src/lib/providers/agent-comms.js addresses a recipient as
 //      (actor, machineId) and REFUSES a recipient on the local machine by
-//      design. The shipped config/service-registry.json declares exactly one
-//      machine, so the tool's own recipientMachine enum contains exactly one
+//      design. An earlier local service registry declared exactly one
+//      machine, so that tool's recipientMachine enum contained exactly one
 //      value and that value is the one the provider refuses. Measured, not
 //      inferred: the enum is ["this-machine"] and the answer for it is
 //      {accepted:false, code:"AGENT_COMMS_CROSS_MACHINE_RECIPIENT_REQUIRED"}.
@@ -219,7 +219,7 @@ function sleepSync(milliseconds) {
  * lock.js's own bakery queue was built to avoid.
  *
  * MEASURED 2026-09-03: eight processes (this file's own live ceiling --
- * MAX_AGENT_SESSIONS in shell/main.cjs) calling registerNode() concurrently,
+ * MAX_AGENT_SESSIONS in the host process) calling registerNode() concurrently,
  * default settings throughout. 64 calls, 45 (70%) failed TREE_DIRECTORY_BUSY,
  * each after burning the full ~10-13s this function let it wait; raising the
  * budget to 60s did not fix it -- calls kept failing at the full 60s, so this
@@ -390,7 +390,7 @@ function managerIndex(nodes) {
 
 /* A row registered for a saved circle (nodeKey) took its managerName from the
  *  saved tree the app sent with it, so that manager is a circle on the tree even
- *  when no row for it is held any more (T1791). A legacy row without a saved
+ *  when no row for it is held any more. A legacy row without a saved
  *  circle identity cannot say that, and keeps the never-registered answer. */
 function managerFromSavedTree(sender) {
   return typeof sender?.nodeKey === 'string' && sender.nodeKey.length > 0;
@@ -765,7 +765,7 @@ function expired(entry, atMs) {
     : atMs - entry.heartbeatAt > STOPPED_RETENTION_MS;
 }
 
-/* T255: THE ONE PLACE THAT DECIDES WHETHER A NOT-RUNNING ROW CAN BE WOKEN.
+/* THE ONE PLACE THAT DECIDES WHETHER A NOT-RUNNING ROW CAN BE WOKEN.
  *
  * Two callers need this answer and they must never be able to disagree:
  * resolveDelivery(), which refuses a row that cannot wake, and the roster's
@@ -855,16 +855,16 @@ function supersededByCircle(entry, incoming, isLive) {
   return !isLive(entry);
 }
 
-/* ONE SAVED CIRCLE IS ONE RECIPIENT, WHATEVER SESSIONS IT HAS RUN IN (T839).
+/* ONE SAVED CIRCLE IS ONE RECIPIENT, WHATEVER SESSIONS IT HAS RUN IN.
  *
  * MEASURED 2026-09-21 on this module alone, no app: a circle an account recovery
- * replaced (a6 -> b6) answered its manager three different ways depending only on
+ * replaced by a fresh slot answered its manager three different ways depending only on
  * the successor's state, and none of them was the truth. The successor still
  * starting (registered, heartbeat not yet renewed) was TREE_RECIPIENT_AMBIGUOUS by
  * name and TREE_RECIPIENT_NOT_RUNNING by its old address; a successor the person had
  * stopped was AMBIGUOUS; and a live successor whose manager label had drifted from
  * the manager's registered name was TREE_RECIPIENT_NOT_RUNNING while it worked. The
- * plain stopped circle with no successor, meanwhile, was held for a wake (T255).
+ * plain stopped circle with no successor, meanwhile, was held for a wake.
  *
  * WHY. resolveDelivery judged whichever ROW the name happened to match, and a
  * superseded row is a tombstone that cannot wake -- while the roster (reachabilityFrom)
@@ -945,7 +945,7 @@ function createTreeNodeDirectory({
       matches.push(node);
       byName.set(key, matches);
     }
-    /* T839: rows indexed by the plain spelling of their name, so a label that drifted between the
+    /* rows indexed by the plain spelling of their name, so a label that drifted between the
        canvas's two spellings of one circle can still find it. See spellingBase. */
     const bySpelling = new Map();
     for (const node of nodes) {
@@ -988,7 +988,7 @@ function createTreeNodeDirectory({
            unrelated circle registered as "Controller" gained the manager edge of every unbound
            report still labelled "Controller (aaaa0001)" once that alias expired. */
         if (candidates.size === 0 && !namesExpiredAlias) {
-          /* T839: NO EXACT NAME, SO TRY THE OTHER SPELLING -- with the same rules and the same demand
+          /* NO EXACT NAME, SO TRY THE OTHER SPELLING -- with the same rules and the same demand
              for exactly one circle. Measured: a circle's successor re-sent its manager as "Builder 2"
              while the manager was registered as "Builder 2 (0000b002)"; nothing matched, the successor
              had no line to its manager, and the manager could not reach a circle that was working.
@@ -1339,7 +1339,7 @@ function createTreeNodeDirectory({
     );
   }
 
-  /* T1791: A SAVED MANAGER THAT IS NOT RUNNING IS NOT A NAME THAT WAS NEVER
+  /* A SAVED MANAGER THAT IS NOT RUNNING IS NOT A NAME THAT WAS NEVER
    * REGISTERED. A row is kept only STOPPED_RETENTION_MS after its session
    * ends, so a child resumed before its stopped manager found no row and was
    * told the manager was "not registered" and to "re-point this agent" --
@@ -1466,8 +1466,7 @@ function createTreeNodeDirectory({
       const reachableLive = connected.filter(node => isLive(node, atMs));
       const reachableNames = reachableLive.map(node => node.nodeName);
       /* AND SAY IT IN A FORM THE NEXT ATTEMPT CAN USE. A list of bare names is
-         no answer at all when the names repeat, which is the state T138 was
-         filed for: a caller refused for addressing a saved-circle id was told
+         no answer at all when the names repeat, which occurred in a repeated-name case: a caller refused for addressing a saved-circle id was told
          "You can write to: Worker, Worker, Worker", and every one of those is
          TREE_RECIPIENT_AMBIGUOUS. The address goes beside the name so the
          refusal carries its own remedy; `reachable` keeps its array-of-names
@@ -1486,7 +1485,7 @@ function createTreeNodeDirectory({
          a new session -- an account move or a restart. Delivering there is the
          whole point of keeping the tombstone. A circle that merely stopped has
          no successor and still refuses below. */
-      /* T255: A CIRCLE THAT MERELY STOPPED IS WOKEN, NOT REFUSED.
+      /* A CIRCLE THAT MERELY STOPPED IS WOKEN, NOT REFUSED.
        *
        * This used to refuse outright, and the refusal's own words -- "its
        * session has stopped, so nothing would read this message" -- were an
@@ -1516,7 +1515,7 @@ function createTreeNodeDirectory({
        * describes anything startable. Neither is a stopped circle, so neither
        * gets a wake, and the original refusal stands for them with its original
        * wording. */
-      /* T839: ONE CIRCLE, ONE RECIPIENT. See currentRowOf. Every row this name matched is
+      /* ONE CIRCLE, ONE RECIPIENT. See currentRowOf. Every row this name matched is
        * reduced to the row that continues its saved circle today: rows of ONE circle are one
        * recipient, two circles sharing a name are still two (AMBIGUOUS). This used to chase the
        * first matched row to a LIVE successor only, count a circle's own predecessor and successor
@@ -1576,7 +1575,7 @@ function createTreeNodeDirectory({
     if (liveRecipients.length > 1) {
       /* THE ADVICE HAS TO BE FOLLOWABLE. "Use the full name" was the whole
          answer here, and it is not one when the full names are the thing that
-         collided: T138 measured four circles whose full name was "Manager", so
+         collided: a test measured four circles whose full name was "Manager", so
          every re-attempt this sentence invited was refused again the same way.
          Each candidate is named with the address that separates it, and the
          addresses ride in the details so a caller can pick one without parsing
@@ -1665,7 +1664,7 @@ function createTreeNodeDirectory({
         /* EVERY REACHABLE ROW CARRIES ITS ADDRESS, not only a user-linked one.
            The agentId arrived with direct links and was scoped to
            them because that was the case being built; a manager and a report
-           were simply never extended. Measured 2026-09-16 (T138): a manager
+           were simply never extended. A test found that a manager
            whose four workers all registered as "Worker" read this roster, got
            four identical rows with nothing on them to tell apart, and every
            send_local it could compose answered TREE_RECIPIENT_AMBIGUOUS -- while
@@ -1706,7 +1705,7 @@ function createTreeNodeDirectory({
           transient,
           status: transient ? 'heartbeat-overdue' : 'registered-but-session-stopped',
           code: 'TREE_RECIPIENT_NOT_RUNNING',
-          /* T255: WHAT THIS BRANCH WAS PROTECTING IS NOW PARTLY EXPOSED, so it
+          /* WHAT THIS BRANCH WAS PROTECTING IS NOW PARTLY EXPOSED, so it
            * has to say so. These rows are "unavailable" and carry
            * TREE_RECIPIENT_NOT_RUNNING, and both remain true: no session is
            * reading. But since a stopped circle's message is now accepted and
@@ -1726,7 +1725,7 @@ function createTreeNodeDirectory({
       });
     const missingManager = unresolvedManager(sender, nodes);
     if (missingManager && managerFromSavedTree(sender)) {
-      /* T1791: the manager is a saved circle that is not running. That is an
+      /* the manager is a saved circle that is not running. That is an
        * unavailable row like any stopped circle, not a broken roster; nothing
        * is held for it (there is no row to wake), so wakeable is false. */
       unavailable.push(Object.freeze({

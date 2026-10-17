@@ -46,8 +46,8 @@ function ensureWorker(allowShutdown = false) {
 
 function safeChildEnvironment(context) {
   // Lazy for the same reason src/lib/runtime.js's own safeChildEnvironment is:
-  // subscription-launch-env reaches this module transitively at startup.
-  return require('./providers/subscription-launch-env.js')
+  // launch-environment reaches this module transitively at startup.
+  return require('./supervision/launch-environment.js')
     .safeLaunchEnvironment(process.env, { context });
 }
 

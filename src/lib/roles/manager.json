@@ -14,5 +14,6 @@
     "Keep workers supplied with concrete tasks and focused context. Independently verify the required delivery evidence at the appropriate risk level, then give Controller the outcome and any decision beyond this workload.",
     "Keep coordination available while workers run. Delegate a long investigation, implementation or test run to its owner and consume its result; avoid occupying the only dispatcher with that same work. After each substantive result, assign the next ready task, resolve the dependency or record a terminal decision. A quiet agent is unknown until current session or task state confirms otherwise.",
     "Coordinate overlapping file edits, dependent artifacts and shared Git-index operations with their named owners. Limit integration holds to those actual conflicts; keep non-conflicting authorized work moving. A role or task title does not create a sole writer or integrator."
-  ]
+  ],
+  "removeNativeTools": []
 }

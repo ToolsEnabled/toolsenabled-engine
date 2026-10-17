@@ -5,10 +5,10 @@
 // The observer must never inherit ambient provider credentials, but it must
 // also remain loadable while provider and fleet code is broken or mid-edit.
 // This module therefore depends only on the pure, built-ins-only env-scrub
-// helper. The provider compatibility surface re-exports these same functions;
-// it does not own a second list that can drift away from the observer.
+// helper. Launchers and the observer share one policy and one credential list.
 
 const envScrub = require('../env-scrub.js');
+const { stripPowerShellSevenModulePathEntries } = require('./powershell-module-path.js');
 
 const SUBSCRIPTION_PROVIDER_IDS = Object.freeze(['codex', 'claude', 'gemini', 'grok']);
 
@@ -105,21 +105,9 @@ function assertNoBillingCredentials(environment, { context = '' } = {}) {
   return environment;
 }
 
-// SEC11: on win32, a powershell.exe child (Windows PowerShell 5.1) that
-// inherits a PSModulePath set by PowerShell 7 cannot autoload
-// Microsoft.PowerShell.Security -- MEASURED, this breaks every vault and
-// audit read that shells out to it. `childExecutable` is opt-in and absent
-// for every caller that existed before this fix, so this stays a no-op
-// everywhere except the callers below that now name their child explicitly.
-// Lazy require: this module must stay loadable (its own header comment)
-// while provider/fleet code, including owner-prompt-platform.js, is broken
-// or mid-edit, and owner-prompt-platform.js reaches back to this file
-// through providers/subscription-launch-env.js's re-export -- a top-level
-// require here would be circular at load time.
 function applyPowerShellSevenModulePathScrub(environment, { platform = process.platform, childExecutable } = {}) {
   if (!childExecutable) return environment;
-  return require('../owner-prompt-platform.js')
-    .stripPowerShellSevenModulePathEntries(environment, { platform, childExecutable });
+  return stripPowerShellSevenModulePathEntries(environment, { platform, childExecutable });
 }
 
 function safeLaunchEnvironment(baseEnvironment = process.env, { context = '', platform, childExecutable } = {}) {

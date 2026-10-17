@@ -1,40 +1,8 @@
 'use strict';
-// THE SEAM BETWEEN A SPAWN AND THE PERSON'S VISIBLE TREE.
-//
-// An assistant that is a circle on the tree may hand work down to new circles
-// beside it (src/lib/agent-subagent-route.js decides when). Drawing a circle is
-// something only the application can do -- the tree is a record the Computers
-// view keeps, and the session behind a circle is started by the shell -- so
-// this file does not draw anything. It holds ONE slot, and the application puts
-// its own tree in it at startup.
-//
-// ---------------------------------------------------------------------------
-// WHY A MODULE SINGLETON IS THE WHOLE TRANSPORT, WHICH LOOKS LIKE A SHORTCUT
-// AND IS NOT.
-//
-// The application starts the agent-session authority by REQUIRING it out of the
-// installed payload and calling it in process: shell/capability-layer.cjs
-// startAppOwnedOwnerHost() does `require(<payload>/src/owner-host.js)` and then
-// `host.listen()`. That host answers each MCP line through the same payload's
-// src/mcp-server.js, which calls executeTool() in src/lib/tool-registry.js.
-//
-// So for an agent session hosted by the application, `agent.spawn` runs inside
-// the Electron main process, in the same module graph as the code that owns the
-// window. Both halves resolve THIS FILE to one absolute path, so Node's module
-// cache hands them one object. Nothing has to be serialised, no port is opened,
-// and no request crosses a process boundary that would have to be authenticated
-// all over again.
-//
-// THE CASE THIS MUST GET RIGHT is the other one. The capability layer also runs
-// as a separate child process for work that is not an application agent
-// session, and that child loads its own copy of this module with an EMPTY slot.
-// A tree spawn attempted from there finds no host and is refused by name rather
-// than silently becoming a lane -- an assistant told "put them on the tree" that
-// quietly got detached lanes would report a team the person cannot find.
-//
-// The slot is deliberately tiny and validated on the way in: a host that does
-// not answer both questions is rejected at install time, where the stack names
-// the installer, instead of at spawn time, where it would name an assistant.
+// Dispatch agent tree operations through the host installed in this process.
+// A server without a tree host refuses these operations. The host owns the
+// persistent tree, session lifecycle and authorization decisions; this module
+// validates the request shape and forwards it without creating an OS process.
 
 const {
   TREE_SPAWN_HOST_REQUIRED,
@@ -44,6 +12,9 @@ const {
   supportsConfinedTreeSpawn,
   supportsConfinedTreeLifecycle,
   supportsResumeAssignment,
+  supportsConfinedSpeedControl,
+  supportsConfinedConfigurationControl,
+  supportsConfinedContinuationControl,
 } = require('./tree-host-registry');
 
 /* The lifecycle verbs an assistant may ask for on a circle BELOW it.
@@ -61,6 +32,8 @@ const TREE_ACTIONS = Object.freeze({
   remove: 'remove-node',
   'set-model': 'set-node-model',
   'set-effort': 'set-node-effort',
+  'set-speed': 'set-node-speed',
+  'set-continuation': 'set-node-continuation',
   'set-account': 'set-node-account',
   'set-provider': 'set-node-provider',
   'set-role': 'set-node-role',
@@ -177,8 +150,8 @@ async function spawnOnTree(request) {
   }
   inFlight.add(parentSessionId);
   try {
-    // host.spawn is the slot installTreeSpawnHost() fills (shell/main.cjs
-    // wires it to dispatchTreeSpawn), an in-process call that asks the
+    // host.spawn is the slot installTreeSpawnHost() fills. It is an in-process
+    // callback that asks the
     // renderer to draw a circle. It starts no OS process and opens no window
     // -- the marker below is read by tests/spawn-hygiene.test.js, which
     // otherwise has no way to tell this "spawn(" from child_process.spawn's.
@@ -211,7 +184,13 @@ async function commandOnTree(verb, request) {
     );
   }
   const confined = request?.confined === true;
-  if (confined && (!['resume', 'restart'].includes(verb) || !supportsConfinedTreeLifecycle())) {
+  const speedControl = confined && verb === 'set-speed';
+  if (speedControl && !supportsConfinedSpeedControl()) fail('TREE_SPEED_CONTROL_REFUSED', 'This host has no confined speed-control adapter.');
+  const configurationControl = confined && ['set-model', 'set-effort', 'set-role'].includes(verb);
+  if (configurationControl && !supportsConfinedConfigurationControl()) fail('TREE_CONFIGURATION_CONTROL_REFUSED', 'This host has no confined model, effort or role control adapter.');
+  const continuationControl = confined && verb === 'set-continuation';
+  if (continuationControl && !supportsConfinedContinuationControl()) fail('TREE_CONTINUATION_CONTROL_REFUSED', 'This host has no confined assigned-task continuation adapter.');
+  if (confined && !speedControl && !configurationControl && !continuationControl && (!['resume', 'restart'].includes(verb) || !supportsConfinedTreeLifecycle())) {
     fail('TREE_DELEGATION_REFUSED', 'This build cannot safely replace a Standard tree circle.');
   }
   if (!confined && typeof treeSpawnHost().command !== 'function') {
@@ -220,6 +199,8 @@ async function commandOnTree(verb, request) {
       'The application that owns the tree does not offer this action in this build.'
     );
   }
+  if (verb === 'set-continuation' && treeSpawnHost().ledgerContinuationVersion !== 1)
+    fail('CONTINUATION_UNSUPPORTED', 'This host does not provide assigned-task continuation.');
   const action = TREE_ACTIONS[verb];
   if (!action) fail('AGENT_TREE_COMMAND_UNKNOWN', `"${verb}" is not something that can be done to a circle.`);
   const parentSessionId = request && request.parentSessionId;
@@ -233,7 +214,7 @@ async function commandOnTree(verb, request) {
   if (typeof nodeId !== 'string' || nodeId === '') {
     fail('AGENT_TREE_COMMAND_NO_NODE', 'Name the circle to act on.');
   }
-  /* T1792: agent.resume may carry the next assignment for the resumed circle.
+  /* agent.resume may carry the next assignment for the resumed circle.
      tool-registry.js has already bounded it and refused credential-shaped
      text. An application that does not say it delivers one would drop it in
      the middle while the caller is told the resume worked, so it is refused. */
@@ -247,7 +228,10 @@ async function commandOnTree(verb, request) {
         'This application cannot hand an assignment to a resumed circle yet, so nothing was resumed. Resume without an assignment, then send it as a message.');
     }
   }
-  const command = confined ? treeSpawnHost().commandConfined.bind(treeSpawnHost()) : treeSpawnHost().command.bind(treeSpawnHost());
+  const command = speedControl ? treeSpawnHost().commandSpeedConfined.bind(treeSpawnHost())
+    : continuationControl ? treeSpawnHost().commandContinuationConfined.bind(treeSpawnHost())
+    : configurationControl ? treeSpawnHost().commandConfigurationConfined.bind(treeSpawnHost())
+    : confined ? treeSpawnHost().commandConfined.bind(treeSpawnHost()) : treeSpawnHost().command.bind(treeSpawnHost());
   return command({
     action,
     ...(verb.startsWith('set-') ? { choice: request.choice } : {}),
@@ -259,6 +243,17 @@ async function commandOnTree(verb, request) {
       ? request.expectedSessionId
       : null,
   });
+}
+
+async function waitOnTree(request) {
+  const current = treeSpawnHost();
+  if (!current || typeof current.wait !== 'function') {
+    fail('AGENT_WAIT_UNAVAILABLE', 'This tree cannot wait for worker reports. Read its normal inbox on the next tool answer.');
+  }
+  if (!isTreeSession(request?.parentSessionId)) {
+    fail('AGENT_WAIT_TREE_SESSION_REQUIRED', 'Only a live session on this tree can wait for worker reports.');
+  }
+  return current.wait(request);
 }
 
 module.exports = Object.freeze({
@@ -274,5 +269,6 @@ module.exports = Object.freeze({
   spawnConfinedOnTree,
   spawnResearchOnTree,
   commandOnTree,
+  waitOnTree,
   spawnOnTree
 });

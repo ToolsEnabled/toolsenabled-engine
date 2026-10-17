@@ -2,7 +2,7 @@
 
 // The audit admission worker: one thread whose only job is to admit batches
 // of audit events to the canonical ledger, so the synchronous SQLite and
-// vault work never runs on the thread the desktop app draws on. See
+// vault work never runs on the thread the host application draws on. See
 // src/lib/audit-admission.js for the contract.
 //
 // It shares nothing with the parent but the ledger file and the environment;

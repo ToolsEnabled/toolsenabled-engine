@@ -33,6 +33,26 @@ function isInsideOpenShellSandbox(env = process.env) {
   return describeSandboxDetection(env).insideSandbox;
 }
 
+// The ToolsEnabled host that serves sandboxes from outside them
+// (src/lib/openshell-host-server.js, bin/toolsenabled-openshell-host.js). Its
+// entry sets this marker for itself before any engine module loads, and it
+// counts only where the sandbox marker is absent. Like the sandbox marker it
+// is an environment variable, so it chooses wording and where this process
+// keeps its own records; it grants nothing. A process in a sandbox that sets
+// it still reaches only its own sandbox's files.
+const HOST_MARKER = 'TOOLSENABLED_OPENSHELL_HOST';
+
+function isOpenShellHost(env = process.env) {
+  return env[HOST_MARKER] === '1' && !isInsideOpenShellSandbox(env);
+}
+
+// Both keep the engine's own records (the audit signing key) in the state-file
+// vault under their state root, never a desktop keyring: a sandbox has none,
+// and the host must never prompt on the person's desktop.
+function usesStateFileVault(env = process.env) {
+  return isInsideOpenShellSandbox(env) || isOpenShellHost(env);
+}
+
 /**
  * A `policy.local` route answered outside its documented contract. `code`
  * distinguishes the cases a caller actually needs to act on differently:
@@ -253,8 +273,11 @@ function policyMentionsHostForProvider(policyYamlText, host) {
 module.exports = Object.freeze({
   DEFAULT_BASE_URL,
   SANDBOX_MARKER,
+  HOST_MARKER,
   describeSandboxDetection,
   isInsideOpenShellSandbox,
+  isOpenShellHost,
+  usesStateFileVault,
   PolicyAdvisorError,
   PolicyLocalClient,
   listNetworkPolicyRuleNames,

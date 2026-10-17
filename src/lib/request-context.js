@@ -1,6 +1,6 @@
 'use strict';
 
-// Durable "active outward request" marker (Q31).
+// Durable "active outward request" marker.
 //
 // Root cause this closes: src/lib/egress-preflight.js#assertGatesMet() only
 // ever ran when a caller happened to pass a requestId -- an agent (or a

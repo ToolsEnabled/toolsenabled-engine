@@ -6,7 +6,9 @@ const SETTING_ID = TOOL_MODE_SETTING_ID;
 const LEGACY_SETTING_ID = AGENT_API_SETTING_ID;
 const MODE = Object.freeze({ ONLY: TOOL_MODES.Only, OPTIMIZED: TOOL_MODES.Optimized, BOTH: TOOL_MODES.Enabled, NATIVE: TOOL_MODES.Disabled });
 const MODES = Object.freeze(Object.values(MODE));
-const DEFAULT_MODE = MODE.ONLY;
+// Workers keep their agent's own tools unless the person chooses otherwise:
+// Fleet removes nothing by default (roles and levels do the narrowing).
+const DEFAULT_MODE = MODE.BOTH;
 function modeFromSettings(settings) {
   const values = settings && settings.values || {};
   const canonical = normalizeAgentApiMode(values[AGENT_API_SETTING_ID]);

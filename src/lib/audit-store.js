@@ -31,7 +31,7 @@ function openDatabaseSync(...args) {
 }
 const AUDIT_SCHEMA_VERSION = 3;
 const AUDIT_APPLICATION_ID = 0x54454155; // "TEAU"
-const DEFAULT_AUDIT_DB = rootPath('state', 'audit.sqlite3');
+const DEFAULT_AUDIT_DB = path.join(require('./runtime-state-root').resolveStateRoot().root, 'state', 'audit.sqlite3');
 const MAX_EVENT_BYTES = 64 * 1024;
 const MAX_ERROR_LENGTH = 1000;
 const ZERO_HASH = '0'.repeat(64);
@@ -534,7 +534,7 @@ class AuditStore {
     // same defaulting point so a contended write can be bounded to fail fast
     // into the existing emergency-spool path instead of blocking the whole
     // process for up to ~65s under sustained concurrent tool-call load (see
-    // docs/coordinator/R1162-AUDIT-CONTENTION-REPORT.md). Both defaults are
+    // the audit contention measurements). Both defaults are
     // unchanged, so behavior does not change unless one is configured.
     const environmentBusyTimeoutMs = environmentInteger('TOOLSENABLED_AUDIT_BUSY_TIMEOUT_MS');
     const environmentTransactionRetryMs = environmentInteger('TOOLSENABLED_AUDIT_TRANSACTION_RETRY_MS');
@@ -850,7 +850,7 @@ class AuditStore {
   // for an acquisition is busyTimeoutMs (the driver's block), not
   // transactionRetryMs (which was never consulted), so the deadline below is
   // the larger of the two. A caller that configures a short busyTimeoutMs to
-  // fail fast into the emergency spool -- the R1162 operator override, and
+  // fail fast into the emergency spool -- the operator override, and
   // what tests/kernel.audit/audit-contention.js pins -- keeps exactly the
   // behaviour it had.
   _beginImmediate(db) {
@@ -1904,15 +1904,15 @@ function createAuditStore(options = {}) { return new AuditStore(options); }
 
 // The settings probe must not initialize schema, migrate projections, or mint
 // a key. Reuse the canonical verifier against a strictly read-only handle.
-function withReadOnlyLedger(file, callback) {
+function withReadOnlyLedger(file, callback, { scratchRoot, maxCopyBytes } = {}) {
   // SQLite's readOnly flag still creates a missing WAL/shared-memory file.
   // Inspect a disposable DB+WAL snapshot so even that bookkeeping cannot
   // mutate the original. A racing/inconsistent copy fails verification.
-  const scratch = fs.mkdtempSync(path.join(path.dirname(path.resolve(file)), '.audit-inspect-'));
+  const scratch = fs.mkdtempSync(path.join(scratchRoot || path.dirname(path.resolve(file)), '.audit-inspect-'));
   const copy = path.join(scratch, 'audit.sqlite3');
   let db;
   try {
-    require('./audit-file-inspection').copyLedgerFiles(file, copy);
+    require('./audit-file-inspection').copyLedgerFiles(file, copy, maxCopyBytes);
     db = openDatabaseSync(copy, { readOnly: true, allowExtension: false });
   } catch (error) { fs.rmSync(scratch, { recursive: true, force: true }); throw error; }
   const view = Object.create(AuditStore.prototype);
@@ -1923,8 +1923,18 @@ function withReadOnlyLedger(file, callback) {
     db.exec('BEGIN DEFERRED');
     const adapter = {
       getKey: keyId => view.getKey(keyId),
+      listKeys: () => db.prepare('SELECT key_id AS keyId, algorithm, public_key_pem AS publicKeyPem, public_key_hash AS publicKeyHash FROM audit_keys').all(),
       getEvent: selector => view.getEvent(selector),
       getMetadata: key => view.getMetadata(key),
+      tailPage: ({ offset, limit }) => {
+        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+          throw auditError('AUDIT_INVALID_ARGUMENT', 'Audit tail paging is invalid.');
+        const total = db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count;
+        const head = rowEvent(db.prepare('SELECT * FROM audit_events ORDER BY sequence DESC LIMIT 1').get());
+        const events = db.prepare('SELECT * FROM audit_events ORDER BY sequence DESC LIMIT ? OFFSET ?')
+          .all(limit, offset).map(rowEvent);
+        return { total, head, events };
+      },
       verify: boundary => ({ ...view._verifySnapshot(db, boundary), status: view._status(db) }),
       integrity: () => db.prepare('PRAGMA integrity_check').all().map(row => Object.values(row)[0]),
       // Repair must bind even a tampered historical row, while a harmless

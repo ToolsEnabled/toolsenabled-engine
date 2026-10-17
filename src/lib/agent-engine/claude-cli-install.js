@@ -7,7 +7,7 @@
  *
  *   1. WHICH FILES COULD BE THE `claude` PROGRAM, in preference order. The
  *      transport (claude-cli-process.js resolveInvocation) decides what to
- *      spawn; the mission bridge (mission-bridge/actions.js
+ *      spawn; the mission bridge (the host dispatch
  *      detectClaudeCliPresence) decides whether a lane may be dispatched; the
  *      provider gateway (providers/cli-provider-gateway.js executableFor)
  *      decides what to diagnose. Each carried its own copy of "the npm layout's
@@ -188,7 +188,7 @@ function loginHome() {
  *
  * Windows: ONLY the environment's USERPROFILE. The dispatch environment is
  * pinned to the installation owner's profile before it reaches here
- * (mission-bridge/actions.js accountConfinedDispatchEnvironment), and that pin
+ * (the host dispatch accountConfinedDispatchEnvironment), and that pin
  * is the whole account fence: os.homedir() under an elevated launch names the
  * elevated account's profile, which is precisely the directory this product
  * must never enumerate. If the environment names no profile there is no
@@ -267,7 +267,7 @@ function pathExtensions(env) {
  * and batch shims last. The npm exe stays first because that is the order
  * the transport has shipped with; a machine with both copies keeps running the
  * one it always ran. POSIX ORDER: native, ~/bin, then PATH. The explicit
- * entries exist because a desktop app launched from a GUI need not inherit the
+ * entries exist because a host application launched from a GUI need not inherit the
  * login shell's PATH, and ~/.local/bin is exactly the directory such a PATH
  * tends to lack.
  *
@@ -492,7 +492,10 @@ const CLAUDE_ALIAS_RESOLUTIONS = Object.freeze({
     Object.freeze({ since: '2.1.280', model: 'claude-opus-5-5' }),
     Object.freeze({ since: '0.0.0', model: 'claude-opus-5' })
   ]),
-  sonnet: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-sonnet-5' })]),
+  sonnet: Object.freeze([
+    Object.freeze({ since: '2.1.292', model: 'claude-sonnet-5-5' }),
+    Object.freeze({ since: '0.0.0', model: 'claude-sonnet-5' })
+  ]),
   fable: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-fable-5-1' })]),
   haiku: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-haiku-4-5' })])
 });
@@ -508,11 +511,12 @@ const MIN_CLI_VERSION_BY_MODEL = Object.freeze({
   'claude-fable-5-1': '2.1.251'
 });
 
-/* One name per model a dispatch tier can pin (mission-bridge/actions.js
+/* One name per model a dispatch tier can pin (the host dispatch
    TIERS), in the catalog's own words. */
 const MODEL_DISPLAY_NAMES = Object.freeze({
   'claude-opus-5-5': 'Opus 5.5',
   'claude-opus-5': 'Opus 5',
+  'claude-sonnet-5-5': 'Sonnet 5.5',
   'claude-sonnet-5': 'Sonnet 5',
   'claude-fable-5-1': 'Fable 5.1',
   'claude-fable-5': 'Fable 5',

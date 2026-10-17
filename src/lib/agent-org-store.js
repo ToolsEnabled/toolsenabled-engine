@@ -441,7 +441,7 @@ function createAgentOrgStore({
      * conversation: a provider it already carries changes nothing, and any
      * other replaces the whole seat. A deliberate owner edit (write(), or a
      * reset) still replaces the whole set and still revokes. */
-    ensureSeat({ id, role, roleSelection = undefined, provider = 'claude', displayName = null, managerId = undefined, adoptProvider = false, nodeId = null }, options = {}) {
+    ensureSeat({ id, role, roleSelection = undefined, provider = 'none', displayName = null, managerId = undefined, adoptProvider = false, nodeId = null }, options = {}) {
       const { org } = this.read();
       if (typeof id !== 'string' || id.length === 0) fail('AGENT_ORG_STORE_INVALID', 'ensureSeat needs the seat id.', { field: 'id' });
       if (typeof role !== 'string' || role.length === 0) fail('AGENT_ORG_STORE_INVALID', 'ensureSeat needs the seat role.', { field: 'role' });

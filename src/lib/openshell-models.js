@@ -478,6 +478,26 @@ function runCodexAppServerInSession({ env = process.env, home = codexHome(env) }
   return 'added';
 }
 
+// Descriptor-driven MCP exposure/startup defaults. Existing choices remain
+// the person's; inline or dotted tables are never rewritten to make room.
+function applyRegistrationSettings(file, settings, name) {
+  let text = readText(file) ?? '';
+  for (const setting of settings) {
+    const parts = setting.table.map(part => part === '{name}' ? name : part);
+    const scan = scanToml(text);
+    const table = scan.tables.find(candidate => !candidate.array && JSON.stringify(candidate.parts) === JSON.stringify(parts));
+    if (!table && parts.length > 1) continue;
+    if (!table && scan.lines.slice(0, scan.rootEnd).some((line, index) => !scan.inString[index] && keyOf(line)?.[0] === parts[0])) continue;
+    if (table && scan.lines.slice(table.index + 1, tableEnd(scan, table)).some((line, offset) => !scan.inString[table.index + 1 + offset] && keyOf(line)?.[0] === setting.key)) continue;
+    const line = `${setting.key} = ${JSON.stringify(setting.value)}`;
+    const lines = [...scan.lines];
+    if (table) lines.splice(table.index + 1, 0, line);
+    else lines.push(`[${parts.join('.')}]`, line, '');
+    text = lines.join('\n');
+  }
+  if (text !== readText(file)) writeAtomic(file, text);
+}
+
 /* -------------------------------------------------------------- rendering -- */
 
 function providerTableLines(endpoint) {
@@ -903,11 +923,20 @@ function modelCommand(argv, { env = process.env, stdout = process.stdout } = {})
   if (args._.length > 2) throw new OpenShellModelError('MODEL_USAGE', `Unexpected ${args._[2]}.`);
   if (action === 'add') {
     requireSandbox(env);
+    const endpoint = validateModelEndpoint({ name, baseUrl: args.baseUrl, model: args.model, envKey: args.envKey, displayName: args.displayName });
+    const connections = require('./openshell-model-connections');
+    const connection = endpoint.envKey ? connections.validateConnection({ name: endpoint.name,
+      transport: 'openai-chat', endpoint: endpoint.baseUrl.replace(/\/$/, '') + '/chat/completions', model: endpoint.model,
+      source: ['localhost', '127.0.0.1', '[::1]', 'host.openshell.internal'].includes(new URL(endpoint.baseUrl).hostname) ? 'local' : 'api',
+      auth: 'openshell', tokenEnv: endpoint.envKey }, { env }) : null;
+    if (connection) connections.readConnections({ env });
     const result = addModel({ name, baseUrl: args.baseUrl, model: args.model, envKey: args.envKey, displayName: args.displayName }, { env, makeDefault: args.makeDefault === true });
+    if (connection) connections.saveConnection(connection, { env });
     out(`${result.updated ? 'Updated' : 'Added'} model endpoint ${result.name}: ${result.model} at ${result.baseUrl}`);
     out(`  Key        ${describeKey(result)}`);
     out(`  Codex      codex --profile ${result.name}${result.isDefault ? '   (also the default for codex and Codex workers)' : ''}`);
     out(`  Written    ${result.configFile}, ${result.profileFile}`);
+    if (connection) out(`  Worker     model-${connection.name}`);
     return 0;
   }
   if (action === 'list') {
@@ -963,6 +992,7 @@ module.exports = Object.freeze({
   PLACEHOLDER_PREFIX,
   RESERVED_PROVIDER_IDS,
   addModel,
+  applyRegistrationSettings,
   codexHome,
   codexSelection,
   listMcpServerTools,

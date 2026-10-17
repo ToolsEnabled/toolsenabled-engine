@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "id": "gemini",
+  "name": "Gemini CLI",
+  "command": "gemini",
+  "worker": {
+    "driver": "acp",
+    "args": [
+      "--acp"
+    ]
+  },
+  "signIn": {
+    "result": "unknown",
+    "how": "Use your own Gemini API key, Vertex AI, or a Gemini Code Assist Standard or Enterprise sign-in in `gemini`. Google ended Login with Google for individual plans in Gemini CLI on 2026-06-18."
+  },
+  "register": {
+    "kind": "command",
+    "add": [
+      "mcp",
+      "add",
+      "{env...}",
+      "--scope",
+      "user",
+      "{name}",
+      "{command}",
+      "--",
+      "{args...}"
+    ],
+    "remove": [
+      "mcp",
+      "remove",
+      "--scope",
+      "user",
+      "{name}"
+    ],
+    "profile": {
+      "env": "GEMINI_CLI_HOME",
+      "envSubdir": ".gemini",
+      "default": ".gemini",
+      "file": "settings.json"
+    },
+    "config": {
+      "format": "json",
+      "container": "mcpServers",
+      "entryType": "command"
+    },
+    "list": [
+      "mcp",
+      "list"
+    ],
+    "envFlag": "-e",
+    "inspection": {
+      "kind": "json-config"
+    },
+    "envValueEncoding": "nonempty-no-equals",
+    "forwardEnv": {
+      "kind": "entry-env-reference",
+      "syntax": "$NAME"
+    }
+  },
+  "models": {
+    "flag": "--model",
+    "efforts": [],
+    "defaults": {
+      "standard": "gemini"
+    },
+    "choices": {
+      "gemini": {
+        "tier": "standard",
+        "model": "gemini/default",
+        "cliModel": ""
+      }
+    }
+  },
+  "permissions": {
+    "aliases": {
+      "-y": "--yolo"
+    },
+    "lead": [
+      {
+        "when": {
+          "--yolo": true
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--approval-mode": "yolo"
+        },
+        "level": 4
+      },
+      {
+        "when": {
+          "--approval-mode": "auto_edit"
+        },
+        "level": 3
+      },
+      {
+        "when": {
+          "--approval-mode": "plan"
+        },
+        "level": 1
+      }
+    ],
+    "worker": {
+      "1": {
+        "args": [
+          "--approval-mode",
+          "plan"
+        ],
+        "allow": "none"
+      },
+      "2": {
+        "args": [],
+        "allow": "none"
+      },
+      "3": {
+        "args": [
+          "--approval-mode",
+          "auto_edit"
+        ],
+        "allow": "edits"
+      },
+      "4": {
+        "args": [
+          "--approval-mode",
+          "yolo"
+        ],
+        "allow": "all"
+      }
+    },
+    "remove": {
+      "subagents": {
+        "settings": {
+          "kind": "system-settings-overlay",
+          "exclude": [
+            "invoke_agent"
+          ]
+        }
+      },
+      "shell": {
+        "settings": {
+          "kind": "system-settings-overlay",
+          "exclude": [
+            "run_shell_command"
+          ]
+        }
+      },
+      "web": {
+        "settings": {
+          "kind": "system-settings-overlay",
+          "exclude": [
+            "web_fetch",
+            "google_web_search"
+          ]
+        }
+      }
+    }
+  }
+}

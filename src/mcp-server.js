@@ -35,7 +35,7 @@ const {
   UnknownToolError, ToolNotEnabledError, assertToolRegistered, dispatchKindForTool, executeTool, listTools
 } = require('./lib/tool-registry');
 const { throughputMode } = require('./lib/throughput-mode');
-const { researchAccessToolNames } = require('./lib/research-access');
+const { childScopeToolNames } = require('./lib/fleet-child-scope');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -181,36 +181,17 @@ function closeLastWordsForTests() {
 
 const MAX_MESSAGE_BYTES = 1024 * 1024;
 const SUPPORTED_PROTOCOLS = Object.freeze(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
-// Transport-bindable agent principals.  `human` and `coordinator` are
-// deliberately absent and must stay absent.
-//
-// `coordinator` (request R98) carries fleet-wide control authority over
-// every run regardless of submitter.  Binding it here would make it reachable
-// by setting one environment variable -- and the shared, user-scoped Claude MCP
-// entry is inherited by every Claude session on this host, including builder
-// lanes.  One edit there would silently promote the whole model family.
-//
-// So the coordinator role is surface-injected, exactly like the owner's
-// `updateMissionFromOwnerSurface`: it is reachable only from the local
-// coordinator CLI (`tools/coordinator-runs.js`), never over MCP.  An MCP caller
-// that sends actor:'coordinator' is rejected below no matter what its
-// TOOLSENABLED_AGENT_ACTOR says, so no Claude lane can inherit the role by
-// configuration or by environment.
-// Local is a caller principal, not a new worker kind or model capability.
-// Each handler retains its independent role, permission and workload gates.
-const AGENT_ACTOR_VALUES = new Set(['codex', 'claude', 'gemini', 'grok', 'local']);
+// Only worker principals can bind to this transport. `human` and the
+// historical `coordinator` principal carry broader authority and cannot be
+// selected through an environment variable. Local identifies a caller, not
+// a model capability. Handlers keep their own role and permission checks.
+const AGENT_REGISTRY = require('./lib/agents/registry');
+const AGENT_ACTOR_VALUES = new Set(AGENT_REGISTRY.actorNames(AGENT_REGISTRY.activeRegistry()));
 const DECLARED_AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const OVERNIGHT_ADVISORY_READ_ONLY_TOOLS = new Set(['overnight_advisory.lifecycle_status', 'overnight_advisory.list', 'overnight_advisory.status']);
-// An explicit bound set rather than a prefix: research.* also contains the
-// pre-existing local-model tools (hermes/strong/local_tiers), whose schemas
-// carry no actor field, and the read-only research tools, which need none.
-const RESEARCH_ACTOR_BOUND_TOOLS = new Set(['research.run_submit', 'research.finding_save', 'research.session_assign', 'research.lifecycle']);
 // The standing-rule tools carry the same binding: the attribution written on
 // the ledger's head line is the principal this transport was started as.
 const R_LEDGER_ACTOR_BOUND_TOOLS = new Set([
-  'r_ledger.file', 'r_ledger.propose',
-  't_ledger.file', 't_ledger.assign', 't_ledger.complete', 't_ledger.progress', 't_ledger.review', 't_ledger.remove', 'a_ledger.file',
-  'a_ledger.answer', 'a_ledger.decline', 'p_ledger.decide'
+  'r_ledger.file', 't_ledger.file', 't_ledger.complete', 't_ledger.progress', 'a_ledger.file'
 ]);
 // agent-comms handlers derive their sender and reader from this same
 // transport-bound principal. A caller never supplies its fabric sender.
@@ -283,13 +264,27 @@ const PUBLIC_OWNER_PROMPT_REQUEST_ID = /^owner-prompt-[a-f0-9]{8}-[a-f0-9]{4}-[a
 // arbitrary message attached to either code remains private and falls back to
 // the closed taxonomy summary.
 const PUBLIC_SOURCE_MESSAGES = Object.freeze({
+  /* The audit ledger's own fixed sentences (audit-store.js). audit.status and
+     audit.tail on a truncated or unreadable ledger answered "internal error"
+     while audit.verify, reading the same file, said the ledger could not be
+     opened. Only these exact words pass; SQLite's own details stay private. */
+  AUDIT_SQLITE_ERROR: Object.freeze([
+    'The audit ledger could not be opened.',
+    'The audit ledger rejected a transaction.',
+    'The audit ledger rejected a read transaction.'
+  ]),
   FABRIC_RECIPIENT_BACKLOG_FULL: Object.freeze([
     'That agent has not yet read the messages already waiting for it, so this one cannot be queued without discarding one it has never seen. Nothing was lost; send it again once the agent has caught up.'
   ]),
   AGENT_RESUME_ACCOUNT_LIMIT: Object.freeze([
     'The provider has refused this saved conversation’s account: its allowance is spent. Wait for it to reset, or continue on another account with a new session.',
     'The saved conversation account cannot serve right now, and this copy could not tell whether the provider or a limit on the Accounts page refused it. Check that account on the Accounts page, or continue on another account with a new session.'
-  ])
+  ]),
+  HOST_PATH_CHECK_FAILED: Object.freeze([
+    'host control root', 'runtime state and control roots', 'host workspace',
+    'executable search path', 'path against the product tree', 'path existence',
+    'write target', 'directory entry', 'directory entry metadata'
+  ].map(subject => `${subject} could not be checked; this does NOT claim that the path or entry is absent.`))
 });
 
 function exactPublicSourceMessage(error) {
@@ -326,9 +321,9 @@ function toolError(error) {
       && error.details && typeof error.details === 'object') {
     details.details = audit.scrub(error.details);
   }
-  // Repository repairs need exact file/range metadata to be actionable, but
+  // Host file repairs need exact file/range metadata to be actionable, but
   // generic Error.details can contain private provider prose or file content.
-  const coordination = !protectedTerminal && /^(?:BYTE_|REPO_FILE_)/.test(error?.code || '')
+  const coordination = !protectedTerminal && /^BYTE_/.test(error?.code || '')
     ? require('./lib/byte-tool-refusal').publicByteRefusal(error) : null;
   if (coordination) details.coordination = coordination;
   // A persisted credential request must remain cancellable after its provider
@@ -382,17 +377,13 @@ function requireObject(value, label, optional = false) {
 }
 
 function bindAgentActor(name, args, boundActor = process.env.TOOLSENABLED_AGENT_ACTOR) {
-  const overnight = name.startsWith('overnight_advisory.');
-  const research = RESEARCH_ACTOR_BOUND_TOOLS.has(name);
-  const ledger = R_LEDGER_ACTOR_BOUND_TOOLS.has(name);
-  if ((!overnight && !research && !ledger) || (overnight && OVERNIGHT_ADVISORY_READ_ONLY_TOOLS.has(name))) return args;
+  if (!R_LEDGER_ACTOR_BOUND_TOOLS.has(name)) return args;
   const bound = String(boundActor || '').trim().toLowerCase();
-  const family = overnight ? 'overnight advisory' : ledger ? 'ledger' : 'research';
   if (!AGENT_ACTOR_VALUES.has(bound)) {
-    throw new RpcError(-32602, `This ${family} mutation requires a transport-bound TOOLSENABLED_AGENT_ACTOR (codex, claude, gemini, grok, or local).`);
+    throw new RpcError(-32602, `This ledger mutation requires a transport-bound TOOLSENABLED_AGENT_ACTOR (${[...AGENT_ACTOR_VALUES].join(', ')}).`);
   }
   if (!args || args.actor !== bound) {
-    throw new RpcError(-32602, `${family[0].toUpperCase()}${family.slice(1)} actor must match this transport-bound principal ('${bound}').`);
+    throw new RpcError(-32602, `Ledger actor must match this transport-bound principal ('${bound}').`);
   }
   return args;
 }
@@ -538,6 +529,7 @@ function sessionInstructions(enumerationView, options = {}) {
       .briefToolSummary({
         tier: installTier,
         allowedNames: advertised,
+        setupKind: options.setupKind,
         valuesPath: options.valuesPath,
         env: options.env
       });
@@ -547,36 +539,37 @@ function sessionInstructions(enumerationView, options = {}) {
   }
 }
 
-// Grok 1.0.25 lists MCP tools but does not discover dotted wire names.  This
-// translation is presentation-only: dispatch, authorization, and audit retain
-// the registered canonical Function ID.  The actor is supplied by owner-host,
-// never by an MCP request field.
-function grokWireAliases(tools) {
+// Some agents list MCP tools but do not discover dotted wire names (their
+// descriptor says mcp.toolNames: "underscore"). This translation is
+// presentation-only: dispatch, authorization, and audit retain the registered
+// canonical Function ID. The actor is supplied by owner-host, never by an MCP
+// request field.
+function underscoreWireAliases(tools) {
   const aliases = new Map();
   for (const tool of tools) {
     const canonicalName = tool.name;
     const wireName = canonicalName.replace(/\./g, '_');
     if (aliases.has(wireName)) {
-      throw new RpcError(-32602, 'Grok MCP wire alias collision; refusing to guess.');
+      throw new RpcError(-32602, 'MCP wire alias collision; refusing to guess.');
     }
     aliases.set(wireName, canonicalName);
   }
   return aliases;
 }
 
-function grokWireTools(tools, actor) {
-  if (actor !== 'grok') return tools;
-  grokWireAliases(tools); // Validate the complete surface before advertising it.
+function underscoreWireTools(tools, actor) {
+  if (!AGENT_REGISTRY.usesUnderscoreToolNames(AGENT_REGISTRY.activeRegistry(), actor)) return tools;
+  underscoreWireAliases(tools); // Validate the complete surface before advertising it.
   return tools.map(tool => ({
     ...tool,
     name: tool.name.replace(/\./g, '_')
   }));
 }
 
-function resolveGrokWireName(name, tools) {
-  const canonicalName = grokWireAliases(tools).get(name);
+function resolveUnderscoreWireName(name, tools) {
+  const canonicalName = underscoreWireAliases(tools).get(name);
   if (!canonicalName) {
-    throw new RpcError(-32602, 'Grok MCP tool name is not advertised for this session.');
+    throw new RpcError(-32602, 'This MCP tool name is not advertised for this session.');
   }
   return canonicalName;
 }
@@ -584,15 +577,16 @@ function resolveGrokWireName(name, tools) {
 async function dispatch(message, options = {}) {
   validateRequest(message);
   const requestedAllowedToolNames = snapshotAllowedToolNames(options.allowedToolNames);
-  const researchNames = researchAccessToolNames(options.researchAccess);
-  const allowedToolNames = researchNames === undefined
+  const scopeNames = childScopeToolNames(options.researchAccess);
+  const allowedToolNames = scopeNames === undefined
     ? requestedAllowedToolNames
     : requestedAllowedToolNames === undefined
-      ? researchNames
-      : Object.freeze(requestedAllowedToolNames.filter(name => researchNames.includes(name)));
+      ? scopeNames
+      : Object.freeze(requestedAllowedToolNames.filter(name => scopeNames.includes(name)));
   const toolView = {
     ...(allowedToolNames === undefined ? {} : { allowedToolNames }),
     ...(options.agentRole === undefined ? {} : { agentRole: options.agentRole }),
+    ...(options.setupKind === undefined ? {} : { setupKind: options.setupKind }),
   };
   // THE ADVERTISED SURFACE IS NARROWED BY THE TIER; THE CALL PATH IS NOT --
   // because the call path already refuses, and refuses better.
@@ -606,7 +600,7 @@ async function dispatch(message, options = {}) {
   // too would make an out-of-tier call fail as "tool not enabled", which is
   // both less true and less useful than what executeTool() already raises a few
   // lines later -- PERMISSION_EFFECT_REFUSED, naming the tool, its effect and
-  // the tier that refused it. R1228 asks for a precise failure diagnostic, and
+  // the tier that refused it. A precise failure diagnostic matters here, and
   // "no such tool" is not one when the real answer is "your tier refuses this
   // effect". The tool is still unreachable either way; only the explanation
   // differs, so the honest explanation wins.
@@ -626,6 +620,12 @@ async function dispatch(message, options = {}) {
     };
     const instructions = sessionInstructions(enumerationView, options);
     if (instructions !== undefined) result.instructions = instructions;
+    if (require('./lib/openshell-authority').configured()) {
+      result.instructions = [instructions, require('./lib/openshell-authority').NOTE].filter(Boolean).join(' ');
+    }
+    if (options.recordMcpRevision !== false) {
+      require('./lib/mcp-revisions').record((Object.hasOwn(options, 'agentActor') ? options.agentActor : process.env.TOOLSENABLED_AGENT_ACTOR), params, result.protocolVersion);
+    }
     return result;
   }
 
@@ -634,17 +634,17 @@ async function dispatch(message, options = {}) {
 
   if (message.method === 'tools/list') {
     requireObject(message.params, 'tools/list params', true);
-    return { tools: grokWireTools(listTools(enumerationView), options.agentActor) };
+    return { tools: underscoreWireTools(listTools(enumerationView), options.agentActor) };
   }
 
   if (message.method === 'tools/call') {
     const params = requireObject(message.params, 'tools/call params');
     if (typeof params.name !== 'string' || !params.name) throw new RpcError(-32602, 'tools/call params.name must be a non-empty string.');
-    // A Grok call may name only a wire alias advertised by this exact current
-    // enumeration.  Other actors retain the old direct canonical path and do
-    // not pay an enumeration cost on calls.
-    const canonicalName = options.agentActor === 'grok'
-      ? resolveGrokWireName(params.name, listTools(enumerationView))
+    // An underscore-name agent may name only a wire alias advertised by this
+    // exact current enumeration. Other actors retain the direct canonical path
+    // and do not pay an enumeration cost on calls.
+    const canonicalName = AGENT_REGISTRY.usesUnderscoreToolNames(AGENT_REGISTRY.activeRegistry(), options.agentActor)
+      ? resolveUnderscoreWireName(params.name, listTools(enumerationView))
       : params.name;
     try {
       assertToolRegistered(canonicalName, toolView);
@@ -656,13 +656,15 @@ async function dispatch(message, options = {}) {
     }
     const suppliedArgs = params.arguments === undefined ? {} : params.arguments;
     if (!suppliedArgs || typeof suppliedArgs !== 'object' || Array.isArray(suppliedArgs)) throw new RpcError(-32602, 'tools/call params.arguments must be an object.');
-    const agentActor = options.agentActor || process.env.TOOLSENABLED_AGENT_ACTOR || undefined;
+    const agentActor = Object.hasOwn(options, 'agentActor') ? options.agentActor : (process.env.TOOLSENABLED_AGENT_ACTOR || undefined);
     const agentId = boundAgentId(options);
     const args = bindAgentActor(canonicalName, suppliedArgs, agentActor);
     try {
       const output = await executeTool(canonicalName, args, {
         requestId: message.id,
         agentActor,
+        personChannelFrom: options.personChannelFrom,
+        personChannelScope: options.personChannelScope,
         fileToolContext: options.fileToolContext,
         ...(options.toolMode === undefined ? {} : { toolMode: options.toolMode }),
         ...(options.agentApiMode === undefined ? {} : { agentApiMode: options.agentApiMode }),
@@ -681,7 +683,8 @@ async function dispatch(message, options = {}) {
         ...(allowedToolNames === undefined ? {} : { allowedToolNames }),
         ...(options.permissionSession === undefined ? {} : { permissionSession: options.permissionSession }),
         ...(options.workspaceRoots === undefined ? {} : { workspaceRoots: options.workspaceRoots }),
-        /* The owner host's stall-record hook (src/owner-host.js). A function
+        ...(options.setupKind === undefined ? {} : { setupKind: options.setupKind }),
+        /* The owner host's stall-record hook (the host transport). A function
            can only come from the in-process caller, never from a JSON line. */
         ...(typeof options.lagNote === 'function' ? { lagNote: options.lagNote } : {}),
         ...(options.signal === undefined ? {} : { signal: options.signal })
@@ -724,12 +727,47 @@ function parseLine(line, write) {
 }
 
 async function processMessage(message, write, options = {}) {
+  let boundary = null;
+  const ownedHost = require('./lib/tree-host-registry').treeSpawnHost();
+  const sessionId = options.agentSessionId || options.agentPrincipal?.sessionId;
+  const boundaryHook = typeof options.controlBoundary === 'function' ? options.controlBoundary
+    : ownedHost?.controlDeliveryVersion === 1 && ownedHost.isTreeSession(sessionId)
+      ? request => ownedHost.controlBoundary({ ...request, parentSessionId: sessionId }) : null;
+  const protectedWork = !['initialize', 'tools/list', 'ping'].includes(message?.method);
   try {
+    if (boundaryHook && message?.method === 'tools/call' && !Object.hasOwn(message, 'id'))
+      throw new RpcError(-32600, 'CONTROL_MCP_REQUEST_REQUIRED: tools/call needs a request ID before protected work.');
+    if (boundaryHook && message && Object.hasOwn(message, 'id')) {
+      // Only these protocol/liveness methods bypass work admission. Caller
+      // tool arguments cannot supply this classifier or a control callback.
+      try { boundary = await boundaryHook({ phase: 'begin', requestId: message.id, protectedWork }); }
+      catch (error) {
+        if (protectedWork) throw new RpcError(-32000, 'CONTROL_BOUNDARY_REFUSED: ' + (error.code || 'unknown'));
+        boundary = { status: 'unsupported', reason: error.code || 'CONTROL_BOUNDARY_UNAVAILABLE',
+          scope: 'protocol-discovery-only', providerAcknowledged: false };
+      }
+    }
     const result = await dispatch(message, options);
+    let delivery = boundary;
+    if (boundary?.boundaryId) {
+      const failed = result?.isError === true ? new AbortController() : null;
+      if (failed) failed.abort();
+      try { delivery = await boundaryHook({ phase: 'end', boundaryId: boundary.boundaryId, signal: failed?.signal || options.signal }); }
+      catch (error) { delivery = { status: 'unknown', reason: error.code || 'CONTROL_BOUNDARY_UNAVAILABLE' }; }
+      boundary = null;
+    }
     if (Object.prototype.hasOwnProperty.call(message, 'id')) {
-      write({ jsonrpc: '2.0', id: message.id, result: result === undefined ? {} : result });
+      const reply = result === undefined ? {} : result;
+      write({ jsonrpc: '2.0', id: message.id, result: delivery && reply && typeof reply === 'object'
+        ? { ...reply, controlDelivery: delivery } : reply });
     }
   } catch (error) {
+    if (boundary?.boundaryId) {
+      // A failed/cancelled operation still settles its protection boundary,
+      // without submitting queued steering after that failure.
+      const aborted = new AbortController(); aborted.abort();
+      try { await boundaryHook({ phase: 'end', boundaryId: boundary.boundaryId, signal: aborted.signal }); } catch { /* original typed refusal wins */ }
+    }
     const hasId = message && typeof message === 'object' && !Array.isArray(message) && Object.prototype.hasOwnProperty.call(message, 'id');
     const invalidRequest = error instanceof RpcError && error.code === -32600;
     if (hasId || invalidRequest) write(errorResponse(hasId ? message.id : null, error));
@@ -843,40 +881,26 @@ function recordMcpSurface(options = {}) {
   });
 }
 
-/**
- * The permission ceiling this stdio broker runs under.
- *
- * ABSENCE MUST MEAN REFUSAL, AND HERE IT DID NOT. src/lib/tool-registry.js runs
- * its tier check only `if (context.permissionSession !== undefined)`, and
- * start() never set one -- it accepted an `options` object and forwarded it to
- * recordMcpSurface alone, so `processLine(line)` was called with no options at
- * all and the conditional spread in dispatch() yielded nothing. Every locally
- * spawned agent therefore reached the tool surface with the tier check never
- * running. The narrowing that DID apply was TOOLSENABLED_TOOL_ALLOWLIST, which
- * is a name filter written into a generated .mcp.json; the strictly stronger
- * effect-based check this resolves was dead on the local path.
- *
- * That is the third instance of one shape in this codebase -- an absent
- * `allowlisted` flag reading as the full surface, an absent `tierCheck` reading
- * as approval with no ceiling, and this. So this function has exactly one
- * postcondition: it ALWAYS returns a session. There is no branch that returns
- * undefined, because undefined is the value that means "no ceiling".
- *
- * Unreadable, absent, or unrecognised all resolve to the most restrictive level
- * the product offers rather than to the owner's. A machine that has never run
- * setup has never been granted anything, and an installation whose record we
- * cannot read is exactly the one not to guess generously about.
- */
+// Resolve once at server startup. The launcher's level cap can only lower the
+// detected ancestor's level. A broken installation record remains fail-closed.
 function resolvePermissionSession({
   permissionSession,
   machineRecord = require('./lib/setup/machine-record'),
   permissionTierPolicy = require('./lib/permission-tier-policy'),
-  agentConfinement = require('./lib/agent-session-confinement')
+  agentConfinement = require('./lib/agent-confinement-constants'),
+  env = process.env,
+  leadLevel = () => require('./lib/agents/permission-level').leadLevel({ registry: require('./lib/agents/registry').activeRegistry(env), env }).level
 } = {}) {
-  if (permissionSession !== undefined) return permissionSession;
+  const level = typeof leadLevel === 'function' ? leadLevel() : leadLevel;
+  if (permissionSession !== undefined) {
+    const existing = permissionTierPolicy.session(permissionSession);
+    const cap = existing.tier === 'full' ? 'unrestricted'
+      : existing.tier === 'confined' && existing.profile === 'workspace' ? 'standard' : 'guided';
+    return permissionTierPolicy.effectiveSession(level, cap);
+  }
   try {
     const record = machineRecord.readMachineRecord({ servicesRoot: machineRecord.resolveServicesRoot({}) });
-    if (record) return permissionTierPolicy.installTierSessionFromRecord(record);
+    if (record) return permissionTierPolicy.effectiveSessionFromRecord(level, record);
   } catch (error) {
     // WAS an empty catch. Falling back to the fail-closed tier here is correct
     // and stays exactly as it was -- the defect was that the reason reached
@@ -926,21 +950,42 @@ function degradedFailClosedSession(error, permissionTierPolicy, agentConfinement
   });
 }
 
+function transportActorOptions(startOptions = {}, env = process.env) {
+  const candidate = Object.hasOwn(startOptions, 'agentActor') ? startOptions.agentActor : env.TOOLSENABLED_AGENT_ACTOR;
+  const actor = typeof candidate === 'string' ? candidate.trim().toLowerCase() : null;
+  if (actor && !AGENT_ACTOR_VALUES.has(actor)) throw new RpcError(-32602, 'The startup actor is not a described agent or local model.');
+  return Object.freeze({ ...startOptions, agentActor: actor || null });
+}
+
 function start(startOptions = {}) {
+  const launchOptions = transportActorOptions(startOptions);
   /* INSIDE AN OPENSHELL SANDBOX, WITH AGENTS ASKED FOR, this transport is part
    * of the sandbox's agent tree (src/lib/openshell-agent-host.js): the root
    * that holds the tree and its workers, or one worker's own server bound to
    * that root. The sandbox, not this process, is the boundary in that mode.
    * Off everywhere else, so the desktop stdio broker is unchanged. */
   const openShell = require('./lib/openshell-agent-host').startOpenShellAgentMode();
-  const options = openShell === null ? startOptions : { ...startOptions, ...openShell.context };
+  const options = openShell === null ? launchOptions : Object.freeze({ ...launchOptions, ...openShell.context });
   if (openShell !== null) {
     /* A root that is told to end still stops its workers first: they lead
      * process groups of their own, so nothing else would. Bounded, then gone. */
     for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
       process.once(signal, () => {
         const deadline = setTimeout(() => process.exit(0), 10_000);
-        openShell.close().catch(() => {}).finally(() => { clearTimeout(deadline); process.exit(0); });
+        openShell.close().catch(() => {}).finally(() => {
+          try { require('./lib/state-store').closeStateStore(); } catch {}
+          clearTimeout(deadline);
+          process.exit(0);
+        });
+      });
+    }
+  } else {
+    // The direct MCP broker can also be stopped by its parent without a
+    // preceding stdin EOF. Close SQLite explicitly so WAL sidecars settle.
+    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+      process.once(signal, () => {
+        try { require('./lib/state-store').closeStateStore(); } catch {}
+        process.exit(0);
       });
     }
   }
@@ -962,10 +1007,13 @@ function start(startOptions = {}) {
   // by side, writes keep their arrival order, and `tools.throughput = strict`
   // restores the one-at-a-time chain this used to be.
   const handle = createLineDispatcher();
+  const activeRequests = new Set();
   input.on('line', line => {
     noteLastWordsRequest(line);
-    handle(line, undefined, lineOptions, 'stdio')
+    const request = handle(line, undefined, lineOptions, 'stdio')
       .catch(error => process.stderr.write(`${publicMessage(error)}\n`));
+    activeRequests.add(request);
+    request.finally(() => activeRequests.delete(request));
   });
   /* THE MOMENT THE PARENT WENT AWAY, written down.
    *
@@ -974,19 +1022,21 @@ function start(startOptions = {}) {
    * reader comparing this timestamp against a crash dump's header time can tell
    * a shutdown that raced teardown from a process killed mid-call. */
   input.on('close', () => {
+    const closures = [];
     if (openShell !== null) {
-      openShell.close()
-        .catch(error => process.stderr.write(`[toolsenabled] OpenShell worker shutdown failed (${error.code || 'CLOSURE_FAILED'}).\n`));
+      closures.push(openShell.close()
+        .catch(error => process.stderr.write(`[toolsenabled] OpenShell worker shutdown failed (${error.code || 'CLOSURE_FAILED'}).\n`)));
     }
-    require('./lib/providers/web-inspector').closeContext(directFileScope)
-      .catch(error => process.stderr.write(`[toolsenabled] mobile browser cleanup failed (${error.code || 'CLOSURE_FAILED'}).\n`));
-    require('./lib/providers/remote-playwright').closeContext(directFileScope)
-      .catch(error => process.stderr.write(`[toolsenabled] browser connection cleanup failed (${error.code || 'CLOSURE_FAILED'}).\n`));
-    fileToolContext.retireFileToolContext(directFileScope, 'stdio-closed')
-      .catch(error => process.stderr.write(`[toolsenabled] file-scope closure could not be persisted (${error.code || 'CLOSURE_FAILED'}).\n`));
-    if (lastWords.state === null) return;
-    lastWords.state.stdinClosedAt = new Date().toISOString();
-    writeLastWords();
+    closures.push(fileToolContext.retireFileToolContext(directFileScope, 'stdio-closed')
+      .catch(error => process.stderr.write(`[toolsenabled] file-scope closure could not be persisted (${error.code || 'CLOSURE_FAILED'}).\n`)));
+    if (lastWords.state !== null) {
+      lastWords.state.stdinClosedAt = new Date().toISOString();
+      writeLastWords();
+    }
+    Promise.allSettled([...activeRequests, ...closures]).then(() => {
+      try { require('./lib/state-store').closeStateStore(); }
+      catch (error) { process.stderr.write(`[toolsenabled] state close failed (${error.code || 'CLOSURE_FAILED'}).\n`); }
+    });
   });
 }
 
@@ -1029,7 +1079,7 @@ module.exports = {
   MAX_MESSAGE_BYTES, RpcError, SUPPORTED_PROTOCOLS,
   LAST_WORDS_SAMPLE_MS, closeLastWordsForTests, lastWordsMemory, noteLastWordsRequest,
   openLastWords, writeLastWords,
-  bindAgentActor, boundAgentId, classifyMessage, createLineDispatcher, dispatch, errorResponse, grokWireAliases, grokWireTools, installTierOfSession, processLine, processMessage, publicMessage, resolveGrokWireName,
+  bindAgentActor, boundAgentId, classifyMessage, createLineDispatcher, dispatch, errorResponse, underscoreWireAliases, underscoreWireTools, installTierOfSession, processLine, processMessage, publicMessage, resolveUnderscoreWireName,
   recordMcpSurface, resolvePermissionSession, sessionInstructions, snapshotAllowedToolNames,
-  start, toolError, toolResult
+  start, transportActorOptions, toolError, toolResult
 };

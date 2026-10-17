@@ -1,7 +1,6 @@
 'use strict';
 
-// Shared fix for a real, verified class of bug (coordinator security review,
-// 2026-07-30): a path-containment check that only inspects the lexical,
+// A path-containment check that only inspects the lexical,
 // string-resolved path is defeated by any reparse point (a Windows
 // junction/symlink) anywhere in its ancestor chain, because the OS follows
 // the reparse point when the file is actually opened but a string regex
@@ -18,8 +17,7 @@
 // string-pattern exclusion list never matches, even though both spellings
 // open the identical file.
 //
-// The fix used by both src/lib/providers/host-control.js and
-// src/lib/providers/repo-files.js: after the existing lexical checks pass,
+// The host file provider's fix: after the existing lexical checks pass,
 // ALSO canonicalize the target with fs.realpathSync.native (which resolves
 // every junction/symlink in the chain) and re-run the exact same
 // containment/exclusion checks against the canonical form. A lexical pass

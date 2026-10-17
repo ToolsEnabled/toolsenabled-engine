@@ -1,8 +1,8 @@
 'use strict';
 
-// Durable P12 adapter.  It intentionally has no MCP registration yet: legacy
+// Durable capability adapter.  It intentionally has no MCP registration yet: legacy
 // direct MCP sessions are static allowlist compatibility paths and are not
-// task-bound.  P13 will attach this guard to consequential dispatch.
+// task-bound.  policy will attach this guard to consequential dispatch.
 
 const path = require('node:path');
 const capability = require('../capability-manifests');
@@ -30,7 +30,7 @@ function durableCapabilityState(dependencies = {}) {
 function configuredCatalog(dependencies = {}) {
   if (dependencies.catalog) return dependencies.catalog;
   // Lazy loading avoids a registry/provider initialization cycle.  The profile
-  // service is not itself registered as a tool in P12.
+  // service is not itself registered as a tool in capability.
   const { TOOL_REGISTRY } = require('../tool-registry');
   return {
     tools: TOOL_REGISTRY.map(tool => ({
@@ -172,7 +172,7 @@ function authorizeBoundRequest(input, dependencies = {}) {
     required: tool && tool.effect === 'external-write'
   }, dependencies);
   // This adapter remains unregistered. The normalized request contains only
-  // P12-validated selectors (paths are already hashes) and lets P13 bind its
+  // capability-validated selectors (paths are already hashes) and lets policy bind its
   // derived target to the exact authorized scope rather than caller prose.
   return Object.freeze({
     replayed: saved.replayed,

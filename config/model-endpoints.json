@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "api": [
+    { "id": "openai", "name": "OpenAI API", "keyEnv": "OPENAI_API_KEY", "transport": "openai-responses", "endpoint": "https://api.openai.com/v1/responses" },
+    { "id": "anthropic", "name": "Anthropic API", "keyEnv": "ANTHROPIC_API_KEY", "transport": "anthropic-messages", "endpoint": "https://api.anthropic.com/v1/messages" },
+    { "id": "openrouter", "name": "OpenRouter", "keyEnv": "OPENROUTER_API_KEY", "transport": "openai-chat", "endpoint": "https://openrouter.ai/api/v1/chat/completions" },
+    { "id": "gemini-api", "name": "Gemini API (OpenAI-compatible)", "keyEnv": "GEMINI_API_KEY", "transport": "openai-chat", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" },
+    { "id": "nvidia", "name": "NVIDIA API catalog", "keyEnv": "NVIDIA_API_KEY", "transport": "openai-chat", "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions" }
+  ],
+  "local": [
+    { "id": "ollama", "name": "Ollama", "port": 11434 },
+    { "id": "lm-studio", "name": "LM Studio", "port": 1234 },
+    { "id": "vllm", "name": "vLLM", "port": 8000 },
+    { "id": "llama-cpp", "name": "llama.cpp server", "port": 8080 },
+    { "id": "sglang", "name": "SGLang", "port": 30000 }
+  ]
+}

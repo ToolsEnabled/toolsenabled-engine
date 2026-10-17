@@ -453,7 +453,7 @@ def validate_release(pins):
 
 
 def parse_arguments(argv):
-    values = {'workspace': 'default', 'prefix': None, 'tier': 'unrestricted', 'providers': 'codex,claude', 'upgrade': False}
+    values = {'workspace': 'default', 'prefix': None, 'tier': 'unrestricted', 'providers': '', 'upgrade': False}
     seen = set()
     while argv:
         flag, *argv = argv
@@ -475,7 +475,7 @@ def parse_arguments(argv):
             raise FetchError('USAGE', 'Explicit bounded gateway, workspace and sandbox names are required')
     if values['prefix'] is not None and (not values['prefix'].startswith('/') or any(piece in ('.', '..') for piece in values['prefix'].split('/'))):
         raise FetchError('USAGE', 'Prefix must be an absolute sandbox path without dot components')
-    if values['tier'] not in ('unrestricted', 'standard', 'guided') or values['providers'] not in ('codex,claude', 'codex', 'claude'):
+    if values['tier'] not in ('unrestricted', 'standard', 'guided') or values['providers'] and not re.fullmatch(r'[a-z][a-z0-9-]{0,63}(?:,[a-z][a-z0-9-]{0,63}){0,15}', values['providers']):
         raise FetchError('USAGE', 'Invalid tier or providers')
     if values['upgrade'] and seen.intersection({'--tier', '--providers'}):
         raise FetchError('USAGE', 'Tier and providers apply only to fresh installs')
@@ -557,7 +557,7 @@ def sandbox_command(choices, remote_archive, pins, bootstrap):
     args = ['python3', '-I', '-c', bootstrap, '--archive', remote_archive, '--sha256', pins['sha256'],
             '--source', pins['source'], '--version', pins['version'], '--mode', 'upgrade' if choices['upgrade'] else 'fresh']
     if not choices['upgrade']:
-        args.extend(['--tier', choices['tier'], '--providers', choices['providers']])
+        args.extend(['--tier', choices['tier'], *(['--providers', choices['providers']] if choices['providers'] else [])])
     # Function-local variables do not pollute the user's shell; source executes
     # within that same Bash function/shell, so the installed PATH remains set.
     return ('function _fleet_verified_install() { local fleet_install_prefix=' + prefix + '; '
@@ -606,7 +606,7 @@ def execute(choices, pins, bootstrap, base_env=None, runner=run_owned, downloade
         target = inspect_target(paths['openshell'], choices, env, str(owned), runner)
         print('Target: ' + json.dumps(target, ensure_ascii=True, sort_keys=True), flush=True)
         if not choices['upgrade']:
-            print('Fresh install: agents on; tier=' + choices['tier'] + '; workers=' + choices['providers']
+            print('Fresh install: agents on; optional Fleet tool cap=' + choices['tier'] + '; workers=' + (choices['providers'] or 'every described agent')
                   + '. Setup --add registers every installed supported CLI. Audit is not enabled.', flush=True)
         sums = owned / 'SHA256SUMS'
         archive = owned / pins['archive']

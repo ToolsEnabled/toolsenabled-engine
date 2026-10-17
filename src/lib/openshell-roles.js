@@ -1,89 +1,13 @@
 'use strict';
 
-// ROLES FOR THE TERMINAL BUILD THAT RUNS INSIDE A PERSON'S OWN OPENSHELL
-// SANDBOX, where there is no desktop application.
-//
-// On the desktop a role reaches an agent through four hands: the Role library
-// (engine src/lib/agent-roles.js, src/lib/custom-role-store.js), the
-// application's org record (app shell/agent-org-record.cjs describeRole and
-// resolveRoleBinding), the agent host that writes the role's directions into
-// the first turn (app shell/agent-host.cjs composeRoleIntroduction) and the
-// owner host that narrows each line's tools by the role's function list
-// (engine src/owner-host.js boundRoleFunctionPolicy, tool-registry.js
-// registeredTools). Inside a sandbox only the engine is present, so this module
-// is the one place that does all four, from the same stores and with the same
-// words, for the headless agent tree (src/lib/openshell-agent-host.js).
-//
-// NOTHING HERE THROWS FOR A DECISION. Like shell/agent-org-record.cjs, every
-// exported decision returns { ok: true, ... } or { ok: false, code, reason },
-// so the tree host can branch on a code instead of reading English.
-// refusalError() turns a refusal into the coded Error a tool call throws.
-//
-// THE API, AND WHEN THE TREE HOST CALLS IT
-//
-//   readRoleLibrary(options)          one consistent read of the installed
-//                                     roles (and the declared org). Pass the
-//                                     result as `library` to the calls below
-//                                     to decide several things from one read.
-//   listRoles(options)                every role this installation offers,
-//                                     with what each allows here.
-//   resolveRole(name, context)        one role record, or the start refusal.
-//   leadRole(options)                 the role of the person's own session,
-//                                     the root of the sandbox's tree. Called
-//                                     once when the stdio server starts.
-//   leadRoleSetupEnv(role, options)   the server-entry variable setup writes
-//                                     when the person chooses the lead's role.
-//   canAssign({ parentRole, childRole, ... })
-//                                     before agent.spawn starts a child.
-//   toolSurfaceFor(role, baseAllowlist, { parent })
-//                                     the tools a session with this role may
-//                                     be offered and dispatch, never wider
-//                                     than its parent's. For the lead at
-//                                     start, and for every child at start.
-//   briefFor(role, { parentRole, task, provider, surface })
-//                                     the first-turn text of a child, on every
-//                                     fresh start, restart and resume.
-//   validateSetRole({ node, role, requester, ... })
-//                                     before agent.set_role records a role.
-//   composeRoleIntroduction(role)     the role directions alone. The lead's
-//                                     first turn belongs to the person, so for
-//                                     the lead this is the text the stdio
-//                                     server can offer in the MCP handshake's
-//                                     instructions instead.
-//
-// WHAT DOES NOT WORK IN A SANDBOX, AND WHAT THAT MEANS FOR A ROLE
-//
-//   A role that requires a direct request from the person
-//   (requiresDirectUserAuthorization; the shipped Coordinator assistant) can
-//   act only in a turn the trusted application has seen the person send.
-//   role-functions.js assertDirectUserAction asks the role-function host for
-//   that, and only the desktop application installs one (app shell/main.cjs,
-//   installRoleFunctionHost). Inside a sandbox the slot stays EMPTY and must:
-//   a headless server cannot tell a person's typed request from model output
-//   or another agent's message, and claiming it could would be the very thing
-//   the rule forbids. So such a role keeps every function that reads, and any
-//   other function is refused (ROLE_DIRECT_USER_REQUEST_REQUIRED) unless the
-//   person's saved action-permission profile makes that one action automatic
-//   (never for accessibility actions). listRoles reports this as
-//   allows.actsHere = 'reads-only'.
-//
-//   The workflow capabilities mayClaimWork, mayWakeReports,
-//   requiresMutationContext and the mission-bridge fields are carried through
-//   as data. Their consumers (controller-launch-record, agent-wake, the
-//   mission bridge) are not part of the sandbox surface. orgRoot and singleSeat
-//   are enforced here, for placement in the sandbox's tree.
-//
-// ONE RULE THE DESKTOP DOES NOT HAVE: A CHILD IS NEVER WIDER THAN ITS PARENT.
-// On the desktop a child circle is bounded by the permission level its parent
-// was started under (app shell/tree-delegation-authority.cjs requires the
-// child's permission session to equal the parent's), and each role's function
-// list narrows from there. Inside a sandbox every agent shares one OpenShell
-// boundary and the transport runs at the Unrestricted level, so the level
-// narrows nothing between parent and child. The role function list is the only
-// per-agent narrowing left, and it must not become a way for an agent to start
-// another with functions it does not have itself. toolSurfaceFor therefore
-// intersects a child's own surface with its parent's, and the functions that
-// removes are reported back (withheld) and told to the child in its brief.
+// Role resolution and function narrowing for the OpenShell agent tree. It
+// reads the installed role and organization stores, checks child placement,
+// and supplies each worker's directions and bounded tool surface.
+// Decisions return { ok: true, ... } or { ok: false, code, reason };
+// refusalError turns a decision into a coded tool error.
+// A child receives the intersection of its own functions and its parent's.
+// Roles requiring a direct user turn have read-only actions in this sandbox
+// unless a saved action permission makes a specific action automatic.
 
 const path = require('node:path');
 const agentOrg = require('./agent-org');
@@ -106,8 +30,7 @@ const LEAD_ROLE_ENV = 'TOOLSENABLED_OPENSHELL_LEAD_ROLE';
 const SET_ROLE_FUNCTION = 'agent.set_role';
 const SPAWN_FUNCTION = 'agent.spawn';
 const EXPLICIT_GRANTS = Object.freeze([
-  ...roleFunctions.SLOT_CONFIGURATION_FUNCTIONS,
-  ...roleFunctions.TASK_HANDOUT_FUNCTIONS
+  ...roleFunctions.SLOT_CONFIGURATION_FUNCTIONS
 ]);
 const DEFAULT_ROLE_IDS = new Set(agentOrg.ROLES);
 const SHIPPED = new Map(ROLE_LIBRARY.map(role => [role.id, role]));
@@ -209,7 +132,12 @@ function describeRole(definition, revision) {
     capabilities,
     functions: definition.functions === undefined || definition.functions === null ? null : [...definition.functions],
     requiresDirectUserAuthorization: definition.requiresDirectUserAuthorization === true,
-    enforced: { mayClaimWork: capabilities.mayClaimWork, singleSeat: capabilities.singleSeat }
+    enforced: { mayClaimWork: capabilities.mayClaimWork, singleSeat: capabilities.singleSeat },
+    // The most a session in this role may do; a role only lowers (permission-level.js).
+    maxLevel: [1, 2, 3, 4].includes(definition.maxLevel) ? definition.maxLevel
+      : ((shipped || SHIPPED.get(base))?.maxLevel ?? null),
+    removeNativeTools: require('./agents/permission-level').nativeToolRemovals(
+      (shipped || SHIPPED.get(base))?.removeNativeTools, definition.removeNativeTools)
   };
   record.allows = allowsFor(record, capabilities);
   return deepFreeze(record);

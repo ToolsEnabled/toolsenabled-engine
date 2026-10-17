@@ -171,7 +171,7 @@ function capabilityBoundaryReadback(loadedRegistry, {
 
   const failedClosed = record === null;
   const tier = failedClosed
-    ? require('./agent-session-confinement').FAIL_CLOSED_TIER
+    ? require('./agent-confinement-constants').FAIL_CLOSED_TIER
     : record.tier;
   const workspaceRoots = failedClosed ? [] : record.workspaceRoots.slice();
   const status = failedClosed ? 'failed-closed' : 'recorded';
@@ -311,11 +311,6 @@ function loadSettings({ registry, valuesPath, env, machineRecord, servicesRoot, 
         values['rules.filing_from'] = values['rules.capture_spoken'] === true ? 'Agents too' : 'Ledger page and /Request';
         provenance['rules.filing_from'] = { ...provenance['rules.capture_spoken'], migratedFrom: 'rules.capture_spoken' };
       }
-    }
-    if (loadedRegistry.byId.has('purchases.require_owner_approval') && !['user', 'installer'].includes(provenance['purchases.require_owner_approval']?.source)
-        && ['user', 'installer'].includes(provenance['outward.reserved_from_agents']?.source) && Array.isArray(values['outward.reserved_from_agents'])) {
-      values['purchases.require_owner_approval'] = values['outward.reserved_from_agents'].includes('Approving any purchase or spending any money');
-      provenance['purchases.require_owner_approval'] = { ...provenance['outward.reserved_from_agents'], migratedFrom: 'outward.reserved_from_agents' };
     }
     return { values, provenance, enforcement, readbacks, rejected, revision, valuesPath: resolvedPath };
   };

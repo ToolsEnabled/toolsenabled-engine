@@ -48,7 +48,7 @@ function fail(code, message, details) {
   throw new LocalAgentMessageError(code, message, details);
 }
 
-/* What a sender is told when a stopped circle's inbox is full (T1735): who
+/* What a sender is told when a stopped circle's inbox is full: who
    can start it, from where the sender stands, and when to send again. */
 function stoppedBacklogNote(name, relation) {
   const who = relation === 'reports-to-sender'
@@ -221,7 +221,7 @@ function createLocalAgentMessageProvider({
    * reach, and only a genuinely malformed call throws. */
   /* WHOSE SESSION IS CALLING, as the tool surface vouched for it -- never as
    * the caller wrote it. The owner host binds a session before it may call
-   * anything (src/owner-host.js) and hands the bound session id to every tool
+   * anything (the host transport) and hands the bound session id to every tool
    * call as `agentSessionId`, plus a full `agentPrincipal` when the session
    * also holds a declared identity; both name the same session. The directory
    * requires that bound session's own live row, including when another circle
@@ -279,12 +279,12 @@ function createLocalAgentMessageProvider({
         Object.freeze({ identity: sender })
       );
     } catch (error) {
-      /* T1735: A STOPPED CIRCLE WHOSE INBOX IS FULL STAYS STOPPED UNTIL SOMEONE
+      /* A STOPPED CIRCLE WHOSE INBOX IS FULL STAYS STOPPED UNTIL SOMEONE
        * STARTS IT. A running circle's courier reads its inbox within a tick, so
        * for it the fabric's refusal -- nothing lost, send again once it has
        * caught up -- is the whole truth and is passed through unchanged. A
        * stopped circle catches up only after a start, and nothing here starts
-       * it: writing to a circle never undoes a person's Stop (T255, see
+       * it: writing to a circle never undoes a person's Stop (see
        * tree-node-directory resolveDelivery). Thrown raw, the refusal dropped
        * the recipientStopped/wakeRequired answer a non-full send gives, and
        * told the sender to wait for a catch-up that will not come on its own.
@@ -328,7 +328,7 @@ function createLocalAgentMessageProvider({
        * an answer). Reading it here reported delivered:false on messages the
        * broker had already confirmed -- a true field about the wrong thing,
        * which is the worst kind of wrong for a receipt a model reads aloud. */
-      /* T255: A STOPPED RECIPIENT IS NEVER REPORTED AS DELIVERED, AND THE
+      /* A STOPPED RECIPIENT IS NEVER REPORTED AS DELIVERED, AND THE
        * BROKER'S OWN `delivered` CANNOT BE USED RAW HERE. Measured: for a
        * stopped circle the broker answers delivered:true, because in the
        * broker's vocabulary delivery means the envelope reached the INBOX --
@@ -343,7 +343,7 @@ function createLocalAgentMessageProvider({
       delivered: resolved.recipientStopped === true
         ? false
         : Boolean(result.broker && result.broker.delivered === true),
-      /* T255. RECORDED IS NOT DELIVERED, AND THIS IS THE FIELD THAT KEEPS THEM
+      /* RECORDED IS NOT DELIVERED, AND THIS IS THE FIELD THAT KEEPS THEM
        * APART. When the recipient's session has stopped, the message is now
        * accepted and durably held by the fabric instead of refused -- but no
        * session is reading it, so `delivered` above is false and saying anything
@@ -420,7 +420,7 @@ function createLocalAgentMessageProvider({
     return Object.freeze({ agentId, page: withDeliveryReceipts(page, agentId, failures) });
   }
 
-  /* THE DOOR A DURABLE CURSOR NEEDS (T201).
+  /* THE DOOR A DURABLE CURSOR NEEDS.
    *
    * inbox() above READS and nothing more. The app therefore had nowhere to say
    * "this one reached its agent", so it kept its own in-memory `treeCursor` and
@@ -509,7 +509,7 @@ function createLocalAgentMessageProvider({
   }
 
   /* WHAT THIS SESSION HAS ACTUALLY READ, SAID OUT LOUD TO THE DURABLE STREAM
-   * (T201).
+   *
    *
    * THE HOLE THIS CLOSES. inbox()/inboxes() above are POSITIONED reads: the
    * caller passes the cursor it has already shown and fabric.read() answers

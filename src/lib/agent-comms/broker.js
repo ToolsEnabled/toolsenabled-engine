@@ -697,7 +697,7 @@ function validateStoredState(value) {
   return value;
 }
 
-/* THE SPOOL IS CHECKED ONCE PER CONTENT, NOT ON EVERY READ (T1800).
+/* THE SPOOL IS CHECKED ONCE PER CONTENT, NOT ON EVERY READ.
  *
  * The app's tree courier asks for delivery receipts every 1.2 s
  * (fabric.deliveryFailures -> getState), and every ask read this whole file,
@@ -705,7 +705,7 @@ function validateStoredState(value) {
  * each message -- and copied the result, although the file had not changed
  * since the round before. MEASURED offline with LIVE's shape (467 KB, 500
  * receipts, 112 deferred handoffs): about 8 ms of main-thread work per round,
- * the largest single part of the round once T1762 stopped re-checking unchanged
+ * the largest single part of the round after inbox checks stopped re-reading unchanged
  * inboxes.
  *
  * So the checked state is kept, keyed by the file's EXACT BYTES: the file is

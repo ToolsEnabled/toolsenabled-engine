@@ -30,7 +30,7 @@ const OPERATION_ID = /^operation-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}
 const DEVICE_ID = /^(?:0|[1-9][0-9]{0,19})$/;
 const INODE_ID = /^[1-9][0-9]{0,19}$/;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,255}$/;
-const SCOPE_KINDS = new Set(['owner-host-session', 'standalone-mcp', 'paired-desktop']);
+const SCOPE_KINDS = new Set(['standalone-mcp']);
 const WHOLE_FILE_NAMES = new Set([
   'package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml',
   'cargo.lock', 'poetry.lock', 'gemfile.lock', 'composer.lock'
@@ -478,7 +478,12 @@ class ByteAuthority {
       const end = endByte === undefined ? full.length : endByte;
       checkedRange(start, end, full.length);
       const bytes = Buffer.from(full.subarray(start, end));
-      if (validateRead) await this._call(validateRead, { bytes, startByte: start, endByte: end });
+      // Up to three bytes on each side, so a validator can tell a window that
+      // cuts a character from one that holds bytes which are not text at all.
+      if (validateRead) {
+        await this._call(validateRead, { bytes, startByte: start, endByte: end,
+          preceding: Buffer.from(full.subarray(Math.max(0, start - 3), start)), following: Buffer.from(full.subarray(end, end + 3)) });
+      }
       this._assertCurrentNow(assertCurrent);
       const current = this._resource(db, resource, { present: true, bytes: full });
       const at = this._time();

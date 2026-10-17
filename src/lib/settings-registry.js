@@ -31,7 +31,7 @@ const FIELDS = new Set([
   'capabilities', 'risks', 'externalStep', 'minimum', 'maximum', 'step', 'unit', 'applies', 'platforms',
 ]);
 
-// --- CAPABILITIES AND RISKS, SEPARATELY (R1529 gate 8) ------------------------
+// --- CAPABILITIES AND RISKS, SEPARATELY ------------------------
 //
 // The requirement: every setting must also state, separately, the capabilities
 // it grants and the risks it carries. `consequence` already existed and is
@@ -57,7 +57,7 @@ const EXTERNAL_STEP_FIELDS = new Set([
 ]);
 const EXTERNAL_STEP_ITEM_FIELDS = new Set(['do', 'why']);
 
-// --- HOW OFTEN THIS ACTUALLY ASKS SOMETHING OF YOU (R1536) -------------------
+// --- HOW OFTEN THIS ACTUALLY ASKS SOMETHING OF YOU -------------------
 //
 // The requirement: label each outside step with how often it will actually ask
 // the person to do something -- typically, sometimes, rarely -- so they know
@@ -105,7 +105,7 @@ function nonEmptyStringArray(value) {
 
 // --- THE STEP THIS PRODUCT WALKS YOU THROUGH AND NEVER TAKES FOR YOU ----------
 //
-// The R1529 requirement: when a setting a person changes needs a UAC-elevated
+// The requirement: when a setting a person changes needs a UAC-elevated
 // step outside this product, the product walks them through that step rather
 // than performing it, tells them the pros and cons, and makes clear the
 // setting saves and turns on without the step -- it just may not work fully

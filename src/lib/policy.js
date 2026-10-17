@@ -6,9 +6,6 @@ const { rootPath, readJson } = require('./runtime');
 const APPROVAL_ACTION = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
 const STANDING_AUTHORIZATION_ID = /^[a-z0-9][a-z0-9._-]{2,119}$/;
 const STANDING_AUTHORIZATION_ARGUMENT_NAME = /^[A-Za-z][A-Za-z0-9_]{0,127}$/;
-const STANDING_AUTHORIZATION_FORBIDDEN_ACTIONS = new Set([
-  'browser.stop', 'window.close', 'chrome_web_store.publish'
-]);
 
 // UNAVAILABLE is not the same as EMPTY, and the difference is a security default.
 //
@@ -73,23 +70,6 @@ function assertActive(action, options = {}) {
   if (policy.mode !== 'autonomous') {
     throw new Error(`ToolsEnabled policy mode is '${policy.mode}', not autonomous.`);
   }
-  const providerByAction = {
-    instagram: 'instagram', firebase: 'firebase', gcloud: 'googleCloud', terraform: 'googleCloud', chromeWebStore: 'chromeWebStore', extension: 'extension',
-    gmail: 'google', calendar: 'google', drive: 'google', github: 'github',
-    vercel: 'vercel', cloudflare: 'cloudflare', stripe: 'stripe'
-  };
-  const provider = options.provider || providerByAction[String(action).split('.')[0]];
-  assertProviderEnabled(provider, action, policy);
-  return policy;
-}
-
-function assertProviderEnabled(provider, action = 'operation', policy = loadPolicy()) {
-  if (provider) {
-    const configured = policy.providers && policy.providers[provider];
-    if (!configured || configured.enabled !== true) {
-      throw new Error(`Provider '${provider}' is not explicitly enabled by local policy; '${action}' was not executed.`);
-    }
-  }
   return policy;
 }
 
@@ -137,7 +117,6 @@ function requiresApproval(action, effect, policy = loadPolicy(), { loadSettings:
   // An explicit required-action rule always wins over the narrowly scoped
   // browser-launch exception below.
   if (listed.includes(action)) return true;
-  if (action === 'browser.start' && approvals.autoApproveBrowserStart === true) return false;
   return approvals.externalWrites === true && effect === 'external-write';
 }
 
@@ -148,13 +127,11 @@ function standingAuthorizationError(message) {
 }
 
 function standingAuthorizationForbidden(action, metadata = {}) {
-  if (STANDING_AUTHORIZATION_FORBIDDEN_ACTIONS.has(action)) return true;
   if (typeof action !== 'string') return true;
   // A standing mission grant must never reach a cancellation, charge/trial,
   // teardown, or an action the registry classifies as destructive.  The
   // registry passes its hints below, so this remains true as tools evolve.
   if (/(?:^|[._-])(cancel|teardown|destroy|delete|remove|revoke|rollback|close|stop)(?:$|[._-])/.test(action)) return true;
-  if (/^(?:billing|stripe|pay)\./.test(action)) return true;
   return metadata.effect === 'local-write' || metadata.destructiveHint === true;
 }
 
@@ -242,133 +219,9 @@ function standingAuthorizationFor(action, argumentsValue, policy = loadPolicy(),
   )) || null;
 }
 
-function allowsScheduledActions(policy = loadPolicy()) {
-  const approvals = policy && policy.approvals;
-  return Boolean(approvals && approvals.enabled === true && approvals.allowScheduledActions === true);
-}
-
-function localInferenceConfiguration(policy = loadPolicy()) {
-  const localInference = policy && policy.localInference;
-  if (!plainObject(localInference)) {
-    throw new Error('localInference policy must be an object.');
-  }
-  for (const key of Object.keys(localInference)) {
-    if (!['hermesAdvisoryEnabled', 'strongAdvisoryEnabled'].includes(key)) {
-      throw new Error(`localInference policy has an unsupported property '${key}'.`);
-    }
-  }
-  if (typeof localInference.hermesAdvisoryEnabled !== 'boolean') {
-    throw new Error('localInference.hermesAdvisoryEnabled must be a boolean.');
-  }
-  if (typeof localInference.strongAdvisoryEnabled !== 'boolean') {
-    throw new Error('localInference.strongAdvisoryEnabled must be a boolean.');
-  }
-  return {
-    hermesAdvisoryEnabled: localInference.hermesAdvisoryEnabled,
-    strongAdvisoryEnabled: localInference.strongAdvisoryEnabled
-  };
-}
-
-function assertHermesAdvisoryAllowed(policy = loadPolicy()) {
-  if (localInferenceConfiguration(policy).hermesAdvisoryEnabled !== true) {
-    throw new Error('Local Hermes advisory inference is disabled by policy.');
-  }
-}
-
-function assertStrongAdvisoryAllowed(policy = loadPolicy()) {
-  if (localInferenceConfiguration(policy).strongAdvisoryEnabled !== true) {
-    throw new Error('Strong local advisory inference is disabled by policy.');
-  }
-}
-
-function overnightAdvisoryConfiguration(policy = loadPolicy()) {
-  const configured = policy && policy.overnightAdvisory;
-  if (!plainObject(configured)) throw new Error('overnightAdvisory policy must be an object.');
-  for (const key of Object.keys(configured)) {
-    if (key !== 'enabled') throw new Error(`overnightAdvisory policy has an unsupported property '${key}'.`);
-  }
-  if (typeof configured.enabled !== 'boolean') throw new Error('overnightAdvisory.enabled must be a boolean.');
-  return { enabled: configured.enabled };
-}
-
-function assertOvernightAdvisoryAllowed(policy = loadPolicy()) {
-  if (overnightAdvisoryConfiguration(policy).enabled !== true) {
-    throw new Error('Overnight local advisory work is disabled by policy.');
-  }
-}
-
 function plainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
     && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
-}
-
-function policyError(message) {
-  const error = new Error(message);
-  error.code = 'HTTP_POLICY_INVALID';
-  return error;
-}
-
-function httpHost(value, label) {
-  if (typeof value !== 'string' || !value || value.length > 253) throw policyError(`${label} must be a host suffix string.`);
-  const host = value.toLowerCase();
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host) || host.includes('..') || !host.includes('.')) {
-    throw policyError(`${label} must be a normalized DNS host suffix.`);
-  }
-  return host;
-}
-
-function httpHostList(value, label) {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 100) throw policyError(`${label} must be an array of at most 100 host suffixes.`);
-  const hosts = value.map((item, index) => httpHost(item, `${label}[${index}]`));
-  if (new Set(hosts).size !== hosts.length) throw policyError(`${label} must not contain duplicate host suffixes.`);
-  return hosts;
-}
-
-function httpAuthStyle(value, label) {
-  if (value === 'bearer') return value;
-  if (typeof value !== 'string' || value.length > 160) throw policyError(`${label} must be bearer, header:<name>, or query:<param>.`);
-  const match = /^(header|query):(.+)$/.exec(value);
-  if (!match) throw policyError(`${label} must be bearer, header:<name>, or query:<param>.`);
-  if (match[1] === 'header' && !/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,100}$/.test(match[2])) {
-    throw policyError(`${label} has an invalid header name.`);
-  }
-  if (match[1] === 'query' && !/^[A-Za-z0-9_.~-]{1,100}$/.test(match[2])) {
-    throw policyError(`${label} has an invalid query parameter name.`);
-  }
-  return value;
-}
-
-function httpConfiguration(policy = loadPolicy()) {
-  const configured = policy && policy.http;
-  if (configured === undefined) return { allowedHosts: [], vaultKeys: {} };
-  if (!plainObject(configured)) throw policyError('http policy must be an object.');
-  for (const key of Object.keys(configured)) {
-    if (!['allowedHosts', 'vaultKeys'].includes(key)) throw policyError(`http policy has an unsupported property '${key}'.`);
-  }
-  const allowedHosts = httpHostList(configured.allowedHosts, 'http.allowedHosts');
-  const rawVaultKeys = configured.vaultKeys === undefined ? {} : configured.vaultKeys;
-  if (!plainObject(rawVaultKeys) || Object.keys(rawVaultKeys).length > 100) {
-    throw policyError('http.vaultKeys must be an object with at most 100 entries.');
-  }
-  const vaultKeys = {};
-  for (const [vaultKey, binding] of Object.entries(rawVaultKeys)) {
-    if (!/^[A-Za-z0-9_.-]{1,200}$/.test(vaultKey)) throw policyError(`http.vaultKeys has an invalid vault key '${vaultKey}'.`);
-    if (!plainObject(binding)) throw policyError(`http.vaultKeys.${vaultKey} must be an object.`);
-    for (const key of Object.keys(binding)) {
-      if (!['hosts', 'authStyle'].includes(key)) throw policyError(`http.vaultKeys.${vaultKey} has an unsupported property '${key}'.`);
-    }
-    const hosts = httpHostList(binding.hosts, `http.vaultKeys.${vaultKey}.hosts`);
-    if (!hosts.length) throw policyError(`http.vaultKeys.${vaultKey}.hosts must not be empty.`);
-    vaultKeys[vaultKey] = { hosts, authStyle: httpAuthStyle(binding.authStyle, `http.vaultKeys.${vaultKey}.authStyle`) };
-  }
-  return { allowedHosts, vaultKeys };
-}
-
-function httpHostAllowed(host, allowedHosts) {
-  if (typeof host !== 'string' || !Array.isArray(allowedHosts)) return false;
-  const normalized = host.toLowerCase().replace(/\.$/, '');
-  return allowedHosts.some(suffix => normalized === suffix || normalized.endsWith(`.${suffix}`));
 }
 
 function assertHttps(url, label = 'URL') {
@@ -379,8 +232,7 @@ function assertHttps(url, label = 'URL') {
 }
 
 module.exports = {
-  allowsScheduledActions, approvalTimeoutSeconds, assertActive, assertHermesAdvisoryAllowed, assertHttps, assertOvernightAdvisoryAllowed, assertProviderEnabled,
-  assertStrongAdvisoryAllowed, httpConfiguration, httpHostAllowed, killSwitchPath, loadPolicy,
-  localInferenceConfiguration, overnightAdvisoryConfiguration, requiresApproval,
+  approvalTimeoutSeconds, assertActive, assertHttps,
+  killSwitchPath, loadPolicy, requiresApproval,
   standingAuthorizationConfiguration, standingAuthorizationFor, standingAuthorizationForbidden
 };

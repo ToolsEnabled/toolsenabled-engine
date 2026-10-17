@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "opencode",
+  "name": "OpenCode",
+  "command": "opencode",
+  "worker": {
+    "driver": "acp",
+    "modelSelection": "session",
+    "args": [
+      "acp"
+    ]
+  },
+  "signIn": {
+    "result": "unknown",
+    "how": "Run `opencode` and use /connect, or set your own provider API key. OpenCode checks its providers when a session starts."
+  },
+  "register": {
+    "kind": "opencode-config",
+    "profile": {
+      "env": "XDG_CONFIG_HOME",
+      "default": ".config",
+      "file": "opencode/opencode.json"
+    },
+    "config": {
+      "format": "json",
+      "container": "mcp",
+      "entryType": "local"
+    },
+    "inspection": {
+      "kind": "json-config"
+    },
+    "http": {
+      "kind": "config",
+      "config": {
+        "format": "json",
+        "container": "mcp",
+        "entryType": "remote"
+      },
+      "header": "Authorization",
+      "envSyntax": "env-braces"
+    }
+  },
+  "models": {
+    "flag": "--model",
+    "efforts": [],
+    "defaults": {
+      "standard": "opencode"
+    },
+    "choices": {
+      "opencode": {
+        "tier": "standard",
+        "model": "opencode/default",
+        "cliModel": ""
+      }
+    }
+  },
+  "permissions": {
+    "workerAgent": {
+      "kind": "inline-primary-agent",
+      "name": "toolsenabled-worker"
+    },
+    "workerMinimum": {
+      "level": 4,
+      "reason": "An OpenCode worker asks before every tool, including Fleet's own, and a worker cannot show you a prompt."
+    },
+    "aliases": {},
+    "lead": [],
+    "worker": {
+      "1": {
+        "args": [],
+        "allow": "none"
+      },
+      "2": {
+        "args": [],
+        "allow": "none"
+      },
+      "3": {
+        "args": [],
+        "allow": "edits"
+      },
+      "4": {
+        "args": [],
+        "allow": "all"
+      }
+    },
+    "remove": {
+      "subagents": {
+        "env": {
+          "OPENCODE_PERMISSION": "{\"task\":\"deny\"}"
+        }
+      },
+      "shell": {
+        "env": {
+          "OPENCODE_PERMISSION": "{\"bash\":\"deny\"}"
+        }
+      },
+      "web": {
+        "env": {
+          "OPENCODE_PERMISSION": "{\"webfetch\":\"deny\",\"websearch\":\"deny\"}"
+        }
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@ try {
   $start.UseShellExecute = $false
   $start.CreateNoWindow = $true
   $start.RedirectStandardInput = $true
-  foreach ($argument in @('build', '--file', 'adapters/openshell/image/Dockerfile', '--tag', $Tag, '-')) {
+  foreach ($argument in @('build', '--file', 'adapters/openshell/image/Dockerfile', '--tag', $Tag, '--label', "org.opencontainers.image.revision=$commit", '-')) {
     [void]$start.ArgumentList.Add($argument)
   }
   $build = [System.Diagnostics.Process]::Start($start)

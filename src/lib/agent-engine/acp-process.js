@@ -1,163 +1,122 @@
 'use strict';
 
 const { AcpAdapter } = require('./acp-adapter');
-const { createCodexProcessTransport, detectCodexVersion } = require('./codex-process');
+const { createCodexProcessTransport } = require('./codex-process');
 const { createStartupControl } = require('./startup-control');
 const { cleanupFailure, validateCleanupTimeout, withOwnedStartupCleanup } = require('./codex-startup-cleanup');
-const { safeLaunchEnvironment } = require('../supervision/launch-environment');
-const { assertGrokInspection } = require('./acp-confinement');
-const fs = require('node:fs');
-const path = require('node:path');
+const agents = require('../agents/registry');
+const levels = require('../agents/permission-level');
 
-const PROVIDERS = Object.freeze(['gemini', 'grok']);
+const EDIT_KINDS = Object.freeze(['read', 'search', 'think', 'edit', 'delete', 'move']);
+function refusal(code, message) { return Object.assign(new Error(message), { code }); }
 
-/* GROK'S REFUSALS NAME GROK AND GROK'S OWN FIX.
- *
- * The Grok preflight runs through the Codex version reader, whose codes name
- * Codex: a missing Grok arrived as CODEX_CLI_NOT_FOUND ("install Codex"), and a
- * Grok that refused an option as CODEX_VERSION_DETECTION_FAILED ("run codex
- * --version"). An agent that refused an option the start passes arrived as
- * ACP_PROCESS_EXITED ("check its sign-in").
- *
- * COMPATIBILITY IS DECIDED BY WHAT THIS GROK ACCEPTS, NEVER BY A VERSION. Grok's
- * argument parser exits 2 with "error: unexpected argument '<x>' found" (or
- * "unrecognized subcommand", "invalid value") when it lacks an option. Recorded
- * from Grok 1.0.25 and 1.0.40 on 2026-09-22; both accept every option used here. */
-const GROK_USAGE_ERROR = /(?:^|\n|: )error: (?:unexpected argument|unrecognized subcommand|invalid value)\b/;
-
-function grokRefusal(code, message, cause) {
-  const error = new Error(message);
-  error.code = code;
-  if (cause) error.cause = cause;
-  return error;
+// A worker has no person to ask. Use only the agent's once-only choices so
+// answering one request never changes permissions for a later request.
+function workerEvents({ allow, level, rejectKinds = [], onEvent, adapter }) {
+  const turns = new Map();
+  return event => {
+    let turn = turns.get(event.turnId);
+    if (!turn) { turn = { text: '', denied: new Set() }; turns.set(event.turnId, turn); }
+    if (event.type === 'approval_request') {
+      const { approvalId, details, availableDecisions } = event.approval;
+      const kind = details.toolCall.kind;
+      const allowed = !rejectKinds.includes(kind) && !(rejectKinds.length && !kind)
+        && (allow === 'all' || allow === 'edits' && EDIT_KINDS.includes(kind));
+      const choices = availableDecisions || [];
+      const option = (allowed && choices.find(choice => choice.kind === 'allow_once'))
+        || choices.find(choice => choice.kind === 'reject_once');
+      if (!option || option.kind !== 'allow_once') turn.denied.add(kind || 'unknown');
+      adapter().answerApproval({ approvalId, response: { outcome: option
+        ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' } } });
+      return;
+    }
+    if (event.type === 'assistant_text') turn.text = event.text;
+    if (event.type === 'turn_completed') {
+      if (turn.denied.size) {
+        const explanation = `The worker denied native permission requests at inherited level ${level} (${levels.LEVEL_NAMES[level]}): ${[...turn.denied].join(', ')}. It cannot ask for approval, and Fleet added no permission grants.`;
+        event = { ...event, text: [event.text || turn.text, explanation].filter(Boolean).join('\n\n'),
+          payload: { ...event.payload, permissionDenied: true, permissionDeniedTools: [...turn.denied] } };
+      }
+      turns.delete(event.turnId);
+    }
+    if (typeof onEvent === 'function') return onEvent(event);
+  };
 }
 
-function grokIncompatible(detail, cause) {
-  const text = String(detail || '');
-  if (!GROK_USAGE_ERROR.test(text)) return null;
-  const named = text.match(/(?:^|\n|: )error: [^'\n]*'([^'\n]{1,80})'/);
-  return grokRefusal('GROK_CLI_INCOMPATIBLE', `This Grok does not accept ${named ? `"${named[1]}"` : 'an option'}, `
-    + 'which ToolsEnabled passes when it starts a session. Run "grok update" in a terminal, then start again.', cause);
-}
-
-// Only the two answers the reader gives after its child has closed are renamed.
-// Timeouts, stops and unproven cleanup keep their own codes and retry custody.
-function grokPreflightRefusal(error) {
-  if (error?.code === 'CODEX_CLI_NOT_FOUND') {
-    return grokRefusal('PROVIDER_LOGIN_NOT_INSTALLED', 'Grok could not be found on this computer. Install Grok, then start again.', error);
+async function openAcpSession({ provider, cwd, env = process.env, level = levels.DEFAULT_LEVEL, removeNativeTools = [], nodeFolder,
+  fleetServer, serverName, apiMode = 'Enabled', clientInfo, onEvent,
+  threadId = null, threadOptions = {}, rootLaunch, signal = null,
+  containProcessTree = true, processGroup = false,
+  startupTimeoutMs = 60_000, cleanupTimeoutMs = 5_000,
+  transportFactory = createCodexProcessTransport } = {}) {
+  const registry = agents.activeRegistry(env);
+  agents.assertWorkerAvailable(registry, provider);
+  const agent = registry.get(provider);
+  if (agent?.worker.driver !== 'acp') throw refusal('ACP_AGENT_UNSUPPORTED', 'This worker needs an agent descriptor with the ACP driver.');
+  if (!levels.isLevel(level)) level = levels.DEFAULT_LEVEL;
+  levels.assertWorkerLevel(agent, level, { registry });
+  const settings = levels.workerSettings(agent, level);
+  const removals = levels.nativeRemovalSettings(agent, removeNativeTools);
+  if (!settings || !Array.isArray(settings.args) || !['none', 'edits', 'all'].includes(settings.allow)) {
+    throw refusal('ACP_LEVEL_UNAVAILABLE', 'The descriptor cannot enforce this worker level, so no worker was started.');
   }
-  if (error?.code !== 'CODEX_VERSION_DETECTION_FAILED') return error;
-  return grokIncompatible(error.message, error) || grokRefusal('GROK_CLI_CHECK_FAILED',
-    'Grok did not answer when ToolsEnabled checked its tools and extensions. Run "grok inspect" in a terminal to see what it reports.', error);
-}
-
-// An agent process that ended with the parser's own refusal, before any
-// session existed, was refused an option the start passed. The parser exits 2,
-// but the closed pipe is often reported first (code null, "read ECONNRESET"),
-// so the status may be missing; a signal is never this refusal.
-function grokStartRefusal(error) {
-  const exit = error?.code === 'ACP_PROCESS_EXITED' ? error.exit : null;
-  if (!exit || exit.signal !== null || (exit.code !== 2 && exit.code !== null)) return null;
-  return grokIncompatible(exit.stderr, error);
-}
-
-async function openAcpSession({ provider, plan, command = provider, clientInfo, onEvent,
-  rootLaunch, signal = null, env, startupTimeoutMs = 60_000, cleanupTimeoutMs = 5_000,
-  threadId = null, threadOptions = {}, transportFactory = createCodexProcessTransport, inspect = detectCodexVersion } = {}) {
-  if (!PROVIDERS.includes(provider) || plan?.ok !== true || plan?.agentApiMode !== 'Only' ||
-    plan?.acp?.provider !== provider || !Array.isArray(plan.acp.args) || !Array.isArray(plan.acp.mcpServers)) {
-    const error = new Error('This assistant needs a prepared Research tool and account boundary.');
-    error.code = 'AGENT_ACP_PLAN_REQUIRED';
-    throw error;
+  env = require('../agents/native-removal-environment').removalEnvironment(removals, env, { nodeFolder, workerSettings: settings });
+  if (apiMode !== 'Enabled' && apiMode !== 'Disabled') {
+    throw refusal('ACP_API_MODE_UNSUPPORTED', 'This ACP driver cannot enforce the saved Agent API tool restrictions. Choose Enabled or Disabled before starting this worker.');
   }
+  if (!fleetServer || typeof serverName !== 'string' || !serverName) {
+    throw refusal('ACP_SERVER_REQUIRED', 'An ACP worker needs its own Fleet server entry.');
+  }
+  const model = threadOptions.model;
+  if (model != null && (typeof model !== 'string' || model && !/^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,199}$/.test(model))) {
+    throw refusal('ACP_MODEL_UNAVAILABLE', 'Choose a model name accepted by the agent descriptor.');
+  }
+  const args = [...agent.worker.args, ...settings.args,
+    ...(model && agent.worker.modelSelection !== 'session' ? [agent.models.flag, model] : [])];
+  const mcpServers = apiMode === 'Disabled' ? [] : [{ name: serverName, command: fleetServer.command,
+    args: [...fleetServer.args], env: Object.entries(fleetServer.env).map(([name, value]) => ({ name, value })) }];
   validateCleanupTimeout(cleanupTimeoutMs);
-  const requestedModel = threadOptions.model;
-  const model = requestedModel === undefined || requestedModel === null || requestedModel === `${provider}/auto`
-    ? null : typeof requestedModel === 'string' && requestedModel.startsWith(`${provider}/`)
-      ? requestedModel.slice(provider.length + 1) : requestedModel;
-  if (model !== null && (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(model))) {
-    const error = new Error('Choose an exact model advertised by this provider.');
-    error.code = 'ACP_MODEL_UNAVAILABLE';
-    throw error;
-  }
-  const startup = createStartupControl({ signal, timeoutMs: startupTimeoutMs, label: `${provider} startup`, codePrefix: 'ACP_START' });
-  let transport;
-  let adapter;
-  const ambient = Object.fromEntries(Object.entries(safeLaunchEnvironment(env || process.env)).filter(([key]) =>
-    !/^(?:GROK_|GEMINI_|GOOGLE_)/i.test(key)));
-  const childEnv = safeLaunchEnvironment({ ...ambient, ...plan.env });
+  const startup = createStartupControl({ signal, timeoutMs: startupTimeoutMs, label: 'ACP worker startup', codePrefix: 'ACP_START' });
+  let transport, adapter;
   try {
     startup.throwIfStopped();
-    if (provider === 'gemini') {
-      let signedIn = false;
-      try {
-        const stat = fs.lstatSync(path.join(plan.configDir, '.gemini', 'oauth_creds.json'));
-        signedIn = stat.isFile() && !stat.isSymbolicLink() && stat.size > 0;
-      } catch { /* Presence is not a reason to open or copy a credential. */ }
-      if (!signedIn) {
-        const error = new Error('Sign in to Gemini in its official terminal, then start this Research agent again.');
-        error.code = 'ACP_AUTH_REQUIRED';
-        throw error;
-      }
-    }
-    if (provider === 'grok') {
-      let inspection;
-      try {
-        inspection = await inspect({ provider, command, args: ['--no-auto-update', 'inspect', '--json'], cwd: plan.acp.cwd,
-          env: childEnv, signal: startup.signal, containProcessTree: true, cleanupTimeoutMs });
-      } catch (error) { throw grokPreflightRefusal(error); }
-      assertGrokInspection(inspection);
-    }
-    startup.throwIfStopped();
-    const args = provider === 'grok' ? ['--no-auto-update', ...plan.acp.args]
-      : [...plan.acp.args, ...(model ? ['--model', model] : [])];
-    transport = transportFactory({ provider, command, args, cwd: plan.acp.cwd, env: childEnv, rootLaunch });
-    adapter = new AcpAdapter({ transport, clientInfo, defaultCwd: plan.acp.cwd, mcpServers: plan.acp.mcpServers });
-    adapter.modelProvider = provider;
-    if (onEvent) adapter.onEvent(onEvent);
+    transport = transportFactory({ provider, command: agent.command, args, cwd, env, rootLaunch, containProcessTree, processGroup });
+    adapter = new AcpAdapter({ transport, clientInfo, defaultCwd: cwd, mcpServers });
+    adapter.onEvent(workerEvents({ allow: settings.allow, level, rejectKinds: removals.rejectKinds, onEvent, adapter: () => adapter }));
     if (rootLaunch) await startup.wait(() => transport.rootReady);
     await startup.wait(() => adapter.initialize());
-    const methods = adapter.getAuthMethods();
-    // Authenticate through a method actually advertised by the official client.
-    // Never receive a password, copy a token, or start a browser in the background.
-    const method = methods.find(entry => entry.id === (provider === 'grok' ? 'cached_token' : 'oauth-personal'));
-    if (provider === 'grok' && method) await startup.wait(() => adapter.authenticate(method.id, { headless: true }));
-    if (provider === 'gemini' && method) await startup.wait(() => adapter.authenticate(method.id));
+    // The agent uses its existing environment and profile. Advertised auth
+    // methods never authorize Fleet to authenticate or inspect credentials.
     const started = await startup.wait(() => threadId === null ? adapter.startThread() : adapter.resumeThread(threadId));
-    if (model) await startup.wait(() => adapter.selectModel(started.threadId, model));
-    const effort = threadOptions.effort;
-    if (effort != null) await startup.wait(() => adapter.selectEffort(started.threadId, effort));
-    return { adapter, threadId: started.threadId,
-      ...(model ? { model: `${provider}/${model}` } : {}),
-      ...(effort != null ? { reasoningEffort: effort } : {}),
-      close() { try { adapter.close(); } finally { transport.close(); } } };
+    if (removals.workerAgent) await startup.wait(() => adapter.selectMode(started.threadId, removals.workerAgent.name));
+    if (model && agent.worker.modelSelection === 'session') await startup.wait(() => adapter.selectModel(started.threadId, model));
+    if (threadOptions.effort) await startup.wait(() => adapter.selectEffort(started.threadId, threadOptions.effort));
+    return Object.freeze({ adapter, threadId: started.threadId, level, apiMode, turnCompletion: 'event',
+      ...(transport.processGroup ? { processGroup: transport.processGroup } : {}),
+      close() { try { adapter.close(); } finally { transport.close(); } } });
   } catch (error) {
     const nestedCleanup = typeof error?.retryCleanup === 'function' ? error.retryCleanup.bind(error) : null;
-    let cleanupConfirmed = false;
+    let cleaned = false;
     const retryCleanup = async () => {
-      if (cleanupConfirmed) return;
+      if (cleaned) return;
       const errors = [];
-      if (nestedCleanup) {
-        try { await nestedCleanup(); } catch (failure) { errors.push(failure); }
-      }
+      if (nestedCleanup) { try { await nestedCleanup(); } catch (failure) { errors.push(failure); } }
       try { adapter?.close(); } catch (failure) { errors.push(failure); }
       try { await transport?.closeForStartupFailure(cleanupTimeoutMs); } catch (failure) { errors.push(failure); }
       if (errors.length) throw cleanupFailure('ACP_START_CLEANUP_UNPROVEN', error, errors, retryCleanup);
-      cleanupConfirmed = true;
+      cleaned = true;
     };
     await retryCleanup();
-    throw withOwnedStartupCleanup((provider === 'grok' && grokStartRefusal(error)) || error, retryCleanup);
+    throw withOwnedStartupCleanup(error, retryCleanup);
   } finally { startup.dispose(); }
 }
 
 function startAcpSession(options) { return openAcpSession(options); }
 function resumeAcpSession(options) {
   if (typeof options?.threadId !== 'string' || !options.threadId) {
-    const error = new Error('Choose the Research conversation to resume.');
-    error.code = 'ACP_RESUME_ID_REQUIRED';
-    return Promise.reject(error);
+    return Promise.reject(refusal('ACP_RESUME_ID_REQUIRED', 'Choose the worker conversation to resume.'));
   }
   return openAcpSession(options);
 }
 
-module.exports = { ROOT_ADMISSION_CONTRACT_VERSION: 1, MODEL_SELECTION_CONTRACT_VERSION: 1, PROVIDERS, startAcpSession, resumeAcpSession };
+module.exports = Object.freeze({ startAcpSession, resumeAcpSession });

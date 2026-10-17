@@ -10,7 +10,7 @@ const { getStateStore } = require('../state-store');
 const { assertSchema, assertValid } = require('../schema-validator');
 const { pickFastModel, pickModel } = require('../model-picker');
 const { readOnBattery } = require('../agent-resource-monitor');
-const { safeLaunchEnvironment } = require('./subscription-launch-env');
+const { safeLaunchEnvironment } = require('../supervision/launch-environment');
 const {
   containsQuickEditAuthorityInstruction, containsQuickEditSensitiveMaterial
 } = require('./sensitive-local-input');
