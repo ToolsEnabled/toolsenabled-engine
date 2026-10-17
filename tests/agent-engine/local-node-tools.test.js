@@ -33,7 +33,7 @@ process.env.TOOLSENABLED_STATE_ROOT = STATE_ROOT;
 test.after(() => { try { fs.rmSync(STATE_ROOT, { recursive: true, force: true }); } catch { /* best effort */ } });
 
 const { EVENT_TYPES } = require('../../src/lib/agent-engine/engine-contract');
-const { LocalNodeAdapter, MAX_TOOL_ROUNDS } = require('../../src/lib/agent-engine/local-node-adapter');
+const { LocalNodeAdapter } = require('../../src/lib/agent-engine/local-node-adapter');
 const { startLocalSession } = require('../../src/lib/agent-engine/local-node-process');
 const {
   CLIENT_INFO,
@@ -343,13 +343,15 @@ test('a tool round: the model names a tool, the surface answers, the model is as
   }
 });
 
-test('a session with no tool surface sends no tools field and emits no tool events; a looping model is stopped with a sentence', async () => {
-  let rounds = 0;
+test('a session with no tool surface sends no tools field and emits no tool events; a model that calls tools 30 times is not stopped', async () => {
+  // NO WORK BUDGETS (2026-10-17): this used to require a stop at 24 tool rounds.
+  let rounds = 0, toolReplies = 0;
   const ollama = await fakeOllama((chat, response) => {
     rounds += 1;
-    if (!chat.tools) {
+    if (!chat.tools || toolReplies >= 30) {
       ndjson(response, { model: MODEL, message: { role: 'assistant', content: 'plain' }, done: true, done_reason: 'stop', prompt_eval_count: 1, eval_count: 1 });
     } else {
+      toolReplies += 1;
       ndjson(response, { model: MODEL, message: { role: 'assistant', content: '', tool_calls: [{ id: 'x', function: { name: 'weather.now', arguments: '{"city":"Rome"}' } }] }, done: true, done_reason: 'stop', prompt_eval_count: 1, eval_count: 1 });
     }
     response.end();
@@ -367,10 +369,9 @@ test('a session with no tool surface sends no tools field and emits no tool even
     const looping = await startLocalSession({ threadOptions: {}, settings: ollama.settings, dependencies: { probeResources: RESOURCES, toolSurface: fakeSurface(calls) } });
     const before = rounds;
     const result = await looping.adapter.sendTurn({ threadId: looping.threadId, text: 'loop' });
-    assert.equal(result.status, 'error');
-    assert.match(result.failure, new RegExp(`called tools ${MAX_TOOL_ROUNDS} times`));
-    assert.equal(rounds - before, MAX_TOOL_ROUNDS, 'exactly the bounded number of rounds were made');
-    assert.equal(calls.filter(entry => entry !== 'closed').length, MAX_TOOL_ROUNDS);
+    assert.equal(result.status, 'success', 'thirty tool rounds, past the old cap of 24, and then the answer');
+    assert.equal(rounds - before, 31, 'thirty tool rounds and the answer');
+    assert.equal(calls.filter(entry => entry !== 'closed').length, 30);
     assert.deepEqual(calls[0], { name: 'weather.now', args: { city: 'Rome' } }, 'string-encoded arguments are parsed');
     looping.close();
   } finally {

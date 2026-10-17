@@ -89,11 +89,11 @@ const MAX_THREADS_HELD = 256;
 const MAX_HISTORY_MESSAGES = 400;
 /* What a resume reports, matching the Codex adapter's own cap. */
 const MAX_RESUMED_TURNS = 200;
-/* How many times one turn may go back to the model after tool results
-   before the turn is stopped. A model that keeps calling tools without ever
-   answering is looping, and a loop that is also spending the person's GPU
-   deserves a sentence rather than a spinner. */
-const MAX_TOOL_ROUNDS = 24;
+/* NO WORK BUDGETS (2026-10-17). A local model's turn is not stopped for the number of
+   tool rounds it takes: the work ends when the model answers. The 24-round cap that was here was
+   never asked for. The activity timer (turnTimeoutMs) still ends a turn whose model or tool gives no
+   answer at all. MAX_TOOL_ROUNDS stays exported for compatibility and is not enforced. */
+const MAX_TOOL_ROUNDS = Infinity;
 const RECEIPT_STATUSES = Object.freeze(['pending', 'success', 'error', 'interrupted']);
 const TURN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -537,9 +537,8 @@ class LocalNodeAdapter {
      that names tools is committed to the history with its calls, every call
      is made through the surface and answered into the history as a `tool`
      message, and the model is asked again with those answers in front of
-     it; a reply that names none is the answer, and the turn ends. The
-     rounds are bounded (MAX_TOOL_ROUNDS) so a looping model ends in a
-     sentence. */
+     it; a reply that names none is the answer, and the turn ends. Nothing
+     counts the rounds: the work ends when the model answers. */
   async runTurn(turn, record) {
     const base = { threadId: turn.threadId, turnId: turn.turnId };
     const signal = turn.controller.signal;
@@ -619,13 +618,6 @@ class LocalNodeAdapter {
           this.saveThread(turn.threadId, record);
         }
         if (stopped || signal.aborted) { outcome = 'interrupted'; break; }
-        if (round >= MAX_TOOL_ROUNDS) {
-          outcome = 'error';
-          turn.error = fail('LOCAL_NODE_TOOL_ROUNDS_EXCEEDED',
-            `The local model called tools ${round} times in one turn without finishing its answer, so the turn was stopped.`,
-            { rounds: round });
-          break;
-        }
       }
     } catch (error) {
       if (signal.aborted) outcome = 'interrupted';
