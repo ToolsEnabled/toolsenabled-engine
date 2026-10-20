@@ -43,7 +43,7 @@ function writeAgent(dir, value) {
 test('the bundled registry names its agents equally and keeps every earlier worker choice', () => {
   const loaded = registry.loadRegistry({ userDir: null });
   for (const id of ['claude', 'codex', 'gemini', 'opencode']) assert.ok(loaded.has(id), id);
-  for (const choice of ['luna', 'terra', 'sol', 'astra', 'claude-sonnet', 'claude-opus', 'claude-fable']) {
+  for (const choice of ['luna', 'terra', 'sol', 'astra', 'daybreak', 'claude-sonnet', 'claude-opus', 'claude-fable']) {
     assert.ok(loaded.choices[choice], choice);
   }
   assert.equal(loaded.choices.luna.provider, 'codex');
@@ -60,6 +60,13 @@ test('current Codex worker aliases select Sol 6.1 and Luna 6 without changing pr
   assert.ok(codex.models.efforts.includes('xhigh'));
   assert.ok(loaded.choices.luna.efforts.includes('xhigh'));
   assert.equal(loaded.choices.luna.efforts.includes('ultra'), false);
+  // Daybreak Blue is in the Codex model catalogue and is the model the person's security work is
+  // triaged with, so it is a worker choice like the rest: without one, Fleet could not run it at all
+  // (a model is offered only as a tier, and set_model refuses anything that is not one).
+  assert.equal(loaded.choices.daybreak.model, 'gpt-daybreak-blue-latest');
+  assert.equal(loaded.choices.daybreak.cliModel, 'gpt-daybreak-blue-latest');
+  assert.equal(loaded.choices.daybreak.provider, 'codex');
+  for (const depth of ['xhigh', 'max', 'ultra']) assert.ok(loaded.choices.daybreak.efforts.includes(depth), depth);
   assert.equal(codex.permissions.worker['3'].sandbox, 'workspace-write');
   assert.equal(codex.permissions.worker['3'].approvalPolicy, 'never');
 });

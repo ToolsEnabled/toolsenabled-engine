@@ -31,6 +31,15 @@ function assertMode(env) {
     throw refusal('HOST_MODE_REQUIRED', 'A generic host worker requires an explicitly configured Fleet host environment.');
   }
 }
+// Setup records the node it found on PATH, which may be a link to the binary (/usr/local/bin/node
+// on the development laptop), while process.execPath is always the resolved binary. The installer
+// already compares the two by real path; this did not, so every standalone worker run on such a
+// computer was refused HOST_CONFIG_MISMATCH. Same binary, same runtime; anything else still refuses.
+function sameRuntime(saved) {
+  if (saved === process.execPath) return true;
+  if (typeof saved !== 'string' || !path.isAbsolute(saved)) return false;
+  try { return fs.realpathSync(saved) === fs.realpathSync(process.execPath); } catch { return false; }
+}
 function readSetup(runtime, outerRoot, env) {
   assertMode(env);
   runtime.requireHostEnvironment(env);
@@ -38,8 +47,8 @@ function readSetup(runtime, outerRoot, env) {
   const servicesRoot = path.join(outerRoot, 'services');
   const record = machine.readMachineRecord({ servicesRoot, adopt: false });
   if (!config || config.mode !== 'host' || config.stateRoot !== outerRoot
-    || config.installRoot !== INSTALL_ROOT || config.nodePath !== process.execPath
-    || !record || record.installRoot !== INSTALL_ROOT || record.nodePath !== process.execPath
+    || config.installRoot !== INSTALL_ROOT || !sameRuntime(config.nodePath)
+    || !record || record.installRoot !== INSTALL_ROOT || !sameRuntime(record.nodePath)
     || record.servicesRoot !== servicesRoot || record.tier !== config.tier
     || record.workspaceRoots.length !== 1 || record.workspaceRoots[0] !== config.workspace) {
     throw refusal('HOST_CONFIG_MISMATCH', 'The host configuration and saved Fleet permission record must name this runtime, tier and workspace. Run host setup first.');

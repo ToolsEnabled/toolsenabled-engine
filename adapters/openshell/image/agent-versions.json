@@ -1,5 +1,5 @@
 [
-  { "id": "claude", "command": "claude", "package": "@anthropic-ai/claude-code", "version": "2.1.302" },
+  { "id": "claude", "command": "claude", "package": "@anthropic-ai/claude-code", "version": "2.1.305" },
   { "id": "codex", "command": "codex", "package": "@openai/codex", "version": "0.162.1" },
   { "id": "gemini", "command": "gemini", "package": "@google/gemini-cli", "version": "0.58.0" },
   { "id": "opencode", "command": "opencode", "package": "opencode-ai", "version": "1.18.34" }

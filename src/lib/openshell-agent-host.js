@@ -1726,8 +1726,12 @@ function createOpenShellAgentHost({
       const row = rowFor(node.tier);
       const runs = row ? effortAllowed(node.provider, row, choice) : null;
       if (!runs) {
-        throw refusal('TREE_CONFIGURATION_CHOICE_REFUSED',
-          `${node.displayName}'s model does not offer the effort "${choice}". It accepts: ${(Array.isArray(row?.efforts) ? row.efforts : (PROVIDER_EFFORT_RULES[node.provider] || { efforts: [] }).efforts).join(', ') || 'none'}.`);
+        // An empty list used to print as "It accepts: none.", which reads as a value named none: a lead
+        // passed effort "none" and got the same refusal (2026-10-17). Say there are no choices instead.
+        const offered = Array.isArray(row?.efforts) ? row.efforts : (PROVIDER_EFFORT_RULES[node.provider] || { efforts: [] }).efforts;
+        throw refusal('TREE_CONFIGURATION_CHOICE_REFUSED', offered.length
+          ? `${node.displayName}'s model does not offer the effort "${choice}". It accepts: ${offered.join(', ')}.`
+          : `${node.displayName}'s model offers no effort choices, so effort cannot be set for it ("${choice}" was asked for).`);
       }
       return { effort: runs };
     }

@@ -14,8 +14,12 @@
  * it declines what would prompt and never widens.
  *
  * Lead detection reads only the command line (/proc/<pid>/cmdline), never an
- * agent's settings. Native tool removals may preserve system settings in a
- * private worker overlay; sign-in files are never a source for that overlay. */
+ * agent's settings. A versioned binary under <command>/versions/<version> is
+ * that command. Claude's session image and bg-pty-host / daemon run plumbing
+ * are walked through; the level still comes only from the lead's own flags.
+ * When that lead cannot be read, the level stays 2. Native tool removals may
+ * preserve system settings in a private worker overlay; sign-in files are
+ * never a source for that overlay. */
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -73,20 +77,66 @@ function levelFromArgv(descriptor, argv) {
   return DEFAULT_LEVEL;
 }
 
+/* The executable and the arguments after it. Node heap-limit relaunches are
+   skipped only for that numeric option; arbitrary arguments are not searched. */
+function programToken(argv) {
+  if (!Array.isArray(argv) || argv.length === 0) return { path: '', args: [] };
+  const first = String(argv[0]);
+  const firstBase = path.basename(first);
+  let index = 1;
+  if (firstBase === 'node' || firstBase === 'nodejs') {
+    while (/^--max[-_]old[-_]space[-_]size=\d+$/.test(argv[index] || '')) index += 1;
+    if (/^--max[-_]old[-_]space[-_]size$/.test(argv[index] || '') && /^\d+$/.test(argv[index + 1] || '')) index += 2;
+  }
+  if (INTERPRETERS.has(firstBase) && argv.length > index) return { path: String(argv[index]), args: argv.slice(index + 1) };
+  return { path: first, args: argv.slice(1) };
+}
+
+/* Claude's native installer execs a file whose basename is the version:
+   <...>/<command>/versions/<major.minor.patch>. That file is the same program
+   as <command>. A basename that is not a numeric version, or a versions
+   directory under any other name, is not an agent. */
+function versionedCommandName(programPath) {
+  if (typeof programPath !== 'string' || programPath.length === 0) return null;
+  const version = path.basename(programPath);
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
+  if (path.basename(path.dirname(programPath)) !== 'versions') return null;
+  const command = path.basename(path.dirname(path.dirname(programPath)));
+  if (!command || command === 'versions' || command === '.' || command === '..') return null;
+  return command;
+}
+
+function safeProgramName(program) {
+  return typeof program === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(program) ? program : null;
+}
+
 /** Which described agent a process's argv belongs to, or null. */
 function agentOfArgv(registry, argv) {
   if (!Array.isArray(argv) || argv.length === 0) return null;
-  const first = path.basename(String(argv[0]));
-  let script = 1;
-  // Node can relaunch a CLI with a heap limit before its entry point. Only
-  // skip this numeric runtime option; searching arbitrary arguments could
-  // mistake an eval string or another program's argument for an agent.
-  if (first === 'node' || first === 'nodejs') {
-    while (/^--max[-_]old[-_]space[-_]size=\d+$/.test(argv[script] || '')) script += 1;
-    if (/^--max[-_]old[-_]space[-_]size$/.test(argv[script] || '') && /^\d+$/.test(argv[script + 1] || '')) script += 2;
-  }
-  const program = INTERPRETERS.has(first) && argv.length > script ? path.basename(String(argv[script])) : first;
-  return registry.agents.find(agent => program === agent.command || program === `${agent.command}.js`) || null;
+  const token = programToken(argv);
+  const program = path.basename(token.path);
+  const versioned = versionedCommandName(token.path);
+  return registry.agents.find(agent => program === agent.command || program === `${agent.command}.js` || versioned === agent.command) || null;
+}
+
+/* An agent's own session image and internal launchers are not the lead. The
+   agent's descriptor names them (permissions.leadPlumbing): subcommands that
+   are background launchers, and the flag that marks a versioned binary as the
+   image exec'd for a session (Claude's native install runs one with only
+   --session-id). The walk continues past them to the process the person
+   actually started. A versioned binary whose own flags select a level is that
+   lead: an ancestor must not widen it. An agent with no declared plumbing is
+   never treated as plumbing. */
+function isInternalPlumbing(agent, argv) {
+  const plumbing = agent && agent.permissions && agent.permissions.leadPlumbing;
+  if (!plumbing) return false;
+  const token = programToken(argv);
+  const words = token.args.filter(word => typeof word === 'string' && !word.startsWith('-'));
+  if (plumbing.subcommands.some(command => command.every((word, index) => words[index] === word))) return true;
+  if (plumbing.sessionImageFlag && versionedCommandName(token.path) === agent.command
+    && parseArgv(token.args, agent.permissions.aliases || {}).flags.has(plumbing.sessionImageFlag)
+    && levelFromArgv(agent, token.args) === DEFAULT_LEVEL) return true;
+  return false;
 }
 
 function readCmdline(pid) {
@@ -108,20 +158,35 @@ function isWrapper(argv) {
 }
 
 /* The lead agent that started this process: the parent, looking through
-   launch wrappers (sh -c, env, npx, ...), whose program is a described agent,
-   and the level its own flags start it at. Null when whatever started Fleet is
-   not an agent (another MCP client, a test runner, a platform without /proc). */
-function findLead({ registry, startPid = process.ppid, read = readCmdline, parent = readParent } = {}) {
+   launch wrappers (sh -c, env, npx, ...) and Claude's internal plumbing,
+   whose program is a described agent, and the level its own flags start it
+   at. Null when whatever started Fleet is not an agent (another MCP client,
+   a test runner, a platform without /proc). stoppedAt names the program the
+   walk could see and did not treat as a lead; it is a basename, never a path. */
+function inspectLead({ registry, startPid = process.ppid, read = readCmdline, parent = readParent } = {}) {
   let pid = startPid;
+  let stoppedAt = null;
   for (let step = 0; step < MAX_ANCESTORS && Number.isInteger(pid) && pid > 1; step += 1) {
     let argv;
-    try { argv = read(pid); } catch { return null; }
+    try { argv = read(pid); } catch {
+      return { lead: null, stoppedAt: { pid, program: null, kind: 'cmdline-unreadable' } };
+    }
     const agent = agentOfArgv(registry, argv);
-    if (agent) return Object.freeze({ agentId: agent.id, pid, level: levelFromArgv(agent, argv.slice(1)) });
-    if (!isWrapper(argv)) return null;
-    try { pid = parent(pid); } catch { return null; }
+    if (agent && !isInternalPlumbing(agent, argv)) {
+      return { lead: Object.freeze({ agentId: agent.id, pid, level: levelFromArgv(agent, argv.slice(1)) }), stoppedAt: null };
+    }
+    const program = safeProgramName(path.basename(programToken(argv).path));
+    stoppedAt = { pid, program, kind: agent ? 'internal-plumbing' : 'non-agent' };
+    if (!agent && !isWrapper(argv)) return { lead: null, stoppedAt };
+    try { pid = parent(pid); } catch {
+      return { lead: null, stoppedAt: { pid, program, kind: 'parent-unreadable' } };
+    }
   }
-  return null;
+  return { lead: null, stoppedAt: stoppedAt ? { ...stoppedAt, kind: 'ancestor-limit' } : { pid, program: null, kind: 'ancestor-limit' } };
+}
+
+function findLead(options = {}) {
+  return inspectLead(options).lead;
 }
 
 /* The level the lead runs at, for this process. A lead Fleet cannot identify is
@@ -141,8 +206,14 @@ function leadLevel({ registry, env = process.env, ...options } = {}) {
 // Diagnostics are separate from the long-standing leadLevel return contract.
 // An unknown GUI/remote parent is not proof of the default level: label the
 // fallback explicitly and never manufacture a wider inherited permission.
+function fallbackReason(stoppedAt) {
+  if (!stoppedAt || !stoppedAt.program || stoppedAt.kind === 'cmdline-unreadable') return 'parent-cli-not-observable';
+  return `stopped-at:${stoppedAt.program}`;
+}
+
 function leadPermissionContext(options = {}) {
-  const lead = findLead(options);
+  const inspected = inspectLead(options);
+  const lead = inspected.lead;
   const detected = lead ? lead.level : DEFAULT_LEVEL;
   const cap = Number((options.env || process.env).TOOLSENABLED_LEVEL_CAP);
   const result = { agentId: lead ? lead.agentId : null, detected,
@@ -151,7 +222,8 @@ function leadPermissionContext(options = {}) {
     source: lead ? 'ancestor-cli' : 'unknown-parent-fallback',
     verifiedParent: Boolean(lead),
     permissionPolicyVerified: false,
-    reason: lead ? 'level-derived-from-cli-arguments' : 'parent-cli-not-observable',
+    reason: lead ? 'level-derived-from-cli-arguments' : fallbackReason(inspected.stoppedAt),
+    stoppedAtProgram: lead ? null : (inspected.stoppedAt && inspected.stoppedAt.program) || null,
     fallback: !lead,
     cap: isLevel(Number((options.env || process.env).TOOLSENABLED_LEVEL_CAP))
       ? Number((options.env || process.env).TOOLSENABLED_LEVEL_CAP) : null,

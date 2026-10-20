@@ -77,6 +77,10 @@
         {
           "version": "2.1.302",
           "versionOutput": "2.1.302 (Claude Code)\n"
+        },
+        {
+          "version": "2.1.305",
+          "versionOutput": "2.1.305 (Claude Code)\n"
         }
       ],
       "absentStderr": "No MCP server named \"{name}\" in user scope\n",
@@ -237,6 +241,18 @@
         "level": 1
       }
     ],
+    "leadPlumbing": {
+      "subcommands": [
+        [
+          "bg-pty-host"
+        ],
+        [
+          "daemon",
+          "run"
+        ]
+      ],
+      "sessionImageFlag": "--session-id"
+    },
     "worker": {
       "1": {
         "permissionMode": "plan"

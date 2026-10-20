@@ -67,7 +67,10 @@ test('actual CLI dispatch reads a match, blocks a failed view and skips DB on a 
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-cmd-'));
   try {
     const env = { ...process.env, TOOLSENABLED_STATE_ROOT: home };
-    const run = args => spawnSync(process.execPath, [cli, 'fleet-command', ...args], { env, encoding: 'utf8', timeout: 5000 });
+    // The limit is there to catch a hang, not to time the CLI: it starts in about 2.8 s on the
+    // development laptop and took over 5 s there under a load average of 16 (2026-10-20), which
+    // failed a correct build. 30 s still catches a hang.
+    const run = args => spawnSync(process.execPath, [cli, 'fleet-command', ...args], { env, encoding: 'utf8', timeout: 30000 });
     const matched = run(['--input', '/fleet/tasks', '--surface', 'codex-hook', '--emit']);
     assert.equal(matched.status, 0, matched.stderr);
     assert.deepEqual(Object.keys(JSON.parse(matched.stdout)), ['decision', 'reason']);

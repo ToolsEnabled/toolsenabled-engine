@@ -1,10 +1,10 @@
 # ToolsEnabled Fleet for OpenShell: runtime
 
-ToolsEnabled Fleet 1.9.1 adds an MCP server and an optional agent tree to an existing OpenShell sandbox on Linux x86_64.
+ToolsEnabled Fleet 1.9.2 adds an MCP server and an optional agent tree to an existing OpenShell sandbox on Linux x86_64.
 
 Fleet installs the `toolsenabled` command.
 
-Version 1.9.1 is published on [toolsenabled.ai](https://toolsenabled.ai), with public source to follow on GitHub. Consult the release notes and qualification results there; the runtime also includes `docs/RELEASE-NOTES-1.9.1.md` under its engine directory. The installed manifest and `toolsenabled --version` identify the runtime's version and source commit.
+Version 1.9.2 is published on [toolsenabled.ai](https://toolsenabled.ai), with public source to follow on GitHub. Consult the release notes and qualification results there; the runtime also includes `docs/RELEASE-NOTES-1.9.2.md` under its engine directory. The installed manifest and `toolsenabled --version` identify the runtime's version and source commit.
 
 ## Requirements
 
@@ -14,11 +14,11 @@ Install these in your sandbox image before installing ToolsEnabled Fleet:
 - Python **3.9 or newer** at `/usr/bin/python3`.
 - The agent CLIs you use, installed separately using their own instructions and available on `PATH`. Bundled descriptors cover Claude Code, Codex, Gemini CLI and OpenCode.
 
-The release archive contains ToolsEnabled Fleet. The 1.9.1 release declares no production npm dependencies. It does not bundle Node, npm, npx, Python, or provider CLIs. Installation is offline and does not install system packages or change OpenShell policy. Your sandbox's existing provider configuration and network policy govern provider access.
+The release archive contains ToolsEnabled Fleet. The 1.9.2 release declares no production npm dependencies. It does not bundle Node, npm, npx, Python, or provider CLIs. Installation is offline and does not install system packages or change OpenShell policy. Your sandbox's existing provider configuration and network policy govern provider access.
 
 ## Install
 
-The **1.9.1** archive is `toolsenabled-openshell-1.9.1-linux-x64.tar.gz`. Installation uses two commands, shown in full in the [README](../../README.md#install-the-runtime-archive): on your host, verify the archive against the release's `SHA256SUMS` and upload it with `openshell sandbox upload`; then, inside the sandbox, extract it and run `toolsenabled-installer/install.sh --setup --archive ABSOLUTE_ARCHIVE --sha256 RELEASE_SHA256`. The installer rechecks the archive, extracts into a private stage, installs, runs setup and status, and makes `toolsenabled` available after `source ~/.local/toolsenabled/env.sh`. It does not edit shell startup files. Use `toolsenabled --version` and `toolsenabled status` to inspect the result. The earlier beta 3 release is version 1.4.2.
+The **1.9.2** archive is `toolsenabled-openshell-1.9.2-linux-x64.tar.gz`. Installation uses two commands, shown in full in the [README](../../README.md#install-the-runtime-archive): on your host, verify the archive against the release's `SHA256SUMS` and upload it with `openshell sandbox upload`; then, inside the sandbox, extract it and run `toolsenabled-installer/install.sh --setup --archive ABSOLUTE_ARCHIVE --sha256 RELEASE_SHA256`. The installer rechecks the archive, extracts into a private stage, installs, runs setup and status, and makes `toolsenabled` available after `source ~/.local/toolsenabled/env.sh`. It does not edit shell startup files. Use `toolsenabled --version` and `toolsenabled status` to inspect the result. The earlier beta 3 release is version 1.4.2.
 
 Package staging in this source tree refuses group-writable manual extractions, even in a private staging directory. If you trust the verified package and its extraction location, run `chmod -R go-w ABSOLUTE_VERIFIED_PACKAGE` yourself and retry; the installer does not silently change those permissions.
 
@@ -31,7 +31,7 @@ Fresh installation refuses an existing Fleet setup or an unproven same-name regi
 Runtime upgrades take an absolute archive and its independently published release digest:
 
 ```text
-toolsenabled upgrade --archive /absolute/path/toolsenabled-openshell-1.9.1-linux-x64.tar.gz --sha256 RELEASE_SHA256
+toolsenabled upgrade --archive /absolute/path/toolsenabled-openshell-1.9.2-linux-x64.tar.gz --sha256 RELEASE_SHA256
 ```
 
 Before upgrading, stop active agent sessions and Fleet tree hosts that use this installation. Restart them only after upgrade commits or reviewed recovery finishes. A process left running across the generation swap can load modules from different versions or fail while loading them.
@@ -42,10 +42,10 @@ For a generation outside that fixed legacy catalog, also supply `--previous-arch
 
 All participating setup, model, settings and lifecycle writers share one fixed per-user lock across prefixes and profiles. A partial setup or uncertain interruption keeps a durable recovery barrier, the runtime and its evidence. Do not delete that barrier or blindly rerun setup. Runtime transaction recovery uses the exact staged command printed on failure; it rechecks identities and never automatically replays a partial setup. If a committed old generation gains unknown contents, cleanup retains it and reports the remainder. Recovery accepts the printed intended journal path even if preparation stopped before creating that journal. After proving the active runtime unchanged, it can clear the preparation barrier while retaining partial or unknown preparation files; `PREPARATION_RETAINED` exits nonzero and does not claim cleanup succeeded.
 
-Use `toolsenabled --version` to see the installed version and source. To remove a 1.9.1 runtime while keeping state, supply its original archive and independently published digest:
+Use `toolsenabled --version` to see the installed version and source. To remove a 1.9.2 runtime while keeping state, supply its original archive and independently published digest:
 
 ```sh
-toolsenabled uninstall --keep-state --archive /absolute/path/toolsenabled-openshell-1.9.1-linux-x64.tar.gz --sha256 RELEASE_SHA256
+toolsenabled uninstall --keep-state --archive /absolute/path/toolsenabled-openshell-1.9.2-linux-x64.tar.gz --sha256 RELEASE_SHA256
 ```
 
 Uninstall verifies the entire installed tree against that archive plus exact generated files before changing registrations. It retains ancestor, runtime and subdirectory handles through registration removal and deletes through those handles only while the complete inventory and identities remain valid. Unknown files, changed paths, protected roots, mounts or copied ownership receipts refuse removal. Partial provider removal, interruption or incomplete filesystem cleanup keeps a durable barrier and the runtime or remainder; preserve that evidence for review. State purge remains unimplemented: answering yes to plain uninstall refuses before mutation.
@@ -74,7 +74,7 @@ The older `adapters/openshell/image/` recipe is an optional development image bu
 
 ### Public source and archive identity
 
-The 1.9.1 release is published on toolsenabled.ai with its archive checksums. Public source will follow on GitHub with a public source commit and `MAPPING-RECEIPT.json`. The receipt maps the reviewed development commit and archive hashes to the public source commit and its rebuilt archive hashes. The two archive builds differ only in `manifest.source_commit`. The builder embeds the checkout commit and timestamp, so use the exact published asset and checksum when testing this release. Fleet upgrades from the earlier beta 3 (version 1.4.2) are supported.
+The 1.9.2 release is published on toolsenabled.ai with its archive checksums. Public source will follow on GitHub with a public source commit and `MAPPING-RECEIPT.json`. The receipt maps the reviewed development commit and archive hashes to the public source commit and its rebuilt archive hashes. The two archive builds differ only in `manifest.source_commit`. The builder embeds the checkout commit and timestamp, so use the exact published asset and checksum when testing this release. Fleet upgrades from the earlier beta 3 (version 1.4.2) are supported.
 
 The build script uses the committed file list and source timestamp for archive entries. Compare archive files to the source commit named in `manifest.json` and consult `MAPPING-RECEIPT.json` when the public source release is available for the reviewed-to-public source mapping.
 

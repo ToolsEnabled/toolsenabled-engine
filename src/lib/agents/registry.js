@@ -365,7 +365,7 @@ function validatePermissions(input, driver, source) {
     throw invalid(source, 'permissions must say how the lead\'s flags map to levels and how a worker starts at each level.');
   }
   if (!plain(input)) throw invalid(source, 'permissions must be an object.');
-  onlyKeys(input, ['aliases', 'lead', 'openShellMinimumLevel', 'workerMinimum', 'worker', 'remove', 'workerAgent'], source, 'permissions');
+  onlyKeys(input, ['aliases', 'lead', 'leadPlumbing', 'openShellMinimumLevel', 'workerMinimum', 'worker', 'remove', 'workerAgent'], source, 'permissions');
   let workerAgent;
   if (input.workerAgent !== undefined) {
     const row = input.workerAgent;
@@ -397,6 +397,34 @@ function validatePermissions(input, driver, source) {
   for (const [alias, option] of Object.entries(input.aliases || {})) {
     if (!OPTION.test(alias) || typeof option !== 'string' || !OPTION.test(option)) throw invalid(source, `permissions.aliases.${alias} must name an option.`);
     aliases[alias] = option;
+  }
+  // Processes an agent runs on the lead's behalf that are not the lead: its own background
+  // launchers, and the image it execs for a session. Finding the lead looks through them so the
+  // level comes from the process the person actually started. Declared per agent, never in code.
+  let leadPlumbing = null;
+  if (input.leadPlumbing !== undefined) {
+    const row = input.leadPlumbing;
+    if (!plain(row)) throw invalid(source, 'permissions.leadPlumbing must be an object.');
+    onlyKeys(row, ['subcommands', 'sessionImageFlag'], source, 'permissions.leadPlumbing');
+    const subcommands = row.subcommands === undefined ? [] : row.subcommands;
+    if (!Array.isArray(subcommands) || subcommands.length > 16) {
+      throw invalid(source, 'permissions.leadPlumbing.subcommands must be a list of up to 16 subcommands.');
+    }
+    const words = subcommands.map((command, index) => {
+      if (!Array.isArray(command) || command.length === 0 || command.length > 4
+        || !command.every(word => typeof word === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(word))) {
+        throw invalid(source, `permissions.leadPlumbing.subcommands[${index}] must be one to four plain words.`);
+      }
+      return Object.freeze([...command]);
+    });
+    let sessionImageFlag = null;
+    if (row.sessionImageFlag !== undefined) {
+      if (typeof row.sessionImageFlag !== 'string' || !OPTION.test(row.sessionImageFlag)) {
+        throw invalid(source, 'permissions.leadPlumbing.sessionImageFlag must name an option.');
+      }
+      sessionImageFlag = row.sessionImageFlag;
+    }
+    leadPlumbing = Object.freeze({ subcommands: Object.freeze(words), sessionImageFlag });
   }
   if (!Array.isArray(input.lead) || input.lead.length > 32) throw invalid(source, 'permissions.lead must be a list of rules.');
   const lead = input.lead.map((rule, index) => {
@@ -491,7 +519,7 @@ function validatePermissions(input, driver, source) {
       remove[category] = Object.freeze({ ...out, [field]: value });
     }
   }
-  return Object.freeze({ aliases: Object.freeze(aliases), lead: Object.freeze(lead), openShellMinimumLevel,
+  return Object.freeze({ aliases: Object.freeze(aliases), lead: Object.freeze(lead), leadPlumbing, openShellMinimumLevel,
     ...(workerMinimum ? { workerMinimum } : {}),
     ...(workerAgent ? { workerAgent } : {}),
     worker: Object.freeze(worker), remove: Object.freeze(remove) });

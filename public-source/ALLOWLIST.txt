@@ -39,6 +39,7 @@ docs/RELEASE-NOTES-1.9.0.md
 docs/RELEASE-NOTES-1.9.1-rc.1.md
 docs/RELEASE-NOTES-1.9.1-rc.2.md
 docs/RELEASE-NOTES-1.9.1.md
+docs/RELEASE-NOTES-1.9.2.md
 docs/host-interactions.md
 installer/host/build.sh
 installer/host/handoff_preflight.py

@@ -149,6 +149,19 @@
         "model": "gpt-6-astra",
         "cliModel": "gpt-6-astra"
       },
+      "daybreak": {
+        "tier": "premium",
+        "model": "gpt-daybreak-blue-latest",
+        "cliModel": "gpt-daybreak-blue-latest",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
+      },
       "luna": {
         "tier": "cheap",
         "model": "gpt-6-luna",

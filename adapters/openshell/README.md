@@ -34,9 +34,9 @@ their own terms.
 ToolsEnabled Fleet is not made by, affiliated with, or endorsed by NVIDIA, Anthropic
 or OpenAI.
 
-> Fleet **1.9.1** is the current release, published on
+> Fleet **1.9.2** is the current release, published on
 > [toolsenabled.ai](https://toolsenabled.ai), with public source to follow on GitHub.
-> See the [1.9.1 release notes](../../docs/RELEASE-NOTES-1.9.1.md). The earlier
+> See the [1.9.2 release notes](../../docs/RELEASE-NOTES-1.9.2.md). The earlier
 > Linux beta 3 release is version 1.4.2.
 > Consult the chosen release notes for qualification results. The
 > [Supported versions](#supported-versions) table records historical image

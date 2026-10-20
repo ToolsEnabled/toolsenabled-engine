@@ -1,6 +1,6 @@
 # ToolsEnabled Fleet host mode
 
-Host mode adds an explicit Linux x86_64 / WSL 2 entry for people who already use an agent CLI. It uses the same Fleet MCP broker, durable task and memory stores, inherited permission levels, and byte-mediated file tools as the OpenShell edition. Host mode is included in Fleet 1.9.1, published on [toolsenabled.ai](https://toolsenabled.ai). Consult the release for its exact archive and real CLI qualification results.
+Host mode adds an explicit Linux x86_64 / WSL 2 entry for people who already use an agent CLI. It uses the same Fleet MCP broker, durable task and memory stores, inherited permission levels, and byte-mediated file tools as the OpenShell edition. Host mode is included in Fleet 1.9.2, published on [toolsenabled.ai](https://toolsenabled.ai). Consult the release for its exact archive and real CLI qualification results.
 
 For Gemini CLI, use your own Gemini API key, Vertex AI, or a Gemini Code Assist Standard or Enterprise sign-in in `gemini`. Google ended Login with Google for individual plans in Gemini CLI on 2026-06-18.
 
@@ -27,11 +27,11 @@ Worker tree records remain under the configured state directory. Unix worker soc
 
 ## Download, verify, and install
 
-Obtain the reviewed `toolsenabled-host-1.9.1-linux-x64.tar.gz` for 1.9.1 and its SHA-256 from the release channel. Verify the checksum using an independently obtained release digest before extracting or executing any package code. `SHA256SUMS` fetched alongside an archive detects corruption; authenticate the expected digest through the release channel too.
+Obtain the reviewed `toolsenabled-host-1.9.2-linux-x64.tar.gz` for 1.9.2 and its SHA-256 from the release channel. Verify the checksum using an independently obtained release digest before extracting or executing any package code. `SHA256SUMS` fetched alongside an archive detects corruption; authenticate the expected digest through the release channel too.
 
 ```bash
 # Replace both values with the chosen release's absolute path and digest.
-archive=/absolute/path/toolsenabled-host-1.9.1-linux-x64.tar.gz
+archive=/absolute/path/toolsenabled-host-1.9.2-linux-x64.tar.gz
 release_sha256=REPLACE_WITH_APPROVED_64_CHARACTER_SHA256
 printf '%s  %s\n' "$release_sha256" "$archive" | sha256sum -c -
 umask 077
@@ -147,7 +147,7 @@ The closed-writer requirement also applies during rollback and cleanup. POSIX ch
 
 ## Shared source and packaging
 
-`installer/host/build.sh` packages the committed `installer/openshell/SOURCE-ALLOWLIST` Fleet runtime with the host lifecycle/registration helpers and shared filesystem verifier. It emits `dist/host/toolsenabled-host-1.9.1-linux-x64.tar.gz` and `SHA256SUMS`; the manifest records `mode: host`, source commit and runtime requirements. The current runtime has no production npm dependencies. Provider CLIs and npm/Node toolchains are excluded. Every packaged directory is 0700 and every regular file is 0600 or executable 0700.
+`installer/host/build.sh` packages the committed `installer/openshell/SOURCE-ALLOWLIST` Fleet runtime with the host lifecycle/registration helpers and shared filesystem verifier. It emits `dist/host/toolsenabled-host-1.9.2-linux-x64.tar.gz` and `SHA256SUMS`; the manifest records `mode: host`, source commit and runtime requirements. The current runtime has no production npm dependencies. Provider CLIs and npm/Node toolchains are excluded. Every packaged directory is 0700 and every regular file is 0600 or executable 0700.
 
 A fixture build proves layout and reproducibility; it does not qualify real provider behavior. Build and install/setup/uninstall require no package download.
 
